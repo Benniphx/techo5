@@ -40,7 +40,7 @@ Assistant voice satellite with a touch screen of its own.
 |---|---|---|---|
 | **Echo Show 5, 2nd gen** (2021, `cronos`) | AEOCN | this one | In daily use |
 | **Echo Show 5, 1st gen** (2019, `checkers`) | AEOCH | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | Working, tested end to end on one unit |
-| **Echo Show 8, 1st gen** (2019, `crown`) | AEOCW | this one, same binary | Working on one unit, the newest port |
+| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | Working on one unit, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
 
