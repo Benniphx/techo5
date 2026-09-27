@@ -200,6 +200,9 @@ type renderer struct {
 	// flip is the night's flip clock: what its cards show, and a flip under way.
 	flip flipState
 
+	// wb is the wave turn screen's working memory, made the first time it is drawn.
+	wb *waveBuf
+
 	// weatherAt is where the home screen's weather was drawn in the frame last drawn, for a tap there
 	// to open the forecast; empty when it was not drawn. Written while drawing, read by the touch
 	// goroutine, so under its own lock.
@@ -446,7 +449,11 @@ func (r *renderer) draw(s scene) {
 	}
 
 	if s.eq != nil {
-		r.equalizer(s)
+		if s.eq.wave {
+			r.wave(s)
+		} else {
+			r.equalizer(s)
+		}
 		if s.showVolume {
 			r.volumeBar(s)
 		}

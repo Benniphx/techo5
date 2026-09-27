@@ -30,7 +30,10 @@ const (
 )
 
 // equalizerOn is whether turns are drawn as the equalizer, on a device that has it.
-func equalizerOn() bool { return hasEqualizer && turnStyles[turnStyleIndex()].value == "equalizer" }
+func equalizerOn() bool { return hasEqualizer && turnStyles[turnStyleIndex()].value != "" }
+
+// waveOn is whether the equalizer is drawn as the wave rather than the bars.
+func waveOn() bool { return turnStyles[turnStyleIndex()].value == "wave" }
 
 // turnStyleSelect is the Home Assistant setting.
 func turnStyleSelect(wake func()) *esphome.Select {
@@ -60,6 +63,7 @@ type eqView struct {
 	level, peak []float64
 	night       bool
 	quiet       bool // every bar has fallen: nothing left to animate
+	wave        bool // drawn as the wave rather than the bars
 }
 
 var (
@@ -171,16 +175,7 @@ func (r *renderer) equalizer(s scene) {
 	v := s.eq
 	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(eqGround), image.Point{}, draw.Src)
 
-	// The bars take the top half, and give way to a long answer down to a quarter of the screen.
-	top, bottom := headerH+r.s(8), r.h-r.s(14)
-	under := r.s(54) // the reflection and the gap below it
-	lines := r.eqWords(s, bottom-(r.h*28/100)-under)
-	words := 0
-	for _, l := range lines {
-		words += l.lineH
-	}
-	bot := min(r.h*54/100, bottom-under-words)
-	bot = max(bot, r.h*28/100)
+	top, bot, under, bottom, lines := r.eqLayout(s, 54)
 
 	x0, x1 := r.s(40), r.w-r.s(40)
 	cw := float64(x1-x0) / eqBands
@@ -228,8 +223,27 @@ func (r *renderer) equalizer(s scene) {
 		}
 	}
 
-	// The words, centered beneath; what still does not fit ends in an ellipsis.
-	y := bot + under
+	r.eqText(lines, bot+under, bottom)
+}
+
+// eqLayout splits the page between the picture and the words: the picture takes the top part (pct of
+// the height) and gives way to a long answer down to a quarter of the screen. It returns the picture's
+// top and bottom, the gap under it, the words' last baseline, and the words.
+func (r *renderer) eqLayout(s scene, pct int) (top, bot, under, bottom int, lines []eqLine) {
+	top, bottom = headerH+r.s(8), r.h-r.s(14)
+	under = r.s(54)
+	lines = r.eqWords(s, bottom-(r.h*28/100)-under)
+	words := 0
+	for _, l := range lines {
+		words += l.lineH
+	}
+	bot = min(r.h*pct/100, bottom-under-words)
+	bot = max(bot, r.h*28/100)
+	return top, bot, under, bottom, lines
+}
+
+// eqText draws the words centered from y down; what still does not fit ends in an ellipsis.
+func (r *renderer) eqText(lines []eqLine, y, bottom int) {
 	for i, l := range lines {
 		base := y + l.lineH - r.s(14)
 		last := i+1 < len(lines) && base+lines[i+1].lineH > bottom+r.s(10)

@@ -86,7 +86,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			settingRow{id: "answertime", label: "Answer time", sub: "How long an answer stays up; a tap clears it", kind: ctlChoice, value: answerTimes[answerTimeIndex()].label},
 		)
 		if hasEqualizer {
-			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or bars that move with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
+			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or a wave or bars that move with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
 		}
 		rows = append(rows,
 			settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()},

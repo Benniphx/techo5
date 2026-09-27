@@ -1532,6 +1532,7 @@ func (d *Display) frame() time.Duration {
 	}
 	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
 		s.eq = eqFor(s.phase, inNight(config.Get().Screen.Night, now), now)
+		s.eq.wave = waveOn()
 	}
 	// A stream this player is carrying is the room's when it is what is being heard: the page names it,
 	// and says what it is doing, though the audio never passes through this player's own stream. Both,
@@ -1721,6 +1722,9 @@ func (d *Display) frame() time.Duration {
 		return home.SlideshowFrame
 	}
 	if s.eq != nil && !s.showWeather && !(s.phase == "lingering" && s.eq.quiet) {
+		if s.eq.wave {
+			return waveFrame
+		}
 		return eqFrame // the bars are moving
 	}
 	if s.showWeather || s.nowPlaying {

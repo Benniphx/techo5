@@ -55,19 +55,26 @@ func TestEqualizerDraws(t *testing.T) {
 		{"-show8", show8Wide, show8High},
 	} {
 		for name, s := range eqScenes(time.Date(2026, 9, 27, 20, 0, 0, 0, time.Local)) {
-			img := image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high))
-			newRenderer(img).draw(s)
-			if dir == "" {
-				continue
+			for _, wave := range []bool{false, true} {
+				s.eq.wave = wave
+				img := image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high))
+				newRenderer(img).draw(s)
+				if dir == "" {
+					continue
+				}
+				style := "bars"
+				if wave {
+					style = "wave"
+				}
+				f, err := os.Create(filepath.Join(dir, style+"-"+name+panel.name+".png"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := png.Encode(f, img); err != nil {
+					t.Fatal(err)
+				}
+				f.Close()
 			}
-			f, err := os.Create(filepath.Join(dir, name+panel.name+".png"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := png.Encode(f, img); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
 		}
 	}
 }
@@ -81,12 +88,20 @@ func BenchmarkEqualizerFrame(b *testing.B) {
 		{"show5", showWide, showHigh},
 		{"show8", show8Wide, show8High},
 	} {
-		b.Run(panel.name, func(b *testing.B) {
-			s := eqScenes(time.Now())["eq-replying"]
-			r := newRenderer(image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high)))
-			for range b.N {
-				r.draw(s)
+		for _, wave := range []bool{false, true} {
+			name := panel.name + "-bars"
+			if wave {
+				name = panel.name + "-wave"
 			}
-		})
+			b.Run(name, func(b *testing.B) {
+				s := eqScenes(time.Now())["eq-replying"]
+				s.eq.wave = wave
+				r := newRenderer(image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high)))
+				for i := range b.N {
+					s.now = s.now.Add(66 * time.Millisecond * time.Duration(i%2))
+					r.draw(s)
+				}
+			})
+		}
 	}
 }

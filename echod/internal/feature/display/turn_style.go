@@ -19,7 +19,8 @@ var turnStyles = []struct {
 	value string
 }{
 	{"Classic", ""},
-	{"Equalizer", "equalizer"},
+	{"Wave", "wave"},
+	{"Bars", "equalizer"},
 }
 
 func turnStyleOptions() []string {
