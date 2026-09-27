@@ -60,6 +60,10 @@ func init() {
 		component.Supervise(service.Restart(time.Second, 30*time.Second)))
 }
 
+// hasEqualizer is whether this screen offers the equalizer turn screen: the Show's does; the Spot's
+// round one would want its own.
+const hasEqualizer = true
+
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -91,6 +95,7 @@ type Display struct {
 	// words do once it is over.
 	camTime    *esphome.Select
 	answerTime *esphome.Select
+	turnStyle  *esphome.Select
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -288,6 +293,7 @@ func build() *Display {
 	d.clock = clockSelect(d.wake)
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
+	d.turnStyle = turnStyleSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
@@ -344,8 +350,11 @@ func build() *Display {
 
 func (d *Display) Name() string { return "screen" }
 
+// turnStyleSel is the Turn screen setting in Home Assistant.
+func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
+
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.atNight, d.nightStyle, d.glowLevel,
+	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.atNight, d.nightStyle, d.glowLevel,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay}
 }
 
@@ -355,6 +364,7 @@ func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
+	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
@@ -1520,6 +1530,9 @@ func (d *Display) frame() time.Duration {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
+	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
+		s.eq = eqFor(s.phase, inNight(config.Get().Screen.Night, now), now)
+	}
 	// A stream this player is carrying is the room's when it is what is being heard: the page names it,
 	// and says what it is doing, though the audio never passes through this player's own stream. Both,
 	// not just playing: the page tests paused first, so a station left paused underneath would label
@@ -1706,6 +1719,9 @@ func (d *Display) frame() time.Duration {
 	}
 	if (s.slideshow != nil || s.slideshowScreensaver != nil) && home.Get().SlideshowTransitioning() {
 		return home.SlideshowFrame
+	}
+	if s.eq != nil && !s.showWeather && !(s.phase == "lingering" && s.eq.quiet) {
+		return eqFrame // the bars are moving
 	}
 	if s.showWeather || s.nowPlaying {
 		return time.Until(now.Truncate(idleFrame).Add(idleFrame))

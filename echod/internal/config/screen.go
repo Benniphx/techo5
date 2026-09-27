@@ -44,6 +44,10 @@ type Screen struct {
 	// default five seconds, -1 until they are tapped away.
 	AnswerSeconds int `json:"answer_seconds,omitempty"`
 
+	// TurnStyle is how a voice turn is drawn: empty for the classic title and words, "equalizer" for
+	// bars moving with the voice.
+	TurnStyle string `json:"turn_style,omitempty"`
+
 	// CallButton puts a Call button on the home screen, which opens the list of devices in the house
 	// and phone contacts to call. Off until somebody wants it, so an update changes nobody's screen.
 	CallButton bool `json:"call_button,omitempty"`
@@ -134,6 +138,10 @@ func (w ScreenWriter) CameraMinutes(v int) error {
 
 func (w ScreenWriter) AnswerSeconds(v int) error {
 	return w.st.Update(func(c *Config) { c.Screen.AnswerSeconds = v })
+}
+
+func (w ScreenWriter) TurnStyle(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.TurnStyle = v })
 }
 
 func (w ScreenWriter) WeatherStill(v bool) error {

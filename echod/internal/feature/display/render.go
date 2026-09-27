@@ -40,7 +40,8 @@ var shade = color.RGBA{0x00, 0x00, 0x00, 0x90}
 // scene is one frame's worth of facts.
 type scene struct {
 	now     time.Time
-	phase   string // idle, listening, thinking, replying, lingering
+	phase   string  // idle, listening, thinking, replying, lingering
+	eq      *eqView // a turn's bars, when turns are drawn as the equalizer
 	heard   string
 	reply   string
 	since   time.Time
@@ -438,6 +439,14 @@ func (r *renderer) draw(s scene) {
 	}
 	if s.showDash {
 		r.dashboardPage(s)
+		if s.showVolume {
+			r.volumeBar(s)
+		}
+		return
+	}
+
+	if s.eq != nil {
+		r.equalizer(s)
 		if s.showVolume {
 			r.volumeBar(s)
 		}

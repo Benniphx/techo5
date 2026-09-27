@@ -64,6 +64,9 @@ func init() {
 		component.Supervise(service.Restart(time.Second, 30*time.Second)))
 }
 
+// hasEqualizer is whether this screen offers the equalizer turn screen: not yet on the Spot's round one.
+const hasEqualizer = false
+
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -293,6 +296,9 @@ func build() *Display {
 }
 
 func (d *Display) Name() string { return "screen" }
+
+// turnStyleSel is the Turn screen setting, which the Spot does not have.
+func (d *Display) turnStyleSel() *esphome.Select { return nil }
 
 func (d *Display) Entities() []esphome.Entity {
 	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.callBtn, d.weatherFx, d.lang}
