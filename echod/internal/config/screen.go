@@ -40,6 +40,10 @@ type Screen struct {
 	// -1 until it is tapped closed.
 	CameraMinutes int `json:"camera_minutes,omitempty"`
 
+	// AnswerSeconds is how long a voice turn's words stay on the screen after it ends: 0 for the
+	// default five seconds, -1 until they are tapped away.
+	AnswerSeconds int `json:"answer_seconds,omitempty"`
+
 	// CallButton puts a Call button on the home screen, which opens the list of devices in the house
 	// and phone contacts to call. Off until somebody wants it, so an update changes nobody's screen.
 	CallButton bool `json:"call_button,omitempty"`
@@ -126,6 +130,10 @@ func (w ScreenWriter) Clock24(v bool) error {
 
 func (w ScreenWriter) CameraMinutes(v int) error {
 	return w.st.Update(func(c *Config) { c.Screen.CameraMinutes = v })
+}
+
+func (w ScreenWriter) AnswerSeconds(v int) error {
+	return w.st.Update(func(c *Config) { c.Screen.AnswerSeconds = v })
 }
 
 func (w ScreenWriter) WeatherStill(v bool) error {

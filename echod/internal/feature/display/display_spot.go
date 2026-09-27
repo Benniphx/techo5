@@ -65,9 +65,6 @@ func init() {
 }
 
 const (
-	// linger is how long the last turn's words stay on the screen after it ends.
-	linger = 10 * time.Second
-
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
 
@@ -107,8 +104,10 @@ type Display struct {
 	light *esphome.Light
 	auto  *esphome.Switch
 	clock *esphome.Select
-	// camTime is how long a camera opened from the screen stays up.
-	camTime *esphome.Select
+	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
+	// words do once it is over.
+	camTime    *esphome.Select
+	answerTime *esphome.Select
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -255,6 +254,7 @@ func build() *Display {
 	d.auto.OnCommand = func(on bool) { d.setAuto(on, true) }
 	d.clock = clockSelect(d.wake)
 	d.camTime = cameraTimeSelect()
+	d.answerTime = answerTimeSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.lang = langSelect()
@@ -295,13 +295,14 @@ func build() *Display {
 func (d *Display) Name() string { return "screen" }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.callBtn, d.weatherFx, d.lang}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.callBtn, d.weatherFx, d.lang}
 }
 
 // Restore lights the panel the way it was left.
 func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
+	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.setAuto(c.Screen.Auto, false)
@@ -595,6 +596,11 @@ func (d *Display) gesture(g touch.Gesture) {
 	}
 	switch g.Kind {
 	case touch.Tap:
+		// A finished turn's words: a tap puts them away rather than starting another turn.
+		if d.answerUp(time.Now()) {
+			d.clearAnswer()
+			return
+		}
 		d.mu.Lock()
 		call := d.callShown && onCallButton(g.X, g.Y)
 		if call {
@@ -1087,7 +1093,7 @@ func (d *Display) frame() time.Duration {
 	if !on {
 		return time.Hour
 	}
-	if view.Phase == "idle" && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger {
+	if view.Phase == "idle" && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger() {
 		s.phase = "lingering"
 	}
 	if quiet && (s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {

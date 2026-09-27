@@ -61,9 +61,6 @@ func init() {
 }
 
 const (
-	// linger is how long the last turn's words stay on the screen after it ends.
-	linger = 12 * time.Second
-
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
 
@@ -90,8 +87,10 @@ type Display struct {
 	light *esphome.Light
 	auto  *esphome.Switch
 	clock *esphome.Select
-	// camTime is how long a camera opened from the screen stays up.
-	camTime *esphome.Select
+	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
+	// words do once it is over.
+	camTime    *esphome.Select
+	answerTime *esphome.Select
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -288,6 +287,7 @@ func build() *Display {
 	d.auto.OnCommand = func(on bool) { d.setAuto(on, true) }
 	d.clock = clockSelect(d.wake)
 	d.camTime = cameraTimeSelect()
+	d.answerTime = answerTimeSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
@@ -345,7 +345,7 @@ func build() *Display {
 func (d *Display) Name() string { return "screen" }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.atNight, d.nightStyle, d.glowLevel,
+	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.atNight, d.nightStyle, d.glowLevel,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay}
 }
 
@@ -354,6 +354,7 @@ func (d *Display) Entities() []esphome.Entity {
 func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
+	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
@@ -748,6 +749,12 @@ func (d *Display) gesture(g touch.Gesture) {
 		weatherUp := time.Now().Before(d.weatherUntil)
 		idle := d.view.Phase == "idle"
 		d.mu.Unlock()
+		// A finished turn's words: a tap puts them away. It used to start another turn, which is not
+		// what a hand put on an answer to clear it means.
+		if !weatherUp && d.answerUp(time.Now()) {
+			d.clearAnswer()
+			return
+		}
 		// The alert badge on the clock opens the alert, and a pill over the rain map opens its alert.
 		// Both sit in the top band too.
 		if idle && !weatherUp && d.r != nil && d.r.badgeTapped(image.Pt(g.X, g.Y)) && d.OpenAlert(0) {
@@ -1503,7 +1510,7 @@ func (d *Display) frame() time.Duration {
 	s.snooze = config.Get().Alarms.Snooze()
 	s.alarms = alarm.Get().View(now)
 	s.timers = timer.Get().List(now)
-	if view.Phase == "idle" && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger {
+	if view.Phase == "idle" && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger() {
 		s.phase = "lingering"
 	}
 	d.mu.Lock()
