@@ -340,11 +340,16 @@ func (c *conversation) handle(e event) {
 			c.shown.Heard = e.text
 			Changed.Emit(c.shown)
 		}
-		// Home Assistant has no alarm of this device's to stop, so "stop the alarm" is acted on here,
-		// whatever it goes on to answer.
-		if ring.IsSounding() && stopsRing(e.text) {
-			slog.Info("heard a stop over a ring, ending it", "text", e.text)
-			ring.End()
+		// Home Assistant has no alarm of this device's to stop or snooze, so "stop the alarm" and
+		// "snooze for ten minutes" are acted on here, whatever it goes on to answer.
+		if ring.IsSounding() {
+			if stopsRing(e.text) {
+				slog.Info("heard a stop over a ring, ending it", "text", e.text)
+				ring.End()
+			} else if minutes, ok := ring.SnoozeAsked(e.text); ok {
+				slog.Info("heard a snooze over a ring", "text", e.text, "minutes", minutes)
+				ring.SnoozeFor(minutes)
+			}
 		}
 		c.turn.Heard(e.text)
 		if c.phase == phaseListening {

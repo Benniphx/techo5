@@ -151,12 +151,15 @@ response_variable: set
 
 Home Assistant keeps no alarms or reminders of its own, so "stop the alarm" or "remind me to..." said
 to a TECHO5 device reaches Home Assistant with nothing there to act on, and it answers "OK" having
-done nothing. Two automations hand those sentences back to the device that heard them. Add each one
+done nothing. Three automations hand those sentences back to the device that heard them. Add each one
 in Settings > Automations & scenes > Create automation > Edit in YAML.
 
 The device stops a ring by itself as well, without these: while an alarm or timer rings, the wake
 word silences it, and a sentence that only asks to stop ("stop", "stop the alarm", "turn it off")
-ends it. The automation is what makes Home Assistant answer "Stopped." rather than "OK".
+ends it. A sentence that asks to snooze ("snooze", "snooze for ten minutes", "snooze the alarm
+another 5 minutes") snoozes it, for that long or for the device's snooze length, from 1 to 30
+minutes; a ringing timer cannot be put off, so it stops. The automations are what make Home Assistant
+answer "Stopped." or "Snoozed until 7:42 AM." rather than not understanding.
 
 ```yaml
 alias: TECHO5 - stop alarm or timer by voice
@@ -173,6 +176,31 @@ actions:
     target:
       entity_id: "{{ device_entities(trigger.device_id) | select('search', 'stop_alarm') | first }}"
   - set_conversation_response: "Stopped."
+mode: queued
+```
+
+```yaml
+alias: TECHO5 - snooze an alarm by voice
+triggers:
+  - trigger: conversation
+    command:
+      - "snooze [the] [alarm|it]"
+      - "snooze {rest}"
+conditions:
+  - "{{ device_entities(trigger.device_id) | select('search', 'stop_alarm') | list | count > 0 }}"
+actions:
+  - action: esphome.{{ device_attr(trigger.device_id, 'name') | slugify }}_alarm_snooze_for
+    data:
+      sentence: "{{ trigger.sentence }}"
+    response_variable: snooze
+    continue_on_error: true
+  - if:
+      - condition: template
+        value_template: "{{ snooze is defined and snooze.snoozed | default(false) }}"
+    then:
+      - set_conversation_response: "Snoozed until {{ snooze.until }}."
+    else:
+      - set_conversation_response: "{{ 'Stopped.' if snooze is defined and snooze.stopped | default(false) else 'Nothing is ringing.' }}"
 mode: queued
 ```
 
@@ -250,8 +278,12 @@ actions:
 mode: queued
 ```
 
-Both find the device that heard the sentence, so one of each covers every TECHO5 device in the house,
-and a speaker that is not a TECHO5 device is left alone.
+All three find the device that heard the sentence, so one of each covers every TECHO5 device in the
+house, and a speaker that is not a TECHO5 device is left alone. The snooze automation passes the whole
+sentence to `esphome.<name>_alarm_snooze_for`, which reads the length from it the same way the device
+does and answers with `snoozed`, `minutes` and `until` (or `snoozed: false`, with `stopped` if a timer
+was stopped instead). Like the reminder's, its action name comes from the device's name in Home
+Assistant.
 
 The reminder automation takes the whole sentence apart itself, because speech to text is not
 consistent about how it writes a time: "8.14am", "8.14 a.m." and "8-18 AM" all turn up. It takes a
