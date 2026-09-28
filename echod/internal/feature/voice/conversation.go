@@ -1039,8 +1039,8 @@ func activeWakeWords(models []wake.Model, slots int) []string {
 	// Nothing chosen yet: start listening for something rather than nothing, or a fresh device looks
 	// broken until the user finds the select. The shipped default when it is installed, and otherwise
 	// whatever this device does have — a device carrying one model somebody copied on should listen for
-	// that one rather than for nothing.
-	if len(active) == 0 {
+	// that one rather than for nothing. "No wake word" chosen on purpose stays chosen.
+	if len(active) == 0 && !saved.NoneChosen {
 		if m, ok := wake.Find(models, wake.DefaultModel); ok {
 			active = []string{m.ID}
 		} else if len(models) > 0 {

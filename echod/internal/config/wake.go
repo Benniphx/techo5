@@ -4,6 +4,11 @@ package config
 type Wake struct {
 	Words []WakeWord `json:"words"`
 
+	// NoneChosen is "No wake word" chosen on purpose. Without it an empty selection reads as a device
+	// that was never set up, which starts with the default word so it is not deaf out of the box, and
+	// the choice came back undone at every start.
+	NoneChosen bool `json:"none_chosen,omitempty"`
+
 	// Stop is the device's own word for interrupting what it is saying. It is not one of the slots
 	// above: Home Assistant does not choose it, and it opens no pipeline.
 	Stop Stop `json:"stop"`

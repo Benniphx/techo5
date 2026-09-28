@@ -295,6 +295,11 @@ func (v *Voice) OnWakeWord(load func(ids []string) []string, selected func()) {
 				slog.Error("saving the wake word failed", "slot", slot+1, "err", err)
 			}
 		}
+		// Nothing asked for is "No wake word", which must survive a restart; something asked for and
+		// refused is not, and leaves the start-up default to do its job.
+		if err := config.Set().NoneChosen(len(ids) == 0); err != nil {
+			slog.Error("saving the wake word choice failed", "err", err)
+		}
 		if len(accepted) != len(ids) {
 			slog.Warn("some wake words were refused", "asked", ids, "running", accepted)
 		}

@@ -101,6 +101,11 @@ func (w Writer) Wake(slot int) WakeWriter { return WakeWriter{st: w.st, slot: sl
 // Stop is the stop word, which is not a slot.
 func (w Writer) Stop() StopWriter { return StopWriter(w) }
 
+// NoneChosen records whether "No wake word" was chosen on purpose.
+func (w Writer) NoneChosen(v bool) error {
+	return w.st.Update(func(c *Config) { c.Wake.NoneChosen = v })
+}
+
 func errSlot(n int) error { return fmt.Errorf("config: wake slot %d", n) }
 
 // Labelled is a setting whose values name themselves. The entity layer binds any of these to a
