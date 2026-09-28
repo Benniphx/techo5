@@ -44,6 +44,16 @@ type Screen struct {
 	// default five seconds, -1 until they are tapped away.
 	AnswerSeconds int `json:"answer_seconds,omitempty"`
 
+	// NightByHA leaves the night to Home Assistant: the hours are not followed, and it is night only
+	// while the Night mode switch is on. Night keeps the hours, for choosing them again.
+	NightByHA bool `json:"night_by_ha,omitempty"`
+
+	// NightOverride is the Night mode switch turned "on" or "off" at NightOverrideAt (Unix seconds).
+	// With hours set it holds until they next start or end the night; with NightByHA it holds until
+	// the switch is turned again.
+	NightOverride   string `json:"night_override,omitempty"`
+	NightOverrideAt int64  `json:"night_override_at,omitempty"`
+
 	// TurnStyle is how a voice turn is drawn: empty for the classic title and words, "equalizer" for
 	// bars moving with the voice.
 	TurnStyle string `json:"turn_style,omitempty"`
@@ -134,6 +144,15 @@ func (w ScreenWriter) Clock24(v bool) error {
 
 func (w ScreenWriter) CameraMinutes(v int) error {
 	return w.st.Update(func(c *Config) { c.Screen.CameraMinutes = v })
+}
+
+func (w ScreenWriter) NightByHA(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NightByHA = v })
+}
+
+// NightOverride saves the Night mode switch: "on", "off", or "" to follow the hours again.
+func (w ScreenWriter) NightOverride(v string, at int64) error {
+	return w.st.Update(func(c *Config) { c.Screen.NightOverride, c.Screen.NightOverrideAt = v, at })
 }
 
 func (w ScreenWriter) AnswerSeconds(v int) error {

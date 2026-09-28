@@ -67,6 +67,10 @@ func init() {
 // hasEqualizer is whether this screen offers the equalizer turn screen: not yet on the Spot's round one.
 const hasEqualizer = false
 
+// hasNightSwitch is whether Home Assistant can turn the night on and off here: not on the Spot, whose
+// night hours are its own.
+const hasNightSwitch = false
+
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -1294,7 +1298,10 @@ func (d *Display) Screenshot() *image.RGBA {
 // Spot's night only dims, and its hours are not in Home Assistant.
 func (d *Display) setAtNight(int)     {}
 func (d *Display) nightHoursChanged() {}
-func (d *Display) setNightStyle(int)  {}
+
+// nightLeftToHA does nothing on the Spot, which has no Night mode switch (hasNightSwitch).
+func (d *Display) nightLeftToHA()    {}
+func (d *Display) setNightStyle(int) {}
 
 // popupSettingsChanged: the Spot has no event pop-ups yet.
 func (d *Display) popupSettingsChanged() {}

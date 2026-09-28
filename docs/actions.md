@@ -771,6 +771,20 @@ data:
   end: "09:30"
 ```
 
+### Turning the night on from an automation
+
+A Show also has a **Night mode** switch, on while it is night. Turn it on or off from an automation,
+a "house to sleep" scene for example, to start or end the night now. With night hours set, the switch
+holds until the hours next start or end the night, then the hours take over again. To leave the night
+to Home Assistant entirely, set **Night hours** to **Controlled by Home Assistant**: the hours are then
+ignored and it is night only while the switch is on.
+
+```yaml
+action: switch.turn_on
+target:
+  entity_id: switch.office_night_mode
+```
+
 ## Point the device at a dashboard server
 
 In YAML, refer to this action as `esphome.<node>_dashboard_server`.

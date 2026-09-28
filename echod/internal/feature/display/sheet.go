@@ -69,7 +69,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		rows := []settingRow{
 			{id: "brightness", label: "Brightness", kind: ctlStepper, value: fmt.Sprintf("%d%%", st.brightness)},
 			{id: "auto", label: "Auto-brightness", sub: "Follows the room's light", kind: ctlToggle, on: st.auto},
-			{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightText(st.night)},
+			{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)},
 		}
 		if hasNightLight && st.night != "" {
 			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: "Dark, a faint glow, or a clock alone until touched",
@@ -279,6 +279,17 @@ func slideshowIndex() int {
 }
 
 // nightText is a night window as the clock would say it: "10 PM – 6 AM", "7 PM – 9:30 AM", or "Never".
+// nightByHARow is the night row's choice that leaves the night to Home Assistant's Night mode switch.
+const nightByHARow = "Controlled by Home Assistant"
+
+// nightRowValue is what the night row says: the hours, or that Home Assistant has the night.
+func nightRowValue(v string) string {
+	if hasNightSwitch && config.Get().Screen.NightByHA {
+		return nightByHARow
+	}
+	return nightText(v)
+}
+
 func nightText(v string) string {
 	from, to, ok := nightWindow(v)
 	if !ok {
@@ -362,6 +373,12 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		p.opts = append(p.opts, nightCustomRow)
 		if _, _, ok := nightWindow(cur); ok && p.cur < 0 {
 			p.cur = len(p.opts) - 1
+		}
+		if hasNightSwitch {
+			p.opts = append(p.opts, nightByHARow)
+			if config.Get().Screen.NightByHA {
+				p.cur = len(p.opts) - 1
+			}
 		}
 		return p, true
 	case "nightfromh", "nighttoh":
@@ -491,9 +508,17 @@ func (d *Display) choose(id string, i int) {
 			if err := config.Set().Screen().Night(nightPresets[i]); err != nil {
 				slog.Warn("saving the night setting failed", "err", err)
 			}
+			if err := config.Set().Screen().NightByHA(false); err != nil {
+				slog.Warn("saving the night setting failed", "err", err)
+			}
 			d.nightHoursChanged()
 		} else if i == len(nightPresets) {
+			if err := config.Set().Screen().NightByHA(false); err != nil {
+				slog.Warn("saving the night setting failed", "err", err)
+			}
 			d.openPicker("nightfromh")
+		} else if i == len(nightPresets)+1 && hasNightSwitch {
+			d.nightLeftToHA()
 		}
 	case "nightfromh", "nighttoh":
 		if i < 0 || i > 23 {

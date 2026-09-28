@@ -64,6 +64,9 @@ func init() {
 // round one would want its own.
 const hasEqualizer = true
 
+// hasNightSwitch is whether Home Assistant can turn the night on and off here (Night mode).
+const hasNightSwitch = true
+
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -171,6 +174,10 @@ type Display struct {
 	// nightStyle is the red night clock's look.
 	nightStyle *esphome.Select
 	glowLevel  *esphome.Number
+	// nightMode is Night mode: Home Assistant turning the night on and off; nightShown what it last said.
+	nightMode  *esphome.Switch
+	nightShown bool
+	nightSeen  bool // nightShown has been sent at least once
 
 	// wide is the Show 8's bigger, brighter panel, which glows harder at the same backlight.
 	wide bool
@@ -302,6 +309,7 @@ func build() *Display {
 	d.nightStyle = nightStyleSelect(d)
 	d.buildPopupEntities()
 	d.atNight = atNightSelect(d)
+	d.nightMode = nightModeSwitch(d)
 	d.glowLevel = glowNumber(d)
 	d.lang = langSelect()
 	voice.Changed.Listen(d.changed)
@@ -354,7 +362,7 @@ func (d *Display) Name() string { return "screen" }
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.atNight, d.nightStyle, d.glowLevel,
+	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay}
 }
 
@@ -445,7 +453,7 @@ func (d *Display) relight(jump bool) {
 		target = math.Max(target, floor)
 		if d.nightGlow {
 			target = float64(d.glowBacklight()) // relight holds mu
-		} else if phone.Get().Busy() && inNight(config.Get().Screen.Night, time.Now()) {
+		} else if phone.Get().Busy() && nightNow(time.Now()) {
 			target = math.Min(target, screen.BacklightMax/2) // a call at night: enough to see who it is
 		}
 	}
@@ -1081,7 +1089,8 @@ func (d *Display) ceilingOrDefault() int {
 // brings it back when the window ends. It reports true when it changed the screen, so the frame
 // is redrawn from the new state.
 func (d *Display) night(now time.Time, on bool, view voice.State) bool {
-	in := inNight(config.Get().Screen.Night, now)
+	in := nightNow(now)
+	d.showNightMode(in)
 	d.mu.Lock()
 	dark, touched, viewAt := d.nightDark, d.touchedAt, d.viewAt
 	d.mu.Unlock()
@@ -1162,7 +1171,6 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 const nightIdle = 90 * time.Second
 
 // inNight is whether now falls in the window, which may cross midnight.
-func inNight(v string, now time.Time) bool { return config.InWindow(v, now) }
 
 // ---- Wi-Fi pages ----
 
@@ -1475,7 +1483,7 @@ func (d *Display) frame() time.Duration {
 	ring := d.ringing(now)
 	call := phone.Get().State()
 	_, reminding := remind.Get().Showing()
-	night := inNight(config.Get().Screen.Night, now)
+	night := nightNow(now)
 	if !on && (call.Phase != phone.Idle || (!night && (ring.any() || reminding))) {
 		// A call lights a dark panel, at night to half brightness (relight): its page is how it is
 		// answered. By day a ring and a reminder do too, the ring's page being how it is stopped and a
@@ -1483,7 +1491,7 @@ func (d *Display) frame() time.Duration {
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
-	if !on && d.popupUp() != nil && !inNight(config.Get().Screen.Night, now) {
+	if !on && d.popupUp() != nil && !nightNow(now) {
 		// A pop-up lights a dark panel by day. At night it waits there, dark, until the screen is woken.
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
@@ -1561,7 +1569,7 @@ func (d *Display) frame() time.Duration {
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
 	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
-		s.eq = eqFor(s.phase, inNight(config.Get().Screen.Night, now), now)
+		s.eq = eqFor(s.phase, nightNow(now), now)
 		s.eq.wave = waveOn()
 	}
 	// A stream this player is carrying is the room's when it is what is being heard: the page names it,
