@@ -75,6 +75,7 @@ type roundScene struct {
 	now          time.Time
 	phase        string // idle, listening, thinking, replying, lingering
 	heard, reply string
+	eq           *eqView // a turn's picture, when turns are drawn as the wave or the bars
 	muted        bool
 	playing      bool
 	paused       bool
@@ -196,6 +197,8 @@ type roundRenderer struct {
 	alertPillAt image.Rectangle
 	alertMax    int
 	shapes      alertOverlay
+
+	wb *waveBuf // the wave turn screen's working memory, kept between frames
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {
@@ -286,6 +289,8 @@ func (r *roundRenderer) draw(s roundScene) {
 		r.rim(s) // the view clears the panel; the rim still says muted or listening
 	case s.showVolume:
 		r.volume(s)
+	case s.eq != nil:
+		r.turnFace(s)
 	case s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering":
 		r.conversation(s)
 	case s.showDash:

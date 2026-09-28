@@ -6,121 +6,9 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"math"
-	"time"
 
-	esphome "github.com/ygelfand/go-esphome-device"
 	"golang.org/x/image/font"
-
-	"github.com/HuskerMinion/techo5/echod/internal/lib/spectrum"
 )
-
-// The equalizer turn screen: a wall of LED segments moving with the voice being heard while it
-// listens and with the answer while it speaks, a slow wave while it thinks, and the words beneath.
-// Unlit segments stay faintly visible, as on a real panel, lit ones glow a little, and the bottom
-// rows are reflected under the baseline.
-
-const (
-	eqBands = 32
-	eqSegs  = 18
-
-	// eqFrame is the frame time while the bars are moving: smooth enough to read as motion, and only
-	// for the few seconds of a turn.
-	eqFrame = 66 * time.Millisecond
-)
-
-// equalizerOn is whether turns are drawn as the equalizer, on a device that has it.
-func equalizerOn() bool { return hasEqualizer && turnStyles[turnStyleIndex()].value != "" }
-
-// waveOn is whether the equalizer is drawn as the wave rather than the bars.
-func waveOn() bool { return turnStyles[turnStyleIndex()].value == "wave" }
-
-// turnStyleSelect is the Home Assistant setting.
-func turnStyleSelect(wake func()) *esphome.Select {
-	s := &esphome.Select{
-		Base: esphome.Base{
-			ObjectID: "screen_turn_style",
-			Name:     "Turn screen",
-			Icon:     "mdi:equalizer",
-			Category: esphome.CategoryConfig,
-		},
-		Options: turnStyleOptions(),
-	}
-	s.OnCommand = func(v string) {
-		for i, t := range turnStyles {
-			if t.label == v {
-				setTurnStyle(s, i)
-				wake()
-				return
-			}
-		}
-	}
-	return s
-}
-
-// eqView is what the equalizer draws: a bar and a peak per band, 0 to 1.
-type eqView struct {
-	level, peak []float64
-	night       bool
-	quiet       bool // every bar has fallen: nothing left to animate
-	wave        bool // drawn as the wave rather than the bars
-}
-
-var (
-	eqGround = color.RGBA{8, 10, 16, 255}
-	eqGreen  = color.RGBA{57, 211, 83, 255}
-	eqYellow = color.RGBA{245, 213, 71, 255}
-	eqRed    = color.RGBA{255, 77, 77, 255}
-	eqDeep   = color.RGBA{110, 10, 10, 255}
-	eqEmber  = color.RGBA{255, 60, 40, 255}
-)
-
-func mix(a, b color.RGBA, t float64) color.RGBA {
-	t = min(max(t, 0), 1)
-	f := func(x, y uint8) uint8 { return uint8(float64(x) + (float64(y)-float64(x))*t) }
-	return color.RGBA{f(a.R, b.R), f(a.G, b.G), f(a.B, b.B), 255}
-}
-
-// eqColor is segment k's color: green rising through yellow to red, or dim reds at night.
-func eqColor(k int, night bool) color.RGBA {
-	t := float64(k) / (eqSegs - 1)
-	if night {
-		return mix(eqDeep, eqEmber, t)
-	}
-	if t < 0.65 {
-		return mix(eqGreen, eqYellow, t/0.65)
-	}
-	return mix(eqYellow, eqRed, (t-0.65)/0.35)
-}
-
-// eqThinking is the wave while an answer is being worked out: low, slow, and the same for every
-// frame at the same moment.
-func eqThinking(now time.Time, level, peak []float64) {
-	t := float64(now.UnixMilli()%100000) / 1000
-	for i := range level {
-		x := float64(i) / float64(len(level))
-		s := math.Sin(2*math.Pi*(1.5*x-0.25*t) + 0.8)
-		level[i] = 0.16 + 0.12*s*s
-		peak[i] = level[i] + 0.05
-	}
-}
-
-// eqFor is the view for a turn's phase at now.
-func eqFor(phase string, night bool, now time.Time) *eqView {
-	v := &eqView{night: night}
-	switch phase {
-	case "listening":
-		v.level, v.peak = spectrum.Mic.Bands(eqBands, now)
-		v.quiet = spectrum.Mic.Quiet()
-	case "thinking":
-		v.level, v.peak = make([]float64, eqBands), make([]float64, eqBands)
-		eqThinking(now, v.level, v.peak)
-	default: // replying, and the answer lingering after it while the bars fall
-		v.level, v.peak = spectrum.Speaker.Bands(eqBands, now)
-		v.quiet = spectrum.Speaker.Quiet()
-	}
-	return v
-}
 
 // eqLine is one line of words under the bars.
 type eqLine struct {
@@ -170,59 +58,25 @@ func (r *renderer) eqWords(s scene, room int) []eqLine {
 	return out
 }
 
-// equalizer draws the whole turn page in the equalizer style.
+// eqGround is the turn page's background on the Show.
+var eqGround = color.RGBA{8, 10, 16, 255}
+
+// equalizer draws the whole turn page in the bars style.
 func (r *renderer) equalizer(s scene) {
-	v := s.eq
 	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(eqGround), image.Point{}, draw.Src)
-
 	top, bot, under, bottom, lines := r.eqLayout(s, 54)
+	drawBars(r.dst, image.Rect(r.s(40), top, r.w-r.s(40), bot), s.eq, eqGround, max(1, r.s(2)), r.s(4))
+	r.eqText(lines, bot+under, bottom)
+}
 
-	x0, x1 := r.s(40), r.w-r.s(40)
-	cw := float64(x1-x0) / eqBands
-	gap := max(2, int(cw*0.22))
-	sh := float64(bot-top) / eqSegs
-	sg := max(2, int(sh*0.28))
-	halo := max(1, r.s(2))
-
-	seg := func(c, k int) image.Rectangle {
-		X0 := x0 + int(float64(c)*cw) + gap/2
-		X1 := x0 + int(float64(c+1)*cw) - gap/2
-		Y1 := bot - int(float64(k)*sh)
-		Y0 := Y1 - int(sh) + sg
-		return image.Rect(X0, Y0, X1, Y1)
+// wave draws the whole turn page in the wave style.
+func (r *renderer) wave(s scene) {
+	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(eqGround), image.Point{}, draw.Src)
+	top, bot, under, bottom, lines := r.eqLayout(s, 58)
+	if r.wb == nil {
+		r.wb = &waveBuf{}
 	}
-	fill := func(rc image.Rectangle, c color.RGBA) {
-		draw.Draw(r.dst, rc, image.NewUniform(c), image.Point{}, draw.Src)
-	}
-
-	for c := range eqBands {
-		lit := int(math.Round(v.level[c] * eqSegs))
-		pk := int(math.Round(v.peak[c] * eqSegs))
-		for k := range eqSegs {
-			col := eqColor(k, v.night)
-			rc := seg(c, k)
-			switch {
-			case k < lit:
-				fill(rc.Inset(-halo), mix(eqGround, col, 0.28))
-				fill(rc, col)
-			case k == pk-1 && pk > lit:
-				fill(rc.Inset(-halo), mix(eqGround, col, 0.22))
-				fill(rc, mix(col, color.RGBA{255, 255, 255, 255}, 0.35))
-			default:
-				fill(rc, mix(eqGround, col, 0.10))
-			}
-		}
-		// The reflection: the bottom rows mirrored under the baseline, fading out.
-		for k, f := range []float64{0.20, 0.08} {
-			col := eqColor(k, v.night)
-			if k >= lit {
-				f /= 3
-			}
-			rc := seg(c, 0).Add(image.Pt(0, int(float64(k+1)*sh)+r.s(4)))
-			fill(rc, mix(eqGround, col, f))
-		}
-	}
-
+	drawWave(r.dst, r.wb, image.Rect(0, top, r.w, bot), r.s(20), s.eq, eqGround, s.now, max(2, r.s(5)/2), 0)
 	r.eqText(lines, bot+under, bottom)
 }
 

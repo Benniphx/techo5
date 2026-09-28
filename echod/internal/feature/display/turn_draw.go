@@ -1,4 +1,4 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package display
 
@@ -9,7 +9,167 @@ import (
 	"math"
 	"math/rand"
 	"time"
+
+	esphome "github.com/ygelfand/go-esphome-device"
+
+	"github.com/HuskerMinion/techo5/echod/internal/lib/spectrum"
 )
+
+// The equalizer turn screen: a wall of LED segments moving with the voice being heard while it
+// listens and with the answer while it speaks, a slow wave while it thinks, and the words beneath.
+// Unlit segments stay faintly visible, as on a real panel, lit ones glow a little, and the bottom
+// rows are reflected under the baseline.
+
+const (
+	eqBands = 32
+	eqSegs  = 18
+
+	// eqFrame is the frame time while the bars are moving: smooth enough to read as motion, and only
+	// for the few seconds of a turn.
+	eqFrame = 66 * time.Millisecond
+)
+
+// equalizerOn is whether turns are drawn as the equalizer, on a device that has it.
+func equalizerOn() bool { return hasEqualizer && turnStyles[turnStyleIndex()].value != "" }
+
+// waveOn is whether the equalizer is drawn as the wave rather than the bars.
+func waveOn() bool { return turnStyles[turnStyleIndex()].value == "wave" }
+
+// turnStyleSelect is the Home Assistant setting.
+func turnStyleSelect(wake func()) *esphome.Select {
+	s := &esphome.Select{
+		Base: esphome.Base{
+			ObjectID: "screen_turn_style",
+			Name:     "Turn screen",
+			Icon:     "mdi:equalizer",
+			Category: esphome.CategoryConfig,
+		},
+		Options: turnStyleOptions(),
+	}
+	s.OnCommand = func(v string) {
+		for i, t := range turnStyles {
+			if t.label == v {
+				setTurnStyle(s, i)
+				wake()
+				return
+			}
+		}
+	}
+	return s
+}
+
+// eqView is what the equalizer draws: a bar and a peak per band, 0 to 1.
+type eqView struct {
+	level, peak []float64
+	night       bool
+	quiet       bool // every bar has fallen: nothing left to animate
+	wave        bool // drawn as the wave rather than the bars
+}
+
+var (
+	eqGreen  = color.RGBA{57, 211, 83, 255}
+	eqYellow = color.RGBA{245, 213, 71, 255}
+	eqRed    = color.RGBA{255, 77, 77, 255}
+	eqDeep   = color.RGBA{110, 10, 10, 255}
+	eqEmber  = color.RGBA{255, 60, 40, 255}
+)
+
+func mix(a, b color.RGBA, t float64) color.RGBA {
+	t = min(max(t, 0), 1)
+	f := func(x, y uint8) uint8 { return uint8(float64(x) + (float64(y)-float64(x))*t) }
+	return color.RGBA{f(a.R, b.R), f(a.G, b.G), f(a.B, b.B), 255}
+}
+
+// eqColor is segment k's color: green rising through yellow to red, or dim reds at night.
+func eqColor(k int, night bool) color.RGBA {
+	t := float64(k) / (eqSegs - 1)
+	if night {
+		return mix(eqDeep, eqEmber, t)
+	}
+	if t < 0.65 {
+		return mix(eqGreen, eqYellow, t/0.65)
+	}
+	return mix(eqYellow, eqRed, (t-0.65)/0.35)
+}
+
+// eqThinking is the wave while an answer is being worked out: low, slow, and the same for every
+// frame at the same moment.
+func eqThinking(now time.Time, level, peak []float64) {
+	t := float64(now.UnixMilli()%100000) / 1000
+	for i := range level {
+		x := float64(i) / float64(len(level))
+		s := math.Sin(2*math.Pi*(1.5*x-0.25*t) + 0.8)
+		level[i] = 0.16 + 0.12*s*s
+		peak[i] = level[i] + 0.05
+	}
+}
+
+// eqFor is the view for a turn's phase at now.
+func eqFor(phase string, night bool, now time.Time) *eqView {
+	v := &eqView{night: night}
+	switch phase {
+	case "listening":
+		v.level, v.peak = spectrum.Mic.Bands(eqBands, now)
+		v.quiet = spectrum.Mic.Quiet()
+	case "thinking":
+		v.level, v.peak = make([]float64, eqBands), make([]float64, eqBands)
+		eqThinking(now, v.level, v.peak)
+	default: // replying, and the answer lingering after it while the bars fall
+		v.level, v.peak = spectrum.Speaker.Bands(eqBands, now)
+		v.quiet = spectrum.Speaker.Quiet()
+	}
+	return v
+}
+
+// drawBars draws the bars into band on dst, over ground: a wall of segments, unlit ones faintly
+// visible, lit ones with a glow halo pixels wide, and the bottom rows reflected drop pixels under the
+// band.
+func drawBars(dst *image.RGBA, band image.Rectangle, v *eqView, ground color.RGBA, halo, drop int) {
+	x0, x1, top, bot := band.Min.X, band.Max.X, band.Min.Y, band.Max.Y
+	cw := float64(x1-x0) / eqBands
+	gap := max(2, int(cw*0.22))
+	sh := float64(bot-top) / eqSegs
+	sg := max(2, int(sh*0.28))
+
+	seg := func(c, k int) image.Rectangle {
+		X0 := x0 + int(float64(c)*cw) + gap/2
+		X1 := x0 + int(float64(c+1)*cw) - gap/2
+		Y1 := bot - int(float64(k)*sh)
+		Y0 := Y1 - int(sh) + sg
+		return image.Rect(X0, Y0, X1, Y1)
+	}
+	fill := func(rc image.Rectangle, c color.RGBA) {
+		draw.Draw(dst, rc, image.NewUniform(c), image.Point{}, draw.Src)
+	}
+
+	for c := range eqBands {
+		lit := int(math.Round(v.level[c] * eqSegs))
+		pk := int(math.Round(v.peak[c] * eqSegs))
+		for k := range eqSegs {
+			col := eqColor(k, v.night)
+			rc := seg(c, k)
+			switch {
+			case k < lit:
+				fill(rc.Inset(-halo), mix(ground, col, 0.28))
+				fill(rc, col)
+			case k == pk-1 && pk > lit:
+				fill(rc.Inset(-halo), mix(ground, col, 0.22))
+				fill(rc, mix(col, color.RGBA{255, 255, 255, 255}, 0.35))
+			default:
+				fill(rc, mix(ground, col, 0.10))
+			}
+		}
+		// The reflection: the bottom rows mirrored under the baseline, fading out.
+		for k, f := range []float64{0.20, 0.08} {
+			col := eqColor(k, v.night)
+			if k >= lit {
+				f /= 3
+			}
+			rc := seg(c, 0).Add(image.Pt(0, int(float64(k+1)*sh)+drop))
+			fill(rc, mix(ground, col, f))
+		}
+	}
+}
 
 // The wave turn screen: some twenty thin lines woven together, their height following the voice
 // being heard or the answer being spoken, adding up where they cross so the weave glows brightest
@@ -96,6 +256,7 @@ type waveBuf struct {
 	tmp    []float32
 	col    []float32 // the color at each x, RGB
 	amp    []float32 // how far the weave swings at each x, in pixels
+	fade   []float32 // how much of the weave shows at each x, 1 but near a faded end
 	lx     []int32   // for each x, the glow column left of it
 	wx     []float32 // and how far toward the next one it sits
 	used   []bool    // rows the lines touched
@@ -116,6 +277,7 @@ func (b *waveBuf) size(w, h int) {
 	b.tmp = make([]float32, b.lw*b.lh*3)
 	b.col = make([]float32, w*3)
 	b.amp = make([]float32, w)
+	b.fade = make([]float32, w)
 	b.lx = make([]int32, w)
 	b.wx = make([]float32, w)
 	b.used = make([]bool, h)
@@ -197,20 +359,17 @@ func (b *waveBuf) waveColors(t float64, night bool) {
 	}
 }
 
-// wave draws the whole turn page in the wave style.
-func (r *renderer) wave(s scene) {
-	v := s.eq
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(eqGround), image.Point{}, draw.Src)
-	top, bot, under, bottom, lines := r.eqLayout(s, 58)
-	if r.wb == nil {
-		r.wb = &waveBuf{}
-	}
-	b := r.wb
-	pad := r.s(20) // room above and below the swing for the glow
-	b.size(r.w/2, (bot-top+2*pad)/2)
+// drawWave draws the wave into band on dst, over ground, at now: the weave swings through the band's
+// height and its glow spills pad beyond it, above and below. wide is the wide glow's blur radius, in
+// the glow's quarter-size pixels. fade is the share of the width at each end over which the weave fades
+// out, for a band that stops short of the screen's edges; 0 runs it to the edges. b is the working
+// memory, kept between frames.
+func drawWave(dst *image.RGBA, b *waveBuf, band image.Rectangle, pad int, v *eqView, ground color.RGBA, now time.Time, wide int, fade float64) {
+	top, bot := band.Min.Y, band.Max.Y
+	b.size(band.Dx()/2, (bot-top+2*pad)/2)
 	mid := float64(b.h) / 2
 	full := float64(bot-top) / 4 * 0.92
-	t := float64(s.now.UnixMilli()%(1<<40)) / 1000
+	t := float64(now.UnixMilli()%(1<<40)) / 1000
 	b.waveColors(t, v.night)
 
 	// How far the weave swings at each x: the bands spread across the width, tapered at both ends.
@@ -222,6 +381,11 @@ func (r *renderer) wave(s scene) {
 		e := v.level[i] + (v.level[i+1]-v.level[i])*(p-float64(i))
 		taper := math.Pow(math.Sin(math.Pi*u), 0.7)
 		b.amp[x] = float32(full * taper * (0.07 + 0.93*e))
+		b.fade[x] = 1
+		if fade > 0 {
+			f := min(1, u/fade, (1-u)/fade)
+			b.fade[x] = float32(f * f * (3 - 2*f))
+		}
 	}
 
 	for _, l := range waveLines {
@@ -229,7 +393,7 @@ func (r *renderer) wave(s scene) {
 			a := float64(b.amp[x]) * l.spread
 			u := 2 * math.Pi * float64(x) / float64(b.w)
 			y := mid + a*float64(0.75*fastSin(l.f1*u+l.ph+l.speed*t)+0.25*fastSin(l.f2*u+1.7*l.ph+1.3*l.speed*t))
-			b.plot(x, y, b.col[x*3:x*3+3], l.bright)
+			b.plot(x, y, b.col[x*3:x*3+3], l.bright*b.fade[x])
 		}
 	}
 	// The core: a brighter, near-white thread through the middle of the weave.
@@ -240,14 +404,14 @@ func (r *renderer) wave(s scene) {
 		k := b.col[x*3 : x*3+3]
 		core = [3]float32{0.35*k[0] + 0.65, 0.35*k[1] + 0.65, 0.35*k[2] + 0.65}
 		strength := 1.2 * b.amp[x] / float32(max(full, 1))
-		b.plot(x, y, core[:], 1.2*strength)
+		b.plot(x, y, core[:], 1.2*strength*b.fade[x])
 	}
 	// The sparks drift slowly along and twinkle.
 	for i, sp := range waveSparks {
 		x := int(math.Mod(sp[0]+sp[1]*t, 1) * float64(b.w-1))
 		y := mid + sp[2]*float64(b.amp[x])
 		tw := float32(0.6 + 0.5*math.Sin(t*2+float64(i)))
-		b.add(x, int(y), b.col[x*3:x*3+3], tw)
+		b.add(x, int(y), b.col[x*3:x*3+3], tw*b.fade[x])
 	}
 
 	// The glow: the lines shrunk to a quarter, blurred near and wide.
@@ -266,18 +430,18 @@ func (r *renderer) wave(s scene) {
 	}
 	copy(b.lo2, b.lo)
 	boxBlur(b.lo, b.tmp, b.lw, b.lh, 1)
-	boxBlur(b.lo2, b.tmp, b.lw, b.lh, max(2, r.s(5)/2))
+	boxBlur(b.lo2, b.tmp, b.lw, b.lh, wide)
 	// The sums above are of 16 pixels each: the average is folded into the glows' strengths.
 	for i := range b.lo {
 		b.lo[i] = (1.3*b.lo[i] + 0.9*b.lo2[i]) / 16
 	}
 
 	// Everything added over the ground, into the band's rows of the canvas.
-	g := [3]float32{float32(eqGround.R) / 255, float32(eqGround.G) / 255, float32(eqGround.B) / 255}
+	g := [3]float32{float32(ground.R) / 255, float32(ground.G) / 255, float32(ground.B) / 255}
 	y0 := top - pad
 	for y := range b.h {
 		cy := y0 + 2*y
-		if cy < 0 || cy+1 >= r.h {
+		if cy < 0 || cy+1 >= dst.Rect.Dy() {
 			continue
 		}
 		fy := (float32(y)+0.5)/4 - 0.5
@@ -295,7 +459,7 @@ func (r *renderer) wave(s scene) {
 			continue
 		}
 		acc := b.acc[y*b.w*3:]
-		row, next := r.dst.Pix[cy*r.dst.Stride:], r.dst.Pix[(cy+1)*r.dst.Stride:]
+		row, next := dst.Pix[cy*dst.Stride+band.Min.X*4:], dst.Pix[(cy+1)*dst.Stride+band.Min.X*4:]
 		for x := range b.w {
 			l, wx := int(b.lx[x])*3, b.wx[x]
 			gl := b.glow[l : l+6]
@@ -309,5 +473,4 @@ func (r *renderer) wave(s scene) {
 		}
 	}
 
-	r.eqText(lines, bot+under, bottom)
 }

@@ -64,8 +64,8 @@ func init() {
 		component.Supervise(service.Restart(time.Second, 30*time.Second)))
 }
 
-// hasEqualizer is whether this screen offers the equalizer turn screen: not yet on the Spot's round one.
-const hasEqualizer = false
+// hasEqualizer is whether this screen offers the Wave and Bars turn screens (render_turn_spot.go).
+const hasEqualizer = true
 
 // hasNightSwitch is whether Home Assistant can turn the night on and off here: not on the Spot, whose
 // night hours are its own.
@@ -115,6 +115,7 @@ type Display struct {
 	// words do once it is over.
 	camTime    *esphome.Select
 	answerTime *esphome.Select
+	turnStyle  *esphome.Select // Turn screen: Classic, Wave or Bars
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -262,6 +263,7 @@ func build() *Display {
 	d.clock = clockSelect(d.wake)
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
+	d.turnStyle = turnStyleSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.lang = langSelect()
@@ -301,11 +303,11 @@ func build() *Display {
 
 func (d *Display) Name() string { return "screen" }
 
-// turnStyleSel is the Turn screen setting, which the Spot does not have.
-func (d *Display) turnStyleSel() *esphome.Select { return nil }
+// turnStyleSel is the Turn screen setting in Home Assistant.
+func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.callBtn, d.weatherFx, d.lang}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang}
 }
 
 // Restore lights the panel the way it was left.
@@ -313,6 +315,7 @@ func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
+	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.setAuto(c.Screen.Auto, false)
@@ -1110,6 +1113,10 @@ func (d *Display) frame() time.Duration {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
+	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
+		s.eq = eqFor(s.phase, inNight(now), now)
+		s.eq.wave = waveOn()
+	}
 	s.muted, _ = mute.Get().Muted()
 	// A stream this player is carrying is the room's when it is what is being heard: the face names it,
 	// and says what it is doing, though the audio never passes through this player's own stream. Both,
@@ -1266,6 +1273,11 @@ func (d *Display) frame() time.Duration {
 		return dialFrame // a finger dragging the page is followed smoothly
 	case s.showDash && !s.menuOpen:
 		return time.Second // what arrives for it wakes the loop itself
+	case s.eq != nil && !s.showVolume && !s.menuOpen && !(s.phase == "lingering" && s.eq.quiet):
+		if s.eq.wave {
+			return waveFrame
+		}
+		return eqFrame // the bars are moving
 	case s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.showVolume || s.menuOpen || s.btPairing || s.call.Phase != phone.Idle || s.ringing.any():
 		return activeFrame
 	default:

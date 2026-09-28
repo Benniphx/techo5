@@ -174,6 +174,28 @@ func TestRoundScenesDraw(t *testing.T) {
 		}
 	}
 
+	// A turn in the Wave and Bars styles: listening, thinking, a reply, a long one, and at night.
+	listen, listenPk := eqVoice(0.62, 1)
+	reply, replyPk := eqVoice(0.95, 7)
+	night, nightPk := eqVoice(0.8, 11)
+	for _, wave := range []bool{false, true} {
+		style := "bars"
+		if wave {
+			style = "wave"
+		}
+		think := eqFor("thinking", false, at)
+		think.wave = wave
+		scenes["turn-"+style+"-listening"] = roundScene{now: at, phase: "listening", eq: &eqView{level: listen, peak: listenPk, wave: wave}}
+		scenes["turn-"+style+"-thinking"] = roundScene{now: at, phase: "thinking", heard: "What's the weather tomorrow?", eq: think}
+		scenes["turn-"+style+"-replying"] = roundScene{now: at, phase: "replying", heard: "What's the weather tomorrow?",
+			reply: "Tomorrow will be sunny, with a high of 74 and a low of 51.", eq: &eqView{level: reply, peak: replyPk, wave: wave}}
+		scenes["turn-"+style+"-long"] = roundScene{now: at, phase: "replying", heard: "Tell me about the Apollo program",
+			reply: "The Apollo program was the United States human spaceflight program that landed the first humans on the Moon, from 1969 to 1972.",
+			eq:    &eqView{level: reply, peak: replyPk, wave: wave}}
+		scenes["turn-"+style+"-night"] = roundScene{now: at, phase: "replying", heard: "Turn off the bedroom light", reply: "Bedroom light is off.",
+			eq: &eqView{level: night, peak: nightPk, night: true, wave: wave}}
+	}
+
 	dir := os.Getenv("SPOT_PREVIEW")
 	for name, s := range scenes {
 		img := image.NewRGBA(image.Rect(0, 0, side, side))
