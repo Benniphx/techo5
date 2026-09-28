@@ -53,6 +53,11 @@ type Ring struct {
 	Key   string
 	Label string
 	At    time.Time // when it was due
+
+	// snoozed is set once the ring has been put off, so it is put off once: the device acts on a
+	// spoken snooze as it is heard and Home Assistant's automation asks again a moment later, while
+	// the bell is still winding the ring down.
+	snoozed bool
 }
 
 // Upcoming is an alarm yet to ring.
@@ -556,10 +561,11 @@ func (a *Alarms) SnoozeFor(minutes int) bool {
 
 	a.mu.Lock()
 	r, silence := a.ringing, a.silence
-	if r == nil {
+	if r == nil || r.snoozed {
 		a.mu.Unlock()
 		return false
 	}
+	r.snoozed = true
 	now := time.Now()
 	at := now.Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
 	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at})

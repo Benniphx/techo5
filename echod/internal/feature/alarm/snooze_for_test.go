@@ -60,6 +60,34 @@ func TestSnoozeForALength(t *testing.T) {
 	}
 }
 
+// A ring is snoozed once, however many times it is asked while the bell is still winding it down.
+func TestARingIsSnoozedOnce(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+
+	// As the real bell does it: silencing does not clear the ring at once, rang does, later.
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", Label: "Wake up", At: time.Now()}
+	a.silence = func() {}
+	a.mu.Unlock()
+
+	if !a.SnoozeFor(10) {
+		t.Fatal("the first snooze found nothing ringing")
+	}
+	if a.SnoozeFor(10) {
+		t.Error("a ring already snoozed was snoozed again")
+	}
+	if got := a.snoozeAnswer("snooze for ten minutes"); got["snoozed"] != true || got["minutes"] != 10 {
+		t.Errorf("the action answered %v", got)
+	}
+	a.mu.Lock()
+	n := len(a.snoozed)
+	a.mu.Unlock()
+	if n != 1 {
+		t.Errorf("%d snoozes saved, want 1", n)
+	}
+}
+
 // The action answers with the snooze the device made a moment before from what it heard, and says so
 // when nothing was snoozed.
 func TestSnoozeActionAnswers(t *testing.T) {
