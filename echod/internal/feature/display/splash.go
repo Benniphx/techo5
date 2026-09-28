@@ -48,6 +48,11 @@ const (
 
 	// splashMin is the least the splash is shown, so a fast connection still shows the mark.
 	splashMin = 4 * time.Second
+
+	// noAddressWait is how long after the start a device with no network address waits before the Wi-Fi
+	// page opens by itself, ending the splash: long enough for a lease on a slow network, short enough
+	// that a fresh unit, or one in a house it has no network for, is not left on the splash.
+	noAddressWait = 45 * time.Second
 )
 
 var (

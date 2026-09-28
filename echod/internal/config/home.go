@@ -15,6 +15,10 @@ type Home struct {
 	// WeatherSources are the weather entities Home Assistant listed last, offered as choices.
 	WeatherSources []string `json:"weather_sources,omitempty"`
 
+	// Location is a zone.* entity the rain map and weather alerts are centered on, for a device that
+	// is somewhere other than home (a family device in another house). Empty is Home Assistant's home.
+	Location string `json:"location,omitempty"`
+
 	Radio Radio `json:"radio"`
 
 	// RadioSource is the list the radio page shows: RadioFavorites (the stations wired with
@@ -125,6 +129,17 @@ const DefaultWeather = "weather.forecast_home"
 const WeatherOff = "none"
 
 // WeatherEntity is the weather entity to show, empty for none.
+// HomeZone is the zone the rain map and weather alerts are centered on: Location, or zone.home.
+func (h Home) HomeZone() string {
+	if h.Location != "" {
+		return h.Location
+	}
+	return HomeZoneDefault
+}
+
+// HomeZoneDefault is Home Assistant's own home.
+const HomeZoneDefault = "zone.home"
+
 func (h Home) WeatherEntity() string {
 	switch h.Weather {
 	case "":
@@ -176,6 +191,10 @@ func defaultHome() Home {
 func (r Radio) Configured() bool { return len(r.Stations) > 0 && r.Service != "" }
 
 type HomeWriter struct{ st *Store }
+
+func (w HomeWriter) Location(zone string) error {
+	return w.st.Update(func(c *Config) { c.Home.Location = zone })
+}
 
 func (w HomeWriter) Weather(entity string) error {
 	return w.st.Update(func(c *Config) { c.Home.Weather = entity })

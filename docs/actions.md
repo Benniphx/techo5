@@ -930,6 +930,29 @@ data:
   speaker: media_player.office
 ```
 
+## Center the rain map and weather alerts somewhere else
+
+In YAML, refer to this action as `esphome.<node>_home_location`.
+
+The rain map and the weather alerts are centered on Home Assistant's home. A device that lives
+somewhere else, with family in another town, can be given a zone of its own instead: create the zone in
+Home Assistant (**Settings → Areas, labels & zones → Zones**), then give its entity here. Screen devices
+only. Set its weather with [`home_weather`](#choose-the-weather-shown-on-the-idle-screen) as well, for
+a forecast for the same place.
+
+### zone (Required)
+
+*string*
+
+A `zone.*` entity, or empty (or `home`) for Home Assistant's home again. A zone Home Assistant doesn't
+know leaves the rain map and alerts saying the location isn't known, rather than showing home's.
+
+```yaml
+action: esphome.office_home_location
+data:
+  zone: zone.cabin
+```
+
 ## Set the slideshow's photo source
 
 In YAML, refer to this action as `esphome.<node>_home_slideshow`.

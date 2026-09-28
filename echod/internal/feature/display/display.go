@@ -320,9 +320,10 @@ func build() *Display {
 	ambient.Get().Lux.Listen(d.lux)
 	touch.Get().Gestures.Listen(d.gesture)
 	// A device with no address a while after boot gets the Wi-Fi page without being asked: a
-	// fresh unit, or one carried to another house.
+	// fresh unit, or one carried to another house. The page ends the splash (frame), which would
+	// otherwise wait for Home Assistant for ever on a device that cannot reach it.
 	go func() {
-		time.Sleep(90 * time.Second)
+		time.Sleep(noAddressWait)
 		if wifi.Available() && wifi.Current(context.Background()).Address == "" {
 			d.mu.Lock()
 			open := d.wifiOpen
@@ -1549,6 +1550,12 @@ func (d *Display) frame() time.Duration {
 	if booting && ring.any() {
 		d.booting, booting = false, false
 		slog.Info("splash cut short: something is ringing", "after", now.Sub(started).Round(time.Millisecond))
+	}
+	// So does the Wi-Fi page: it opens by itself on a device with no address, which is a device whose
+	// splash would otherwise wait for a Home Assistant it cannot reach, over the one page that fixes it.
+	if booting && d.wifiOpen {
+		d.booting, booting = false, false
+		slog.Info("splash cut short: Wi-Fi setup", "after", now.Sub(started).Round(time.Millisecond))
 	}
 	d.mu.Unlock()
 	if booting {

@@ -7,6 +7,7 @@ package home
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"log/slog"
 	neturl "net/url"
@@ -334,8 +335,9 @@ func (f *Feature) want(h config.Home) {
 		keys = append(keys, hastate.Key{Entity: w}, hastate.Key{Entity: w, Attribute: "temperature"},
 			hastate.Key{Entity: w, Attribute: "temperature_unit"}, hastate.Key{Entity: w, Attribute: "friendly_name"})
 	}
-	// Home's location, for the rain map.
-	keys = append(keys, hastate.Key{Entity: "zone.home", Attribute: "latitude"}, hastate.Key{Entity: "zone.home", Attribute: "longitude"})
+	// Where the rain map and weather alerts are centered: home, or the zone this device was given.
+	zone := h.HomeZone()
+	keys = append(keys, hastate.Key{Entity: zone, Attribute: "latitude"}, hastate.Key{Entity: zone, Attribute: "longitude"})
 	for _, s := range h.Radio.Stations {
 		keys = append(keys, hastate.Key{Entity: s, Attribute: "options"})
 	}
@@ -345,12 +347,38 @@ func (f *Feature) want(h config.Home) {
 	hastate.Get().Follow("home", keys...)
 }
 
+// locationAction centers the rain map and weather alerts on a zone rather than home, for a device in
+// another house: "zone.cabin", or empty (or "home") for home again.
+func (f *Feature) locationAction() *esphome.Action {
+	return &esphome.Action{
+		Name: "home_location",
+		Args: []esphome.Arg{{Name: "zone", Type: esphome.ArgString}},
+		Run: func(c esphome.Call) (any, error) {
+			zone := strings.ToLower(strings.TrimSpace(c.String("zone")))
+			switch zone {
+			case "", "home", config.HomeZoneDefault:
+				zone = ""
+			default:
+				if !strings.HasPrefix(zone, "zone.") || len(zone) == len("zone.") {
+					return nil, fmt.Errorf("home_location: %q is not a zone entity, like zone.cabin", zone)
+				}
+			}
+			if err := config.Set().Home().Location(zone); err != nil {
+				return nil, err
+			}
+			slog.Info("home: location", "zone", config.Get().Home.HomeZone())
+			f.rewire()
+			return nil, nil
+		},
+	}
+}
+
 // Actions are how Home Assistant configures this: which weather entity to show, and how the
 // radio page is wired. Both persist and take effect at the next connection.
 func (f *Feature) Actions() []*esphome.Action {
 	actions := append(f.cameraActions(), f.accessAction())
 	if hasScreen {
-		actions = append(actions, f.slideshowAction(), f.calendarAction())
+		actions = append(actions, f.slideshowAction(), f.calendarAction(), f.locationAction())
 	}
 	return append(actions, []*esphome.Action{
 		{
