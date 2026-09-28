@@ -279,6 +279,8 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
    you would not hand a speaker to, turn the player off per device with the Sendspin switch in Home
    Assistant.
 
+Next: **[Setting it up](setup.md)**, for photos, weather, cameras, music and the night settings.
+
 ### If Home Assistant does not find it
 
 Home Assistant finds these devices over mDNS, the same way it finds ESPHome boards.

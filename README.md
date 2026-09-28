@@ -208,7 +208,8 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 
 **New to this? Start with [Getting started](docs/getting-started.md)**: every step from a stock Echo
 Show 5, Dot or Spot, with the unlock guides linked, what to check after each step, and notes for
-Windows, Linux and macOS.
+Windows, Linux and macOS. Once it's in Home Assistant, **[Setting it up](docs/setup.md)** covers
+photos, weather, cameras, music and the night settings, in order.
 
 You need a Show 5 **unlocked and running LineageOS 18.1** — 2nd gen with
 [amonet-cronos](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-5-2nd-gen-2021-cronos.4772596/)
