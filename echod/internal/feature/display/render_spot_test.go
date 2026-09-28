@@ -240,3 +240,48 @@ func spotPicker(cat category, row string) roundScene {
 	sc.sheet.st.picker = row
 	return sc
 }
+
+// The same on the round face: the control is where the face says it is, and a frame without the sound
+// leaves nothing tappable. A circle has no corner, so this is the bottom bar, and the tap has to
+// follow it there.
+func TestTheCameraSoundControlIsWhereItIsDrawnOnTheSpot(t *testing.T) {
+	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local)
+	img := image.NewRGBA(image.Rect(0, 0, side, side))
+	r := newRoundRenderer(img)
+	cam := roundScene{now: at, phase: "idle", showCamera: true,
+		camera: home.CameraView{Entity: "camera.deck", Name: "Deck"}}
+	// The widest the control ever says, so this is inside the bar whatever it is carrying.
+	box := cameraSoundBox(r.width(r.label, "Unmute") + 24)
+	centre := box.Min.Add(image.Pt(box.Dx()/2, box.Dy()/2))
+
+	r.draw(cam)
+	if r.cameraSoundTapped(centre.X, centre.Y) {
+		t.Fatal("a tap found a sound control where the face draws none")
+	}
+
+	cam.cameraSound, cam.cameraSoundLive = true, true
+	r.draw(cam)
+	if !r.cameraSoundTapped(centre.X, centre.Y) {
+		t.Fatalf("a tap on the sound control, at %v, was missed", centre)
+	}
+
+	// Silenced, taken, or never arrived: the control stays, offering to ask for it again.
+	cam.cameraSoundLive = false
+	r.draw(cam)
+	if !r.cameraSoundTapped(centre.X, centre.Y) {
+		t.Fatal("a sound that is not playing lost its control, so it could not be asked for again")
+	}
+
+	cam.cameraSound = false
+	r.draw(cam)
+	if r.cameraSoundTapped(centre.X, centre.Y) {
+		t.Fatal("the control was left tappable for a view with no sound")
+	}
+
+	// It has to hold the words it is given, on the face it is drawn with.
+	for _, label := range []string{"Mute", "Unmute"} {
+		if b := cameraSoundBox(r.width(r.label, label) + 24); b.Dx() < r.width(r.label, label) {
+			t.Errorf("%q does not fit the bar it is drawn in", label)
+		}
+	}
+}

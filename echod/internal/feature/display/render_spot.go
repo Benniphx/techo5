@@ -110,6 +110,13 @@ type roundScene struct {
 	showCamera bool
 	cameraLive bool // the sensor is running
 
+	// cameraSound is whether that view has a sound of its own at all, which is when its control is drawn;
+	// cameraSoundLive is whether that sound is playing or on its way, which is what the control says: Mute
+	// while it is, and Unmute when it is not. Drawn for both, because a sound that is not playing has to
+	// be askable-for from the screen — muting it must not be a door that only closes.
+	cameraSound     bool
+	cameraSoundLive bool
+
 	btPairing bool
 
 	// call is the phone: while one rings, is placed or is up, its face is over everything.
@@ -199,6 +206,10 @@ type roundRenderer struct {
 	shapes      alertOverlay
 
 	wb *waveBuf // the wave turn screen's working memory, kept between frames
+
+	// cameraSoundAt is where the camera page's sound control was drawn in the frame last drawn, for a
+	// tap, under zmu; empty when there was no control to draw.
+	cameraSoundAt image.Rectangle
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {
@@ -235,6 +246,7 @@ func (r *roundRenderer) draw(s roundScene) {
 	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(colBackground), image.Point{}, draw.Src)
 	r.callDrawn = false
 	r.clearAlertTaps()
+	r.clearCameraSoundTap()
 
 	// Muted is drawn last, over whatever the face turns out to be: see mutedRim.
 	defer func() {

@@ -124,6 +124,16 @@ type Feature struct {
 	// cam is the camera view in progress; see camera.go.
 	cam CameraView
 
+	// camSound is the camera whose sound this view has, camOver the media player's token for the request
+	// it was asked with, and camMuted whether that sound was silenced from the screen. camSound stays for
+	// as long as the view does, playing or not: the view still has a sound, which is what the control on
+	// the screen is drawn from, and muting it is not the end of it. cameraSoundSw is the setting's
+	// switch. See camera_sound.go.
+	camSound      string
+	camOver       media.OverToken
+	camMuted      bool
+	cameraSoundSw *esphome.Switch
+
 	// slideshowSel picks the display mode, slideshowOverlaySel the screensaver's clock/date size,
 	// slideshowIdleNum the screensaver's idle wait; slideshow is the fetch state. See slideshow.go.
 	slideshowSel        *esphome.Select
@@ -196,6 +206,7 @@ func Get() *Feature {
 		shared.buildWeatherSelect()
 		shared.buildRadarSelect()
 		shared.buildAlertsSwitch()
+		shared.buildCameraSoundSwitch()
 		shared.buildSlideshowSelect()
 		hastate.Get().Changed.Listen(func(hastate.Update) { shared.Changed.Emit(struct{}{}) })
 		media.Get().OnPlay.Listen(shared.played)
@@ -313,6 +324,7 @@ func (f *Feature) Restore(c config.Config) {
 	f.weatherSel.Set(chosenOption(c.Home))
 	f.radarSel.Set(radarChoices[RadarSourceIndex()].label)
 	f.alertsSw.Set(!c.Home.AlertsOff)
+	f.cameraSoundSw.Set(c.Home.CameraSound)
 	if hasScreen {
 		f.slideshowSel.Set(slideshowLabelFor(c.Home.Slideshow.Mode))
 		f.slideshowOverlaySel.Set(slideshowOverlayLabelFor(c.Home.Slideshow.Overlay))
