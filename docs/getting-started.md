@@ -88,6 +88,16 @@ board is called out — `checkers`, `cronos`, `crown`.
    [[UNLOCK][ROOT][TWRP][UNBRICK] Amazon Echo Show 8 1st Gen - 2019 (crown)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-1st-gen-2019-crown.4766687/)
    (amonet branch `mt8163-crown`).
    *Check:* the Show boots into TWRP.
+
+   **Shortcut: straight from TWRP.** Steps 2 to 4 can be skipped. Download the LineageOS zip from step
+   2's thread, and with the Show still in TWRP and connected by USB, run the installer with it:
+   ```
+   python3 tools/install-show.py --lineage-zip lineage-18.1-XXXXXXXX-UNOFFICIAL-cronos.zip --wifi "MyNetwork"
+   ```
+   It installs LineageOS only for its drivers, without starting it, and gives TECHO5 your Wi-Fi (it asks
+   for the passphrase). Tested on the Show 5 2nd gen; the 1st gen and the Show 8 take the same command
+   with their own zip. Then go to step 5. [docs/install.md](install.md#straight-from-twrp-without-starting-lineageos)
+   has the details.
 2. **Install LineageOS 18.1.** Follow
    [[ROM][UNOFFICIAL][11][cronos] LineageOS 18.1 for the Echo Show 5 (2021)](https://xdaforums.com/t/rom-unofficial-11-cronos-lineageos-18-1-for-the-amazon-echo-show-5-2021.4772598/).
    Use a current build (0.4 or later; earlier ones lose audio after a few days). A **1st gen** takes
