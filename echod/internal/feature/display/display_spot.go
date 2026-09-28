@@ -1299,6 +1299,12 @@ func (d *Display) Screenshot() *image.RGBA {
 func (d *Display) setAtNight(int)     {}
 func (d *Display) nightHoursChanged() {}
 
+// The clock's position and the date's color are the Show's (clock_layout.go): the Spot's round face
+// has neither.
+func clockLayoutRows() []settingRow                        { return nil }
+func clockLayoutPicker(string) (pickerView, bool)          { return pickerView{}, false }
+func (d *Display) chooseClockLayout(id string, i int) bool { return false }
+
 // nightLeftToHA does nothing on the Spot, which has no Night mode switch (hasNightSwitch).
 func (d *Display) nightLeftToHA()    {}
 func (d *Display) setNightStyle(int) {}

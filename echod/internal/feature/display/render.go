@@ -523,35 +523,66 @@ func (r *renderer) volumeBar(s scene) {
 // optional suffix appended to the date line (an alarm note, on the ordinary idle page). Shared by
 // bigClock and the screensaver's normal-size overlay, which wants the clock alone.
 func (r *renderer) timeAndDate(now time.Time, base int, dateSuffix string) image.Rectangle {
+	return r.timeAndDateAt(now, base, dateSuffix, 0, 0)
+}
+
+// timeAndDateAt is timeAndDate lined up across as align says: -1 against left (a left edge), 0
+// centered, 1 against the right margin. Off center it is the compact clock, for a corner: the time at
+// the size of the weather's reading, the date close under it.
+func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, align, left int) image.Rectangle {
+	clock, ampmFace, dateGap := r.clock, r.ampm, r.s(70)
+	if align != 0 {
+		clock, ampmFace, dateGap = r.big, r.small, r.s(48)
+	}
 	hour := clockHM(now)
 	ampm := clockSuffix(now)
-	hw := r.width(r.clock, hour)
-	aw := r.width(r.ampm, ampm)
+	hw := r.width(clock, hour)
+	aw := r.width(ampmFace, ampm)
 	gap := r.s(18)
+	if align != 0 {
+		gap = r.s(10)
+	}
 	if ampm == "" {
 		gap = 0
 	}
-	x := (r.w - hw - gap - aw) / 2
-	r.text(r.clock, hour, x, base, cream)
-	r.text(r.ampm, ampm, x+hw+gap, base, amber)
+	across := func(w int) int {
+		switch {
+		case align < 0:
+			return left
+		case align > 0:
+			return r.w - r.margin - w
+		}
+		return (r.w - w) / 2
+	}
+	x := across(hw + gap + aw)
+	r.text(clock, hour, x, base, cream)
+	r.text(ampmFace, ampm, x+hw+gap, base, amber)
 
 	date := now.Format("Monday, January 2") + dateSuffix
-	x = (r.w - r.width(r.small, date)) / 2
-	r.text(r.small, date, x, base+r.s(70), dim)
-	return image.Rect(x, base+r.s(40), x+r.width(r.small, date), base+r.s(80))
+	x = across(r.width(r.small, date))
+	r.text(r.small, date, x, base+dateGap, dateColor(dim))
+	return image.Rect(x, base+dateGap-r.s(30), x+r.width(r.small, date), base+dateGap+r.s(10))
 }
 
 // bigClock is the idle screen: the time across the middle, the date beneath, and under that the running
 // timers. With timers the clock moves up to make room. The next alarm, when it is within a day, follows
 // the date.
 func (r *renderer) bigClock(s scene) {
-	base := r.h/2 + r.s(60)
+	align, foot := clockAlign()
+	base, timersAt := r.h/2+r.s(60), r.s(128)
+	if foot {
+		// The compact clock in a corner at the foot, the date clear of the footer's line.
+		base, timersAt = r.h-r.s(106), r.s(96)
+	}
 	timers := false
 	for _, t := range s.timers {
 		timers = timers || t.Active
 	}
 	if timers {
 		base -= r.s(36)
+		if foot {
+			base -= r.s(20) // the timers' line goes under the date, and has to stay on the screen
+		}
 	}
 	if s.strip {
 		// The music strip takes the foot of the panel; the clock and date move up out of its way.
@@ -567,9 +598,14 @@ func (r *renderer) bigClock(s scene) {
 		suffix = "  ·  " + what + " " + clockText(next.At)
 	}
 	// A tap on the date opens the calendar, with a finger's room around it.
-	r.setDateAt(r.timeAndDate(s.now, base, suffix).Inset(-r.s(16)))
+	// Bottom left keeps clear of the Call button, when it is on the clock.
+	left := r.margin
+	if s.callButton && foot && align < 0 {
+		left = r.callButtonRect().Max.X + r.s(24)
+	}
+	r.setDateAt(r.timeAndDateAt(s.now, base, suffix, align, left).Inset(-r.s(16)))
 	if timers {
-		r.timersLine(s, base+r.s(128))
+		r.timersLine(s, base+timersAt)
 	}
 
 	r.weatherCorner(s)

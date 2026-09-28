@@ -44,6 +44,11 @@ type Screen struct {
 	// default five seconds, -1 until they are tapped away.
 	AnswerSeconds int `json:"answer_seconds,omitempty"`
 
+	// ClockPosition is where the home screen's clock sits: empty for the center, "bottom-left" or
+	// "bottom-right"; DateColor the date's color, empty for the theme's (display/clock_layout.go).
+	ClockPosition string `json:"clock_position,omitempty"`
+	DateColor     string `json:"date_color,omitempty"`
+
 	// NightByHA leaves the night to Home Assistant: the hours are not followed, and it is night only
 	// while the Night mode switch is on. Night keeps the hours, for choosing them again.
 	NightByHA bool `json:"night_by_ha,omitempty"`
@@ -153,6 +158,14 @@ func (w ScreenWriter) NightByHA(v bool) error {
 // NightOverride saves the Night mode switch: "on", "off", or "" to follow the hours again.
 func (w ScreenWriter) NightOverride(v string, at int64) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightOverride, c.Screen.NightOverrideAt = v, at })
+}
+
+func (w ScreenWriter) ClockPosition(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.ClockPosition = v })
+}
+
+func (w ScreenWriter) DateColor(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.DateColor = v })
 }
 
 func (w ScreenWriter) AnswerSeconds(v int) error {
