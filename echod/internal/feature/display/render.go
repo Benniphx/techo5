@@ -568,7 +568,7 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 	}
 	x := across(hw + gap + aw)
 	r.text(clock, hour, x, base, cream)
-	r.text(ampmFace, ampm, x+hw+gap, base, amber)
+	r.text(ampmFace, ampm, x+hw+gap, base, dateColor(amber)) // a chosen date color takes the AM/PM with it
 
 	date := now.Format("Monday, January 2") + dateSuffix
 	x = across(r.width(r.small, date))

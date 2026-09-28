@@ -117,7 +117,7 @@ func (r *paint) text(face font.Face, s string, x, baseline int, c color.Color) {
 	}
 	if r.over.photo != nil {
 		r.over.halo(r.dst, face, s, x, baseline)
-		if face.Metrics().Height.Ceil() <= r.s(scrimTallest) {
+		if _, chosen := c.(chosenColor); !chosen && face.Metrics().Height.Ceil() <= r.s(scrimTallest) {
 			c = photoGold
 		}
 	}

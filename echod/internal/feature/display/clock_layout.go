@@ -84,10 +84,11 @@ func clockAlign() (align int, foot bool) {
 	return 0, false
 }
 
-// dateColor is the date's color: the one chosen, or fallback, the theme's.
-func dateColor(fallback color.RGBA) color.RGBA {
+// dateColor is the date's color: the one chosen, or fallback, the theme's. A chosen one is kept over a
+// photo too (chosenColor), where the theme's would turn gold.
+func dateColor(fallback color.RGBA) color.Color {
 	if i := dateColorIndex(); i > 0 {
-		return dateColors[i].c
+		return chosenColor(dateColors[i].c)
 	}
 	return fallback
 }
@@ -122,7 +123,7 @@ func setDateColor(s *esphome.Select, i int) {
 func clockLayoutRows() []settingRow {
 	return []settingRow{
 		{id: "clockpos", label: "Clock position", sub: "Out of a photo's way", kind: ctlChoice, value: clockPositions[clockPositionIndex()].label},
-		{id: "datecolor", label: "Date color", kind: ctlChoice, value: dateColors[dateColorIndex()].label},
+		{id: "datecolor", label: "Date color", sub: "The date and AM/PM", kind: ctlChoice, value: dateColors[dateColorIndex()].label},
 	}
 }
 
