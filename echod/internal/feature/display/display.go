@@ -445,6 +445,8 @@ func (d *Display) relight(jump bool) {
 		target = math.Max(target, floor)
 		if d.nightGlow {
 			target = float64(d.glowBacklight()) // relight holds mu
+		} else if phone.Get().Busy() && inNight(config.Get().Screen.Night, time.Now()) {
+			target = math.Min(target, screen.BacklightMax/2) // a call at night: enough to see who it is
 		}
 	}
 	// The light before an alarm takes the backlight over while it runs: it starts under anything the
@@ -545,20 +547,39 @@ func (d *Display) gesture(g touch.Gesture) {
 	d.mu.Unlock()
 
 	if !on {
+		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
+			// A ring on a panel the night left dark: the tap stops it, and the panel stays dark.
+			d.stopRing()
+			return
+		}
 		if g.Kind == touch.Tap {
 			d.apply(true, d.ceilingOrDefault(), true)
 		}
 		return
 	}
-	// A night light's first touch only brings the screen up, as a dark screen's does: nobody can
-	// see what they are pressing on a screen this dim.
+	// A night light stays a night light when it is touched: bright light is the last thing somebody
+	// asleep or just waking wants, and a hand in the dark is more likely a knock than a request. A long
+	// press is the way to the full screen, as the first touch used to be; nothing else on a night
+	// light does anything, since nobody can see what they are pressing on a screen this dim.
 	d.mu.Lock()
 	glowing := d.nightGlow
-	d.nightGlow = false
 	d.mu.Unlock()
 	if glowing {
-		d.relight(true)
-		d.wake()
+		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
+			// An alarm or a timer rings over the night clock; a tap anywhere stops it, as the ringing
+			// page's own button would.
+			d.stopRing()
+			d.wake()
+			return
+		}
+		if g.Kind == touch.Hold {
+			d.mu.Lock()
+			d.nightGlow = false
+			d.mu.Unlock()
+			slog.Info("screen: night light lifted by a long press")
+			d.relight(true)
+			d.wake()
+		}
 		return
 	}
 	// A call: its page takes every tap.
@@ -1076,17 +1097,24 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	}
 	switch {
 	case in && on:
-		_, cameraUp := home.Get().Camera()
-		_, announcing := announce.Get().Showing()
-		busy := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle ||
-			d.ringing(now).any() || phone.Get().Busy() || sunriseProgress(now) > 0 || reminderUp() ||
-			cameraUp || announcing
+		// Only a call lifts the night light, and only to half brightness (relight): somebody has to
+		// see who it is. The light before an alarm lifts it too, since that light is what was asked
+		// for. Everything else stays at the night light's level: an alarm or a timer rings over the
+		// night clock, and the words of an answer, an announcement or a reminder are shown dim, the
+		// clock coming back after, rather than the main screen at full brightness for somebody asleep
+		// or just waking.
+		lift := phone.Get().Busy() || sunriseProgress(now) > 0
+		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
-		// to, and it kept a guest room's screen at full brightness all night; a touch or a word still
-		// brings the screen up to see what is playing.
-		if busy {
-			// Whatever keeps the screen up at night - a ring, a call, a turn, the light before an
-			// alarm - is seen at the screen's brightness, not the night light's.
+		// to, and it kept a guest room's screen at full brightness all night.
+		if !lift && active {
+			// Left as it is: a night light stays one, and a screen a long press brought up stays up
+			// until the room has been quiet a while.
+			return false
+		}
+		if lift {
+			// A call at night is seen at half brightness (relight), and the light before an alarm at
+			// its own; neither at the night light's.
 			d.mu.Lock()
 			glowing := d.nightGlow
 			d.nightGlow = false
@@ -1447,9 +1475,11 @@ func (d *Display) frame() time.Duration {
 	ring := d.ringing(now)
 	call := phone.Get().State()
 	_, reminding := remind.Get().Showing()
-	if (ring.any() || reminding || call.Phase != phone.Idle) && !on {
-		// A ring, a reminder or a call lights a dark panel, night or not: its page is how it is
-		// answered or stopped, and a reminder is its words on the screen.
+	night := inNight(config.Get().Screen.Night, now)
+	if !on && (call.Phase != phone.Idle || (!night && (ring.any() || reminding))) {
+		// A call lights a dark panel, at night to half brightness (relight): its page is how it is
+		// answered. By day a ring and a reminder do too, the ring's page being how it is stopped and a
+		// reminder being its words. At night they leave the panel dark: "stop" or a tap ends a ring.
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
@@ -1735,11 +1765,4 @@ func (d *Display) frame() time.Duration {
 		return time.Until(now.Truncate(idleFrame).Add(idleFrame))
 	}
 	return activeFrame
-}
-
-// reminderUp is whether a reminder is on the screen, which keeps the panel from going dark for the
-// night under it.
-func reminderUp() bool {
-	_, up := remind.Get().Showing()
-	return up
 }
