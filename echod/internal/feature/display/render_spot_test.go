@@ -214,6 +214,26 @@ func TestRoundScenesDraw(t *testing.T) {
 	}
 }
 
+// One replying frame of a turn in each style, the page it spends longest on; for timing on a Spot.
+func BenchmarkSpotTurnFrame(b *testing.B) {
+	for _, wave := range []bool{false, true} {
+		name := "bars"
+		if wave {
+			name = "wave"
+		}
+		b.Run(name, func(b *testing.B) {
+			level, peak := eqVoice(0.95, 7)
+			s := roundScene{now: time.Now(), phase: "replying", heard: "What's the weather tomorrow?",
+				reply: "Tomorrow will be sunny, with a high of 74 and a low of 51.", eq: &eqView{level: level, peak: peak, wave: wave}}
+			r := newRoundRenderer(image.NewRGBA(image.Rect(0, 0, side, side)))
+			for i := range b.N {
+				s.now = s.now.Add(100 * time.Millisecond * time.Duration(i%2))
+				r.draw(s)
+			}
+		})
+	}
+}
+
 // spotPicker is a settings card with one row's list of choices open.
 func spotPicker(cat category, row string) roundScene {
 	sc := spotScene(cat)
