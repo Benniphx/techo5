@@ -86,7 +86,7 @@ data), installs the zip from TWRP, checks that its Wi-Fi driver is built for the
 goes on as above. `--wifi` asks for the network's passphrase and sends the unit only the WPA key made
 from it. Without `--wifi`, the Show opens its Wi-Fi page by itself a little after it starts.
 
-On a Show 5 2nd gen it also puts the TECHO5 logo in place of Amazon's at boot. The logo lives in the
+On a Show 5 2nd gen or a Show 8 it also puts the TECHO5 logo in place of Amazon's at boot. The logo lives in the
 unlock's bootloader (kaeru, in `expdb`), so it is only written over the kaeru it was made for, and read
 back from the flash; if the read back is wrong, the saved `expdb` goes straight back. Any other unit
 keeps Amazon's logo. `--amazon-logo` keeps it too. See [Boot logo](hardware.md#boot-logo-lk).
