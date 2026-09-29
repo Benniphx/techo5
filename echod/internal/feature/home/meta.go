@@ -105,6 +105,7 @@ func (f *Feature) refreshMeta(ctx context.Context) {
 			f.mu.Lock()
 			f.meta = meta{}
 			f.mu.Unlock()
+			f.showRadio(meta{})
 			f.Changed.Emit(struct{}{})
 		}
 		return
@@ -120,6 +121,7 @@ func (f *Feature) refreshMeta(ctx context.Context) {
 			f.mu.Lock()
 			f.meta = next
 			f.mu.Unlock()
+			f.showRadio(next)
 			f.Changed.Emit(struct{}{})
 			return
 		}
@@ -153,6 +155,7 @@ func (f *Feature) refreshMeta(ctx context.Context) {
 	f.mu.Unlock()
 	if changed {
 		slog.Info("radio: now", "station", station, "title", next.now.Title, "artist", next.now.Artist, "art", next.artURL != "")
+		f.showRadio(next)
 		f.Changed.Emit(struct{}{})
 	}
 }

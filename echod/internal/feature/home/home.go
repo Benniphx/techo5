@@ -134,6 +134,10 @@ type Feature struct {
 	// as long as the view does, playing or not: the view still has a sound, which is what the control on
 	// the screen is drawn from, and muting it is not the end of it. cameraSoundSw is the setting's
 	// switch. See camera_sound.go.
+	// radioStationTxt, radioArtistTxt and radioTitleTxt are what the radio is playing, for Home
+	// Assistant (radio_sensors.go).
+	radioStationTxt, radioArtistTxt, radioTitleTxt *esphome.TextSensor
+
 	camSound      string
 	camOver       media.OverToken
 	camMuted      bool
@@ -213,6 +217,7 @@ func Get() *Feature {
 		shared.buildAlertsSwitch()
 		shared.buildCameraSoundSwitch()
 		shared.buildSlideshowSelect()
+		shared.buildRadioSensors()
 		hastate.Get().Changed.Listen(shared.stateChanged)
 		media.Get().OnPlay.Listen(shared.played)
 		media.Get().OnEnd.Listen(shared.ended)
@@ -329,6 +334,7 @@ func (f *Feature) Restore(c config.Config) {
 	f.weatherSel.Set(chosenOption(c.Home))
 	f.radarSel.Set(radarChoices[RadarSourceIndex()].label)
 	f.alertsSw.Set(!c.Home.AlertsOff)
+	f.showRadio(meta{}) // nothing plays at a start; the poller fills them in
 	f.cameraSoundSw.Set(c.Home.CameraSound)
 	if hasScreen {
 		f.slideshowSel.Set(slideshowLabelFor(c.Home.Slideshow.Mode))

@@ -92,7 +92,9 @@ data:
   Read [what this trusts](getting-started.md#after-installing-every-device) first if your Wi-Fi has
   guests on it. **Music Assistant player** under Settings → Sound turns it off.
 - **Radio.** The Radio drawer and its favorites are set with
-  [the radio actions](actions.md#wire-up-the-radio-page).
+  [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
+  **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's
+  service reports them), for an automation or a dashboard to use.
 
 ## 6. Night and the screen
 
