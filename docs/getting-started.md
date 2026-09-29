@@ -90,12 +90,16 @@ board is called out — `checkers`, `cronos`, `crown`.
    *Check:* the Show boots into TWRP.
 
    **Shortcut: straight from TWRP.** Steps 2 to 4 can be skipped. Download the LineageOS zip from step
-   2's thread, and with the Show still in TWRP and connected by USB, run the installer with it:
+   2's thread, and with the Show still in TWRP and connected by USB, get the installer and run it with it:
    ```
+   git clone https://github.com/HuskerMinion/techo5
+   cd techo5
    python3 tools/install-show.py --lineage-zip lineage-18.1-XXXXXXXX-UNOFFICIAL-cronos.zip --wifi "MyNetwork"
    ```
    It installs LineageOS only for its drivers, without starting it, and gives TECHO5 your Wi-Fi (it asks
-   for the passphrase). Tested on the Show 5 2nd gen; the 1st gen and the Show 8 take the same command
+   for the passphrase). It checks that the zip is for this board before erasing anything, and that its
+   Wi-Fi driver matches TECHO5's kernel right after installing it; a wrong zip stops it there, with the
+   Show still in TWRP to run again with the right one. Tested on the Show 5 2nd gen; the 1st gen and the Show 8 take the same command
    with their own zip. Then go to step 5. [docs/install.md](install.md#straight-from-twrp-without-starting-lineageos)
    has the details.
 2. **Install LineageOS 18.1.** Follow

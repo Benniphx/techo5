@@ -28,11 +28,17 @@ def quote(s):
     return "'" + s.replace("'", "'\\''") + "'"
 
 
-def show_wifi_conf(lines):
-    """A wpa_supplicant configuration for the Show from wifi_conf's two lines (the name and WPA's key, both
-    as hex): the same form boot.sh writes from Android's saved networks."""
+# CONF_FORMAT is the wpa_supplicant configuration as a printf format for the unit's shell, with the name and
+# WPA's key (both hex) as its two arguments: the same form boot.sh writes from Android's saved networks.
+# Sent as escapes rather than as the text itself, since a tab typed into the console's shell can be taken
+# for completion.
+CONF_FORMAT = r'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=%s\n\tpsk=%s\n}\n'
+
+
+def wifi_keys(lines):
+    """The name and key, as hex, from wifi_conf's two lines."""
     kv = dict(line.split('=', 1) for line in lines.strip().split('\n'))
-    return 'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=%s\n\tpsk=%s\n}\n' % (kv['ssid'], kv['psk'])
+    return kv['ssid'], kv['psk']
 
 
 def main():
@@ -63,11 +69,12 @@ def main():
     step('Wi-Fi')
     if a.passphrase_file:
         with open(a.passphrase_file) as f:
-            conf = show_wifi_conf(wifi_conf(a.network, f.read().strip()))
+            # Only the line's end goes: a passphrase may begin or end with spaces.
+            ssid, psk = wifi_keys(wifi_conf(a.network, f.read().rstrip('\r\n')))
     else:
-        conf = show_wifi_conf(ask_wifi(a.network))
-    o = console.run("mkdir -p %s && (umask 077; printf '%%s' %s > %s.tmp) && mv -f %s.tmp %s && sync && echo WIFI-OK"
-                    % (os.path.dirname(CONF), quote(conf), CONF, CONF, CONF), 15)
+        ssid, psk = wifi_keys(ask_wifi(a.network))
+    o = console.run("mkdir -p %s && (umask 077; printf '%s' %s %s > %s.tmp) && mv -f %s.tmp %s && sync && echo WIFI-OK"
+                    % (os.path.dirname(CONF), CONF_FORMAT, ssid, psk, CONF, CONF, CONF), 15)
     if 'WIFI-OK' not in (o or ''):
         fail('writing the Wi-Fi network failed:\n%s' % o)
     note("'%s' saved (only its key)" % a.network)
@@ -80,7 +87,7 @@ def main():
 
     def settled():
         o = console.run("ip -4 addr show wlan0 | sed -n 's/.*inet \\([0-9.]*\\).*/\\1/p'; "
-                        "grep 'wifi: ' /data/techo5-linux/boot.log | tail -1", 8) or ''
+                        "grep 'wifi: ' /run/boot.log | tail -1", 8) or ''
         lines = o.split('\n')
         if re.match(r'^\d+\.\d+\.\d+\.\d+$', lines[0].strip()):
             joined['ip'] = lines[0].strip()

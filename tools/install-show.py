@@ -95,11 +95,17 @@ def lineage_board(zip_path):
     return m.group(1)
 
 
-def show_wifi_conf(lines):
-    """A wpa_supplicant configuration for the Show from wifi_conf's two lines (the name and WPA's key, both
-    as hex): the same form boot.sh writes from Android's saved networks."""
+# WIFI_CONF_FORMAT is the wpa_supplicant configuration as a printf format for the unit's shell, with the
+# name and WPA's key (both hex) as its two arguments: the same form boot.sh writes from Android's saved
+# networks. Sent as escapes rather than as the text itself, since a tab typed into the console's shell can
+# be taken for completion.
+WIFI_CONF_FORMAT = r'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=%s\n\tpsk=%s\n}\n'
+
+
+def wifi_keys(lines):
+    """The name and key, as hex, from wifi_conf's two lines."""
     kv = dict(line.split('=', 1) for line in lines.strip().split('\n'))
-    return 'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=%s\n\tpsk=%s\n}\n' % (kv['ssid'], kv['psk'])
+    return kv['ssid'], kv['psk']
 
 
 def save_partitions(adb, folder):
@@ -117,7 +123,11 @@ def save_partitions(adb, folder):
         with open(out, 'rb') as f:
             sums.append('%s  %s' % (hashlib.sha256(f.read()).hexdigest(), os.path.basename(out)))
     for b in ('boot0', 'boot1'):
-        adb.exec_out_to_file('dd if=/dev/block/mmcblk0%s bs=4096 2>/dev/null' % b, os.path.join(folder, 'mmcblk0%s.img' % b))
+        out = os.path.join(folder, 'mmcblk0%s.img' % b)
+        size = int(adb.sh('cat /sys/class/block/mmcblk0%s/size' % b) or 0) * 512
+        adb.exec_out_to_file('dd if=/dev/block/mmcblk0%s bs=4096 2>/dev/null' % b, out)
+        if not size or os.path.getsize(out) != size:
+            fail('saving %s gave %d bytes, not %d' % (b, os.path.getsize(out), size))
     with open(os.path.join(folder, 'SHA256SUMS'), 'w') as f:
         f.write('\n'.join(sums) + '\n')
     return len(sums)
@@ -281,9 +291,10 @@ def main():
     if a.wifi:
         if a.wifi_passphrase_file:
             with open(a.wifi_passphrase_file) as f:
-                wifi = show_wifi_conf(wifi_conf(a.wifi, f.read().strip()))
+                # Only the line's end goes: a passphrase may begin or end with spaces.
+                wifi = wifi_keys(wifi_conf(a.wifi, f.read().rstrip('\r\n')))
         else:
-            wifi = show_wifi_conf(ask_wifi(a.wifi))
+            wifi = wifi_keys(ask_wifi(a.wifi))
         note("Wi-Fi: '%s' (only its key goes to the unit)" % a.wifi)
     a.name = ask_name(a.name, BOARDS[dev])
     note("name in Home Assistant: '%s'" % a.name)
@@ -358,8 +369,14 @@ def main():
         install_lineage(adb, a.lineage_zip)
         check_lineage_driver(adb)
         if not os.path.exists(los_boot):
+            # Through a .partial kept only when whole, as on the LineageOS path: this is the image the way
+            # back flashes, and a short one kept for good would be skipped on every later run.
             os.makedirs(backup, exist_ok=True)
-            adb.exec_out_to_file('dd if=/dev/block/mmcblk0p9 bs=4096 2>/dev/null', los_boot)
+            size = int(adb.sh('cat /sys/class/block/mmcblk0p9/size') or 0) * 512
+            adb.exec_out_to_file('dd if=/dev/block/mmcblk0p9 bs=4096 2>/dev/null', los_boot + '.partial')
+            if not size or os.path.getsize(los_boot + '.partial') != size:
+                fail('the LineageOS boot image came back %d bytes, not %d' % (os.path.getsize(los_boot + '.partial'), size))
+            os.replace(los_boot + '.partial', los_boot)
             note('LineageOS boot image: %s' % los_boot)
 
     # ------------------------------------------------------------------------------------ 4. push
@@ -464,8 +481,8 @@ def main():
                  " && { [ -e /data/misc/techo5/state.json ] || printf '{\"security\":{\"ssh\":true}}\\n' > /data/misc/techo5/state.json; }"
                  % quote(pub))
     if wifi:
-        prov += (" && mkdir -p /data/techo5-linux && (umask 077; printf '%%s' %s > /data/techo5-linux/wpa_supplicant.conf)"
-                 % quote(wifi))
+        prov += (" && mkdir -p /data/techo5-linux && (umask 077; printf '%s' %s %s > /data/techo5-linux/wpa_supplicant.conf)"
+                 % (WIFI_CONF_FORMAT, wifi[0], wifi[1]))
     o = console.run(prov + ' && sync && echo PROV-OK', 15)
     if 'PROV-OK' not in (o or ''):
         fail('provisioning failed:\n%s' % o)
