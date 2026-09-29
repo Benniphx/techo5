@@ -215,6 +215,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		}
 	case "house":
 		problem = saveHouse(r.PostFormValue("word"))
+	case "brain":
+		problem = saveBrain(r)
 	case "adopt":
 		if _, err := api.Get().OpenAdoption(); err != nil {
 			problem = "could not open the device to a Home Assistant: " + err.Error()
@@ -296,6 +298,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 	case "sound":
 		houseSection(w, token)
 		stationsSection(w, token)
+		brainSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)
 	case "connections":

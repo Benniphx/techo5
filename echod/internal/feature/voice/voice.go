@@ -153,7 +153,7 @@ func (v *Voice) Run(ctx context.Context) error {
 // Ready reports whether Home Assistant has a voice pipeline listening. Wake detection runs before
 // that happens, but nothing can be done with a detection until it does, so this is what the device
 // shows on the ring while it comes up.
-func (v *Voice) Ready() bool { return v.vs.Subscribed() }
+func (v *Voice) Ready() bool { return v.vs.Subscribed() || config.Get().Brain.Direct() }
 
 // Start asks for a turn as if that slot's wake word had fired, which is how detection and the
 // buttons both reach a pipeline. What that means from the phase the conversation is already in is

@@ -109,7 +109,14 @@ type event struct {
 // being written and an event that does not fit the phase is dropped by the transition rather than by
 // a guard flag.
 type conversation struct {
-	vs      *esphome.VoiceSatellite
+	vs *esphome.VoiceSatellite
+
+	// ha and direct are the two backends a turn can run against, and be the one the open turn is
+	// running against (backend.go). be is chosen as a turn opens and is only the loop's to change.
+	ha     ha
+	direct *direct
+	be     backend
+
 	source  *mic.Source
 	speaker *speaker.Player
 
@@ -200,6 +207,9 @@ func newConversation(vs *esphome.VoiceSatellite) *conversation {
 		events:  make(chan event, 32),
 		out:     make(chan func() error, outDepth),
 	}
+	c.ha = ha{vs: vs}
+	c.direct = newDirect(c.post)
+	c.be = c.ha
 
 	vs.OnPipelineEvent = c.pipeline
 	vs.OnTTSAudio = c.tts
@@ -233,10 +243,10 @@ func (c *conversation) send(what string, fn func() error) {
 
 // sendAudio queues a frame or drops it. Audio held back until a stalled link recovers is audio
 // nobody wants by then, and the frame is copied because the caller reuses it.
-func (c *conversation) sendAudio(b []byte) {
+func (c *conversation) sendAudio(be backend, b []byte) {
 	frame := append([]byte(nil), b...)
 	select {
-	case c.out <- func() error { return c.vs.SendAudio(frame) }:
+	case c.out <- func() error { return be.Audio(frame) }:
 	default:
 	}
 }
@@ -536,8 +546,9 @@ func (c *conversation) start(n nextTurn) {
 	}
 	c.clearPending()
 
-	if !c.vs.Subscribed() {
-		slog.Warn("no voice pipeline subscribed, ignoring wake", "slot", slot+1)
+	c.be = c.backendFor()
+	if !c.be.Ready() {
+		slog.Warn("no voice pipeline ready, ignoring wake", "slot", slot+1, "backend", c.be.Name())
 		wakeword.Chime(slot, n.followUp)
 		c.trouble()
 		return
@@ -574,7 +585,8 @@ func (c *conversation) start(n nextTurn) {
 	}
 	c.turn = c.log.Begin(slot+1, phrase)
 	recording.Get().Opens(c.turn.ID(), slot)
-	c.send("start", func() error { return c.vs.StartTurn(phrase, audioSettings()) })
+	be := c.be
+	c.send("start", func() error { return be.Start(phrase) })
 
 	c.shown = State{}
 	c.enter(phaseListening)
@@ -667,7 +679,7 @@ func (c *conversation) idle(why string, how activity.Outcome) {
 	c.disarm()
 
 	if was != phaseIdle {
-		c.send("stop", c.vs.StopTurn)
+		c.send("stop", c.be.Stop)
 	}
 
 	kept := recording.Get()
@@ -872,7 +884,8 @@ func (c *conversation) startAudio(slot int, followUp bool) {
 	// whether this is a follow-up: between them they say what the turn sounds like and so what has to
 	// be kept out of the microphone.
 	id := c.turn.ID()
-	safe.Go("turn audio", func() { c.stream(ctx, slot, followUp, id) })
+	be := c.be
+	safe.Go("turn audio", func() { c.stream(ctx, be, slot, followUp, id) })
 }
 
 func (c *conversation) stopStreaming() {
@@ -882,11 +895,11 @@ func (c *conversation) stopStreaming() {
 	c.stopAudio()
 	c.stopAudio = nil
 
-	c.send("end of audio", c.vs.EndAudio)
+	c.send("end of audio", c.be.End)
 }
 
 // stream sends microphone frames until it is told to stop.
-func (c *conversation) stream(ctx context.Context, slot int, followUp bool, id string) {
+func (c *conversation) stream(ctx context.Context, be backend, slot int, followUp bool, id string) {
 	frames, unlisten := c.source.Listen("turn")
 	defer unlisten()
 
@@ -912,7 +925,11 @@ func (c *conversation) stream(ctx context.Context, slot int, followUp bool, id s
 	// where the loudest thing may be the television, and ending on that would send it the
 	// television's words to act on. There it is logged only, and the follow-up's own limit ends it.
 	// The same when the device has been told to leave it to Home Assistant.
-	acts := !followUp && !config.Get().Microphone.PipelineEnds
+	//
+	// The direct pipeline has nobody else to decide, so there it acts every time, follow-ups too:
+	// without it a follow-up would run to its limit and then be dropped as nothing said.
+	_, isDirect := be.(*direct)
+	acts := isDirect || (!followUp && !config.Get().Microphone.PipelineEnds)
 	ep := endpoint.New(endpoint.Default)
 	var sent int
 	var endpointAt float64
@@ -936,7 +953,7 @@ func (c *conversation) stream(ctx context.Context, slot int, followUp bool, id s
 		}
 		recording.Get().Frame(buf)
 
-		c.sendAudio(buf)
+		c.sendAudio(be, buf)
 		slog.Debug("sent audio history", "ms", len(pre)*1000/mic.Rate)
 	}
 
@@ -997,7 +1014,7 @@ func (c *conversation) stream(ctx context.Context, slot int, followUp bool, id s
 			}
 			recording.Get().Frame(buf)
 
-			c.sendAudio(buf)
+			c.sendAudio(be, buf)
 			see(frame)
 		}
 	}

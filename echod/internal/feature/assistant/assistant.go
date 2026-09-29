@@ -1,0 +1,152 @@
+// Package assistant answers a voice turn on the device itself, for the direct pipeline
+// (feature/voice/direct.go): what was heard goes to a chat model with the device's own abilities as
+// tools - timers, alarms, the radio, the volume, calling another device - and the model's answer is
+// what the device says. See config.Brain.
+package assistant
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
+)
+
+func init() { voice.SetThink(Get().Think) }
+
+// rounds bounds how many times one turn may go back to the model with tool results: a model that
+// keeps asking for tools is not going to stop by being asked once more.
+const rounds = 4
+
+// memory is how long the conversation so far is kept for a follow-up; a question asked after that is
+// a new conversation.
+const memory = 5 * time.Minute
+
+// kept is how many earlier messages go back with a new question.
+const kept = 12
+
+type Assistant struct {
+	mu      sync.Mutex
+	history []llm.Message
+	lastAt  time.Time
+}
+
+var (
+	once   sync.Once
+	shared *Assistant
+)
+
+func Get() *Assistant {
+	once.Do(func() { shared = &Assistant{} })
+	return shared
+}
+
+// Think answers one thing said.
+func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
+	b := config.Get().Brain
+	c := &llm.Client{Base: b.LLM, Key: b.Key, Model: b.Model}
+
+	a.mu.Lock()
+	if time.Since(a.lastAt) > memory {
+		a.history = nil
+	}
+	past := append([]llm.Message(nil), a.history...)
+	a.mu.Unlock()
+
+	msgs := append([]llm.Message{{Role: "system", Content: instructions(b, time.Now())}}, past...)
+	user := llm.Message{Role: "user", Content: heard}
+	msgs = append(msgs, user)
+	added := []llm.Message{user}
+
+	ts := tools()
+	for range rounds {
+		m, err := c.Chat(ctx, msgs, specs(ts))
+		if err != nil {
+			return "", err
+		}
+		msgs = append(msgs, m)
+		added = append(added, m)
+		if len(m.ToolCalls) == 0 {
+			a.remember(added)
+			return spoken(m.Content), nil
+		}
+		for _, call := range m.ToolCalls {
+			result := run(ts, call)
+			slog.Info("assistant: tool", "name", call.Function.Name, "args", call.Function.Arguments, "result", result)
+			r := llm.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: result}
+			msgs = append(msgs, r)
+			added = append(added, r)
+		}
+	}
+	a.remember(added)
+	return "Sorry, I got stuck on that one.", nil
+}
+
+func (a *Assistant) remember(added []llm.Message) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.history = append(a.history, added...)
+	if len(a.history) > kept {
+		a.history = a.history[len(a.history)-kept:]
+		// Never start on a tool result or a call's answer: the model needs the call they belong to.
+		for len(a.history) > 0 && a.history[0].Role != "user" {
+			a.history = a.history[1:]
+		}
+	}
+	a.lastAt = time.Now()
+}
+
+// instructions is what the model is told before anything is said: what it is, when and where it is,
+// and how to talk, which is out loud.
+func instructions(b config.Brain, now time.Time) string {
+	name := config.Get().Device.Name
+	var s strings.Builder
+	fmt.Fprintf(&s, "You are the voice assistant of %q, a smart clock and speaker in someone's home. ", name)
+	fmt.Fprintf(&s, "It is %s, %s, time zone %s. ", now.Format("Monday, January 2, 2006"), now.Format("3:04 PM"), now.Location())
+	s.WriteString("Everything you write is spoken aloud: answer in one or two short sentences, with no lists, ")
+	s.WriteString("markdown, emoji or symbols, and write numbers the way they are said. ")
+	s.WriteString("Use the tools to do things on this device, then say briefly what you did. ")
+	s.WriteString("If you cannot do something, say so plainly rather than pretending. ")
+	s.WriteString("If what was heard makes no sense, it was probably misheard: ask the person to say it again.")
+	if p := strings.TrimSpace(b.Prompt); p != "" {
+		s.WriteString("\n\n")
+		s.WriteString(p)
+	}
+	return s.String()
+}
+
+// spoken tidies an answer for speech: a model told not to use markdown sometimes does anyway, and
+// its typographic punctuation (a non-breaking hyphen, a curly apostrophe) is plain for the voice.
+func spoken(s string) string {
+	r := strings.NewReplacer("**", "", "__", "", "`", "", "#", "",
+		"‑", "-", "‐", "-", "–", "-", "—", ", ", "‘", "'", "’", "'", "“", `"`, "”", `"`,
+		" ", " ", " ", " ")
+	return strings.TrimSpace(r.Replace(s))
+}
+
+// run does one call, and says what happened in words the model reads.
+func run(ts []tool, call llm.ToolCall) string {
+	for _, t := range ts {
+		if t.Name != call.Function.Name {
+			continue
+		}
+		args := map[string]any{}
+		if a := strings.TrimSpace(call.Function.Arguments); a != "" {
+			if err := json.Unmarshal([]byte(a), &args); err != nil {
+				return "error: the arguments were not JSON: " + err.Error()
+			}
+		}
+		out, err := t.Run(args)
+		if err != nil {
+			return "error: " + err.Error()
+		}
+		return out
+	}
+	return "error: there is no tool called " + call.Function.Name
+}
