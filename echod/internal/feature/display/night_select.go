@@ -118,11 +118,12 @@ func nextNightChange(window string, at time.Time) time.Time {
 	if !ok {
 		return at.Add(24 * time.Hour)
 	}
-	day := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, at.Location())
 	next := at.Add(48 * time.Hour)
 	for d := range 2 {
 		for _, m := range []int{from, to} {
-			t := day.AddDate(0, 0, d).Add(time.Duration(m) * time.Minute)
+			// By the clock on the wall, as the hours are: midnight plus a duration is an hour off on the
+			// two days a year the clocks change.
+			t := time.Date(at.Year(), at.Month(), at.Day()+d, m/60, m%60, 0, 0, at.Location())
 			if t.After(at) && t.Before(next) {
 				next = t
 			}
@@ -163,6 +164,10 @@ func (d *Display) showNightMode(in bool) {
 	if d.nightMode == nil {
 		return
 	}
+	// The frame and the switch's own command both publish; one at a time, or the older answer can land
+	// last and stay, since an unchanged answer is not sent again.
+	d.nightPubMu.Lock()
+	defer d.nightPubMu.Unlock()
 	d.mu.Lock()
 	changed := d.nightShown != in || !d.nightSeen
 	d.nightShown, d.nightSeen = in, true

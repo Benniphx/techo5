@@ -1281,7 +1281,9 @@ func (d *Display) frame() time.Duration {
 		return dialFrame // a finger dragging the page is followed smoothly
 	case s.showDash && !s.menuOpen:
 		return time.Second // what arrives for it wakes the loop itself
-	case s.eq != nil && !s.showVolume && !s.menuOpen && !(s.phase == "lingering" && s.eq.quiet):
+	case s.eq != nil && !s.showVolume && !s.menuOpen && !s.sheetOpen && !s.showCamera && s.call.Phase == phone.Idle &&
+		!s.ringing.any() && !s.setupAsking && !s.announceRecording && !s.showReminder && !s.showAnnouncement &&
+		!s.showAlert && !(s.phase == "lingering" && s.eq.quiet):
 		if s.eq.wave {
 			return waveFrame
 		}

@@ -180,6 +180,8 @@ type Display struct {
 	nightMode  *esphome.Switch
 	nightShown bool
 	nightSeen  bool // nightShown has been sent at least once
+	// nightPubMu keeps publishing the Night mode switch to one caller at a time (showNightMode).
+	nightPubMu sync.Mutex
 
 	// wide is the Show 8's bigger, brighter panel, which glows harder at the same backlight.
 	wide bool
@@ -366,6 +368,14 @@ func build() *Display {
 }
 
 func (d *Display) Name() string { return "screen" }
+
+// turnShown is whether the turn's picture is the page: nothing drawn before it in render.draw has the
+// screen. Only then does it need its fast frames.
+func turnShown(s scene) bool {
+	return s.eq != nil && s.call.Phase == phone.Idle && !s.ring.any() && !s.setupAsking && !s.bt.Pairing &&
+		!s.showWifi && !s.showSheet && !s.showCamera && !s.showAlert && !s.showCalendar && !s.showRadar &&
+		!s.showWeather && !s.showDash
+}
 
 // turnStyleSel is the Turn screen setting in Home Assistant.
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
@@ -1786,7 +1796,7 @@ func (d *Display) frame() time.Duration {
 	if (s.slideshow != nil || s.slideshowScreensaver != nil) && home.Get().SlideshowTransitioning() {
 		return home.SlideshowFrame
 	}
-	if s.eq != nil && !s.showWeather && !(s.phase == "lingering" && s.eq.quiet) {
+	if turnShown(s) && !(s.phase == "lingering" && s.eq.quiet) {
 		if s.eq.wave {
 			return waveFrame
 		}

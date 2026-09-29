@@ -128,6 +128,16 @@ func (f *Feature) refreshMeta(ctx context.Context) {
 		next.st = st
 	}
 	if next.st.ID == "" {
+		// Nothing to ask about it, but it is what plays: the sensors say so rather than go on naming the
+		// station before it.
+		f.mu.Lock()
+		changed := next.station != cur.station
+		f.meta = next
+		f.mu.Unlock()
+		if changed {
+			f.showRadio(next)
+			f.Changed.Emit(struct{}{})
+		}
 		return
 	}
 	now, err := radiometa.Playing(ctx, next.st)
