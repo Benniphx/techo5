@@ -36,7 +36,8 @@ root filesystem are downloaded and checked. Each step is checked before the next
 
 From TWRP the steps before the flash differ: the unit's small partitions are saved into
 backups/<serial>/partitions/ first, and after the one question userdata is formatted, LineageOS's zip is
-installed and its Wi-Fi driver checked against the kernel TECHO5's is built from.
+installed and its Wi-Fi driver checked against the kernel TECHO5's is built from. On a Show 5 2nd gen the
+TECHO5 logo then replaces Amazon's at boot (--amazon-logo keeps Amazon's); see put_logo.
 
 The Home Assistant key is kept in backups/<serial>/home-assistant.key (api.psk on a unit installed
 before that name) and reused on a later run, so Home Assistant keeps the device. Undo: TWRP stays in
@@ -80,6 +81,21 @@ def quote(s):
 # the vendor's small ones, boot and recovery, persist and metadata. Everything the store, userdata and
 # cache are not. By number, because TWRP's by-name links differ from LineageOS's.
 SMALL_PARTITIONS = (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15)
+
+# The TECHO5 logo in place of Amazon's at boot, on the Echo Show 5 2nd gen. What the bootloader paints
+# is compiled into kaeru, the unlock's bootloader, which lives in expdb (p7): the wordmark is a zlib
+# bundle at LOGO_OFFSET. boot-logo/cronos-wordmark.bin is that slot with the TECHO5 wordmark in it, made
+# by tools/linux/patch-lk-logo.py --in-place --colors 16 and run on units since 2026-09-15. It is only
+# ever written over the kaeru it was made for (KAERU_STOCK), in place, so the header, the size and every
+# pointer stay as they are; anything else keeps Amazon's logo. expdb must not be written any other way:
+# a unit whose kaeru is broken does not start at all.
+LOGO_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'boot-logo', 'cronos-wordmark.bin')
+LOGO_SHA = '1354914c8a2498a7f69a8ebc4a23782ff3369f9e4f980de04f7b9b77734c3403'
+LOGO_OFFSET = 335736
+LOGO_SIZE = 6105
+KAERU_LEN = 399440
+KAERU_STOCK = 'a9fb5acb08ee99ab5562da612b329249157f96dabc5702fad6e14ec6cf5a415b'  # amonet-cronos v2.0.1
+KAERU_LOGO = '8f062790f7d150928bfcf4967039e38926739f10f22325c5f64a471b29e765cd'   # the same with the logo
 
 
 def lineage_board(zip_path):
@@ -131,6 +147,59 @@ def save_partitions(adb, folder):
     with open(os.path.join(folder, 'SHA256SUMS'), 'w') as f:
         f.write('\n'.join(sums) + '\n')
     return len(sums)
+
+
+def sha256(b):
+    return hashlib.sha256(b).hexdigest()
+
+
+def put_logo(adb, expdb_backup):
+    """The TECHO5 logo into kaeru's wordmark slot (see LOGO_FILE), from TWRP, and read back from the
+    flash. What it did, as a line for the log; a unit it does not fit keeps Amazon's logo. A read back
+    that is wrong puts the saved expdb back at once, before anything restarts the unit."""
+    with open(expdb_backup, 'rb') as f:
+        saved = f.read()
+    with open(LOGO_FILE, 'rb') as f:
+        logo = f.read()
+    kaeru = saved[:KAERU_LEN]
+    if sha256(kaeru) == KAERU_LOGO:
+        return 'the TECHO5 boot logo is already there'
+    if sha256(logo) != LOGO_SHA or len(logo) != LOGO_SIZE:
+        return "kept Amazon's boot logo: %s is not the one this installer knows" % LOGO_FILE
+    if sha256(kaeru) != KAERU_STOCK:
+        return "kept Amazon's boot logo: this unit's bootloader (kaeru, in expdb) is not the one the logo was made for"
+    if sha256(kaeru[:LOGO_OFFSET] + logo + kaeru[LOGO_OFFSET + LOGO_SIZE:]) != KAERU_LOGO:
+        return "kept Amazon's boot logo: the patched bootloader would not be the one that has been run"
+
+    def flash_kaeru():
+        # From the flash rather than the page cache, which would only give back what was just written.
+        path = expdb_backup + '.readback'
+        adb.exec_out_to_file('sync; echo 3 > /proc/sys/vm/drop_caches; dd if=/dev/block/mmcblk0p7 bs=4096 count=%d 2>/dev/null'
+                             % ((KAERU_LEN + 4095) // 4096), path)
+        with open(path, 'rb') as f:
+            got = f.read()[:KAERU_LEN]
+        os.remove(path)
+        return sha256(got)
+
+    adb.push(LOGO_FILE, '/tmp/techo5-logo.bin')
+    if adb.sh('sha256sum /tmp/techo5-logo.bin').split(' ')[0] != LOGO_SHA:
+        adb.sh('rm -f /tmp/techo5-logo.bin')
+        return "kept Amazon's boot logo: the logo changed on its way to the unit"
+    adb.sh('dd if=/tmp/techo5-logo.bin of=/dev/block/mmcblk0p7 bs=1 seek=%d count=%d conv=notrunc 2>/dev/null; sync; '
+           'rm -f /tmp/techo5-logo.bin' % (LOGO_OFFSET, LOGO_SIZE))
+    if flash_kaeru() == KAERU_LOGO:
+        return 'the TECHO5 boot logo written into expdb and read back from the flash'
+
+    # Wrong on the flash: the saved copy goes back whole, now, while TWRP still runs from RAM.
+    adb.push(expdb_backup, '/tmp/expdb.img')
+    adb.sh('dd if=/tmp/expdb.img of=/dev/block/mmcblk0p7 bs=4096 2>/dev/null; sync; rm -f /tmp/expdb.img')
+    if flash_kaeru() == KAERU_STOCK:
+        return "kept Amazon's boot logo: writing the logo did not read back right, so the saved expdb was put back"
+    fail('expdb (p7) did not read back right after the boot logo, nor after putting the saved copy back.\n'
+         '   Do not restart the unit. Write the saved copy again from TWRP:\n'
+         '     adb push %s /tmp/expdb.img\n'
+         '     adb shell "dd if=/tmp/expdb.img of=/dev/block/mmcblk0p7 bs=4096; sync"\n'
+         '   and check it with: adb shell sha256sum /dev/block/mmcblk0p7' % expdb_backup)
 
 
 def install_lineage(adb, zip_path):
@@ -234,6 +303,8 @@ def main():
     ap.add_argument('--lineage-zip', help='install from TWRP: the LineageOS 18.1 zip for this board, installed only for its drivers')
     ap.add_argument('--wifi', help="a Wi-Fi network to join (its passphrase is asked for); otherwise LineageOS's saved one, or the Show's screen")
     ap.add_argument('--wifi-passphrase-file', help='a file holding the --wifi passphrase, for running from a script')
+    ap.add_argument('--amazon-logo', action='store_true',
+                    help="from TWRP on a Show 5 2nd gen: keep Amazon's logo at boot rather than put TECHO5's in")
     ap.add_argument('--dry-run', action='store_true', help='download and check the release; write nothing')
     ap.add_argument('--force', action='store_true', help='do not ask before erasing LineageOS')
     ap.add_argument('--backups', default=default_dir('TECHO5_BACKUPS', 'backups'))
@@ -378,6 +449,12 @@ def main():
                 fail('the LineageOS boot image came back %d bytes, not %d' % (os.path.getsize(los_boot + '.partial'), size))
             os.replace(los_boot + '.partial', los_boot)
             note('LineageOS boot image: %s' % los_boot)
+        if dev != 'cronos':
+            note("boot logo: Amazon's is kept (TECHO5's is made for the Show 5 2nd gen only)")
+        elif a.amazon_logo:
+            note("boot logo: Amazon's is kept (--amazon-logo)")
+        else:
+            note('boot logo: ' + put_logo(adb, os.path.join(parts, 'p7-expdb.img')))
 
     # ------------------------------------------------------------------------------------ 4. push
     step('root filesystem onto the unit')
