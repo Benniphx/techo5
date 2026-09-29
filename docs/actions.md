@@ -68,8 +68,9 @@ restarts. Your Home Assistant can't connect to it again, and the device no longe
 Assistant. Alarms, radio stations, Wi-Fi and its other settings stay.
 
 Afterward, delete the device from **Settings → Devices & services → ESPHome** in your Home Assistant.
-The new key isn't shown anywhere yet, so adding the device to another Home Assistant later needs it
-reinstalled, or its key set over SSH.
+The new key isn't shown anywhere. To add the device to another Home Assistant later, open its setup
+page, go to **General**, and choose **Let a Home Assistant add this device**: for 15 minutes the
+device has no key, and the Home Assistant that adds it sets one.
 
 ### confirm (Required)
 

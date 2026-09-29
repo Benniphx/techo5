@@ -50,6 +50,12 @@ type API struct {
 
 	reconnect chan struct{}
 	announced sync.Once
+
+	// mu guards nextPSK, a key for the server to take when it next listens, and unkeyed, whether the
+	// key it serves with is the zero key (adopt.go).
+	mu      sync.Mutex
+	nextPSK *esphome.PSK
+	unkeyed bool
 }
 
 var (
@@ -97,6 +103,10 @@ func (a *API) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	psk = a.resumeAdoption(psk)
+	a.mu.Lock()
+	a.unkeyed = psk.IsZero()
+	a.mu.Unlock()
 	mac, err := layout.FactoryMAC()
 	if err != nil {
 		return err
@@ -133,7 +143,7 @@ func (a *API) Start(ctx context.Context) error {
 		PSK:    psk,
 		Logger: slog.Default(),
 		// Persist a key Home Assistant pushes, or the next connection reverts to the old one.
-		OnSetEncryptionKey: func(k esphome.PSK) error { return writePSK(layout.KeyPath, k) },
+		OnSetEncryptionKey: a.keySet,
 
 		OnSubscribed: func() { component.Subscribed.Emit(struct{}{}) },
 
@@ -204,8 +214,12 @@ func (a *API) Run(ctx context.Context) error {
 		}
 
 		// Between serving and listening again nothing reads Info, which is the only moment it can be
-		// changed: a client is told what the device is once, when it connects.
+		// changed: a client is told what the device is once, when it connects. The key likewise.
 		a.srv.Info.BluetoothFeatures = bluetooth.Get().Features()
+		if k := a.takeNextPSK(); k != nil {
+			a.srv.PSK = k
+			slog.Info("serving with a new key", "provisioned", !k.IsZero())
+		}
 		slog.Info("serving again", "bluetooth", a.srv.Info.BluetoothFeatures)
 	}
 }
