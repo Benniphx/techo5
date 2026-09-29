@@ -328,6 +328,12 @@ func (p *Player) apply(seq []kctl) {
 	}
 
 	for _, c := range seq {
+		if c.ifPresent {
+			if _, err := mixer.Find(c.name); err != nil {
+				slog.Debug("mixer control not on this unit", "control", c.name)
+				continue
+			}
+		}
 		var err error
 		switch {
 		case c.value != "":
