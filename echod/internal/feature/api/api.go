@@ -307,9 +307,27 @@ func loadPSK(path string) (*esphome.PSK, error) {
 	return &k, nil
 }
 
+// writePSK replaces the key whole or not at all: a key cut short by a power cut is one loadPSK refuses,
+// and a device that cannot read its key serves nothing.
 func writePSK(path string, k esphome.PSK) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(k.String()+"\n"), 0o600)
+	tmp := path + ".new"
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(k.String() + "\n")
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Rename(tmp, path)
 }

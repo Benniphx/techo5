@@ -58,6 +58,31 @@ data:
   token: !secret techo5_office_token
 ```
 
+## Disconnect the device from Home Assistant for good
+
+In YAML, refer to this action as `esphome.<node>_leave_home_assistant`.
+
+For a device you're giving to someone else. The device forgets the URL and token set with
+`home_assistant`, replaces the encryption key Home Assistant connects with by a new random one, and
+restarts. Your Home Assistant can't connect to it again, and the device no longer calls your Home
+Assistant. Alarms, radio stations, Wi-Fi and its other settings stay.
+
+Afterward, delete the device from **Settings → Devices & services → ESPHome** in your Home Assistant.
+The new key isn't shown anywhere yet, so adding the device to another Home Assistant later needs it
+reinstalled, or its key set over SSH.
+
+### confirm (Required)
+
+*string*
+
+Must be `leave`. Anything else changes nothing, so a stray tap in the action list is harmless.
+
+```yaml
+action: esphome.office_leave_home_assistant
+data:
+  confirm: leave
+```
+
 ## Set an alarm
 
 In YAML, refer to this action as `esphome.<node>_alarm_set`.
