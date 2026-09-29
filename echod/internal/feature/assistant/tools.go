@@ -74,8 +74,12 @@ func tools() []tool {
 					return "", errors.New("seconds must be between 1 and 86400")
 				}
 				d := time.Duration(math.Round(s)) * time.Second
-				timer.Get().Start(argString(a, "label"), d)
-				return "started a timer for " + d.String(), nil
+				label := argString(a, "label")
+				timer.Get().Start(label, d)
+				if label == "" {
+					return "started a " + words(d) + " timer with no label", nil
+				}
+				return fmt.Sprintf("started a %s timer labeled %q", words(d), label), nil
 			}},
 
 		{llm.Tool{Name: "list_timers", Description: "List the timers running on this device and how long each has left.",
@@ -87,11 +91,11 @@ func tools() []tool {
 				}
 				var s []string
 				for _, t := range list {
-					name := t.Name
-					if name == "" {
-						name = "timer"
+					name := fmt.Sprintf("%q", t.Name)
+					if t.Name == "" {
+						name = "a timer with no label"
 					}
-					s = append(s, fmt.Sprintf("%s: %s left", name, t.Left.Round(time.Second)))
+					s = append(s, fmt.Sprintf("%s with %s left", name, words(t.Left)))
 				}
 				return strings.Join(s, "; "), nil
 			}},
@@ -100,15 +104,27 @@ func tools() []tool {
 			Parameters: object(map[string]any{"label": str("The timer's label; empty cancels all.")})},
 			func(a map[string]any) (string, error) {
 				label := strings.ToLower(argString(a, "label"))
+				list := timer.Get().List(time.Now())
 				n := 0
-				for _, t := range timer.Get().List(time.Now()) {
+				for _, t := range list {
 					if label == "" || strings.ToLower(t.Name) == label {
 						if timer.Get().Cancel(t.ID) {
 							n++
 						}
 					}
 				}
-				return fmt.Sprintf("canceled %d timer(s)", n), nil
+				// "Cancel the timer" with one running means that one, whatever the model took its
+				// label to be.
+				if n == 0 && len(list) == 1 && timer.Get().Cancel(list[0].ID) {
+					n = 1
+				}
+				switch n {
+				case 0:
+					return "no timer matched, and none was canceled", nil
+				case 1:
+					return "canceled one timer", nil
+				}
+				return fmt.Sprintf("canceled %d timers", n), nil
 			}},
 
 		{llm.Tool{Name: "set_alarm", Description: "Set an alarm on this device.",
@@ -219,6 +235,29 @@ func tools() []tool {
 				return fmt.Sprintf("%+v", w), nil
 			}},
 	}
+}
+
+// words says a duration the way it is said: "2 minutes", "1 hour 5 minutes", "40 seconds".
+func words(d time.Duration) string {
+	d = d.Round(time.Second)
+	h, m, s := int(d.Hours()), int(d.Minutes())%60, int(d.Seconds())%60
+	var out []string
+	part := func(n int, unit string) {
+		if n == 1 {
+			out = append(out, "1 "+unit)
+		} else if n > 1 {
+			out = append(out, fmt.Sprintf("%d %ss", n, unit))
+		}
+	}
+	part(h, "hour")
+	part(m, "minute")
+	if h == 0 {
+		part(s, "second")
+	}
+	if len(out) == 0 {
+		return "0 seconds"
+	}
+	return strings.Join(out, " ")
 }
 
 // clock reads HH:MM, 24-hour.

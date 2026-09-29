@@ -597,7 +597,7 @@ func (d *Display) gesture(g touch.Gesture) {
 	// press is the way to the full screen, as the first touch used to be; nothing else on a night
 	// light does anything, since nobody can see what they are pressing on a screen this dim.
 	d.mu.Lock()
-	glowing := d.nightGlow && !d.wifiOpen
+	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting()
 	d.mu.Unlock()
 	if glowing {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -1147,7 +1147,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// or just waking.
 		// The Wi-Fi page too: it is the one page that fixes a device with no network, and a clock
 		// that has never been set (no network, no time) can put a new device in its night.
-		lift := phone.Get().Busy() || sunriseProgress(now) > 0 || wifiUp
+		// And a browser asking to be let in to the setup page: its Allow has to be seen and pressed,
+		// and whoever is asking is standing at the device.
+		lift := phone.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
