@@ -113,3 +113,23 @@ func TestNightClockStaysWhileSomethingRings(t *testing.T) {
 		t.Error("a ringing timer replaced the night clock")
 	}
 }
+
+// The Wi-Fi page is never under the night clock: a device with no network has no time either, and
+// can think it is the middle of the night while somebody stands at it choosing a network.
+func TestNightClockGivesWayToTheWifiPage(t *testing.T) {
+	now := time.Date(2026, 9, 28, 23, 6, 0, 0, time.Local)
+	draw := func(s scene) *image.RGBA {
+		img := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+		newRenderer(img).draw(s)
+		return img
+	}
+	night := draw(scene{now: now, phase: "idle", redClock: true, redStyle: nightStylePlain})
+	page := draw(scene{now: now, phase: "idle", redClock: true, redStyle: nightStylePlain, showWifi: true})
+	plain := draw(scene{now: now, phase: "idle", showWifi: true})
+	if bytes.Equal(night.Pix, page.Pix) {
+		t.Fatal("the night clock covered the Wi-Fi page")
+	}
+	if !bytes.Equal(plain.Pix, page.Pix) {
+		t.Error("the Wi-Fi page at night is not the Wi-Fi page")
+	}
+}

@@ -354,7 +354,7 @@ func (r *renderer) draw(s scene) {
 	// the night light and takes the screen; a turn, a camera, an announcement or a reminder is shown in
 	// its place at the night light's level.
 	if s.redClock && s.phase == "idle" && s.call.Phase == phone.Idle && !s.setupAsking &&
-		!s.showCamera && !s.showAnnouncement && !s.showReminder {
+		!s.showWifi && !s.bt.Pairing && !s.showCamera && !s.showAnnouncement && !s.showReminder {
 		r.redClockPage(s)
 		return
 	}

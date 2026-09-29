@@ -491,7 +491,11 @@ func (d *Display) relight(jump bool) {
 		d.level += (target - d.level) * autoSmooth
 	}
 	level := int(math.Round(d.level))
+	glowing := d.nightGlow
 	d.mu.Unlock()
+	// A long press is the way up from the night light (gesture), and this screen reports no holds
+	// otherwise. Every change to the night light comes through here.
+	touch.Get().SetHolds(glowing)
 
 	if err := screen.SetBacklight(level); err != nil {
 		slog.Warn("setting the backlight failed", "err", err)
@@ -593,7 +597,7 @@ func (d *Display) gesture(g touch.Gesture) {
 	// press is the way to the full screen, as the first touch used to be; nothing else on a night
 	// light does anything, since nobody can see what they are pressing on a screen this dim.
 	d.mu.Lock()
-	glowing := d.nightGlow
+	glowing := d.nightGlow && !d.wifiOpen
 	d.mu.Unlock()
 	if glowing {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -1121,7 +1125,7 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	in := nightNow(now)
 	d.showNightMode(in)
 	d.mu.Lock()
-	dark, touched, viewAt := d.nightDark, d.touchedAt, d.viewAt
+	dark, touched, viewAt, wifiUp := d.nightDark, d.touchedAt, d.viewAt, d.wifiOpen
 	d.mu.Unlock()
 	if !in {
 		d.mu.Lock()
@@ -1141,7 +1145,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// night clock, and the words of an answer, an announcement or a reminder are shown dim, the
 		// clock coming back after, rather than the main screen at full brightness for somebody asleep
 		// or just waking.
-		lift := phone.Get().Busy() || sunriseProgress(now) > 0
+		// The Wi-Fi page too: it is the one page that fixes a device with no network, and a clock
+		// that has never been set (no network, no time) can put a new device in its night.
+		lift := phone.Get().Busy() || sunriseProgress(now) > 0 || wifiUp
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
@@ -1223,7 +1229,15 @@ func (d *Display) openWifi() {
 	d.mu.Lock()
 	d.wifiOpen = true
 	d.wifi = wifiState{scanning: true}
+	glowing, dark := d.nightGlow, d.nightDark
+	d.nightGlow, d.nightDark = false, false
 	d.mu.Unlock()
+	// Over the night, as a call is: the page has to be seen and pressed.
+	if dark {
+		d.apply(true, d.ceilingOrDefault(), false)
+	} else if glowing {
+		d.relight(true)
+	}
 	wifi.SettingUp(true)
 	slog.Info("wifi page", "open", true)
 	go d.refreshWifi()

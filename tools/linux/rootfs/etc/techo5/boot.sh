@@ -156,6 +156,14 @@ t5_bt_up "$BT_MODULE" /var/log
 			t5_wifi_prefer5
 			continue
 		fi
+		# No network saved: nothing a restart or a reboot could join. The supplicant only has to
+		# be there, for the screen's Wi-Fi page to add one. Killing it here each minute used to
+		# leave none at all, and the page never opened.
+		if ! grep -q '^network={' $LOGDIR/wpa_supplicant.conf 2>/dev/null; then
+			down=0
+			pidof wpa_supplicant >/dev/null || t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
+			continue
+		fi
 		down=$((down+1))
 		log "network: no address for $down min"
 		if [ $down -ge 15 ]; then
@@ -164,6 +172,9 @@ t5_bt_up "$BT_MODULE" /var/log
 			reboot
 		fi
 		killall udhcpc wpa_supplicant 2>/dev/null
+		# Gone before it is started again: t5_wifi_up starts one only when none is running, and
+		# one still on its way out counts.
+		n=0; while [ $n -lt 10 ] && pidof wpa_supplicant >/dev/null; do sleep 1; n=$((n+1)); done
 		t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
 	done
 ) &
