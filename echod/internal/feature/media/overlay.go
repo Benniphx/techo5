@@ -325,7 +325,7 @@ func (p *Player) playOver(url string, token OverToken, muted bool) {
 			p.over = nil
 		}
 		done := OverGone
-		if claim.Stopped() && !sound.stopped {
+		if claim.Preempted() && !sound.stopped {
 			// Taken from it rather than stopped: a reply or an announcement claimed the speaker. Kept
 			// apart from a sound that ended or was silenced, because this one can be asked for again and
 			// the others should not be.

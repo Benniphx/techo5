@@ -31,6 +31,8 @@ type Arbiter struct {
 	// lets go, so one ending does not bring the music back up under another.
 	duck  int
 	ducks map[string]int
+	// duckMu serializes duckTo, which reads ducks under mu and applies the level after letting go of it.
+	duckMu sync.Mutex
 	// hold is the producer the hold stood down, so a retake by it during the same hold is not
 	// suspended a second time.
 	hold Producer
@@ -154,6 +156,11 @@ func (a *Arbiter) duckTo(why string, db int, on bool) {
 	if !on {
 		db = 0
 	}
+	// Working out the deepest ask and applying it is one step: two asks at once (a mute tapped while a
+	// claim ends, a turn ducking as a sound starts) would otherwise apply in the wrong order and leave
+	// the background at a level nobody asks for any more.
+	a.duckMu.Lock()
+	defer a.duckMu.Unlock()
 
 	a.mu.Lock()
 	if a.ducks == nil {

@@ -145,25 +145,26 @@ var playStream = func(entity, player string) error {
 // stream that arrives later as an ordinary media url, which the player plays under this token.
 func (f *Feature) askCameraSound(entity string, token media.OverToken, env soundEnv) {
 	err := env.call(entity, speakerEntity())
+	if err != nil {
+		// A stream can be on its way even when the call that started it fails: the service is answered
+		// only once the stream has been sent, so a slow one times out with the sound already playing. A
+		// sound that has arrived is left playing, and left stoppable; a request that nothing has answered
+		// is given up on. Before Settled, which only shortens a request already given up on: in the other
+		// order the dropped request went on catching urls for its whole wait, and a song asked for just
+		// after a failed call was swallowed.
+		slog.Warn("camera sound", "entity", entity, "err", err)
+		if env.player.State(token) != media.OverPlaying {
+			env.player.Drop(token)
+		}
+	} else {
+		slog.Info("camera sound on", "entity", entity)
+	}
 
 	// Nothing more is coming from this call, whichever way it went: a url still on its way has only just
 	// been sent, so a request that was given up on can stop waiting for it shortly. Until then the ask
 	// stands, because a slow call is answered slowly — fifteen seconds is one Home Assistant has been seen
 	// to take — and an ask forgotten before that lets its url through as a track.
 	env.player.Settled(token)
-
-	if err == nil {
-		slog.Info("camera sound on", "entity", entity)
-		return
-	}
-
-	// A stream can be on its way even when the call that started it fails: the service is answered only
-	// once the stream has been sent, so a slow one times out with the sound already playing. A sound that
-	// has arrived is left playing, and left stoppable; a request that nothing has answered is given up on.
-	slog.Warn("camera sound", "entity", entity, "err", err)
-	if env.player.State(token) != media.OverPlaying {
-		env.player.Drop(token)
-	}
 }
 
 // CameraSoundOn is whether the view on the screen has a sound of its own — it was asked for, whether or

@@ -160,7 +160,7 @@ func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Contex
 	go func() {
 		defer close(c.done)
 		if bg != nil {
-			defer bg.duckTo(c.duckName(), c.duck, false)
+			defer c.endDuck()
 		}
 		defer d.release(c)
 
@@ -174,7 +174,7 @@ func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Contex
 			}
 		}
 		if bg != nil {
-			bg.duckTo(c.duckName(), c.duck, true)
+			c.startDuck()
 		}
 		if err := play(ctx, d.p); err != nil {
 			c.fail(err)
@@ -325,6 +325,16 @@ type Claim struct {
 	duck int
 	bg   *Arbiter
 
+	// duckMu keeps the claim's own duck in step with what it is doing: it ducks only once it has the
+	// speaker (active), not while muted, and never again once it has ended. A mute that arrives while
+	// the claim still waits its turn, or just after it ended, would otherwise leave the room ducked
+	// under a sound that is silent, or gone.
+	duckMu       sync.Mutex
+	duckActive   bool
+	duckMuted    bool
+	duckEnded    bool
+	preemptedBit bool // taken by another claim, as opposed to silenced (see Preempted)
+
 	mu       sync.Mutex
 	err      error
 	stopped  bool
@@ -347,7 +357,43 @@ func (c *Claim) Mute(on bool) {
 	if c == nil || c.bg == nil {
 		return
 	}
-	c.bg.duckTo(c.duckName(), c.duck, !on)
+	c.duckMu.Lock()
+	defer c.duckMu.Unlock()
+	c.duckMuted = on
+	if c.duckActive && !c.duckEnded {
+		c.bg.duckTo(c.duckName(), c.duck, !on)
+	}
+}
+
+// startDuck is the claim taking the speaker: the background goes down, unless the claim was muted
+// meanwhile.
+func (c *Claim) startDuck() {
+	c.duckMu.Lock()
+	defer c.duckMu.Unlock()
+	c.duckActive = true
+	if !c.duckMuted && !c.duckEnded {
+		c.bg.duckTo(c.duckName(), c.duck, true)
+	}
+}
+
+// endDuck is the claim over: its duck goes, and no later mute can put it back.
+func (c *Claim) endDuck() {
+	c.duckMu.Lock()
+	defer c.duckMu.Unlock()
+	c.duckEnded = true
+	c.bg.duckTo(c.duckName(), c.duck, false)
+}
+
+// Preempted is whether another claim took the speaker from this one, rather than it being silenced
+// (Silence: the stop word, a button) or ending by itself. Only a claim taken over has something to come
+// back after.
+func (c *Claim) Preempted() bool {
+	if c == nil {
+		return false
+	}
+	c.duckMu.Lock()
+	defer c.duckMu.Unlock()
+	return c.preemptedBit
 }
 
 // Started records that sound has begun, which is where a reply's timing starts counting from.
@@ -427,6 +473,9 @@ func (c *Claim) preempt(p *Player) {
 	if c == nil || c.Finished() {
 		return
 	}
+	c.duckMu.Lock()
+	c.preemptedBit = true
+	c.duckMu.Unlock()
 	c.stop(p)
 }
 
