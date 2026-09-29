@@ -146,6 +146,13 @@ t5_bt_up "$BT_MODULE" /var/log
 				killall udhcpc 2>/dev/null
 				udhcpc -i wlan0 -b -R -t 10 -p /run/udhcpc.pid -s "${UDHCPC_SCRIPT:-/usr/share/udhcpc/default.script}" > /tmp/udhcpc.log 2>&1
 			fi
+			# The clock is set once there is an address. When Wi-Fi takes longer than the boot
+			# script to come up, that happens here: without it the clock stays years behind,
+			# and Tailscale and the update check both need it right.
+			if ! pidof ntpd >/dev/null; then
+				t5_ntp
+				ntpd -p "${NTP_SERVER:-pool.ntp.org}" > /dev/null 2>&1
+			fi
 			t5_wifi_prefer5
 			continue
 		fi
