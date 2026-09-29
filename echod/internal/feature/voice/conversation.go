@@ -25,6 +25,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/endpoint"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/triggers"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wake"
 )
 
@@ -356,6 +357,9 @@ func (c *conversation) handle(e event) {
 		}
 
 	case evHeard:
+		if pageAsked(e.text) {
+			c.lookHere = true
+		}
 		if e.text != "" {
 			slog.Info("heard", "slot", c.slot+1, "text", e.text)
 			c.log.Heard(e.text)
@@ -1094,4 +1098,15 @@ func activeWakeWords(models []wake.Model, slots int) []string {
 		}
 	}
 	return active
+}
+
+// pageAsked is whether what was heard puts something on the screen that the answer should be left on
+// rather than covered by listening again: the clock asked back ("go home"), a camera, or - where the
+// screen opens the forecast on the words, which it does for Home Assistant's answers - the weather.
+func pageAsked(heard string) bool {
+	lang := config.Get().Screen.Language
+	if triggers.AboutGoingHome(heard, lang) || triggers.AboutCamera(heard, lang) {
+		return true
+	}
+	return !config.Get().Brain.Direct() && (triggers.AboutWeather(heard, lang) || triggers.AboutRadar(heard, lang))
 }
