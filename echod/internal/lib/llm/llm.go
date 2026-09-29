@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -86,7 +87,7 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (Messag
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	r, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.Base, "/")+"/chat/completions", bytes.NewReader(body))
+	r, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint(c.Base), bytes.NewReader(body))
 	if err != nil {
 		return Message{}, err
 	}
@@ -125,4 +126,14 @@ func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (Messag
 	m := out.Choices[0].Message
 	m.Role = "assistant"
 	return m, nil
+}
+
+// endpoint is the chat address for a base. A base given as just the server (http://host:8080), as
+// people often type it, means the usual /v1 under it.
+func endpoint(base string) string {
+	base = strings.TrimRight(base, "/")
+	if u, err := url.Parse(base); err == nil && u.Path == "" {
+		base += "/v1"
+	}
+	return base + "/chat/completions"
 }
