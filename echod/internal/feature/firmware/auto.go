@@ -65,18 +65,22 @@ func (u *Firmware) autoLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		now := time.Now()
-		night := now.Format("2006-01-02")
-		if !config.Get().Update.AutoInstall || now.Hour() < autoFrom || now.Hour() >= autoTo || tried == night {
+		playing, _ := media.Get().Playing()
+		busy := playing || ring.IsSounding() || update.Installing()
+		if !autoDue(config.Get().Update.AutoInstall, now, tried, busy) {
 			continue
 		}
-		if playing, _ := media.Get().Playing(); playing || ring.IsSounding() || update.Installing() {
-			continue
-		}
-		tried = night
+		tried = now.Format("2006-01-02")
 		u.Check(ctx)
 		if v := u.Offered(); v != "" {
 			slog.Info("installing an update by itself, overnight", "version", v)
 			u.Install(ctx)
 		}
 	}
+}
+
+// autoDue is whether to look for an update and install it now: switched on, inside the night's hours,
+// not tried already tonight, and nothing playing or ringing.
+func autoDue(on bool, now time.Time, tried string, busy bool) bool {
+	return on && !busy && now.Hour() >= autoFrom && now.Hour() < autoTo && tried != now.Format("2006-01-02")
 }

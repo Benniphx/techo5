@@ -21,6 +21,7 @@ var tabs = []tab{
 	{"alarms", "Alarms & Timers", "Alarms, timers and reminders"},
 	{"connections", "Connections", "Wi-Fi"},
 	{"weather", "Weather & Calendar", "Where it is, units, calendars"},
+	{"photos", "Photos", "Pictures for the slideshow"},
 	{"privacy", "Privacy & Security", "What this device shares"},
 	{"general", "General", "Name, time zone, help"},
 }

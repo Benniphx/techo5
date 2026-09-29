@@ -68,6 +68,8 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 		f.state(w, r)
 	case "/setup/save":
 		f.save(w, r)
+	case "/setup/photo":
+		f.photo(w, r)
 	case "/setup/diagnostics.txt":
 		f.diagnostics(w, r)
 	default:
@@ -221,6 +223,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveBrain(r)
 	case "listening":
 		problem = saveListening(r)
+	case "photos-remove":
+		problem = removePhotos(r)
 	case "reolink":
 		problem = saveReolink(r)
 	case "place":
@@ -323,6 +327,8 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 		}
 		dashboardSection(w, token)
 		reolinkSection(w, token)
+	case "photos":
+		photosSection(w, token)
 	case "weather":
 		placeSection(w, token)
 		calendarLinksSection(w, token)
