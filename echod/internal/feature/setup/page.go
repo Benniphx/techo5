@@ -219,6 +219,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveBrain(r)
 	case "place":
 		problem = savePlace(r)
+	case "calendar":
+		problem = saveCalendarLink(r)
+	case "calendar-remove":
+		problem = removeCalendarLink(r)
 	case "adopt":
 		if _, err := api.Get().OpenAdoption(); err != nil {
 			problem = "could not open the device to a Home Assistant: " + err.Error()
@@ -313,6 +317,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 		dashboardSection(w, token)
 	case "weather":
 		placeSection(w, token)
+		calendarLinksSection(w, token)
 	case "privacy":
 		privacySection(w)
 	case "general":
