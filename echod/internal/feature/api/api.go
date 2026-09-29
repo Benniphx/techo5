@@ -73,14 +73,18 @@ func (a *API) call(c component.Call) {
 	if a.srv == nil {
 		return
 	}
-	fields := make([]*api.HomeassistantServiceMap, 0, len(c.Data))
-	for k, v := range c.Data {
-		fields = append(fields, &api.HomeassistantServiceMap{Key: k, Value: v})
+	pairs := func(m map[string]string) []*api.HomeassistantServiceMap {
+		out := make([]*api.HomeassistantServiceMap, 0, len(m))
+		for k, v := range m {
+			out = append(out, &api.HomeassistantServiceMap{Key: k, Value: v})
+		}
+		return out
 	}
-	if err := a.srv.Broadcast(&api.HomeassistantActionRequest{Service: c.Service, Data: fields}); err != nil {
+	req := &api.HomeassistantActionRequest{Service: c.Service, Data: pairs(c.Data), DataTemplate: pairs(c.Templates)}
+	if err := a.srv.Broadcast(req); err != nil {
 		slog.Warn("calling a home assistant action failed", "service", c.Service, "err", err)
 	} else {
-		slog.Info("home assistant action called", "service", c.Service, "data", c.Data)
+		slog.Info("home assistant action called", "service", c.Service, "data", c.Data, "templates", c.Templates)
 	}
 }
 
