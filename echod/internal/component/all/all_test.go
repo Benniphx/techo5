@@ -49,6 +49,8 @@ var registered = []string{
 	"follow_up_2",
 	"follow_up_tone_1",
 	"follow_up_tone_2",
+	"follow_ups_1",
+	"follow_ups_2",
 	"free_space",
 	"hardware_color",
 	"headphones",

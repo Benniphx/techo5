@@ -155,8 +155,10 @@ type conversation struct {
 	holding bool
 
 	// followUp says this turn was opened without a wake word, so hearing nothing is a normal ending
-	// rather than Home Assistant having gone away.
-	followUp bool
+	// rather than Home Assistant having gone away. followUps is how many follow-ups in a row there have
+	// been since the wake word (wakeword.FollowUps).
+	followUp  bool
+	followUps int
 
 	// turn measures the one that is open and reports it when it closes. Nil while idle, and every
 	// method on it tolerates that, so the phases do not each have to check.
@@ -425,8 +427,9 @@ func (c *conversation) handle(e event) {
 			c.idle("spoken", activity.Completed)
 
 			// Continual conversation: the slot keeps listening after every reply, not only the ones
-			// Home Assistant asked to continue.
-			if c.pending == nil && wakeword.FollowUp(slot) > 0 {
+			// Home Assistant asked to continue - as many times in a row as the slot allows.
+			limit := wakeword.FollowUps(slot)
+			if c.pending == nil && wakeword.FollowUp(slot) > 0 && (limit == 0 || c.followUps < limit) {
 				slog.Info("listening again after the reply", "slot", slot+1, "for", wakeword.FollowUp(slot))
 				c.pending = &nextTurn{slot: slot, followUp: true}
 			}
@@ -567,6 +570,12 @@ func (c *conversation) start(n nextTurn) {
 
 	c.slot = slot
 	c.followUp = n.followUp
+	// Counted from the wake word: a turn it opens starts again, a follow-up is one more in a row.
+	if n.followUp {
+		c.followUps++
+	} else {
+		c.followUps = 0
+	}
 
 	// Before the chime, and before Home Assistant is told anything. Ducking is what the room hears
 	// first, and it has a second of queued music to get through, so every step it waits behind is a

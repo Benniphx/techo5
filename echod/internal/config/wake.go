@@ -58,6 +58,11 @@ type WakeWord struct {
 	// FollowUp is seconds to listen after a reply, zero to only do it when Home Assistant asks.
 	FollowUp int `json:"follow_up"`
 
+	// FollowUps is how many follow-ups in a row a wake word opens, zero for no limit. It counts only the
+	// listening after every reply that FollowUp turns on: a question the assistant asks is always
+	// listened for.
+	FollowUps int `json:"follow_ups,omitempty"`
+
 	// FollowUpTone is what a turn opened without a wake word sounds like. Empty is the wake word's own
 	// tone, which is what a follow-up has always done; None makes the follow-up silent, and any other
 	// tone gives it a sound of its own so the two are told apart by ear.
@@ -178,6 +183,10 @@ func (w WakeWriter) Delivery(v Delivery) error {
 
 func (w WakeWriter) FollowUp(seconds int) error {
 	return w.word(func(word *WakeWord) { word.FollowUp = seconds })
+}
+
+func (w WakeWriter) FollowUps(n int) error {
+	return w.word(func(word *WakeWord) { word.FollowUps = n })
 }
 
 func (w WakeWriter) FollowUpTone(v Tone) error {

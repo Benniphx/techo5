@@ -69,6 +69,7 @@ func TestLiveAssistant(t *testing.T) {
 	ask("when do the Nebraska Huskers play next?")
 	ask("who do they play after that?")
 	ask("what's the weather going to be in Lincoln, Nebraska on Saturday?")
+	ask("what's the weather?")
 	ask("cancel the pasta timer")
 	if n := len(timer.Get().List(time.Now())); n != 0 {
 		t.Errorf("%d timer(s) left after canceling", n)

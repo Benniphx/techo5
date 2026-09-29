@@ -33,6 +33,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/assistant"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
@@ -366,6 +367,7 @@ func build() *Display {
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Asked.Listen(d.dashboardAsked)
+	assistant.SetScreen(d.showPage)
 	return d
 }
 
@@ -530,7 +532,9 @@ func (d *Display) changed(s voice.State) {
 	d.viewAt = time.Now()
 	// A question about the weather brings the forecast page up once the answer is done, for a
 	// while, and then the screen goes back to whatever it was showing.
-	if newHeard && aboutWeather(s.Heard) {
+	// Not when the device answers directly: its assistant knows where a question was about and puts
+	// the page up itself (showPage), and a forecast for another town is not this one's.
+	if newHeard && aboutWeather(s.Heard) && !config.Get().Brain.Direct() {
 		d.weatherArmed = true
 		d.radar = aboutRadar(s.Heard)
 	}
@@ -560,6 +564,22 @@ func (d *Display) changed(s voice.State) {
 	}
 	d.mu.Unlock()
 	d.wake()
+}
+
+// showPage is the voice assistant putting a page up (feature/assistant): the forecast or the rain map
+// once the answer has been said, as a question about the weather does, or the calendar now.
+func (d *Display) showPage(page string) bool {
+	switch page {
+	case "weather", "radar":
+		d.mu.Lock()
+		d.weatherArmed, d.radar = true, page == "radar"
+		d.mu.Unlock()
+		d.wake()
+		return true
+	case "calendar":
+		return d.OpenCalendar()
+	}
+	return false
 }
 
 // volumeMoved is the level changing on purpose; the screen shows it for a moment.
