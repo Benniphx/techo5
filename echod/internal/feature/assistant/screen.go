@@ -3,6 +3,7 @@ package assistant
 import (
 	"errors"
 
+	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
 )
 
@@ -24,6 +25,7 @@ func screenTools() []tool {
 			if !screen(page) {
 				return "", errors.New("that page cannot be shown here")
 			}
+			voice.Get().LookHere()
 			return "the " + page + " page is going up on the screen once you have answered", nil
 		}}}
 }

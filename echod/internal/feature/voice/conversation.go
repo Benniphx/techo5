@@ -89,6 +89,7 @@ const (
 	evContinue                     // Home Assistant wants the answer to a question it just asked
 	evSpeaking                     // VAD detected speech has started
 	evSpokeEnd                     // the device heard the speaker finish; text is the turn's id
+	evLookHere                     // the answer put something on the screen: no listening again after it
 )
 
 type event struct {
@@ -159,6 +160,10 @@ type conversation struct {
 	// been since the wake word (wakeword.FollowUps).
 	followUp  bool
 	followUps int
+
+	// lookHere says this turn's answer put a page on the screen (the rain map, the forecast), so it is
+	// not followed by listening again: the listening screen would cover the page asked for.
+	lookHere bool
 
 	// turn measures the one that is open and reports it when it closes. Nil while idle, and every
 	// method on it tolerates that, so the phases do not each have to check.
@@ -337,6 +342,11 @@ func (c *conversation) handle(e event) {
 			c.think()
 		}
 
+	case evLookHere:
+		if c.phase != phaseIdle {
+			c.lookHere = true
+		}
+
 	case evContinue:
 		// The pipeline asked a question. Its answer is owed after the reply has been spoken, so this
 		// only records the intent; evPlayed opens it.
@@ -429,7 +439,7 @@ func (c *conversation) handle(e event) {
 			// Continual conversation: the slot keeps listening after every reply, not only the ones
 			// Home Assistant asked to continue - as many times in a row as the slot allows.
 			limit := wakeword.FollowUps(slot)
-			if c.pending == nil && wakeword.FollowUp(slot) > 0 && (limit == 0 || c.followUps < limit) {
+			if c.pending == nil && !c.lookHere && wakeword.FollowUp(slot) > 0 && (limit == 0 || c.followUps < limit) {
 				slog.Info("listening again after the reply", "slot", slot+1, "for", wakeword.FollowUp(slot))
 				c.pending = &nextTurn{slot: slot, followUp: true}
 			}
@@ -570,6 +580,7 @@ func (c *conversation) start(n nextTurn) {
 
 	c.slot = slot
 	c.followUp = n.followUp
+	c.lookHere = false
 	// Counted from the wake word: a turn it opens starts again, a follow-up is one more in a row.
 	if n.followUp {
 		c.followUps++
@@ -858,6 +869,10 @@ func (c *conversation) tts(data []byte, end bool) {
 	// has finished, and it arrives whether or not this was ever set.
 	_ = end
 }
+
+// LookHere says the answer being given put something on the screen, so the turn is not followed by
+// listening again, which would cover it.
+func (c *conversation) LookHere() { c.post(event{kind: evLookHere}) }
 
 // Start asks for a turn on a slot's pipeline. Wake detection and the buttons both use it.
 func (c *conversation) Start(slot int) { c.post(event{kind: evStart, slot: slot}) }

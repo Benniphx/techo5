@@ -227,6 +227,10 @@ func (v *Voice) Interrupt() {
 	v.Stop()
 }
 
+// LookHere says the answer being given put something on the screen, so it is not followed by
+// listening again, whose screen would cover it.
+func (v *Voice) LookHere() { v.turn.LookHere() }
+
 // Stop ends whatever the device is doing audibly, and reports whether there was anything to end.
 //
 // One ladder, because there is one meaning: a turn is canceled, a sound is silenced, a track is
