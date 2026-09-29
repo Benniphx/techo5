@@ -60,3 +60,17 @@ func TestAlarmClock(t *testing.T) {
 		}
 	}
 }
+
+// "Go home" is the screen's to do, and nothing for the model: asked as well, it took it for a call.
+func TestGoingHomeIsHandledHere(t *testing.T) {
+	for _, s := range []string{"go home", "Go home.", "show the home screen"} {
+		if !handledHere(s) {
+			t.Errorf("%q went to the model", s)
+		}
+	}
+	for _, s := range []string{"what time is it", "set a timer for ten minutes", "when do the Huskers play"} {
+		if handledHere(s) {
+			t.Errorf("%q was kept from the model", s)
+		}
+	}
+}

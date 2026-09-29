@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/triggers"
 )
 
 func init() { voice.SetThink(Get().Think) }
@@ -49,6 +51,11 @@ func Get() *Assistant {
 
 // Think answers one thing said.
 func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
+	// What the screen does on its own when it hears it - the clock back, a camera up - is done, and
+	// needs no answer: asked as well, the model took "go home" for a call to make and asked where to.
+	if handledHere(heard) {
+		return "", nil
+	}
 	b := config.Get().Brain
 	c := &llm.Client{Base: b.LLM, Key: b.Key, Model: b.Model}
 
@@ -86,6 +93,12 @@ func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
 	}
 	a.remember(added)
 	return "Sorry, I got stuck on that one.", nil
+}
+
+// handledHere is whether the device acts on what was heard by itself (feature/display).
+func handledHere(heard string) bool {
+	lang := config.Get().Screen.Language
+	return triggers.AboutGoingHome(heard, lang) || (triggers.AboutCamera(heard, lang) && home.Get().MatchCamera(heard) != "")
 }
 
 func (a *Assistant) remember(added []llm.Message) {
