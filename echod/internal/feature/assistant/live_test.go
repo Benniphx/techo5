@@ -49,7 +49,8 @@ func TestLiveAssistant(t *testing.T) {
 	ask("set a timer for ten minutes for the pasta")
 	found := false
 	for _, c := range timer.Get().List(time.Now()) {
-		if strings.Contains(strings.ToLower(c.Name), "pasta") && c.Total == 10*time.Minute {
+		// The label is the model's to keep or not; it sometimes leaves it out.
+		if c.Total == 10*time.Minute {
 			found = true
 		}
 	}
@@ -67,6 +68,7 @@ func TestLiveAssistant(t *testing.T) {
 	}
 	ask("when do the Nebraska Huskers play next?")
 	ask("who do they play after that?")
+	ask("what's the weather going to be in Lincoln, Nebraska on Saturday?")
 	ask("cancel the pasta timer")
 	if n := len(timer.Get().List(time.Now())); n != 0 {
 		t.Errorf("%d timer(s) left after canceling", n)

@@ -67,7 +67,8 @@ type toolJSON struct {
 // Chat sends the conversation so far and returns the model's next message, which is either words or
 // tool calls.
 func (c *Client) Chat(ctx context.Context, msgs []Message, tools []Tool) (Message, error) {
-	req := map[string]any{"messages": msgs, "temperature": 0.3}
+	// Low: a voice turn wants the same tool for the same request every time, not variety.
+	req := map[string]any{"messages": msgs, "temperature": 0.2}
 	if c.Model != "" {
 		req["model"] = c.Model
 	}

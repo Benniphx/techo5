@@ -1,6 +1,7 @@
 package assistant
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/openmeteo"
 )
 
 // tool is one thing the model may do on the device. Run gets the model's arguments and returns what
@@ -133,12 +135,12 @@ func deviceTools() []tool {
 
 		{llm.Tool{Name: "set_alarm", Description: "Set an alarm on this device.",
 			Parameters: object(map[string]any{
-				"time":  str("The time of day, 24-hour, as HH:MM."),
+				"time":  str("The time as the person said it: 6:30, 6:30 pm, 18:30, 7 am. Keep am or pm only if said."),
 				"days":  str("once (the next time it comes round), daily, weekdays, weekends, or days like mon,wed,fri. Default once."),
 				"label": str("What it is for; empty if not said."),
 			}, "time")},
 			func(a map[string]any) (string, error) {
-				h, m, err := clock(argString(a, "time"))
+				h, m, err := alarmClock(argString(a, "time"))
 				if err != nil {
 					return "", err
 				}
@@ -349,7 +351,14 @@ func deviceTools() []tool {
 				return strings.Join(s, "; "), nil
 			}},
 
-		{llm.Tool{Name: "weather", Description: "The weather here now, and the forecast for the next days.",
+		{llm.Tool{Name: "weather_elsewhere", Description: "The weather forecast for another place, up to 14 days ahead: a town, city or ZIP code anywhere.",
+			Parameters: object(map[string]any{
+				"place": str("The place, like Lincoln, Nebraska."),
+				"date":  str("The day: today, tomorrow, a weekday like Saturday, or YYYY-MM-DD; empty for the next few days."),
+			}, "place")},
+			func(a map[string]any) (string, error) { return weatherAt(argString(a, "place"), argString(a, "date")) }},
+
+		{llm.Tool{Name: "weather", Description: "The weather where this device is, now and for the next days. Only this device's own location: for anywhere else use weather_elsewhere.",
 			Parameters: object(map[string]any{})},
 			func(map[string]any) (string, error) {
 				w := home.Get().Weather()
@@ -380,6 +389,78 @@ func deviceTools() []tool {
 	}
 }
 
+// weatherAt is Open-Meteo's forecast for a place looked up by name.
+func weatherAt(place, date string) (string, error) {
+	if place == "" {
+		return "", errors.New("no place was named")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	country := ""
+	if len(place) == 5 && strings.IndexFunc(place, func(r rune) bool { return r < '0' || r > '9' }) < 0 {
+		country = "US"
+	}
+	found, err := openmeteo.Find(ctx, place, country)
+	if err != nil {
+		return "", err
+	}
+	if len(found) == 0 {
+		return "", fmt.Errorf("no place called %q was found", place)
+	}
+	p := found[0]
+	date, err = dayOf(date, time.Now())
+	if err != nil {
+		return "", err
+	}
+	_, days, err := openmeteo.Forecast(ctx, p.Lat, p.Lon, config.Get().Home.Fahrenheit(), 14)
+	if err != nil {
+		return "", err
+	}
+	var s []string
+	for i, d := range days {
+		if date == "" && i >= 4 {
+			break
+		}
+		if date != "" && d.When.Format("2006-01-02") != date {
+			continue
+		}
+		line := fmt.Sprintf("%s: %s, high %.0f, low %.0f", d.When.Format("Monday January 2"), home.ConditionWords(d.Condition), d.High, d.Low)
+		if d.Rain >= 0 {
+			line += fmt.Sprintf(", %d%% chance of rain or snow", d.Rain)
+		}
+		s = append(s, line)
+	}
+	if len(s) == 0 {
+		return "", fmt.Errorf("no forecast for %s on %s: the forecast goes 14 days ahead", p.Name, date)
+	}
+	return "forecast for " + p.Name + ": " + strings.Join(s, "; "), nil
+}
+
+// dayOf reads a day as a person or a model names it - today, tomorrow, a weekday (the next one to
+// come, today included), or YYYY-MM-DD - as YYYY-MM-DD; empty stays empty. Models count days badly: a
+// "Saturday" worked out by one landed on a Wednesday.
+func dayOf(s string, now time.Time) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(s))
+	switch v {
+	case "":
+		return "", nil
+	case "today":
+		return now.Format("2006-01-02"), nil
+	case "tomorrow":
+		return now.AddDate(0, 0, 1).Format("2006-01-02"), nil
+	}
+	for i := range 7 {
+		d := now.AddDate(0, 0, i)
+		if strings.HasPrefix(strings.ToLower(d.Weekday().String()), strings.TrimPrefix(v, "this ")) && len(v) >= 3 {
+			return d.Format("2006-01-02"), nil
+		}
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		return t.Format("2006-01-02"), nil
+	}
+	return "", fmt.Errorf("%q is not a day as today, tomorrow, a weekday or YYYY-MM-DD", s)
+}
+
 // words says a duration the way it is said: "2 minutes", "1 hour 5 minutes", "40 seconds".
 func words(d time.Duration) string {
 	d = d.Round(time.Second)
@@ -401,6 +482,36 @@ func words(d time.Duration) string {
 		return "0 seconds"
 	}
 	return strings.Join(out, " ")
+}
+
+// alarmClock reads an alarm's time as it was said. Without am or pm, an hour from 4 to 11 is the
+// morning and one from 1 to 3 the afternoon; twelve is noon. Left to the model this came out as the
+// evening as often as not.
+func alarmClock(s string) (int, int, error) {
+	v := strings.ToLower(strings.Join(strings.Fields(s), ""))
+	v = strings.NewReplacer("a.m.", "am", "p.m.", "pm").Replace(v)
+	pm, am := strings.HasSuffix(v, "pm"), strings.HasSuffix(v, "am")
+	v = strings.TrimSuffix(strings.TrimSuffix(v, "pm"), "am")
+	hs, ms, ok := strings.Cut(v, ":")
+	if !ok {
+		hs, ms = v, "0"
+	}
+	h, err1 := strconv.Atoi(hs)
+	m, err2 := strconv.Atoi(ms)
+	if err1 != nil || err2 != nil || h < 0 || h > 23 || m < 0 || m > 59 {
+		return 0, 0, fmt.Errorf("%q is not a time of day", s)
+	}
+	switch {
+	case (am || pm) && (h < 1 || h > 12):
+		return 0, 0, fmt.Errorf("%q is not a time of day", s)
+	case pm && h < 12:
+		h += 12
+	case am && h == 12:
+		h = 0
+	case !am && !pm && h >= 1 && h <= 3:
+		h += 12
+	}
+	return h, m, nil
 }
 
 // clock reads HH:MM, 24-hour.

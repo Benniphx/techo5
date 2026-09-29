@@ -109,11 +109,19 @@ func instructions(b config.Brain, now time.Time) string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "You are the voice assistant of %q, a smart clock and speaker in someone's home. ", name)
 	fmt.Fprintf(&s, "The date and time right now are %s, %s, time zone %s: they are correct, so use them ", now.Format("Monday, January 2, 2006"), now.Format("3:04 PM"), now.Location())
-	s.WriteString("whenever the time or the date is asked for. ")
+	s.WriteString("whenever the time or the date is asked for. The coming days are ")
+	var days []string
+	for i := 1; i <= 7; i++ {
+		d := now.AddDate(0, 0, i)
+		days = append(days, d.Format("Monday January 2"))
+	}
+	s.WriteString(strings.Join(days, ", "))
+	s.WriteString(": use these rather than working a date out. ")
 	s.WriteString("Everything you write is spoken aloud, exactly as written, so write only the answer - no notes ")
 	s.WriteString("to yourself. Answer in one or two short sentences, with no lists, ")
 	s.WriteString("markdown, emoji or symbols, and write numbers the way they are said. ")
-	s.WriteString("Use the tools to do things on this device, then say briefly what you did. ")
+	s.WriteString("Use the tools to do things on this device, then say briefly what you did. Do only what was ")
+	s.WriteString("asked: a timer is a timer, never also an alarm. ")
 	s.WriteString("An alarm time said without morning or evening is in the morning from 4 to 11 and otherwise the ")
 	s.WriteString("next one to come; say which you chose. ")
 	s.WriteString("If you cannot do something, say so plainly rather than pretending, and never say you did ")
