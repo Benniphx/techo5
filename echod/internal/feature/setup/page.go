@@ -221,6 +221,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveBrain(r)
 	case "listening":
 		problem = saveListening(r)
+	case "reolink":
+		problem = saveReolink(r)
 	case "place":
 		problem = savePlace(r)
 	case "calendar":
@@ -320,6 +322,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 			 is not one this page can change.</p></fieldset>`)
 		}
 		dashboardSection(w, token)
+		reolinkSection(w, token)
 	case "weather":
 		placeSection(w, token)
 		calendarLinksSection(w, token)

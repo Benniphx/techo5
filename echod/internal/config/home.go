@@ -38,6 +38,10 @@ type Home struct {
 	// Cameras are camera.* entities and the names to say for them, in the order the list shows.
 	Cameras []Camera `json:"cameras,omitempty"`
 
+	// Reolink is a Reolink NVR, Home Hub or camera read directly, for a device with no Home Assistant
+	// to proxy its cameras (feature/home/reolink.go). Its cameras join the list.
+	Reolink Reolink `json:"reolink"`
+
 	// Glance are Home Assistant entities shown as chips along the foot of the clock page, each only
 	// while it has something to say (feature/home/glance.go), in the order given.
 	Glance []string `json:"glance,omitempty"`
@@ -304,4 +308,19 @@ func (h Home) Fahrenheit() bool {
 		return true
 	}
 	return false
+}
+
+// Reolink is one recorder: where it is and how it answers (Base, with https or http), the account the
+// device logs in with, the fingerprint of its certificate as it was when set up, and its cameras by
+// name as it listed them. The password is a secret, never shown again once saved.
+type Reolink struct {
+	Base        string   `json:"base,omitempty"`
+	User        string   `json:"user,omitempty"`
+	Pass        string   `json:"pass,omitempty"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	Cameras     []Camera `json:"cameras,omitempty"`
+}
+
+func (w HomeWriter) Reolink(r Reolink) error {
+	return w.st.Update(func(c *Config) { c.Home.Reolink = r })
 }

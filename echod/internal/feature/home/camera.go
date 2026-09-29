@@ -48,6 +48,7 @@ func (f *Feature) Cameras() []config.Camera {
 		// No list chosen (the home_cameras action): every camera Home Assistant has, by its own name.
 		cams = f.homeAssistantCameras()
 	}
+	cams = append(cams, config.Get().Home.Reolink.Cameras...)
 	if camera.Available() {
 		return append([]config.Camera{{Entity: LocalCamera, Name: localCameraName}}, cams...)
 	}
@@ -133,7 +134,7 @@ func (f *Feature) showCamera(entity string, d time.Duration, sound bool) {
 		} else {
 			go f.fetchFrames(entity)
 		}
-		if sound {
+		if sound && !isReolink(entity) {
 			// The sound is asked of Home Assistant and taken off the speaker when this view ends; a
 			// view already up keeps the sound it was started with (camera_sound.go).
 			go f.startCameraSound(entity, thisDevice())
@@ -237,7 +238,7 @@ func (f *Feature) localFrames() {
 // one that gets tapped answers at once.
 func (f *Feature) Prewarm() {
 	for _, c := range f.Cameras() {
-		if c.Entity == LocalCamera {
+		if c.Entity == LocalCamera || isReolink(c.Entity) {
 			continue
 		}
 		go func(entity string) {
@@ -250,7 +251,13 @@ func (f *Feature) Prewarm() {
 
 // snapshot fetches one frame and scales it to fit the panel.
 func (f *Feature) snapshot(entity string) (*image.RGBA, error) {
-	b, err := hass.Get().Fetch("/api/camera_proxy/" + entity)
+	var b []byte
+	var err error
+	if isReolink(entity) {
+		b, err = reolinkSnap(entity)
+	} else {
+		b, err = hass.Get().Fetch("/api/camera_proxy/" + entity)
+	}
 	if err != nil {
 		return nil, err
 	}
