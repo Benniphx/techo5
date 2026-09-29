@@ -41,6 +41,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/assistant"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
@@ -292,6 +293,7 @@ func build() *Display {
 	})
 	btaudio.Get().Changed.Listen(func(btaudio.State) { d.wake() })
 	d.listenDashboard()
+	assistant.SetScreen(d.showPageSpot)
 	phone.Get().Changed.Listen(d.callLights)
 	// The mute button toggles the mute on the buttons' goroutine; redraw once it has.
 	buttons.Get().Events.Listen(func(buttons.Event) {
@@ -436,8 +438,10 @@ func (d *Display) changed(s voice.State) {
 	}
 	d.view = s
 	d.viewAt = time.Now()
-	// A question about the weather brings the weather face up once the answer is done.
-	if newHeard && aboutWeather(s.Heard) {
+	// A question about the weather brings the weather face up once the answer is done. Not when the
+	// device answers directly: its assistant knows where a question was about and puts the face up
+	// itself (showPageSpot).
+	if newHeard && aboutWeather(s.Heard) && !config.Get().Brain.Direct() {
 		d.weatherArmed = true
 		d.radar = aboutRadar(s.Heard)
 	}
@@ -1335,3 +1339,27 @@ func (d *Display) setNightStyle(int) {}
 
 // popupSettingsChanged: the Spot has no event pop-ups yet.
 func (d *Display) popupSettingsChanged() {}
+
+// showPageSpot is the voice assistant putting a face up (feature/assistant): the forecast or the rain
+// map once the answer has been said, as a question about the weather does, or the calendar.
+func (d *Display) showPageSpot(page string) bool {
+	switch page {
+	case "weather", "radar":
+		d.mu.Lock()
+		d.weatherArmed, d.radar = true, page == "radar"
+		d.mu.Unlock()
+		d.wake()
+		return true
+	case "calendar":
+		if len(home.Get().CalendarSources()) == 0 {
+			return false
+		}
+		d.locked(func() {
+			d.openMenu(modeCalendar, "")
+			d.calUntil = time.Now().Add(calendarIdle)
+		})
+		d.wake()
+		return true
+	}
+	return false
+}
