@@ -231,14 +231,33 @@ func tools() []tool {
 				return strings.Join(s, "; "), nil
 			}},
 
-		{llm.Tool{Name: "weather", Description: "The weather here now.",
+		{llm.Tool{Name: "weather", Description: "The weather here now, and the forecast for the next days.",
 			Parameters: object(map[string]any{})},
 			func(map[string]any) (string, error) {
 				w := home.Get().Weather()
-				if w.Condition == "" {
+				days := home.Get().Forecast()
+				if w.Condition == "" && len(days) == 0 {
 					return "", errors.New("this device has no weather source")
 				}
-				return fmt.Sprintf("%+v", w), nil
+				var s []string
+				if w.Condition != "" {
+					s = append(s, fmt.Sprintf("now: %s, %s", home.ConditionWords(w.Condition), w.Temp))
+				}
+				for i, d := range days {
+					if i >= 5 {
+						break
+					}
+					day := d.When.Format("Monday")
+					if i == 0 {
+						day = "today"
+					}
+					line := fmt.Sprintf("%s: %s, high %.0f, low %.0f", day, home.ConditionWords(d.Condition), d.High, d.Low)
+					if d.Rain >= 0 {
+						line += fmt.Sprintf(", %d%% chance of rain or snow", d.Rain)
+					}
+					s = append(s, line)
+				}
+				return strings.Join(s, "; "), nil
 			}},
 	}
 }

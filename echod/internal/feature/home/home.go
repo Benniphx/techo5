@@ -25,6 +25,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/openmeteo"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
@@ -119,7 +120,12 @@ type Feature struct {
 	resumedAt time.Time
 	forecast  []hass.Day
 	fetched   time.Time
-	poke      chan struct{}
+	// own is the weather now as the device fetched it itself (own_weather.go), for a device with no
+	// Home Assistant; ownAt is when.
+	own   openmeteo.Now
+	ownAt time.Time
+
+	poke chan struct{}
 
 	// meta is what the playing station is playing, for the now-playing screen; metaPoke asks for
 	// a refresh when the station changes.
@@ -183,7 +189,11 @@ func (f *Feature) Run(ctx context.Context) error {
 
 func (f *Feature) refreshForecast() {
 	entity := config.Get().Home.WeatherEntity()
-	if entity == "" || !hass.Get().Ready() {
+	if entity == "" {
+		return
+	}
+	if !hass.Get().Ready() {
+		f.refreshOwnWeather()
 		return
 	}
 	days, err := hass.Get().Forecast(entity)
@@ -499,6 +509,9 @@ func (f *Feature) accessAction() *esphome.Action {
 	}
 }
 
+// Poke has the forecast fetched again now, as after the place it is for has changed.
+func (f *Feature) Poke() { f.wake() }
+
 // Weather is the current reading for the clock.
 func (f *Feature) Weather() Weather {
 	entity := config.Get().Home.WeatherEntity()
@@ -509,6 +522,10 @@ func (f *Feature) Weather() Weather {
 	w := Weather{Condition: t.State(entity)}
 	if w.Condition == "unknown" || w.Condition == "unavailable" {
 		w.Condition = ""
+	}
+	// Nothing from Home Assistant: the device's own, when it has fetched some.
+	if w.Condition == "" {
+		return f.ownWeather()
 	}
 	if temp, ok := t.Value(entity, "temperature"); ok && temp != "" && temp != "None" {
 		if i := strings.IndexByte(temp, '.'); i > 0 {

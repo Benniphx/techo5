@@ -20,6 +20,7 @@ var tabs = []tab{
 	{"sound", "Sound & Voice", "Announcements, radio"},
 	{"alarms", "Alarms & Timers", "Alarms, timers and reminders"},
 	{"connections", "Connections", "Wi-Fi"},
+	{"weather", "Weather & Place", "Where it is, units"},
 	{"privacy", "Privacy & Security", "What this device shares"},
 	{"general", "General", "Name, time zone, help"},
 }

@@ -212,7 +212,8 @@ func (f *Feature) fetchRadar() {
 	f.Changed.Emit(struct{}{})
 }
 
-// home is Home Assistant's home location: the zone's attributes, or its configuration.
+// home is Home Assistant's home location: the zone's attributes, the place kept on the device, or
+// Home Assistant's configuration.
 func homeLocation() (lat, lon float64, err error) {
 	t := hastate.Get()
 	zone := config.Get().Home.HomeZone()
@@ -224,6 +225,11 @@ func homeLocation() (lat, lon float64, err error) {
 		if e1 == nil && e2 == nil && (lat != 0 || lon != 0) {
 			return lat, lon, nil
 		}
+	}
+	// Where the device keeps its own place, it is that place: a device with no Home Assistant, or one
+	// Home Assistant has not described a zone for.
+	if p := config.Get().Home.Place; p.Set() {
+		return p.Lat, p.Lon, nil
 	}
 	if zone != config.HomeZoneDefault {
 		// A zone of its own that Home Assistant has not described: somewhere else is better unknown than

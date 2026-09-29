@@ -19,6 +19,15 @@ type Home struct {
 	// is somewhere other than home (a family device in another house). Empty is Home Assistant's home.
 	Location string `json:"location,omitempty"`
 
+	// Place is where the device is, kept on the device: for weather, alerts and the rain map when
+	// there is no Home Assistant to say where home is (Home Assistant's own location wins when there
+	// is). Set on the setup page from a ZIP code or a town.
+	Place Place `json:"place"`
+
+	// Units is how temperatures are shown when the device fetches its own weather: UnitsF, UnitsC, or
+	// empty for Fahrenheit in the U.S. and Celsius elsewhere.
+	Units string `json:"units,omitempty"`
+
 	Radio Radio `json:"radio"`
 
 	// RadioSource is the list the radio page shows: RadioFavorites (the stations wired with
@@ -202,6 +211,14 @@ func (r Radio) Configured() bool { return len(r.Stations) > 0 && r.Service != ""
 
 type HomeWriter struct{ st *Store }
 
+func (w HomeWriter) Place(p Place) error {
+	return w.st.Update(func(c *Config) { c.Home.Place = p })
+}
+
+func (w HomeWriter) Units(u string) error {
+	return w.st.Update(func(c *Config) { c.Home.Units = u })
+}
+
 func (w HomeWriter) Location(zone string) error {
 	return w.st.Update(func(c *Config) { c.Home.Location = zone })
 }
@@ -256,4 +273,35 @@ func (w HomeWriter) Cameras(cams []Camera) error {
 
 func (w HomeWriter) Slideshow(s Slideshow) error {
 	return w.st.Update(func(c *Config) { c.Home.Slideshow = s })
+}
+
+// Place is somewhere on the map, as a person names it.
+type Place struct {
+	Name    string  `json:"name,omitempty"` // "Anchorage, Alaska"
+	Lat     float64 `json:"lat,omitempty"`
+	Lon     float64 `json:"lon,omitempty"`
+	Country string  `json:"country,omitempty"` // ISO code, "US"
+}
+
+// Set is whether there is a place.
+func (p Place) Set() bool { return p.Lat != 0 || p.Lon != 0 }
+
+const (
+	UnitsF = "F"
+	UnitsC = "C"
+)
+
+// Fahrenheit is whether temperatures are shown in Fahrenheit.
+func (h Home) Fahrenheit() bool {
+	switch h.Units {
+	case UnitsF:
+		return true
+	case UnitsC:
+		return false
+	}
+	switch h.Place.Country {
+	case "", "US", "PR", "VI", "GU", "AS", "MP", "LR", "BS", "BZ", "KY", "PW", "FM", "MH":
+		return true
+	}
+	return false
 }
