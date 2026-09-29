@@ -64,7 +64,7 @@ func argNumber(args map[string]any, k string) (float64, bool) {
 
 // tools is what the model may do, as the device is now: the lists it reads are read when asked.
 func tools() []tool {
-	return append(append(deviceTools(), screenTools()...), webTools()...)
+	return append(append(append(deviceTools(), radioTools()...), screenTools()...), webTools()...)
 }
 
 func deviceTools() []tool {
@@ -237,28 +237,6 @@ func deviceTools() []tool {
 					return "stopped the ringing and anything playing", nil
 				}
 				return "stopped anything playing", nil
-			}},
-
-		{llm.Tool{Name: "list_stations", Description: "List the radio stations this device can play.",
-			Parameters: object(map[string]any{})},
-			func(map[string]any) (string, error) {
-				r := home.Get().Radio()
-				if len(r.Stations) == 0 {
-					return "no stations are set up", nil
-				}
-				return strings.Join(r.Stations, "; "), nil
-			}},
-
-		{llm.Tool{Name: "play_radio", Description: "Play a radio station. Use a name from list_stations.",
-			Parameters: object(map[string]any{"station": str("The station's name.")}, "station")},
-			func(a map[string]any) (string, error) {
-				want := argString(a, "station")
-				name, ok := station(want)
-				if !ok {
-					return "", fmt.Errorf("no station called %q; call list_stations", want)
-				}
-				home.Get().Play(name)
-				return "playing " + name, nil
 			}},
 
 		{llm.Tool{Name: "set_volume", Description: fmt.Sprintf("Set the speaker volume, 0 to %d.", media.VolumeSteps),

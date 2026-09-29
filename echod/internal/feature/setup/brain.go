@@ -7,10 +7,38 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 )
+
+// listeningSection is how long the device listens again after an answer, and how many times in a row:
+// Home Assistant's two settings for the first wake word, here for a device that has none.
+func listeningSection(w http.ResponseWriter, token string) {
+	fmt.Fprint(w, `<fieldset><legend>Listening after an answer</legend><form method="post" action="/setup/save">`)
+	hidden(w, token, "listening", "sound")
+	fmt.Fprintf(w, `<label for="fu">Keep listening for (seconds, 0 for only when asked a question)</label>
+	 <input id="fu" name="followup" type="number" min="0" max="30" value="%d">
+	 <label for="fus">Times in a row (0 for no limit)</label>
+	 <input id="fus" name="followups" type="number" min="0" max="10" value="%d">
+	 <p class="note">After an answer the device listens again without the wake word, for this long and this
+	  many times. A question the assistant asks is always listened for.</p>
+	 <p><button type="submit">Save</button></p></form></fieldset>`,
+		int(wakeword.FollowUp(0).Seconds()), wakeword.FollowUps(0))
+}
+
+func saveListening(r *http.Request) string {
+	fu, err1 := strconv.Atoi(strings.TrimSpace(r.PostFormValue("followup")))
+	fus, err2 := strconv.Atoi(strings.TrimSpace(r.PostFormValue("followups")))
+	if err1 != nil || err2 != nil || fu < 0 || fu > 30 || fus < 0 || fus > 10 {
+		return "listening is 0 to 30 seconds, and 0 to 10 times in a row"
+	}
+	wakeword.Get().SetFollowUp(0, fu)
+	wakeword.Get().SetFollowUps(0, fus)
+	return ""
+}
 
 // brainSection is where the voice answers come from: Home Assistant's Assist pipeline, or speech and a
 // chat model reached directly (config.Brain). The key is never shown: it is written, or left alone.

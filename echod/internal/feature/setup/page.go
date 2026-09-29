@@ -219,6 +219,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveUpdates(what, r.PostFormValue("auto") == "yes")
 	case "brain":
 		problem = saveBrain(r)
+	case "listening":
+		problem = saveListening(r)
 	case "place":
 		problem = savePlace(r)
 	case "calendar":
@@ -307,6 +309,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 		houseSection(w, token)
 		stationsSection(w, token)
 		brainSection(w, token)
+		listeningSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)
 	case "connections":

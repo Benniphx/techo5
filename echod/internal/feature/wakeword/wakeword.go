@@ -347,6 +347,20 @@ func (w *WakeWord) SetTone(n int, label string) {
 	}
 }
 
+// SetFollowUp and SetFollowUps set slot n's follow-up time (seconds) and follow-ups in a row as Home
+// Assistant would, for the setup page of a device that has no Home Assistant.
+func (w *WakeWord) SetFollowUp(n, seconds int) {
+	if n >= 0 && n < len(w.slots) {
+		w.slots[n].followUp.OnCommand(float32(min(max(seconds, 0), 30)))
+	}
+}
+
+func (w *WakeWord) SetFollowUps(n, count int) {
+	if n >= 0 && n < len(w.slots) {
+		w.slots[n].followUps.OnCommand(float32(min(max(count, 0), 10)))
+	}
+}
+
 func (w *WakeWord) Name() string { return "wake word settings" }
 
 func (w *WakeWord) Entities() []esphome.Entity {

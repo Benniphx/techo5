@@ -60,7 +60,10 @@ func TestLiveAssistant(t *testing.T) {
 	ask("how long is left on it?")
 	ask("what time is it?")
 	ask("set an alarm for six thirty on weekdays")
+	config.Set().Home().Place(config.Place{Name: "Fort Lupton, Colorado", Lat: 40.08, Lon: -104.81, Country: "US"})
 	ask("play some country music")
+	ask("save that station")
+	ask("play KOA")
 	ask("are there any alarms?")
 	ask("delete the six thirty alarm")
 	if n := len(config.Get().Alarms.List); n != 0 {
