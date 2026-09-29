@@ -41,6 +41,7 @@ type Firmware struct {
 	look    *esphome.Button
 	status  *esphome.TextSensor
 	events  *esphome.Event
+	auto    *esphome.Switch
 
 	mu    sync.Mutex
 	found update.Manifest
@@ -61,6 +62,7 @@ func Get() *Firmware {
 
 func build() *Firmware {
 	u := &Firmware{}
+	u.buildAuto()
 
 	u.entity = &esphome.Update{
 		Base: esphome.Base{
@@ -351,5 +353,5 @@ func (u *Firmware) state(found update.Manifest) esphome.UpdateState {
 func (u *Firmware) Name() string { return "firmware" }
 
 func (u *Firmware) Entities() []esphome.Entity {
-	return []esphome.Entity{u.entity, u.channel, u.look, u.status, u.events}
+	return []esphome.Entity{u.entity, u.channel, u.look, u.status, u.events, u.auto}
 }

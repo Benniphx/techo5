@@ -169,6 +169,7 @@ var registered = []string{
 	"thinking_effect_2",
 	"timers",
 	"treble",
+	"update_automatically",
 	"update_channel",
 	"update_outcome",
 	"update_status",

@@ -215,6 +215,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		}
 	case "house":
 		problem = saveHouse(r.PostFormValue("word"))
+	case "update-install", "update-check", "update-auto":
+		problem = saveUpdates(what, r.PostFormValue("auto") == "yes")
 	case "brain":
 		problem = saveBrain(r)
 	case "place":
@@ -323,6 +325,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 	case "general":
 		timezoneSection(w, token)
 		nameSection(w, token)
+		updatesSection(w, token)
 		homeAssistantSection(w, token)
 		diagnosticsSection(w)
 	}
