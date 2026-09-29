@@ -12,6 +12,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
@@ -48,6 +49,30 @@ type Firmware struct {
 
 	announced  sync.Once
 	rolledBack string
+
+	// at is how far the running install's download has got, 0 to 1, and failed why the last one
+	// did not install: for the setup page, which has no update card to watch.
+	at     float32
+	failed string
+	// busy counts the Install calls running, which re-read the channel before the download starts.
+	busy atomic.Int32
+}
+
+// Installing says whether an install is running, and how far its download has got (0 to 1); Failed
+// why the last one did not install, empty when it did or none was tried.
+func (u *Firmware) Installing() (bool, float32) {
+	if u.busy.Load() == 0 && !update.Installing() {
+		return false, 0
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return true, u.at
+}
+
+func (u *Firmware) Failed() string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.failed
 }
 
 var (
@@ -266,6 +291,8 @@ func (u *Firmware) command(cmd esphome.UpdateCommand) {
 // Nothing is installed that was not offered: the version comes from the manifest this device fetched,
 // not from Home Assistant, which has no way to name one.
 func (u *Firmware) Install(ctx context.Context) {
+	u.busy.Add(1)
+	defer u.busy.Add(-1)
 	found, err := update.Fetch(ctx, u.Channel())
 	if err != nil {
 		slog.Warn("re-reading the channel failed, using the last check", "err", err)
@@ -312,6 +339,9 @@ func (u *Firmware) Install(ctx context.Context) {
 	}
 	if err != nil {
 		slog.Error("installing an update failed", "version", found.Version, "err", err)
+		u.mu.Lock()
+		u.failed = found.Version + ": " + err.Error()
+		u.mu.Unlock()
 		u.publish(found)
 		u.Settled(EventFailed, "installing "+found.Version+" failed: "+err.Error())
 		feedback.Failure()
@@ -323,6 +353,9 @@ func (u *Firmware) Install(ctx context.Context) {
 // progress republishes the state with how far the download has got. The version fields go out with it
 // because Home Assistant reads the whole state each time.
 func (u *Firmware) progress(found update.Manifest, at float32) {
+	u.mu.Lock()
+	u.at, u.failed = at, ""
+	u.mu.Unlock()
 	state := u.state(found)
 	state.InProgress, state.Progress = true, at*100
 	u.entity.Set(state)
