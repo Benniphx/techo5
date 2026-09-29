@@ -910,6 +910,41 @@ Which dashboard the screen shows, as its path in Home Assistant's address bar. T
 `lovelace/0`, `dashboard-kitchen/lights`, `energy`, … Empty is the Rooms dashboard when drawn, and
 the default dashboard when streamed.
 
+## Show or hide the dashboard
+
+In YAML, refer to these actions as `esphome.<node>_dashboard_show` and `esphome.<node>_dashboard_hide`.
+
+`dashboard_show` puts the dashboard up, the same as swiping it in (on a Spot, the Dashboard item in
+the ring menu). It stays up until `dashboard_hide`, a swipe or "go home" takes it down. It doesn't
+time out after 10 minutes the way one opened by hand does. If the settings, a camera or a call has the
+screen, the dashboard comes up once they're done. The **Dashboard** setting must not be **Off**.
+
+`dashboard_hide` goes back to the clock. With **Dashboard when idle** on, the clock stays for 2
+minutes, then the dashboard comes back, the same as swiping it away.
+
+For example, show a Now Playing dashboard while a speaker plays:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: media_player.living_room_sonos
+    to: playing
+    id: playing
+  - trigger: state
+    entity_id: media_player.living_room_sonos
+    from: playing
+    for: "00:05:00"
+    id: stopped
+actions:
+  - if:
+      - condition: trigger
+        id: playing
+    then:
+      - action: esphome.office_dashboard_show
+    else:
+      - action: esphome.office_dashboard_hide
+```
+
 ## Choose the weather shown on the idle screen
 
 In YAML, refer to this action as `esphome.<node>_home_weather`.

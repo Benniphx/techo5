@@ -131,6 +131,7 @@ type Display struct {
 	// dashboard, a finger moving on it, a level being slid, the idle one put away until, and a finger
 	// held still on it.
 	dash          bool
+	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not spotDashForget
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool
@@ -290,6 +291,7 @@ func build() *Display {
 		d.wake()
 	})
 	btaudio.Get().Changed.Listen(func(btaudio.State) { d.wake() })
+	d.listenDashboard()
 	phone.Get().Changed.Listen(d.callLights)
 	// The mute button toggles the mute on the buttons' goroutine; redraw once it has.
 	buttons.Get().Events.Listen(func(buttons.Event) {

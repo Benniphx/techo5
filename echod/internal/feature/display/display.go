@@ -120,6 +120,7 @@ type Display struct {
 	// The dashboard page: asked for, when last touched, whether the last frame drew it, whether the
 	// touchscreen was put in follow mode for it, and a finger that started at its left edge.
 	dash          bool
+	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not dashForget
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool
@@ -364,6 +365,7 @@ func build() *Display {
 	onMissed(d.wake)
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
+	dashboard.Get().Asked.Listen(d.dashboardAsked)
 	return d
 }
 
