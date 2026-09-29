@@ -231,6 +231,53 @@ func tools() []tool {
 				return strings.Join(s, "; "), nil
 			}},
 
+		{llm.Tool{Name: "calendar", Description: "The events on this device's calendars for a day or a few days.",
+			Parameters: object(map[string]any{
+				"date": str("The first day, as YYYY-MM-DD. Default today."),
+				"days": num("How many days, 1 to 14. Default 1."),
+			})},
+			func(a map[string]any) (string, error) {
+				if len(home.Get().CalendarSources()) == 0 {
+					return "", errors.New("this device shows no calendars")
+				}
+				now := time.Now()
+				first := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+				if d := argString(a, "date"); d != "" {
+					t, err := time.ParseInLocation("2006-01-02", d, time.Local)
+					if err != nil {
+						return "", fmt.Errorf("%q is not a date as YYYY-MM-DD", d)
+					}
+					first = t
+				}
+				n := 1
+				if v, ok := argNumber(a, "days"); ok {
+					n = int(max(1, min(14, math.Round(v))))
+				}
+				var s []string
+				read := true
+				for i := range n {
+					day := first.AddDate(0, 0, i)
+					evs, ok := home.Get().EventsOn(day)
+					read = read && ok
+					var items []string
+					for _, e := range evs {
+						when := "all day"
+						if !e.AllDay {
+							when = e.Start.Format("3:04 PM")
+						}
+						items = append(items, when+" "+e.Summary)
+					}
+					if len(items) == 0 {
+						items = []string{"nothing"}
+					}
+					s = append(s, day.Format("Monday January 2")+": "+strings.Join(items, ", "))
+				}
+				if !read {
+					s = append(s, "(the calendars are still being read; this may be incomplete)")
+				}
+				return strings.Join(s, "; "), nil
+			}},
+
 		{llm.Tool{Name: "weather", Description: "The weather here now, and the forecast for the next days.",
 			Parameters: object(map[string]any{})},
 			func(map[string]any) (string, error) {

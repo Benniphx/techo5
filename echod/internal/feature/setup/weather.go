@@ -34,6 +34,8 @@ func placeSection(w http.ResponseWriter, token string) {
 	 <input id="where" name="where" value="" placeholder="99501, or Anchorage, Alaska" autocomplete="off">
 	 <p><label><input type="checkbox" name="zone" value="yes" checked style="width:auto"> Set the time zone
 	  from it too</label></p>
+	 <p class="note">A new time zone restarts the device, which is back in about a minute, and this page
+	  with it.</p>
 	 <label for="units">Temperatures in</label>
 	 <select id="units" name="units">
 	  <option value=""%s>Fahrenheit in the U.S., Celsius elsewhere</option>
@@ -80,7 +82,9 @@ func savePlace(r *http.Request) string {
 		return "could not save the place: " + err.Error()
 	}
 	slog.Info("setup page: the device's place was set", "place", p.Name, "country", p.Country)
-	if r.PostFormValue("zone") == "yes" && p.Zone != "" {
+	// The same zone chosen again changes nothing, and would cost a restart.
+	same := timezone.Get().SetHere() && timezone.Get().Current() == p.Zone
+	if r.PostFormValue("zone") == "yes" && p.Zone != "" && !same {
 		if err := timezone.Get().Choose(p.Zone); err != nil {
 			return "the place was saved, but not its time zone (" + p.Zone + "): " + err.Error()
 		}
