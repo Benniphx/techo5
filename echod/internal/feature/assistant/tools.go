@@ -155,7 +155,74 @@ func tools() []tool {
 				return fmt.Sprintf("alarm set for %02d:%02d (%s)", al.Hour, al.Minute, config.DaysLabel(al.Days)), nil
 			}},
 
-		{llm.Tool{Name: "stop", Description: "Stop whatever is ringing or playing on this device: an alarm, a timer, the radio or music.",
+		{llm.Tool{Name: "list_alarms", Description: "List the alarms and reminders set on this device.",
+			Parameters: object(map[string]any{})},
+			func(map[string]any) (string, error) {
+				var s []string
+				for _, al := range config.Get().Alarms.List {
+					kind := "alarm"
+					if al.Remind {
+						kind = "reminder"
+					}
+					state := "on"
+					if !al.On {
+						state = "off"
+					}
+					line := fmt.Sprintf("%s at %02d:%02d, %s, %s", kind, al.Hour, al.Minute, config.DaysLabel(al.Days), state)
+					if al.Label != "" {
+						line += fmt.Sprintf(", labeled %q", al.Label)
+					}
+					s = append(s, line)
+				}
+				if len(s) == 0 {
+					return "no alarms or reminders", nil
+				}
+				return strings.Join(s, "; "), nil
+			}},
+
+		{llm.Tool{Name: "delete_alarm", Description: "Delete an alarm or reminder, found by its time or label. Use list_alarms first when unsure.",
+			Parameters: object(map[string]any{
+				"time":  str("Its time of day, 24-hour, as HH:MM; empty to go by the label."),
+				"label": str("Its label; empty to go by the time."),
+			})},
+			func(a map[string]any) (string, error) {
+				list := config.Get().Alarms.List
+				label := strings.ToLower(argString(a, "label"))
+				var h, m int
+				byTime := argString(a, "time") != ""
+				if byTime {
+					var err error
+					if h, m, err = clock(argString(a, "time")); err != nil {
+						return "", err
+					}
+				}
+				var found []config.Alarm
+				for _, al := range list {
+					if byTime && (al.Hour != h || al.Minute != m) {
+						continue
+					}
+					if label != "" && strings.ToLower(al.Label) != label {
+						continue
+					}
+					found = append(found, al)
+				}
+				// "Delete the alarm" with one set means that one.
+				if !byTime && label == "" && len(list) == 1 {
+					found = list
+				}
+				switch len(found) {
+				case 0:
+					return "no alarm matched; nothing was deleted", nil
+				case 1:
+					if err := alarm.Get().Delete(found[0].ID); err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("deleted the %02d:%02d one", found[0].Hour, found[0].Minute), nil
+				}
+				return fmt.Sprintf("%d alarms matched; ask which one, nothing was deleted", len(found)), nil
+			}},
+
+		{llm.Tool{Name: "stop", Description: "Stop whatever is ringing or playing on this device right now: a ringing alarm or timer, the radio or music. It does not delete alarms or cancel timers.",
 			Parameters: object(map[string]any{})},
 			func(map[string]any) (string, error) {
 				rang := ring.End()

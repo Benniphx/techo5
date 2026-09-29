@@ -59,6 +59,12 @@ func TestLiveAssistant(t *testing.T) {
 	ask("what time is it?")
 	ask("set an alarm for six thirty on weekdays")
 	ask("play some country music")
+	ask("are there any alarms?")
+	ask("delete the six thirty alarm")
+	if n := len(config.Get().Alarms.List); n != 0 {
+		t.Errorf("%d alarm(s) left after deleting the only one", n)
+	}
+	ask("when do the Nebraska Huskers play next?")
 	ask("cancel the pasta timer")
 	if n := len(timer.Get().List(time.Now())); n != 0 {
 		t.Errorf("%d timer(s) left after canceling", n)
