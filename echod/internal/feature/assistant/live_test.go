@@ -63,7 +63,7 @@ func TestLiveAssistant(t *testing.T) {
 	config.Set().Home().Place(config.Place{Name: "Springfield, Illinois", Lat: 39.80, Lon: -89.64, Country: "US"})
 	ask("play some country music")
 	ask("save that station")
-	ask("play KOA")
+	ask("play WGN")
 	ask("are there any alarms?")
 	ask("delete the six thirty alarm")
 	if n := len(config.Get().Alarms.List); n != 0 {

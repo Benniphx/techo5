@@ -31,7 +31,7 @@ type Query struct {
 	Name        string // part of the station's name
 	Tag         string // a genre: country, jazz, news
 	CountryCode string // US
-	State       string // Colorado
+	State       string // Texas
 	Limit       int
 }
 

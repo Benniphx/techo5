@@ -16,7 +16,7 @@ import (
 // The radio by voice: the stations the device already has (its own, and Home Assistant's lists where
 // there is a Home Assistant), and any other found in Radio Browser, the open directory Home Assistant's
 // radio is itself built on, so a device with no Home Assistant can still be asked for "some country"
-// or "KOA". What was found is remembered for the conversation, so "play the second one" and "save it"
+// or "WGN". What was found is remembered for the conversation, so "play the second one" and "save it"
 // work.
 
 var found struct {
@@ -26,7 +26,7 @@ var found struct {
 
 func radioTools() []tool {
 	return []tool{
-		{llm.Tool{Name: "find_radio", Description: "Find radio stations to play: by name or call letters (KOA), or by genre (country, news, jazz). Genres are searched near this device first.",
+		{llm.Tool{Name: "find_radio", Description: "Find radio stations to play: by name or call letters (WGN), or by genre (country, news, jazz). Genres are searched near this device first.",
 			Parameters: object(map[string]any{
 				"query": str("A station's name or call letters, or a genre."),
 				"by":    map[string]any{"type": "string", "enum": []string{"name", "genre"}},
