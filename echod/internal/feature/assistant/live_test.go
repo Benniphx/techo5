@@ -26,7 +26,8 @@ func TestLiveAssistant(t *testing.T) {
 		t.Skip("TECHO5_LLM is not set")
 	}
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
-	if err := config.Set().Brain().Set(config.Brain{Mode: config.BrainDirect, LLM: base, STT: "x:1", TTS: "x:1"}); err != nil {
+	if err := config.Set().Brain().Set(config.Brain{Mode: config.BrainDirect, LLM: base, STT: "x:1", TTS: "x:1",
+		Search: os.Getenv("TECHO5_SEARCH")}); err != nil {
 		t.Fatal(err)
 	}
 	if err := config.Set().Brain().SetKey(keyFrom(t, os.Getenv("TECHO5_LLM_KEYFILE"))); err != nil {
@@ -65,6 +66,7 @@ func TestLiveAssistant(t *testing.T) {
 		t.Errorf("%d alarm(s) left after deleting the only one", n)
 	}
 	ask("when do the Nebraska Huskers play next?")
+	ask("who do they play after that?")
 	ask("cancel the pasta timer")
 	if n := len(timer.Get().List(time.Now())); n != 0 {
 		t.Errorf("%d timer(s) left after canceling", n)

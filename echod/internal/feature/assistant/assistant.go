@@ -22,7 +22,7 @@ func init() { voice.SetThink(Get().Think) }
 
 // rounds bounds how many times one turn may go back to the model with tool results: a model that
 // keeps asking for tools is not going to stop by being asked once more.
-const rounds = 4
+const rounds = 6
 
 // memory is how long the conversation so far is kept for a follow-up; a question asked after that is
 // a new conversation.
@@ -110,16 +110,26 @@ func instructions(b config.Brain, now time.Time) string {
 	fmt.Fprintf(&s, "You are the voice assistant of %q, a smart clock and speaker in someone's home. ", name)
 	fmt.Fprintf(&s, "The date and time right now are %s, %s, time zone %s: they are correct, so use them ", now.Format("Monday, January 2, 2006"), now.Format("3:04 PM"), now.Location())
 	s.WriteString("whenever the time or the date is asked for. ")
-	s.WriteString("Everything you write is spoken aloud: answer in one or two short sentences, with no lists, ")
+	s.WriteString("Everything you write is spoken aloud, exactly as written, so write only the answer - no notes ")
+	s.WriteString("to yourself. Answer in one or two short sentences, with no lists, ")
 	s.WriteString("markdown, emoji or symbols, and write numbers the way they are said. ")
 	s.WriteString("Use the tools to do things on this device, then say briefly what you did. ")
 	s.WriteString("An alarm time said without morning or evening is in the morning from 4 to 11 and otherwise the ")
 	s.WriteString("next one to come; say which you chose. ")
 	s.WriteString("If you cannot do something, say so plainly rather than pretending, and never say you did ")
 	s.WriteString("something a tool did not do. ")
-	s.WriteString("Beyond the tools you cannot look anything up: no internet, no news, no sports schedules or scores, and ")
-	s.WriteString("nothing that happened after your training. Never make up dates, times, scores or facts about ")
-	s.WriteString("current events; say you can't look that up. General knowledge you are sure of is fine. ")
+	if b.Search != "" {
+		s.WriteString("For anything current or that you are not sure of - sports schedules and scores, news, ")
+		s.WriteString("business hours, prices, events - use web_search, then read_page on the most useful result, ")
+		s.WriteString("and answer from what they say, not from memory. State only what a tool result actually says: ")
+		s.WriteString("never make up or guess dates, times, opponents, scores or facts. If a page does not have it, ")
+		s.WriteString("read another result; if none do, say you couldn't find it. A time from a page is said with ")
+		s.WriteString("the time zone the page gives it in, like three o'clock Central. ")
+	} else {
+		s.WriteString("Beyond the tools you cannot look anything up: no internet, no news, no sports schedules or ")
+		s.WriteString("scores, and nothing that happened after your training. Never make up dates, times, scores or ")
+		s.WriteString("facts about current events; say you can't look that up. General knowledge you are sure of is fine. ")
+	}
 	s.WriteString("What you hear comes from speech recognition. Only when the words truly make no sense, ask the ")
 	s.WriteString("person to say it again; otherwise answer the likeliest meaning.")
 	if p := strings.TrimSpace(b.Prompt); p != "" {

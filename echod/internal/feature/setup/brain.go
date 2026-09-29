@@ -42,12 +42,17 @@ func brainSection(w http.ResponseWriter, token string) {
 	 <label for="key">Key</label>
 	 <input id="key" name="key" type="password" value="" placeholder="%s" autocomplete="off">
 	 <p><label><input type="checkbox" name="nokey" value="yes" style="width:auto"> Remove the key</label></p>
+	 <label for="search">Web search (a SearXNG server)</label>
+	 <input id="search" name="search" value="%s" placeholder="http://192.168.1.20:8888" autocomplete="off">
+	 <p class="note">To look up what the chat model cannot know: games, news, opening hours. SearXNG needs
+	  its JSON format turned on (search.formats in its settings.yml). Empty: no looking things up.</p>
 	 <label for="prompt">Anything the assistant should know</label>
 	 <textarea id="prompt" name="prompt" rows="3" maxlength="2000">%s</textarea>
 	 <p><button type="submit">Save</button></p></form></fieldset>`,
 		selected(b.Mode == config.BrainHomeAssistant), selected(b.Mode == config.BrainDirect),
 		html.EscapeString(b.STT), html.EscapeString(b.TTS), html.EscapeString(b.Voice), html.EscapeString(b.Language),
-		html.EscapeString(b.LLM), html.EscapeString(b.Model), keyHint(b.Key != ""), html.EscapeString(b.Prompt))
+		html.EscapeString(b.LLM), html.EscapeString(b.Model), keyHint(b.Key != ""), html.EscapeString(b.Search),
+		html.EscapeString(b.Prompt))
 }
 
 func keyHint(set bool) string {
@@ -69,6 +74,7 @@ func saveBrain(r *http.Request) string {
 		Language: v("language"),
 		LLM:      strings.TrimRight(v("llm"), "/"),
 		Model:    v("model"),
+		Search:   strings.TrimRight(v("search"), "/"),
 		Prompt:   strings.TrimSpace(r.PostFormValue("prompt")),
 	}
 	if b.Mode != config.BrainHomeAssistant && b.Mode != config.BrainDirect {
@@ -86,6 +92,12 @@ func saveBrain(r *http.Request) string {
 		u, err := url.Parse(b.LLM)
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return "the chat model endpoint should be an address like http://192.168.1.20:8080/v1"
+		}
+	}
+	if b.Search != "" {
+		u, err := url.Parse(b.Search)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+			return "the search server should be an address like http://192.168.1.20:8888"
 		}
 	}
 	if b.Mode == config.BrainDirect && (b.STT == "" || b.TTS == "" || b.LLM == "") {

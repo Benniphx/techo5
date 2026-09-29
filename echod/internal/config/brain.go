@@ -23,6 +23,10 @@ type Brain struct {
 	Model string `json:"model,omitempty"`
 	Key   string `json:"key,omitempty"`
 
+	// Search is a SearXNG server's address, like http://192.168.1.20:8888, with its JSON format on: the
+	// model looks things up there and reads the pages it finds. Empty is no looking anything up.
+	Search string `json:"search,omitempty"`
+
 	// Prompt is added to the device's own instructions to the model: a name, a tone, what the
 	// household wants it to know.
 	Prompt string `json:"prompt,omitempty"`

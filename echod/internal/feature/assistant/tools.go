@@ -62,6 +62,10 @@ func argNumber(args map[string]any, k string) (float64, bool) {
 
 // tools is what the model may do, as the device is now: the lists it reads are read when asked.
 func tools() []tool {
+	return append(deviceTools(), webTools()...)
+}
+
+func deviceTools() []tool {
 	return []tool{
 		{llm.Tool{Name: "start_timer", Description: "Start a countdown timer on this device.",
 			Parameters: object(map[string]any{
