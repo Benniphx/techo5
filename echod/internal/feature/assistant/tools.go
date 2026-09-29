@@ -130,7 +130,7 @@ func tools() []tool {
 		{llm.Tool{Name: "set_alarm", Description: "Set an alarm on this device.",
 			Parameters: object(map[string]any{
 				"time":  str("The time of day, 24-hour, as HH:MM."),
-				"days":  str("once, daily, weekdays, weekends, or days like mon,wed,fri. Default once."),
+				"days":  str("once (the next time it comes round), daily, weekdays, weekends, or days like mon,wed,fri. Default once."),
 				"label": str("What it is for; empty if not said."),
 			}, "time")},
 			func(a map[string]any) (string, error) {
@@ -138,7 +138,13 @@ func tools() []tool {
 				if err != nil {
 					return "", err
 				}
-				days, err := config.ParseDays(argString(a, "days"))
+				// A one-time alarm goes off the next time its hour comes round, which is what "today"
+				// and "tomorrow" mean whenever they are said; models reach for them.
+				d := argString(a, "days")
+				if l := strings.ToLower(d); l == "today" || l == "tomorrow" {
+					d = "once"
+				}
+				days, err := config.ParseDays(d)
 				if err != nil {
 					return "", err
 				}
