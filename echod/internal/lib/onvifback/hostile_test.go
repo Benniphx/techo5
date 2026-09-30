@@ -156,3 +156,21 @@ func TestATrackOnAnotherHostIsRefused(t *testing.T) {
 		t.Errorf("opened with %v", err)
 	}
 }
+
+// The same camera written with and without RTSP's own port is the same camera; another host or port
+// is not.
+func TestSameHost(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		same bool
+	}{
+		{"rtsp://192.168.1.40/Preview_01_main/", "rtsp://192.168.1.40:554/h264Preview_01_main", true},
+		{"rtsp://CAM.local/x", "rtsp://cam.local:554/y", true},
+		{"rtsp://192.168.1.40:8554/x", "rtsp://192.168.1.40/x", false},
+		{"rtsp://10.9.9.9/x", "rtsp://192.168.1.40/x", false},
+	} {
+		if got := sameHost(c.a, c.b); got != c.same {
+			t.Errorf("%s vs %s: %v", c.a, c.b, got)
+		}
+	}
+}

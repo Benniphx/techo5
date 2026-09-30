@@ -275,7 +275,16 @@ func sameHost(a, b string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(ua.Hostname(), ub.Hostname()) && ua.Port() == ub.Port()
+	return strings.EqualFold(ua.Hostname(), ub.Hostname()) && port(ua) == port(ub)
+}
+
+// port is an address's port, RTSP's own when it names none: a Reolink gives its Content-Base
+// without the :554 it was asked on.
+func port(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	return "554"
 }
 
 // request sends one request and reads its answer, logging in when the camera asks. Before PLAY only:
