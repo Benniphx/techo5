@@ -85,6 +85,25 @@ data:
   seconds: 60
 ```
 
+### Talking through a camera
+
+On the Show and the Spot, **Talk** on the camera page sends the device's microphones to the camera's
+own speaker, for answering the door from the kitchen. It goes straight to the camera over its RTSP
+stream (ONVIF two-way audio), so Home Assistant, go2rtc and Frigate are not needed for it. It works
+with cameras that have a speaker and take G.711 audio, which includes most Reolinks.
+
+1. Turn on **Talk through cameras** under Settings → Privacy & Security, or its switch in Home
+   Assistant. It is off on a new device.
+2. Cameras on a Reolink recorder set up on the device (setup page → Connections → Reolink cameras)
+   need nothing more. For any other camera, give its RTSP address under **Talk through cameras** on
+   the same tab, with the cameras' login. For a Reolink camera that is
+   `rtsp://<address>:554/h264Preview_01_main`. A camera left empty gets no Talk.
+
+A tap on **Talk** starts it and another ends it. While it runs the button is red and counts down, the
+view stays up, and the wake word is not listened for. It also ends when the view closes, the
+microphones are muted, the switch goes off, the camera hangs up, or after two minutes. If the camera
+will not take it, the page says why for a few seconds.
+
 ## 5. Music
 
 - **Music Assistant.** Each device is a Sendspin player, on from the first boot. Music Assistant
