@@ -95,6 +95,8 @@ type Display struct {
 	light *esphome.Light
 	auto  *esphome.Switch
 	clock *esphome.Select
+	// clockStyleSel is Clock style, how the clock looks all day (clock_style.go).
+	clockStyleSel *esphome.Select
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -308,6 +310,7 @@ func build() *Display {
 	d.light.OnCommand = d.command
 	d.auto.OnCommand = func(on bool) { d.setAuto(on, true) }
 	d.clock = clockSelect(d.wake)
+	d.clockStyleSel = clockStyleSelect(d)
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
@@ -385,7 +388,7 @@ func turnShown(s scene) bool {
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel,
+	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay}
 }
 
@@ -393,6 +396,7 @@ func (d *Display) Entities() []esphome.Entity {
 // its own device.
 func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
+	d.clockStyleSel.Set(clockStyles[clockStyleIndex()].label)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)
@@ -1737,6 +1741,7 @@ func (d *Display) frame() time.Duration {
 	d.showingPlaying, d.showingStrip, d.showingWord = s.nowPlaying, s.strip, playingWord(s) != ""
 	d.mu.Unlock()
 	s.weather = home.Get().Weather()
+	s.style = styleFactsFor(clockStyle(), now)
 	d.calendarScene(&s, now)
 	d.alertScene(&s, now)
 	d.mu.Lock()
@@ -1817,8 +1822,8 @@ func (d *Display) frame() time.Duration {
 	}
 	d.answerShots()
 
-	if s.redClock && s.redStyle == nightStyleFlip && d.r.flipBusy(time.Now()) {
-		return flipFrame // a card is flipping
+	if d.r.flipBusy(time.Now()) {
+		return flipFrame // a card is flipping: the night's flip clock, or the Flip clock style
 	}
 	if s.showCamera {
 		return 250 * time.Millisecond // frames arrive as they are fetched; this keeps up

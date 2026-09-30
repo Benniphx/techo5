@@ -112,6 +112,8 @@ type Display struct {
 	light *esphome.Light
 	auto  *esphome.Switch
 	clock *esphome.Select
+	// clockStyleSel is Clock style, how the clock looks all day (clock_style.go).
+	clockStyleSel *esphome.Select
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -263,6 +265,7 @@ func build() *Display {
 	d.light.OnCommand = d.command
 	d.auto.OnCommand = func(on bool) { d.setAuto(on, true) }
 	d.clock = clockSelect(d.wake)
+	d.clockStyleSel = clockStyleSelect(d)
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.turnStyle = turnStyleSelect(d.wake)
@@ -311,12 +314,13 @@ func (d *Display) Name() string { return "screen" }
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang}
 }
 
 // Restore lights the panel the way it was left.
 func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
+	d.clockStyleSel.Set(clockStyles[clockStyleIndex()].label)
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)

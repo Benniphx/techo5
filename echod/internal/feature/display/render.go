@@ -200,6 +200,9 @@ type scene struct {
 	// is drawn with a face on it.
 	sunrise     float64
 	sunriseFace bool
+
+	// style is what the clock style in force shows beyond the time (clock_style.go).
+	style styleFacts
 }
 
 // renderer draws scenes onto one canvas. Faces are made once: parsing a font is cheap, but
@@ -207,8 +210,13 @@ type scene struct {
 type renderer struct {
 	paint // the canvas, its size, and the settings screen's tap zones
 
-	// flip is the night's flip clock: what its cards show, and a flip under way.
+	// flip is the flip clock's cards, at night or as a day style: what they show, and a flip under
+	// way; ink is what the LED and flip clocks are drawn in for the frame in hand.
 	flip flipState
+	ink  clockInk
+
+	// styleFaces are the clock styles' faces, made as they are first needed (render_styles.go).
+	styleFaces map[styleFaceKey]font.Face
 
 	// wb is the wave turn screen's working memory, made the first time it is drawn.
 	wb *waveBuf
@@ -583,6 +591,10 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 // timers. With timers the clock moves up to make room. The next alarm, when it is within a day, follows
 // the date.
 func (r *renderer) bigClock(s scene) {
+	if style := clockStyle(); style != styleClassic {
+		r.styledClock(s, style)
+		return
+	}
 	align, foot := clockAlign()
 	base, timersAt := r.h/2+r.s(60), r.s(128)
 	if foot {
