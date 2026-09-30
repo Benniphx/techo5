@@ -101,19 +101,21 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 	}
 	var ss []radiobrowser.Station
 	var err error
+	// MP3 only: a station found here is played by the device itself, which decodes nothing else.
+	const codec = "MP3"
 	if by == "genre" {
 		if state != "" {
-			ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Tag: q, CountryCode: country, State: state, Limit: 6})
+			ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Tag: q, CountryCode: country, State: state, Codec: codec, Limit: 6})
 		}
 		if err == nil && len(ss) < 3 {
 			var more []radiobrowser.Station
-			more, err = radiobrowser.Search(ctx, radiobrowser.Query{Tag: q, CountryCode: country, Limit: 8})
+			more, err = radiobrowser.Search(ctx, radiobrowser.Query{Tag: q, CountryCode: country, Codec: codec, Limit: 8})
 			ss = mergeStations(ss, more, 6)
 		}
 	} else {
-		ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Name: q, CountryCode: country, Limit: 6})
+		ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Name: q, CountryCode: country, Codec: codec, Limit: 6})
 		if err == nil && len(ss) == 0 {
-			ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Name: q, Limit: 6})
+			ss, err = radiobrowser.Search(ctx, radiobrowser.Query{Name: q, Codec: codec, Limit: 6})
 		}
 	}
 	if err != nil {
@@ -170,8 +172,15 @@ func playRadio(name string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("no station was named")
 	}
-	// The device's own lists first: what it already plays, the way its radio page plays it.
+	// The device's own lists first: what it already plays, the way its radio page plays it. One it
+	// plays itself is checked; one Home Assistant plays is its to report.
 	if s, ok := station(name); ok {
+		if url, direct := home.Get().StreamOf(s); direct {
+			if err := home.Get().PlayStreamChecked(s, url, playCheck); err != nil {
+				return "", fmt.Errorf("%s did not play: %v", s, err)
+			}
+			return "playing " + s, nil
+		}
 		home.Get().Play(s)
 		return "playing " + s, nil
 	}
@@ -191,11 +200,32 @@ func playRadio(name string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no station called %q was found", name)
 	}
-	if !home.Get().PlayStream(st.Name, st.URL) {
-		return "", fmt.Errorf("%s has no stream this device can play", st.Name)
+	// The one asked for, then the others found with it: a station that is down or sends something the
+	// device cannot play is common, and the next one usually works.
+	tries := []radiobrowser.Station{st}
+	found.Lock()
+	for _, o := range found.list {
+		if o.URL != st.URL && len(tries) < 3 {
+			tries = append(tries, o)
+		}
 	}
-	return "playing " + st.Name, nil
+	found.Unlock()
+	var failed []string
+	for _, t := range tries {
+		err := home.Get().PlayStreamChecked(t.Name, t.URL, playCheck)
+		if err == nil {
+			if len(failed) > 0 {
+				return fmt.Sprintf("playing %s (%s did not play)", t.Name, strings.Join(failed, " and ")), nil
+			}
+			return "playing " + t.Name, nil
+		}
+		failed = append(failed, t.Name)
+	}
+	return "", fmt.Errorf("none of these played: %s", strings.Join(failed, ", "))
 }
+
+// playCheck is how long a station has to make a sound before it counts as not playing.
+const playCheck = 10 * time.Second
 
 func firstTags(tags string, n int) string {
 	var out []string

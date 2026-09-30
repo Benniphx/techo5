@@ -97,6 +97,12 @@ type track struct {
 	cancel context.CancelFunc
 	// received is audio a remote is sending (PlayPCM), not a url or a generator.
 	received bool
+
+	// heard closes when the track's first samples go to the speaker, and done when it has stopped for
+	// good, with failed saying why if it failed: how a caller that has to answer whether it is playing
+	// (the voice assistant) finds out, rather than taking the start for the sound.
+	heard, done chan struct{}
+	failed      error
 }
 
 // NewStream builds the stream and joins the speaker's backgrounds. changed is called whenever what it
@@ -166,23 +172,51 @@ func (m *Stream) Duck(db int) {
 //
 // It does not take the speaker from a reply or an announcement that is sounding. Those are seconds
 // long and end on their own, and the track waits behind them rather than talking over them.
-func (m *Stream) Play(url string) {
+func (m *Stream) Play(url string) { m.play(url) }
+
+// PlayChecked starts a url as Play does and waits, up to within, for it to make a sound: nil once it
+// has, or why it did not. A station that does not play says so, rather than the player being taken at
+// its word that it started.
+func (m *Stream) PlayChecked(url string, within time.Duration) error {
+	t := m.play(url)
+	if t == nil {
+		return errors.New("this device has no speaker")
+	}
+	timer := time.NewTimer(within)
+	defer timer.Stop()
+	select {
+	case <-t.heard:
+		return nil
+	case <-t.done:
+		if t.failed != nil {
+			return t.failed
+		}
+		return errors.New("the stream ended before it made a sound")
+	case <-timer.C:
+		return fmt.Errorf("nothing arrived from the stream in %s", within)
+	}
+}
+
+func (m *Stream) play(url string) *track {
 	if m == nil {
 		slog.Warn("asked to play media with no speaker", "url", url)
-		return
+		return nil
 	}
 
-	t, ctx := m.start(&track{item: url})
+	t, ctx := m.start(&track{item: url, heard: make(chan struct{}), done: make(chan struct{})})
 	slog.Info("playing media", "url", url)
 
 	safe.Go("media", func() {
 		err := m.run(ctx, t, url)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("playing media failed", "err", err)
+			t.failed = err
 		}
+		close(t.done)
 		// Canceled means stopped or replaced, which is somebody's doing and nobody's to undo.
 		m.finished(t, ctx.Err() == nil)
 	})
+	return t
 }
 
 // PlayNoise runs generated sound instead of a url, and does not stop until it is stopped: that is the
@@ -492,7 +526,10 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	}
 
 	body := bufio.NewReaderSize(resp.Body, chunk)
-	if err := header(body); err != nil {
+	watchdog := time.AfterFunc(stall, giveUp) // an MP3's first frame is read here, before the loop's own
+	src, err := pcmSource(body, resp.Header.Get("Content-Type"))
+	watchdog.Stop()
+	if err != nil {
 		return err
 	}
 
@@ -505,11 +542,18 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 		// Armed only around the read: a track waiting for a turn to finish is not stalled, and
 		// counting that time would end it for being interrupted.
 		watchdog := time.AfterFunc(stall, giveUp)
-		n, err := io.ReadFull(body, buf)
+		n, err := io.ReadFull(src, buf)
 		watchdog.Stop()
 
 		if n >= frame {
 			m.feed(t, buf[:n-n%frame])
+			if t.heard != nil {
+				select {
+				case <-t.heard:
+				default:
+					close(t.heard)
+				}
+			}
 		}
 		switch {
 		case err == nil:
