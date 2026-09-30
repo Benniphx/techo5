@@ -745,14 +745,22 @@ func (r *renderer) publishCameraTaps() {
 func (r *renderer) cameraTalkTapped(p image.Point) bool {
 	r.weatherMu.Lock()
 	defer r.weatherMu.Unlock()
-	return !r.cameraTalkAt.Empty() && p.In(r.cameraTalkAt)
+	return !r.cameraTalkAt.Empty() && p.In(r.fingerRoom(r.cameraTalkAt))
+}
+
+// fingerRoom is a camera control grown to what a finger on it hits: down to the screen's edge, which
+// the bar sits just above, a little up, and a little to each side, less than half the gap between the
+// two controls so that neither reaches the other.
+func (r *renderer) fingerRoom(b image.Rectangle) image.Rectangle {
+	side := r.s(4)
+	return image.Rect(b.Min.X-side, b.Min.Y-r.s(12), b.Max.X+side, r.h)
 }
 
 // cameraSoundTapped is whether a tap at p landed on the camera page's sound control, as last drawn.
 func (r *renderer) cameraSoundTapped(p image.Point) bool {
 	r.weatherMu.Lock()
 	defer r.weatherMu.Unlock()
-	return !r.cameraSoundAt.Empty() && p.In(r.cameraSoundAt)
+	return !r.cameraSoundAt.Empty() && p.In(r.fingerRoom(r.cameraSoundAt))
 }
 
 // weatherMark is how big the corner's icon is: the height of the line it sits beside, so it reads as

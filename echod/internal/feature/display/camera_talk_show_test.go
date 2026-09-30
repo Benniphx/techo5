@@ -54,6 +54,10 @@ func TestTheCameraTalkControl(t *testing.T) {
 				if s.cameraSound && talk.Overlaps(r.cameraSoundAt) {
 					t.Errorf("%s%s: Talk %v over the sound's control %v", name, panel.name, talk, r.cameraSoundAt)
 				}
+				// A finger just under the bar, at the screen's very edge, is on it too.
+				if edge := image.Pt(mid.X, r.h-1); !r.cameraTalkTapped(edge) {
+					t.Errorf("%s%s: a tap at the bottom edge under Talk, %v, missed it", name, panel.name, edge)
+				}
 				if r.cameraTalkTapped(image.Pt(r.margin, r.h-11)) {
 					t.Errorf("%s%s: a tap on the hint was taken for Talk", name, panel.name)
 				}
