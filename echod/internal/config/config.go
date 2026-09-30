@@ -34,6 +34,7 @@ type Config struct {
 	Media          Media          `json:"media"`
 	Sendspin       Sendspin       `json:"sendspin"`
 	MusicAssistant MusicAssistant `json:"music_assistant,omitempty"`
+	TalkBack       TalkBack       `json:"talk_back,omitempty"`
 	Screen         Screen         `json:"screen"`
 	Home           Home           `json:"home"`
 	Security       Security       `json:"security"`
@@ -98,6 +99,7 @@ func (w Writer) Home() HomeWriter                     { return HomeWriter(w) }
 func (w Writer) Dashboard() DashboardWriter           { return DashboardWriter(w) }
 func (w Writer) Calendar() CalendarWriter             { return CalendarWriter(w) }
 func (w Writer) Brain() BrainWriter                   { return BrainWriter(w) }
+func (w Writer) TalkBack() TalkBackWriter             { return TalkBackWriter(w) }
 
 // Wake names one slot, since every wake word setting belongs to one.
 func (w Writer) Wake(slot int) WakeWriter { return WakeWriter{st: w.st, slot: slot} }

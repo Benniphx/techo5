@@ -152,6 +152,8 @@ func adaptRows(rows []settingRow, sv sheetView) []settingRow {
 			row.label = "Screen on network"
 		case row.id == "camweb":
 			row.label = "Camera on network"
+		case row.id == "talkback":
+			row.label, row.sub = "Talk to cameras", "Talk on camera page"
 		case row.id == "e.days":
 			row.label = ""
 		case row.id == "updates":

@@ -143,6 +143,20 @@ func (f *Feature) showCamera(entity string, d time.Duration, sound bool) {
 	f.Changed.Emit(struct{}{})
 }
 
+// HoldCamera keeps the view of entity up for at least d more, if it is the one up: a camera being
+// talked through (feature/talkback) does not time out mid-sentence.
+func (f *Feature) HoldCamera(entity string, d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	now := time.Now()
+	if f.cam.Entity != entity || now.After(f.cam.Until) {
+		return
+	}
+	if until := now.Add(d); until.After(f.cam.Until) {
+		f.cam.Until = until
+	}
+}
+
 // HideCamera takes the view down.
 func (f *Feature) HideCamera() {
 	f.mu.Lock()

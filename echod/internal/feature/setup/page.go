@@ -231,6 +231,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = removePhotos(r)
 	case "reolink":
 		problem = saveReolink(r)
+	case "talkback":
+		problem = saveTalkBack(r)
 	case "place":
 		problem = savePlace(r)
 	case "calendar":
@@ -332,6 +334,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 		}
 		dashboardSection(w, token)
 		reolinkSection(w, token)
+		talkBackSection(w, token)
 	case "photos":
 		screenSection(w, token)
 		photosSection(w, token)

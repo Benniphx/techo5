@@ -27,6 +27,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
@@ -147,6 +148,10 @@ type scene struct {
 	cameraSoundLive bool
 	cameras         []config.Camera
 
+	// talkOffered is whether that view has Talk (feature/talkback), and talk is where a talk is.
+	talkOffered bool
+	talk        talkback.State
+
 	// callees are who the drawer's Call tab offers; callButton is the clock's Call button showing.
 	callees    []phone.Callee
 	callButton bool
@@ -239,6 +244,9 @@ type renderer struct {
 	// tap there to silence the sound rather than take the view down; empty when there was no control to
 	// draw. Under the same lock and for the same reason as weatherAt.
 	cameraSoundAt image.Rectangle
+
+	// cameraTalkAt is the same for the camera page's Talk control.
+	cameraTalkAt image.Rectangle
 
 	// badgeAt, pillsAt and pillsIdx are where the alert badge and the rain map's alert pills were drawn
 	// in the frame last drawn, and the alert each pill opens, for a tap there.
@@ -718,6 +726,19 @@ func (r *renderer) setCameraSoundAt(b image.Rectangle) {
 	r.weatherMu.Lock()
 	r.cameraSoundAt = b
 	r.weatherMu.Unlock()
+}
+
+func (r *renderer) setCameraTalkAt(b image.Rectangle) {
+	r.weatherMu.Lock()
+	r.cameraTalkAt = b
+	r.weatherMu.Unlock()
+}
+
+// cameraTalkTapped is whether a tap at p landed on the camera page's Talk control, as last drawn.
+func (r *renderer) cameraTalkTapped(p image.Point) bool {
+	r.weatherMu.Lock()
+	defer r.weatherMu.Unlock()
+	return !r.cameraTalkAt.Empty() && p.In(r.cameraTalkAt)
 }
 
 // cameraSoundTapped is whether a tap at p landed on the camera page's sound control, as last drawn.

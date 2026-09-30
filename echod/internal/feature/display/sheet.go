@@ -175,6 +175,7 @@ func securityRows(sv sheetView) []settingRow {
 	return append(rows,
 		settingRow{id: "camweb", label: "Camera on the network", sub: "No login", kind: ctlToggle, on: sec.Camera},
 		settingRow{id: "screenweb", label: "Screen on the network", sub: "No login", kind: ctlToggle, on: sec.Screen},
+		settingRow{id: "talkback", label: "Talk through cameras", sub: "Talk on the camera page", kind: ctlToggle, on: sec.TalkBack},
 		setupRow(st.demo),
 		link, certs)
 }
@@ -806,6 +807,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		security.Get().SetCamera(!config.Get().Security.Camera)
 	case "screenweb":
 		security.Get().SetScreen(!config.Get().Security.Screen)
+	case "talkback":
+		security.Get().SetTalkBack(!config.Get().Security.TalkBack)
 	case "sunface":
 		if err := config.Set().Alarms().SunriseFace(!config.Get().Alarms.SunriseFace); err != nil {
 			slog.Warn("saving the sun's face failed", "err", err)

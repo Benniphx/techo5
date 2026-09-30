@@ -166,6 +166,7 @@ var registered = []string{
 	"speaker",
 	"speaker_eq",
 	"stop_word_sensitivity",
+	"talk_back",
 	"test_playback",
 	"thinking_effect_1",
 	"thinking_effect_2",

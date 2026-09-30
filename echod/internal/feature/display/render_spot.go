@@ -22,6 +22,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
@@ -116,6 +117,10 @@ type roundScene struct {
 	// be askable-for from the screen — muting it must not be a door that only closes.
 	cameraSound     bool
 	cameraSoundLive bool
+
+	// talkOffered is whether that view has Talk (feature/talkback), and talk is where a talk is.
+	talkOffered bool
+	talk        talkback.State
 
 	btPairing bool
 
@@ -216,6 +221,9 @@ type roundRenderer struct {
 	// cameraSoundAt is where the camera page's sound control was drawn in the frame last drawn, for a
 	// tap, under zmu; empty when there was no control to draw.
 	cameraSoundAt image.Rectangle
+
+	// cameraTalkAt is the same for the Talk control.
+	cameraTalkAt image.Rectangle
 
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles_spot.go).
 	styleFaces map[spotFaceKey]font.Face
