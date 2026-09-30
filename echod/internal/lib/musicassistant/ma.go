@@ -50,7 +50,8 @@ func (c Client) do(ctx context.Context, command string, args map[string]any, out
 	case http.StatusForbidden:
 		return errors.New("music assistant does not let this token do that")
 	default:
-		return fmt.Errorf("music assistant: %s: %s", resp.Status, strings.TrimSpace(string(raw[:min(len(raw), 200)])))
+		// The status only: what the server says about it goes to the chat model and the log otherwise.
+		return fmt.Errorf("music assistant answered %s", resp.Status)
 	}
 	if out == nil {
 		return nil

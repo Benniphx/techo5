@@ -424,9 +424,20 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 		y += r.s(44)
 	}
 
-	// The coming days, when there is room for them.
+	// The coming days, when there is room for them; otherwise today's weather on a line, so the style that
+	// leaves out the weather corner still says what it is outside and still opens the forecast.
 	days := s.style.days
-	if len(days) == 0 || box.Max.Y-(base+r.s(80)) < r.s(140) {
+	if len(days) == 0 || box.Max.Y-(base+r.s(86)) < r.s(150) { // the row: names, icons and temperatures
+		if line := weatherText(s); line != "" {
+			y := min(base+r.s(100), box.Max.Y)
+			ix := box.Min.X
+			if s.weather.Condition != "" {
+				r.weatherIcon(s.weather.Condition, ix+weatherMark/2, y-r.s(12), weatherMark)
+				ix += weatherMark + r.s(14)
+			}
+			r.text(r.small, line, ix, y, dim)
+			r.setWeatherAt(image.Rect(box.Min.X, y-r.s(40), ix+r.width(r.small, line), y+r.s(14)))
+		}
 		return
 	}
 	days = days[:min(len(days), 5)]

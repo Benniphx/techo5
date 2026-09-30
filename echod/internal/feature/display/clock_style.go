@@ -116,6 +116,12 @@ func clockStyleSelect(d *Display) *esphome.Select {
 // for the Sun, the coming days and the next events for the Dashboard. Gathered only for the style in
 // force, and never by asking anything: each comes from what the home feature already keeps.
 type styleFacts struct {
+	// kind is the style this frame is drawn in, read once with the rest so a change arriving part way
+	// through a frame cannot draw one style with another's facts; chosen says it was set at all (a
+	// preview built by hand leaves it, and the style in force is read instead).
+	kind   string
+	chosen bool
+
 	rise, set time.Time
 	sunOK     bool
 	days      []hass.Day
@@ -123,6 +129,7 @@ type styleFacts struct {
 }
 
 func styleFactsFor(style string, now time.Time) (f styleFacts) {
+	f.kind, f.chosen = style, true
 	switch style {
 	case styleSun:
 		f.rise, f.set, f.sunOK = home.Get().SunTimes(now)
@@ -131,6 +138,14 @@ func styleFactsFor(style string, now time.Time) (f styleFacts) {
 		f.next = upcomingEvents(now, 3)
 	}
 	return f
+}
+
+// style is the frame's clock style: the one the facts were gathered for, or the one in force.
+func (f styleFacts) style() string {
+	if f.chosen {
+		return f.kind
+	}
+	return clockStyle()
 }
 
 // upcomingEvents is up to n of today's and tomorrow's events that have not ended, soonest first.
@@ -184,6 +199,12 @@ func clockWords(t time.Time) (lead, hour, period string) {
 	if m > 30 {
 		said = (h + 1) % 24
 	}
+	// The part of the day is the said hour's - "quarter to five in the morning", not "at night" - except
+	// for noon and midnight, which belong to the hour before them.
+	ph := said
+	if said == 12 || said == 0 {
+		ph = h
+	}
 	switch {
 	case said == 0 && m == 0:
 		return "", "midnight", ""
@@ -195,11 +216,11 @@ func clockWords(t time.Time) (lead, hour, period string) {
 		hour += " o'clock"
 	}
 	switch {
-	case h >= 5 && h < 12:
+	case ph >= 5 && ph < 12:
 		period = "in the morning"
-	case h >= 12 && h < 18:
+	case ph >= 12 && ph < 18:
 		period = "in the afternoon"
-	case h >= 18 && h < 22:
+	case ph >= 18 && ph < 22:
 		period = "in the evening"
 	default:
 		period = "at night"

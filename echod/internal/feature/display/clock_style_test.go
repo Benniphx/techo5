@@ -100,6 +100,8 @@ func TestClockWords(t *testing.T) {
 		{0, 0, "", "midnight", ""},
 		{23, 50, "ten to", "twelve", "at night"},
 		{19, 20, "twenty past", "seven", "in the evening"},
+		{4, 45, "quarter to", "five", "in the morning"}, // the part of the day is the hour said
+		{17, 45, "quarter to", "six", "in the evening"},
 	} {
 		lead, hour, period := clockWords(time.Date(2026, 9, 16, c.h, c.m, 0, 0, time.Local))
 		if lead != c.lead || hour != c.hour || period != c.period {

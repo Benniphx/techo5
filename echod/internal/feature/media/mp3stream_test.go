@@ -130,3 +130,51 @@ func TestTheResamplerKeepsTimeAndJoinsSmoothly(t *testing.T) {
 		}
 	}
 }
+
+// A station whose ID3 tag claims hundreds of megabytes is refused before anything is allocated for it; a
+// small tag is stepped over and the MP3 after it plays.
+func TestAnID3TagIsSkippedWithinReason(t *testing.T) {
+	huge := append([]byte("ID3\x04\x00\x00\x7f\x7f\x7f\x7f"), make([]byte, 64)...)
+	if _, err := served(t, huge, "audio/mpeg"); err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Errorf("a quarter-gigabyte tag gave %v", err)
+	}
+	tag := append([]byte("ID3\x04\x00\x00\x00\x00\x01\x00"), make([]byte, 128)...) // 128 bytes of tag
+	src, err := served(t, append(tag, sampleMP3(t)...), "audio/mpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pcm, _ := io.ReadAll(src); len(pcm) < speaker.Rate*4 {
+		t.Errorf("after a small tag only %d bytes came out", len(pcm))
+	}
+}
+
+// Something else called MP3 is given up on after a while, not scanned for ever.
+func TestGarbageCalledMP3EndsInsteadOfScanningForever(t *testing.T) {
+	junk := make([]byte, syncMost+4096) // zeros: never a frame header
+	if _, err := served(t, junk, "audio/mpeg"); err == nil {
+		t.Error("a quarter megabyte of zeros was taken for MP3")
+	}
+}
+
+// A stretch of broken bytes in the middle of a stream costs that stretch, not the station.
+func TestAStreamCarriesOnPastABadStretch(t *testing.T) {
+	mp3 := sampleMP3(t)
+	whole, err := served(t, mp3, "audio/mpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, _ := io.ReadAll(whole)
+	broken := append([]byte{}, mp3...)
+	mid := len(broken) / 2
+	for i := mid; i < mid+2000 && i < len(broken); i++ {
+		broken[i] = 0xFF // a run of false sync words
+	}
+	src, err := served(t, broken, "audio/mpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := io.ReadAll(src)
+	if len(got) < len(full)*3/4 {
+		t.Errorf("a broken stretch in the middle cut the stream to %d of %d bytes", len(got), len(full))
+	}
+}

@@ -1232,8 +1232,12 @@ func (d *Display) frame() time.Duration {
 	s.missed = missedNote(now, true)
 
 	if boring {
+		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
+		// The weather art only where it will be seen: not under the night clock or the light before an
+		// alarm, which take the whole screen, where composing it each second is work for nothing.
+		artSeen := s.sunrise == 0
 		s.slideshow = home.Get().SlideshowBackground()
-		if home.Get().SlideshowMode() == config.SlideshowBackground {
+		if home.Get().SlideshowMode() == config.SlideshowBackground && artSeen {
 			if art, fx := sceneArt(now, side, side); art != nil {
 				s.slideshow, s.artFx = art, fx
 			}
@@ -1241,7 +1245,6 @@ func (d *Display) frame() time.Duration {
 		if s.slideshow == nil {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
-		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
 	}
 	d.mu.Lock()
 	if !boring {
@@ -1253,7 +1256,7 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
-		if home.Get().SlideshowMode() == config.SlideshowScreensaver {
+		if home.Get().SlideshowMode() == config.SlideshowScreensaver && s.sunrise == 0 {
 			if art, fx := sceneArt(now, side, side); art != nil {
 				s.slideshowScreensaver, s.artFx = art, fx
 			}

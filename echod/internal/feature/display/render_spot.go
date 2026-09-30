@@ -385,7 +385,7 @@ func (r *roundRenderer) rim(s roundScene) {
 		left := float64(t.Left) / float64(t.Total)
 		r.arc(rimIn, rimOut, 0, 2*math.Pi, colTrack)
 		r.arc(rimIn, rimOut, 0, 2*math.Pi*math.Min(math.Max(left, 0), 1), colTimer)
-	case clockStyle() == styleSun && s.style.sunOK && s.phase == "idle" && !s.nowPlaying && !s.showCamera && !s.showDash:
+	case s.style.style() == styleSun && s.style.sunOK && s.phase == "idle" && !s.nowPlaying && !s.showCamera && !s.showDash:
 		r.sunRim(s)
 	default:
 		r.arc(rimIn, rimOut, 0, 2*math.Pi, colTrack)
@@ -393,7 +393,7 @@ func (r *roundRenderer) rim(s roundScene) {
 }
 
 func (r *roundRenderer) clockFace(s roundScene) {
-	if style := clockStyle(); style != styleClassic {
+	if style := s.style.style(); style != styleClassic {
 		r.styledClockFace(s, style)
 		return
 	}

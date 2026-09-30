@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"time"
@@ -77,6 +78,25 @@ func Search(ctx context.Context, q Query) ([]Station, error) {
 	return nil, last
 }
 
+// public is whether a station's address is one on the internet: http or https, to a name or an address
+// that is not the home network's. Anyone can add a station to the directory, and the device plays what
+// it finds, so an entry pointing into the home (a router's page, another device) is left out.
+func public(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil {
+		return false
+	}
+	h := strings.ToLower(u.Hostname())
+	if h == "localhost" || strings.HasSuffix(h, ".local") || strings.HasSuffix(h, ".localhost") {
+		return false
+	}
+	if a, err := netip.ParseAddr(h); err == nil {
+		a = a.Unmap()
+		return !(a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() || a.IsUnspecified() || a.IsMulticast())
+	}
+	return true
+}
+
 func get(ctx context.Context, u string) ([]Station, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -113,7 +133,7 @@ func get(ctx context.Context, u string) ([]Station, error) {
 			u = r.URL
 		}
 		name := strings.Join(strings.Fields(r.Name), " ")
-		if name == "" || u == "" {
+		if name == "" || !public(u) {
 			continue
 		}
 		out = append(out, Station{Name: name, URL: u, Tags: r.Tags, State: r.State, Country: r.Country,

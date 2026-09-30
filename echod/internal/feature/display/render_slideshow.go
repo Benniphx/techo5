@@ -32,13 +32,14 @@ func (r *renderer) artWeather(s scene) {
 // off — the wash plus a clock, small (cornerClock) or normal size (the same layout bigClock uses,
 // without its weather and timers, which belong to the ordinary idle page).
 func (r *renderer) slideshowScreensaverPage(s scene) {
-	draw.Draw(r.dst, r.dst.Rect, s.slideshowScreensaver, s.slideshowScreensaver.Bounds().Min, draw.Src)
-	r.artWeather(s)
 	if s.slideshowOverlay == config.SlideshowOverlayOff {
+		draw.Draw(r.dst, r.dst.Rect, s.slideshowScreensaver, s.slideshowScreensaver.Bounds().Min, draw.Src)
+		r.artWeather(s)
 		return
 	}
-	wash := color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash}
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(wash), image.Point{}, draw.Over)
+	// Washed as the background is, and kept for the second when it is the weather art (washedArt).
+	r.washed.lay(r.dst, s.slideshowScreensaver, color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash})
+	r.artWeather(s)
 	r.readableOver(s.slideshowScreensaver, walnut, slideshowWash, func() {
 		if s.slideshowOverlay == config.SlideshowOverlaySmall {
 			r.cornerClock(s)

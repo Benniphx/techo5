@@ -77,7 +77,8 @@ func (r *roundRenderer) fitted(bold bool, size int, s string, w int) font.Face {
 
 // styledClockFace is the clock face in a style other than the classic one.
 func (r *roundRenderer) styledClockFace(s roundScene, style string) {
-	r.alertPill(s.alerts.Here, clockPillY)
+	// The alert pill last, over the face: the larger styles reach up where it sits.
+	defer r.alertPill(s.alerts.Here, clockPillY)
 	switch style {
 	case styleBig:
 		r.bigFace(s)

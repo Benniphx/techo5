@@ -865,15 +865,25 @@ func (d *Display) gesture(g touch.Gesture) {
 				return
 			}
 		}
+		// The Call button and the music strip are drawn over the clock, so a tap on them is theirs even
+		// where a clock style's date or weather lies under them.
+		overButtons := false
+		if d.r != nil {
+			d.mu.Lock()
+			call, strip := d.callShown, d.showingStrip
+			d.mu.Unlock()
+			at := image.Pt(g.X, g.Y)
+			overButtons = call && at.In(d.r.callButtonRect().Inset(-d.r.s(12))) || strip && at.In(d.r.stripRect())
+		}
 		// The weather on the home screen opens the forecast, the page a weather question brings up. It
 		// sits in the top band, so it is looked for before that band's rule below.
-		if idle && !weatherUp && d.r != nil && d.r.weatherTapped(image.Pt(g.X, g.Y)) {
+		if idle && !weatherUp && !overButtons && d.r != nil && d.r.weatherTapped(image.Pt(g.X, g.Y)) {
 			slog.Info("screen: forecast by touch")
 			d.ShowWeather(false)
 			return
 		}
 		// The date under the clock opens the calendar, once this device shows one.
-		if idle && !weatherUp && d.r != nil && d.r.dateTapped(image.Pt(g.X, g.Y)) && d.OpenCalendar() {
+		if idle && !weatherUp && !overButtons && d.r != nil && d.r.dateTapped(image.Pt(g.X, g.Y)) && d.OpenCalendar() {
 			slog.Info("screen: calendar by touch")
 			return
 		}
@@ -1790,8 +1800,12 @@ func (d *Display) frame() time.Duration {
 	s.missed = missedNote(now, false)
 
 	if boring {
+		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
+		// The weather art only where it will be seen: not under the night clock or the light before an
+		// alarm, which take the whole screen, where composing it each second is work for nothing.
+		artSeen := !s.redClock && s.sunrise == 0
 		s.slideshow = home.Get().SlideshowBackground()
-		if home.Get().SlideshowMode() == config.SlideshowBackground {
+		if home.Get().SlideshowMode() == config.SlideshowBackground && artSeen {
 			if art, fx := sceneArt(now, d.r.w, d.r.h); art != nil {
 				s.slideshow, s.artFx = art, fx
 			}
@@ -1799,7 +1813,6 @@ func (d *Display) frame() time.Duration {
 		if s.slideshow == nil {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
-		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
 	}
 	d.mu.Lock()
 	if !boring {
@@ -1811,7 +1824,7 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
-		if home.Get().SlideshowMode() == config.SlideshowScreensaver {
+		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {
 			if art, fx := sceneArt(now, d.r.w, d.r.h); art != nil {
 				s.slideshowScreensaver, s.artFx = art, fx
 			}

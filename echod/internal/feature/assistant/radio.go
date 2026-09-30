@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,8 @@ import (
 var found struct {
 	sync.Mutex
 	list []radiobrowser.Station
+	// by is how list was searched: by "name" or by "genre".
+	by string
 }
 
 func radioTools() []tool {
@@ -122,7 +125,7 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 		return nil, fmt.Errorf("the radio directory did not answer")
 	}
 	found.Lock()
-	found.list = ss
+	found.list, found.by = ss, by
 	found.Unlock()
 	return ss, nil
 }
@@ -200,32 +203,49 @@ func playRadio(name string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no station called %q was found", name)
 	}
-	// The one asked for, then the others found with it: a station that is down or sends something the
-	// device cannot play is common, and the next one usually works.
+	// The one asked for, then others from the same search: a station that is down or sends something
+	// the device cannot play is common, and the next one usually works. From a genre search any of its
+	// stations will do; from a search by name, only another stream of the same station, since a
+	// different station is not what was asked for.
 	tries := []radiobrowser.Station{st}
 	found.Lock()
 	for _, o := range found.list {
-		if o.URL != st.URL && len(tries) < 3 {
-			tries = append(tries, o)
+		if len(tries) == 3 {
+			break
 		}
+		if o.URL == st.URL || (found.by != "genre" && !sameStation(o.Name, st.Name)) {
+			continue
+		}
+		tries = append(tries, o)
 	}
 	found.Unlock()
 	var failed []string
 	for _, t := range tries {
 		err := home.Get().PlayStreamChecked(t.Name, t.URL, playCheck)
 		if err == nil {
-			if len(failed) > 0 {
-				return fmt.Sprintf("playing %s (%s did not play)", t.Name, strings.Join(failed, " and ")), nil
+			switch {
+			case len(failed) == 0:
+				return "playing " + t.Name, nil
+			case sameStation(t.Name, st.Name):
+				return "playing " + t.Name + " (its first stream did not play)", nil
 			}
-			return "playing " + t.Name, nil
+			return fmt.Sprintf("playing %s instead (%s did not play)", t.Name, st.Name), nil
 		}
-		failed = append(failed, t.Name)
+		if !slices.Contains(failed, t.Name) {
+			failed = append(failed, t.Name)
+		}
 	}
 	return "", fmt.Errorf("none of these played: %s", strings.Join(failed, ", "))
 }
 
 // playCheck is how long a station has to make a sound before it counts as not playing.
 const playCheck = 10 * time.Second
+
+// sameStation is whether two directory names are the same station: one's words within the other's.
+func sameStation(a, b string) bool {
+	a, b = strings.ToLower(strings.TrimSpace(a)), strings.ToLower(strings.TrimSpace(b))
+	return a != "" && b != "" && (strings.Contains(a, b) || strings.Contains(b, a))
+}
 
 func firstTags(tags string, n int) string {
 	var out []string

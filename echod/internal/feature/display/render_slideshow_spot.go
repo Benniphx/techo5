@@ -32,13 +32,14 @@ func (r *roundRenderer) artWeather(s roundScene) {
 // off — the wash plus a clock, small or normal size. No weather, no timers, no status label: those
 // belong to clockFace's ordinary idle face, not the photo-frame look.
 func (r *roundRenderer) slideshowScreensaverFace(s roundScene) {
-	draw.Draw(r.dst, r.dst.Rect, s.slideshowScreensaver, s.slideshowScreensaver.Bounds().Min, draw.Src)
-	r.artWeather(s)
 	if s.slideshowOverlay == config.SlideshowOverlayOff {
+		draw.Draw(r.dst, r.dst.Rect, s.slideshowScreensaver, s.slideshowScreensaver.Bounds().Min, draw.Src)
+		r.artWeather(s)
 		return
 	}
-	wash := color.RGBA{colBackground.R, colBackground.G, colBackground.B, slideshowWash}
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(wash), image.Point{}, draw.Over)
+	// Washed as the background is, and kept for the second when it is the weather art (washedArt).
+	r.washed.lay(r.dst, s.slideshowScreensaver, color.RGBA{colBackground.R, colBackground.G, colBackground.B, slideshowWash})
+	r.artWeather(s)
 	r.readableOver(s.slideshowScreensaver, colBackground, slideshowWash, func() {
 		r.screensaverClock(s, s.slideshowOverlay != config.SlideshowOverlaySmall)
 	})
