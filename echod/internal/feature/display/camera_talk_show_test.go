@@ -75,3 +75,32 @@ func TestTheCameraTalkControl(t *testing.T) {
 		}
 	}
 }
+
+// A tap on Talk while the next frame is being drawn still finds Talk: the controls are published when
+// a frame is done, never cleared while it draws, or the tap would close the view instead.
+func TestTalkIsTappableWhileAFrameDraws(t *testing.T) {
+	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local)
+	r := newRenderer(image.NewRGBA(image.Rect(0, 0, showWide, showHigh)))
+	s := scene{now: at, phase: "idle", showCamera: true, talkOffered: true, cameraSound: true,
+		camera: home.CameraView{Entity: "camera.front_door", Name: "Front door", Until: at.Add(time.Hour)}}
+	r.draw(s)
+	b := r.cameraTalkAt
+	mid := b.Min.Add(image.Pt(b.Dx()/2, b.Dy()/2))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 30; i++ {
+			r.draw(s)
+		}
+	}()
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		if !r.cameraTalkTapped(mid) {
+			t.Fatal("a tap on Talk while a frame was drawing found nothing there")
+		}
+	}
+}

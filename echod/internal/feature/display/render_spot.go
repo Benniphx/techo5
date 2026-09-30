@@ -225,6 +225,10 @@ type roundRenderer struct {
 	// cameraTalkAt is the same for the Talk control.
 	cameraTalkAt image.Rectangle
 
+	// drawnSound and drawnTalk are those two in the frame being drawn, published when it is done, so
+	// that a tap while a frame draws never finds them missing (see the Show's renderer).
+	drawnSound, drawnTalk image.Rectangle
+
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles_spot.go).
 	styleFaces map[spotFaceKey]font.Face
 
@@ -269,6 +273,7 @@ func (r *roundRenderer) draw(s roundScene) {
 	r.callDrawn, r.artDrawn = false, false
 	r.clearAlertTaps()
 	r.clearCameraSoundTap()
+	defer r.publishCameraTaps()
 
 	// Muted is drawn last, over whatever the face turns out to be: see mutedRim.
 	defer func() {

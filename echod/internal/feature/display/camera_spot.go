@@ -122,17 +122,16 @@ func cameraSoundBox(w int) image.Rectangle {
 	return image.Rect(center-w/2, bottom-barH, center+w/2, bottom)
 }
 
-func (r *roundRenderer) setCameraSoundAt(b image.Rectangle) {
+func (r *roundRenderer) setCameraSoundAt(b image.Rectangle) { r.drawnSound = b }
+
+// publishCameraTaps makes the finished frame's camera controls the ones a tap is matched against.
+func (r *roundRenderer) publishCameraTaps() {
 	r.zmu.Lock()
-	r.cameraSoundAt = b
+	r.cameraSoundAt, r.cameraTalkAt = r.drawnSound, r.drawnTalk
 	r.zmu.Unlock()
 }
 
-func (r *roundRenderer) setCameraTalkAt(b image.Rectangle) {
-	r.zmu.Lock()
-	r.cameraTalkAt = b
-	r.zmu.Unlock()
-}
+func (r *roundRenderer) setCameraTalkAt(b image.Rectangle) { r.drawnTalk = b }
 
 // cameraTalkTapped is cameraSoundTapped for the Talk control.
 func (r *roundRenderer) cameraTalkTapped(x, y int) bool {
@@ -141,8 +140,8 @@ func (r *roundRenderer) cameraTalkTapped(x, y int) bool {
 	return !r.cameraTalkAt.Empty() && image.Pt(x, y).In(r.cameraTalkAt.Inset(-4))
 }
 
-// clearCameraSoundTap forgets where the control was: a face that does not draw it must not leave it
-// tappable. Called at the start of every frame, as clearAlertTaps is.
+// clearCameraSoundTap forgets where the controls were in the frame being drawn: a face that does not
+// draw them must not leave them tappable once it is done. Called at the start of every frame.
 func (r *roundRenderer) clearCameraSoundTap() {
 	r.setCameraSoundAt(image.Rectangle{})
 	r.setCameraTalkAt(image.Rectangle{})

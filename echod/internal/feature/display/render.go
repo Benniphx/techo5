@@ -248,6 +248,12 @@ type renderer struct {
 	// cameraTalkAt is the same for the camera page's Talk control.
 	cameraTalkAt image.Rectangle
 
+	// drawnSound and drawnTalk are those two in the frame being drawn, by the drawing goroutine alone;
+	// they become cameraSoundAt and cameraTalkAt when the frame is done. Clearing the published ones at
+	// the start of a frame would leave a gap, while the frame draws, in which a tap on Talk finds
+	// nothing there and closes the view.
+	drawnSound, drawnTalk image.Rectangle
+
 	// badgeAt, pillsAt and pillsIdx are where the alert badge and the rain map's alert pills were drawn
 	// in the frame last drawn, and the alert each pill opens, for a tap there.
 	alertMu  sync.Mutex
@@ -372,9 +378,9 @@ func (r *renderer) draw(s scene) {
 	r.artDrawn = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
-	// The camera page's controls are tappable only in a frame that draws them.
-	r.setCameraSoundAt(image.Rectangle{})
-	r.setCameraTalkAt(image.Rectangle{})
+	// The camera page's controls are tappable only in a frame that draws them, from when it is done.
+	r.drawnSound, r.drawnTalk = image.Rectangle{}, image.Rectangle{}
+	defer r.publishCameraTaps()
 	r.setPopupAt(image.Rectangle{})
 	r.clearAlertTaps()
 	// The red night clock is the whole screen: nothing else, not even the header, is drawn over it,
@@ -725,15 +731,13 @@ func (r *renderer) weatherTapped(p image.Point) bool {
 	return !r.weatherAt.Empty() && p.In(r.weatherAt)
 }
 
-func (r *renderer) setCameraSoundAt(b image.Rectangle) {
-	r.weatherMu.Lock()
-	r.cameraSoundAt = b
-	r.weatherMu.Unlock()
-}
+func (r *renderer) setCameraSoundAt(b image.Rectangle) { r.drawnSound = b }
+func (r *renderer) setCameraTalkAt(b image.Rectangle)  { r.drawnTalk = b }
 
-func (r *renderer) setCameraTalkAt(b image.Rectangle) {
+// publishCameraTaps makes the finished frame's camera controls the ones a tap is matched against.
+func (r *renderer) publishCameraTaps() {
 	r.weatherMu.Lock()
-	r.cameraTalkAt = b
+	r.cameraSoundAt, r.cameraTalkAt = r.drawnSound, r.drawnTalk
 	r.weatherMu.Unlock()
 }
 
