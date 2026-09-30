@@ -43,7 +43,8 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 	r.text(r.small, t, r.w-r.margin-r.width(r.small, t), 32, dim)
 	left := time.Until(v.Until).Round(time.Second)
 	hint := "tap to close"
-	if left > 0 && left < 24*time.Hour && s.talk.Phase == talkback.Idle { // "until tapped" is a year: no countdown for that
+	talking := s.talk.Entity == v.Entity && s.talk.Phase != talkback.Idle // the view is held: no countdown
+	if left > 0 && left < 24*time.Hour && !talking {                      // "until tapped" is a year: no countdown for that
 		hint = "tap to close  ·  " + left.String()
 	}
 	draw.Draw(r.dst, image.Rect(0, r.h-36, r.w, r.h), image.NewUniform(shade), image.Point{}, draw.Over)
@@ -58,7 +59,7 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 			end = r.cameraSoundBox(r.cameraSoundLabel(s)).Min.X - r.s(10)
 		}
 		label, fill := talkLabel(s.talk, v.Entity), shift(ember, 16)
-		if s.talk.Entity == v.Entity && s.talk.Phase != talkback.Idle {
+		if talking {
 			fill = talkLive
 		}
 		b := r.cameraSoundBox(label)
@@ -68,6 +69,7 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 		mid := b.Min.Y + (b.Dy()+m.Ascent.Ceil()-m.Descent.Ceil())/2
 		r.text(r.tiny, label, b.Min.X+(b.Dx()-r.width(r.tiny, label))/2, mid, cream)
 		r.setCameraTalkAt(b)
+		talkback.Get().Seen(v.Entity) // a talk goes on only while this is on the screen
 		end = b.Min.X - r.s(10)
 		if s.talk.Error != "" && s.talk.Entity == v.Entity {
 			hint = "Talk: " + s.talk.Error

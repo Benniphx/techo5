@@ -13,7 +13,6 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -46,7 +45,6 @@ type Session struct {
 	base, control string // the request URL, and the backchannel track's
 	user, pass    string
 	challenge     map[string]string // the camera's last digest challenge; nil for none yet
-	basic         bool
 
 	mu      sync.Mutex // writes to conn, and everything below
 	cseq    int
@@ -57,6 +55,8 @@ type Session struct {
 	ssrc    uint32
 	seq     uint16
 	ts      uint32
+	first   bool    // the next packet starts the talk, and carries the marker
+	nc      int     // requests signed with the current nonce
 	pending []int16 // 8 kHz samples short of a whole packet
 
 	done    chan struct{}
@@ -102,6 +102,8 @@ func (s *Session) start(ctx context.Context) error {
 		s.conn.SetDeadline(time.Now().Add(20 * time.Second))
 	}
 	defer s.conn.SetDeadline(time.Time{})
+	// A stop while the camera is still being asked ends the asking at once, not at the deadline.
+	defer context.AfterFunc(ctx, func() { s.conn.SetDeadline(time.Now()) })()
 
 	// A camera reached through a hub (a Reolink doorbell behind its Home Hub) can leave the talk-back
 	// track out of its first answer after a quiet spell, while the hub wakes it, and put it in the next.
@@ -112,10 +114,9 @@ func (s *Session) start(ctx context.Context) error {
 		var sdp string
 		var err error
 		hdr, sdp, err = s.request("DESCRIBE", s.base, map[string]string{"Accept": "application/sdp", "Require": require})
-		if err != nil {
-			return err
+		if err == nil {
+			tk, err = parseSDP(sdp)
 		}
-		tk, err = parseSDP(sdp)
 		if err == nil {
 			break
 		}
@@ -133,6 +134,9 @@ func (s *Session) start(ctx context.Context) error {
 		base = cb
 	}
 	s.control = resolve(base, tk.control)
+	if !sameHost(s.control, s.base) || !sameHost(base, s.base) {
+		return errors.New("the camera pointed its talk-back channel at another address")
+	}
 	s.pt, s.alaw = tk.pt, tk.alaw
 
 	hdr, _, err := s.request("SETUP", s.control, map[string]string{
@@ -159,9 +163,13 @@ func (s *Session) start(ctx context.Context) error {
 	if _, _, err := s.request("PLAY", base, map[string]string{"Session": s.session, "Require": require, "Range": "npt=0.000-"}); err != nil {
 		return err
 	}
-	var id [4]byte
+	// The stream's identity, and where its numbering and clock start, are random (RFC 3550).
+	var id [10]byte
 	rand.Read(id[:])
-	s.ssrc = binary.BigEndian.Uint32(id[:])
+	s.ssrc = binary.BigEndian.Uint32(id[:4])
+	s.ts = binary.BigEndian.Uint32(id[4:8])
+	s.seq = binary.BigEndian.Uint16(id[8:])
+	s.first = true
 	return nil
 }
 
@@ -189,7 +197,10 @@ func parseSDP(sdp string) (track, error) {
 			}
 			if v, ok := strings.CutPrefix(line, "a=rtpmap:"); ok {
 				f := strings.Fields(v)
-				if n, err := strconv.Atoi(f[0]); err == nil && len(f) > 1 && n >= 0 && n < 128 {
+				if len(f) < 2 {
+					continue
+				}
+				if n, err := strconv.Atoi(f[0]); err == nil && n >= 0 && n < 128 {
 					codecs[byte(n)] = strings.ToUpper(f[1])
 				}
 			}
@@ -254,6 +265,19 @@ func resolve(base, control string) string {
 	return r.String()
 }
 
+// sameHost is whether two addresses are the same camera: the same host and port.
+func sameHost(a, b string) bool {
+	ua, err := url.Parse(a)
+	if err != nil {
+		return false
+	}
+	ub, err := url.Parse(b)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(ua.Hostname(), ub.Hostname()) && ua.Port() == ub.Port()
+}
+
 // request sends one request and reads its answer, logging in when the camera asks. Before PLAY only:
 // after it, drain reads the connection.
 func (s *Session) request(method, uri string, headers map[string]string) (map[string]string, string, error) {
@@ -269,7 +293,9 @@ func (s *Session) request(method, uri string, headers map[string]string) (map[st
 		case code == 200:
 			return hdr, body, nil
 		case code == 401 && attempt == 0 && hdr["www-authenticate"] != "":
-			s.learn(hdr["www-authenticate"])
+			if err := s.learn(hdr["www-authenticate"]); err != nil {
+				return nil, "", err
+			}
 			continue
 		case code == 401:
 			return nil, "", errors.New("the camera refused the login")
@@ -296,22 +322,30 @@ func (s *Session) send(method, uri string, headers map[string]string) error {
 	return err
 }
 
-// learn takes a camera's WWW-Authenticate. Digest is preferred to Basic when it offers both, but only
-// one header is kept by the reader, and cameras send Digest.
-func (s *Session) learn(h string) {
+// learn takes a camera's WWW-Authenticate. Only Digest with MD5 is answered: Basic would hand the
+// password, which every camera on the setup page shares, to whatever answers at a camera's address.
+func (s *Session) learn(h string) error {
 	scheme, rest, _ := strings.Cut(strings.TrimSpace(h), " ")
-	if strings.EqualFold(scheme, "Basic") {
-		s.basic, s.challenge = true, nil
-		return
+	if !strings.EqualFold(scheme, "Digest") {
+		return errors.New("the camera asks for its password unprotected, which this device will not send")
 	}
-	s.basic = false
-	s.challenge = map[string]string{}
+	c := map[string]string{}
 	for _, part := range splitParams(rest) {
 		k, v, ok := strings.Cut(part, "=")
 		if ok {
-			s.challenge[strings.ToLower(strings.TrimSpace(k))] = strings.Trim(strings.TrimSpace(v), `"`)
+			c[strings.ToLower(strings.TrimSpace(k))] = strings.Trim(strings.TrimSpace(v), `"`)
 		}
 	}
+	if a := c["algorithm"]; a != "" && !strings.EqualFold(a, "MD5") {
+		return errors.New("the camera asks for a login this device cannot give")
+	}
+	for _, v := range c {
+		if strings.ContainsAny(v, "\"\r\n\\") {
+			return errors.New("the camera's login challenge does not parse")
+		}
+	}
+	s.challenge, s.nc = c, 0
+	return nil
 }
 
 // splitParams splits a challenge's parameters on commas outside quotes.
@@ -338,9 +372,6 @@ func splitParams(s string) []string {
 }
 
 func (s *Session) authorization(method, uri string) string {
-	if s.basic {
-		return "Basic " + basic(s.user, s.pass)
-	}
 	c := s.challenge
 	if c == nil {
 		return ""
@@ -352,7 +383,8 @@ func (s *Session) authorization(method, uri string) string {
 	if strings.Contains(c["qop"], "auth") {
 		var cn [8]byte
 		rand.Read(cn[:])
-		cnonce, nc := hex.EncodeToString(cn[:]), fmt.Sprintf("%08x", s.cseq)
+		s.nc++
+		cnonce, nc := hex.EncodeToString(cn[:]), fmt.Sprintf("%08x", s.nc)
 		out += fmt.Sprintf(`, qop=auth, nc=%s, cnonce="%s", response="%s"`, nc, cnonce, h(ha1+":"+c["nonce"]+":"+nc+":"+cnonce+":auth:"+ha2))
 	} else {
 		out += fmt.Sprintf(`, response="%s"`, h(ha1+":"+c["nonce"]+":"+ha2))
@@ -366,42 +398,66 @@ func (s *Session) authorization(method, uri string) string {
 	return out
 }
 
-func basic(user, pass string) string {
-	return base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
-}
-
 // readResponse reads one RTSP answer: status, headers (lower-cased keys, the first of each) and body,
 // skipping any interleaved packets in front of it.
 func readResponse(br *bufio.Reader) (code int, reason string, hdr map[string]string, body string, err error) {
 	for {
+		first, hdr, body, err := readMessage(br)
+		if err != nil {
+			return 0, "", nil, "", err
+		}
+		f := strings.SplitN(first, " ", 3)
+		if !strings.HasPrefix(f[0], "RTSP/") {
+			continue // a request of the camera's own (OPTIONS, SET_PARAMETER): not the answer
+		}
+		if len(f) < 2 {
+			return 0, "", nil, "", errors.New("the camera's answer is not RTSP")
+		}
+		code, _ = strconv.Atoi(f[1])
+		if len(f) > 2 {
+			reason = f[2]
+		}
+		return code, reason, hdr, body, nil
+	}
+}
+
+// readMessage reads one message, an answer or a request of the camera's own: its first line, its
+// headers (lower-cased keys, the first of each) and its body. Interleaved packets and blank lines
+// in front of it are read past.
+func readMessage(br *bufio.Reader) (first string, hdr map[string]string, body string, err error) {
+	for {
 		b, err := br.Peek(1)
 		if err != nil {
-			return 0, "", nil, "", err
+			return "", nil, "", err
 		}
-		if b[0] != '$' {
-			break
+		switch b[0] {
+		case '$':
+			if err := skipPacket(br); err != nil {
+				return "", nil, "", err
+			}
+			continue
+		case '\r', '\n':
+			br.Discard(1)
+			continue
 		}
-		if err := skipPacket(br); err != nil {
-			return 0, "", nil, "", err
-		}
+		break
 	}
-	line, err := br.ReadString('\n')
+	line, err := readLine(br)
 	if err != nil {
-		return 0, "", nil, "", err
+		return "", nil, "", err
 	}
-	f := strings.SplitN(strings.TrimSpace(line), " ", 3)
-	if len(f) < 2 || !strings.HasPrefix(f[0], "RTSP/") {
-		return 0, "", nil, "", fmt.Errorf("not an RTSP answer: %q", strings.TrimSpace(line))
-	}
-	code, _ = strconv.Atoi(f[1])
-	if len(f) > 2 {
-		reason = f[2]
+	first = strings.TrimSpace(line)
+	if !strings.HasPrefix(first, "RTSP/") && !strings.HasSuffix(first, " RTSP/1.0") {
+		return "", nil, "", errors.New("the camera's answer is not RTSP")
 	}
 	hdr = map[string]string{}
-	for {
-		l, err := br.ReadString('\n')
+	for n := 0; ; n++ {
+		if n == maxHeaders {
+			return "", nil, "", errors.New("the camera's answer has too many headers")
+		}
+		l, err := readLine(br)
 		if err != nil {
-			return 0, "", nil, "", err
+			return "", nil, "", err
 		}
 		l = strings.TrimRight(l, "\r\n")
 		if l == "" {
@@ -418,15 +474,28 @@ func readResponse(br *bufio.Reader) (code int, reason string, hdr map[string]str
 	}
 	if n, err := strconv.Atoi(hdr["content-length"]); err == nil && n > 0 {
 		if n > 1<<20 {
-			return 0, "", nil, "", fmt.Errorf("an answer of %d bytes", n)
+			return "", nil, "", fmt.Errorf("an answer of %d bytes", n)
 		}
 		buf := make([]byte, n)
 		if _, err := io.ReadFull(br, buf); err != nil {
-			return 0, "", nil, "", err
+			return "", nil, "", err
 		}
 		body = string(buf)
 	}
-	return code, reason, hdr, body, nil
+	return first, hdr, body, nil
+}
+
+// maxHeaders is the most header lines an answer may have; a camera sends a dozen.
+const maxHeaders = 64
+
+// readLine is one line of an answer, no longer than the reader's buffer (4 KB): a camera sending an
+// endless line is refused rather than read into memory.
+func readLine(br *bufio.Reader) (string, error) {
+	b, err := br.ReadSlice('\n')
+	if err == bufio.ErrBufferFull {
+		return "", errors.New("the camera sent a line too long to be RTSP")
+	}
+	return string(b), err
 }
 
 // skipPacket reads past one interleaved packet: '$', the channel, a 16-bit length, the data.
@@ -444,6 +513,8 @@ func skipPacket(br *bufio.Reader) error {
 func (s *Session) drain() {
 	defer s.stop()
 	for {
+		// The keep-alive's answers come every keepEvery, so a camera silent for much longer is gone.
+		s.conn.SetReadDeadline(time.Now().Add(4 * keepEvery))
 		b, err := s.br.Peek(1)
 		if err != nil {
 			return
@@ -451,7 +522,15 @@ func (s *Session) drain() {
 		if b[0] == '$' {
 			err = skipPacket(s.br)
 		} else {
-			_, _, _, _, err = readResponse(s.br)
+			var first string
+			var hdr map[string]string
+			first, hdr, _, err = readMessage(s.br)
+			// A keep-alive refused for a stale nonce: the next is signed with the new one.
+			if err == nil && strings.HasPrefix(first, "RTSP/1.0 401") && hdr["www-authenticate"] != "" {
+				s.mu.Lock()
+				s.learn(hdr["www-authenticate"])
+				s.mu.Unlock()
+			}
 		}
 		if err != nil {
 			return
@@ -498,6 +577,10 @@ func (s *Session) Write(samples []int16) error {
 		binary.BigEndian.PutUint16(pkt[2:], uint16(12+PacketSamples))
 		rtp := pkt[4:]
 		rtp[0], rtp[1] = 0x80, s.pt
+		if s.first {
+			rtp[1] |= 0x80 // the marker: the start of a talkspurt
+			s.first = false
+		}
 		binary.BigEndian.PutUint16(rtp[2:], s.seq)
 		binary.BigEndian.PutUint32(rtp[4:], s.ts)
 		binary.BigEndian.PutUint32(rtp[8:], s.ssrc)

@@ -18,19 +18,10 @@ type TalkBack struct {
 
 type TalkBackWriter struct{ st *Store }
 
-// Login saves the user, and the password unless pass is nil: the setup page leaves a saved password
-// alone when its field is left empty.
-func (w TalkBackWriter) Login(user string, pass *string) error {
-	return w.st.Update(func(c *Config) {
-		c.TalkBack.User = user
-		if pass != nil {
-			c.TalkBack.Pass = *pass
-		}
-	})
-}
-
-// Cameras replaces the addresses; an empty one is left out.
-func (w TalkBackWriter) Cameras(addrs map[string]string) error {
+// Save replaces the login and the addresses together, keeping the saved password when pass is nil:
+// the setup page leaves a saved password alone when its field is left empty. An empty address is
+// left out.
+func (w TalkBackWriter) Save(user string, pass *string, addrs map[string]string) error {
 	kept := map[string]string{}
 	for e, a := range addrs {
 		if e != "" && a != "" {
@@ -40,5 +31,10 @@ func (w TalkBackWriter) Cameras(addrs map[string]string) error {
 	if len(kept) == 0 {
 		kept = nil
 	}
-	return w.st.Update(func(c *Config) { c.TalkBack.Cameras = kept })
+	return w.st.Update(func(c *Config) {
+		c.TalkBack.User, c.TalkBack.Cameras = user, kept
+		if pass != nil {
+			c.TalkBack.Pass = *pass
+		}
+	})
 }

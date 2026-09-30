@@ -92,17 +92,24 @@ own speaker, for answering the door from the kitchen. It goes straight to the ca
 stream (ONVIF two-way audio), so Home Assistant, go2rtc and Frigate are not needed for it. It works
 with cameras that have a speaker and take G.711 audio, which includes most Reolinks.
 
-1. Turn on **Talk through cameras** under Settings → Privacy & Security, or its switch in Home
-   Assistant. It is off on a new device.
+1. Turn on **Talk through cameras** under Settings → Privacy & Security (**Talk to cameras** on the
+   Spot), or its switch in Home Assistant. It is off on a new device.
 2. Cameras on a Reolink recorder set up on the device (setup page → Connections → Reolink cameras)
-   need nothing more. For any other camera, give its RTSP address under **Talk through cameras** on
-   the same tab, with the cameras' login. For a Reolink camera that is
-   `rtsp://<address>:554/h264Preview_01_main`. A camera left empty gets no Talk.
+   need nothing more, as long as RTSP is turned on in the recorder's network settings. For any other
+   camera, give its RTSP address under **Talk through cameras** on the same tab, with the cameras'
+   login. For a Reolink camera that is `rtsp://<address>:554/h264Preview_01_main`. A camera left
+   empty gets no Talk. The login is only sent protected (digest); a camera that asks for it in the
+   clear is refused.
 
 A tap on **Talk** starts it and another ends it. While it runs the button is red and counts down, the
-view stays up, and the wake word is not listened for. It also ends when the view closes, the
+view stays up, and neither the wake word nor the action button starts a question; a press of the
+action button ends the talk. The room is only sent while the camera page is on the screen, so the talk
+also ends when the view closes or anything covers it (a call, a ring, the settings), when the
 microphones are muted, the switch goes off, the camera hangs up, or after two minutes. If the camera
 will not take it, the page says why for a few seconds.
+
+Cameras read straight from a Reolink recorder have no sound on the device, so for those Talk is
+one-way: you are heard at the door, but the visitor is not heard on the device.
 
 ## 5. Music
 

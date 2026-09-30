@@ -372,6 +372,9 @@ func (r *renderer) draw(s scene) {
 	r.artDrawn = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
+	// The camera page's controls are tappable only in a frame that draws them.
+	r.setCameraSoundAt(image.Rectangle{})
+	r.setCameraTalkAt(image.Rectangle{})
 	r.setPopupAt(image.Rectangle{})
 	r.clearAlertTaps()
 	// The red night clock is the whole screen: nothing else, not even the header, is drawn over it,

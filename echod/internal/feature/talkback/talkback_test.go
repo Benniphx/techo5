@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -40,18 +41,18 @@ func (s *fakeSession) wasClosed() bool {
 
 const door = "camera.front_door"
 
-// setUp is a device with the switch on and the door's address given, and a camera behind open that is
-// handed back on the channel, or err.
-func setUp(t *testing.T, err error) chan *fakeSession {
+// setUp is a device with the switch on and the door's address given, a screen that draws the camera
+// page while showing says so, and a camera behind open that is handed back on the channel, or err.
+func setUp(t *testing.T, err error) (opened chan *fakeSession, showing *atomic.Bool) {
 	t.Helper()
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	if e := config.Set().Security().TalkBack(true); e != nil {
 		t.Fatal(e)
 	}
-	if e := config.Set().TalkBack().Cameras(map[string]string{door: "rtsp://192.168.1.40:554/h264Preview_01_main"}); e != nil {
+	if e := config.Set().TalkBack().Save("admin", nil, map[string]string{door: "rtsp://192.168.1.40:554/h264Preview_01_main"}); e != nil {
 		t.Fatal(e)
 	}
-	opened := make(chan *fakeSession, 4)
+	opened = make(chan *fakeSession, 8)
 	was := open
 	open = func(ctx context.Context, addr, user, pass string) (session, error) {
 		if err != nil {
@@ -63,12 +64,24 @@ func setUp(t *testing.T, err error) chan *fakeSession {
 	}
 	wasCheck := check
 	check = 10 * time.Millisecond
+	showing = &atomic.Bool{}
+	showing.Store(true)
+	screen, stop := context.WithCancel(context.Background())
+	go func() {
+		for screen.Err() == nil {
+			if showing.Load() {
+				shared.Seen(door)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
 	t.Cleanup(func() {
+		stop()
 		shared.Stop()
 		open, check = was, wasCheck
 		home.Get().HideCamera()
 	})
-	return opened
+	return opened, showing
 }
 
 // waitFor waits for the talk to reach phase.
@@ -106,7 +119,7 @@ func TestTalkIsOfferedOnlyWhereItCanWork(t *testing.T) {
 // A talk runs while the view of its camera is up, holds the view up, and ends, letting the camera go,
 // when the view closes. A view that closes is not a failure to show.
 func TestATalkLastsWhileItsViewIsUp(t *testing.T) {
-	opened := setUp(t, nil)
+	opened, _ := setUp(t, nil)
 	home.Get().ShowCamera(door, time.Second)
 	shared.Start(door)
 	s := <-opened
@@ -128,9 +141,31 @@ func TestATalkLastsWhileItsViewIsUp(t *testing.T) {
 	}
 }
 
+// Anything drawn over the camera page ends a talk: the room is sent only while the red bar is seen.
+func TestATalkEndsWhenThePageIsCovered(t *testing.T) {
+	opened, showing := setUp(t, nil)
+	wasSeen := seenWithin
+	seenWithin = 200 * time.Millisecond
+	defer func() { seenWithin = wasSeen }()
+	home.Get().ShowCamera(door, time.Minute)
+	shared.Start(door)
+	s := <-opened
+	waitFor(t, Talking)
+	showing.Store(false)
+	waitFor(t, Idle)
+	if !s.wasClosed() {
+		t.Error("the camera was not let go")
+	}
+
+	// Covered before it ever showed: nothing is sent at all.
+	shared.Start(door)
+	<-opened
+	waitFor(t, Idle)
+}
+
 // The switch going off ends a talk; a second tap on Talk does too, at once.
 func TestATalkEndsWhenAskedTo(t *testing.T) {
-	opened := setUp(t, nil)
+	opened, _ := setUp(t, nil)
 	home.Get().ShowCamera(door, time.Minute)
 	shared.Start(door)
 	<-opened
@@ -148,9 +183,63 @@ func TestATalkEndsWhenAskedTo(t *testing.T) {
 	}
 }
 
+// Taps close together never leave a talk that nothing can stop: after any number of them, one Stop
+// lets every camera go.
+func TestTapsCloseTogetherLeaveNoTalkBehind(t *testing.T) {
+	opened, _ := setUp(t, nil)
+	home.Get().ShowCamera(door, time.Minute)
+	var wg sync.WaitGroup
+	for i := 0; i < 6; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); shared.Toggle(door) }()
+	}
+	wg.Wait()
+	shared.Stop()
+	close(opened)
+	for s := range opened {
+		if !s.wasClosed() {
+			t.Fatal("a talk was left holding its camera")
+		}
+	}
+	if shared.Busy() {
+		t.Error("still busy after Stop")
+	}
+}
+
+// A second tap while the camera is still being asked ends the asking at once.
+func TestStopWhileConnecting(t *testing.T) {
+	setUp(t, nil)
+	open = func(ctx context.Context, addr, user, pass string) (session, error) {
+		<-ctx.Done() // a camera that never answers
+		return nil, ctx.Err()
+	}
+	home.Get().ShowCamera(door, time.Minute)
+	shared.Start(door)
+	waitFor(t, Opening)
+	at := time.Now()
+	shared.Toggle(door)
+	if took := time.Since(at); took > time.Second {
+		t.Errorf("stopping took %v", took)
+	}
+	if st := shared.State(); st.Phase != Idle || st.Error != "" {
+		t.Errorf("after the stop: %+v", st)
+	}
+}
+
+// A talk that panics is not left looking busy, which would keep the wake word off.
+func TestAPanicDoesNotLeaveItBusy(t *testing.T) {
+	setUp(t, nil)
+	open = func(ctx context.Context, addr, user, pass string) (session, error) { panic("a bad camera") }
+	home.Get().ShowCamera(door, time.Minute)
+	shared.Start(door)
+	if st := waitFor(t, Idle); st.Error == "" {
+		t.Error("a panic showed no failure")
+	}
+}
+
 // A camera that hangs up, or will not take a talk at all, says so on the camera page.
 func TestACameraThatWillNotTalkSaysWhy(t *testing.T) {
-	opened := setUp(t, nil)
+	opened, _ := setUp(t, nil)
 	home.Get().ShowCamera(door, time.Minute)
 	check = time.Hour // only the camera ends this one
 	shared.Start(door)
@@ -169,9 +258,12 @@ func TestACameraThatWillNotTalkSaysWhy(t *testing.T) {
 	}
 }
 
-// The log gets an address without its login.
-func TestRedacted(t *testing.T) {
+// The log gets an address without its login, and the page a failure no longer than it has room for.
+func TestRedactedAndClipped(t *testing.T) {
 	if got := redacted("rtsp://admin:secret@192.168.1.40:554/x"); strings.Contains(got, "secret") || strings.Contains(got, "admin") {
 		t.Errorf("redacted to %q", got)
+	}
+	if got := []rune(clip(strings.Repeat("x", 500))); len(got) != maxError {
+		t.Errorf("clipped to %d", len(got))
 	}
 }

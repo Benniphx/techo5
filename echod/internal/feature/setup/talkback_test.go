@@ -27,7 +27,7 @@ func TestTalkBackForm(t *testing.T) {
 	}
 	ok := url.Values{"user": {"admin"}, "pass": {"cam-secret"},
 		"entity": {"camera.front_door", "camera.deck", "camera.not_on_the_list"},
-		"addr":   {"rtsp://192.168.1.40:554/h264Preview_01_main", "", "rtsp://192.168.1.41/x"}}
+		"addr":   {"rtsp://192.168.1.40:554/h264Preview_01_main", "", ""}}
 	if p := post(ok); p != "" {
 		t.Fatal(p)
 	}
@@ -46,6 +46,11 @@ func TestTalkBackForm(t *testing.T) {
 		{"entity": {"camera.deck"}, "addr": {"rtsp://192.168.1.40/x y"}},
 		{"entity": {"camera.deck", "camera.front_door"}, "addr": {"rtsp://192.168.1.40/x"}},
 		{"user": {"admin\r\nX: y"}},
+		{"user": {`ad"min`}},
+		{"user": {strings.Repeat("a", 129)}},
+		// A camera not on the list: Home Assistant's list is not to hand, and the address is not
+		// dropped quietly.
+		{"entity": {"camera.not_on_the_list"}, "addr": {"rtsp://192.168.1.41/x"}},
 	} {
 		if post(bad) == "" {
 			t.Errorf("%v was saved", bad)
@@ -56,7 +61,7 @@ func TestTalkBackForm(t *testing.T) {
 	rec := httptest.NewRecorder()
 	talkBackSection(rec, "tok")
 	page := rec.Body.String()
-	for _, want := range []string{"Front &lt;door&gt;", "rtsp://192.168.1.40:554/h264Preview_01_main", "set; leave empty to keep it", "The switch is off"} {
+	for _, want := range []string{`autocomplete="new-password"`, "Front &lt;door&gt;", "rtsp://192.168.1.40:554/h264Preview_01_main", "set; leave empty to keep it", "The switch is off"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the section does not say %q", want)
 		}

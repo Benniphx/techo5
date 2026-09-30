@@ -28,6 +28,14 @@ type fakeCamera struct {
 	got     chan struct{}
 	sdp     string
 	shy     int // descriptions to answer without the backchannel first, as a hub waking its camera does
+	packets []rtpHead
+}
+
+// rtpHead is what the camera read in a packet's header.
+type rtpHead struct {
+	marker bool
+	seq    uint16
+	ts     uint32
 }
 
 const camSDP = "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\ns=cam\r\nt=0 0\r\n" +
@@ -65,6 +73,7 @@ func (c *fakeCamera) serve(t *testing.T) {
 			data := make([]byte, binary.BigEndian.Uint16(h[2:]))
 			io.ReadFull(br, data)
 			c.mu.Lock()
+			c.packets = append(c.packets, rtpHead{data[1]&0x80 != 0, binary.BigEndian.Uint16(data[2:]), binary.BigEndian.Uint32(data[4:])})
 			for _, v := range data[12:] {
 				c.audio = append(c.audio, g711.ULawDecode(v))
 			}
@@ -128,9 +137,11 @@ func (c *fakeCamera) serve(t *testing.T) {
 				t.Errorf("%s without the session: %q", method, hdr["session"])
 			}
 			fmt.Fprintf(conn, "RTSP/1.0 200 OK\r\nCSeq: %s\r\nSession: 12345678\r\n\r\n", cseq)
-			// Some RTCP from the camera, which the client has to read past.
+			// Some RTCP from the camera, a stray line end and a request of its own, which the client
+			// has to read past without taking any of them for the camera hanging up.
 			if method == "PLAY" {
 				conn.Write([]byte{'$', 5, 0, 4, 0x80, 0xC8, 0, 0})
+				fmt.Fprint(conn, "\r\nOPTIONS * RTSP/1.0\r\nCSeq: 1\r\n\r\n")
 			}
 		}
 	}
@@ -169,6 +180,23 @@ func TestTalkingToACamera(t *testing.T) {
 	for i, v := range audio {
 		if d := int(v) - int(tone[i]); d > 600 || d < -600 {
 			t.Fatalf("sample %d arrived as %d, sent %d", i, v, tone[i])
+		}
+	}
+	select {
+	case <-s.Done():
+		t.Fatal("the session ended on the camera's own request")
+	default:
+	}
+	// The packets: the first marked as the start, then numbered and timed one after another.
+	cam.mu.Lock()
+	pk := append([]rtpHead(nil), cam.packets...)
+	cam.mu.Unlock()
+	for i, p := range pk {
+		if p.marker != (i == 0) {
+			t.Errorf("packet %d marker %v", i, p.marker)
+		}
+		if i > 0 && (p.seq != pk[i-1].seq+1 || p.ts != pk[i-1].ts+PacketSamples) {
+			t.Fatalf("packet %d is seq %d ts %d after %d %d", i, p.seq, p.ts, pk[i-1].seq, pk[i-1].ts)
 		}
 	}
 	s.Close()

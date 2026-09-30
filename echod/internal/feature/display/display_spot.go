@@ -587,13 +587,13 @@ func (d *Display) gesture(g touch.Gesture) {
 			// The sound's control silences the sound and leaves the view up, which is the whole use of
 			// it at a doorbell; anywhere else on the face takes the view down as it always has. Talk
 			// starts or ends talking through the camera.
-			if d.r != nil && d.r.cameraTalkTapped(g.X, g.Y) {
-				go talkback.Get().Toggle(v.Entity)
-				return
-			}
 			if d.r != nil && d.r.cameraSoundTapped(g.X, g.Y) {
 				// Silence it, or ask for it again: the control is a toggle, and the view stays either way.
 				go home.Get().ToggleCameraSound()
+				return
+			}
+			if d.r != nil && d.r.cameraTalkTapped(g.X, g.Y) {
+				go talkback.Get().Toggle(v.Entity)
 				return
 			}
 			go home.Get().HideCamera()

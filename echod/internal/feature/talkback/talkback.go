@@ -5,14 +5,15 @@
 // RTSP address on the setup page (config.TalkBack).
 //
 // The microphones go after echo cancellation, halved to 8 kHz and in G.711, which is what cameras
-// with a speaker take. The camera's own sound can keep playing on the device meanwhile: the echo
-// canceller takes it out of what is sent back.
+// with a speaker take. The camera's own sound, where it has one playing, can keep playing on the
+// device meanwhile: the echo canceller takes it out of what is sent back.
 //
 // Talk is a toggle, not press-to-talk: a conversation at the door is not something to hold a finger
-// on the glass through. A talk ends on a second tap, the view closing or turning to another camera,
-// the Talk through cameras switch going off, the microphones being muted, the camera hanging up, or
-// two minutes passing. While it lasts the view does not time out, and the wake word is not listened
-// for, as in a call.
+// on the glass through. The room is only sent while the camera page, with its red Talk bar, is what is
+// on the screen: a talk ends on a second tap, the view closing, turning to another camera or being
+// covered by anything else (a call, a ring, the settings), the Talk through cameras switch going off,
+// the microphones being muted, the camera hanging up, or two minutes passing. While it lasts the view
+// does not time out, and the wake word and the action button do not start a turn, as in a call.
 package talkback
 
 import (
@@ -26,6 +27,9 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/halfrate"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
@@ -47,11 +51,19 @@ const (
 
 	// failShown is how long a talk that could not start or broke off says why on the camera page.
 	failShown = 6 * time.Second
+
+	// maxError is the most of a failure's words the camera page shows: they can come from the camera.
+	maxError = 100
 )
 
-// check is how often a running talk looks at what ends it besides the camera: the view, the switch,
-// the mute and the time. A variable so that a test need not wait a second to see it.
+// check is how often a running talk looks at what ends it besides the camera, on top of looking
+// whenever one of those things says it changed. A variable so that a test need not wait a second.
 var check = time.Second
+
+// seenWithin is how recently the screen must have drawn the camera page with its Talk bar for a talk
+// to go on: the Show draws four times a second and the Spot eight, so anything drawn over the page for
+// longer than this has covered it. A variable for the tests, which have no screen.
+var seenWithin = 2 * time.Second
 
 // Phase is where a talk is.
 type Phase int
@@ -71,29 +83,45 @@ type State struct {
 }
 
 type Feature struct {
-	mu     sync.Mutex
-	state  State
-	until  time.Time // the two minutes' end
-	failAt time.Time
-	cancel context.CancelFunc
-	done   chan struct{} // closed when the running talk's goroutine is gone
+	// op makes Start, Stop and Toggle one at a time: two taps close together must not both start a
+	// talk, which would leave one sending that nothing could stop.
+	op sync.Mutex
 
-	// Changed fires when a talk starts, ends or fails; listeners must not block.
+	mu      sync.Mutex
+	state   State
+	gen     int       // which talk the state belongs to; a talk that is not the latest leaves it alone
+	until   time.Time // the two minutes' end
+	failAt  time.Time
+	seen    string // the camera the screen last drew with Talk, and when
+	seenAt  time.Time
+	cancel  context.CancelFunc
+	done    chan struct{} // closed when the running talk's goroutine is gone
+	poke    chan struct{} // something that can end a talk changed: look now, not at the next check
+	watched sync.Once
+
+	// Changed fires when a talk starts, ends or fails, and every check while one runs, for the
+	// countdown; listeners must not block, and must not call Start, Stop or Toggle themselves.
 	Changed hook.Hook[struct{}]
 }
 
-var shared = &Feature{}
+var shared = &Feature{poke: make(chan struct{}, 1)}
+
+// A talk has the microphones: no voice turn starts over it, and the action button ends it.
+func init() { voice.YieldTo(shared.Busy, shared.Stop) }
 
 func Get() *Feature { return shared }
 
-// Address is where a camera is talked to and the login for it: the one given on the setup page, or
-// the Reolink recorder's. False for a camera that has neither, which gets no Talk.
+// Address is where a camera is talked to and the login for it: the Reolink recorder's for a camera on
+// it, or the one given on the setup page. False for a camera that has neither, which gets no Talk.
 func Address(entity string) (addr, user, pass string, ok bool) {
+	if a, u, p, ok := home.ReolinkRTSP(entity); ok {
+		return a, u, p, true
+	}
 	c := config.Get().TalkBack
 	if a := c.Cameras[entity]; a != "" {
 		return a, c.User, c.Pass, true
 	}
-	return home.ReolinkRTSP(entity)
+	return "", "", "", false
 }
 
 // Offered is whether the camera page shows Talk for entity: the switch is on and the camera has an
@@ -104,6 +132,13 @@ func Offered(entity string) bool {
 	}
 	_, _, _, ok := Address(entity)
 	return ok
+}
+
+// Seen is the screen saying it has just drawn the camera page for entity with its Talk bar on it.
+func (f *Feature) Seen(entity string) {
+	f.mu.Lock()
+	f.seen, f.seenAt = entity, time.Now()
+	f.mu.Unlock()
 }
 
 // State is read by the screen each frame.
@@ -120,7 +155,8 @@ func (f *Feature) State() State {
 	return st
 }
 
-// Busy is whether a talk has the microphones, for the wake word to leave them alone.
+// Busy is whether a talk has the microphones, for the wake word and the action button to leave them
+// alone.
 func (f *Feature) Busy() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -129,45 +165,70 @@ func (f *Feature) Busy() bool {
 
 // Toggle is the Talk control: it starts a talk to entity, or ends the one running to it.
 func (f *Feature) Toggle(entity string) {
+	f.op.Lock()
+	defer f.op.Unlock()
 	f.mu.Lock()
 	running := f.state.Phase != Idle && f.state.Entity == entity
 	f.mu.Unlock()
 	if running {
-		f.Stop()
+		f.stop()
 		return
 	}
-	f.Start(entity)
+	f.start(entity)
 }
 
 // Start talks to entity, ending any talk already running. It returns once the old talk is gone; the
 // camera is asked for its backchannel in the background.
 func (f *Feature) Start(entity string) {
-	if !Offered(entity) {
+	f.op.Lock()
+	defer f.op.Unlock()
+	f.start(entity)
+}
+
+// Stop ends the talk running, if any, and waits for the camera to have been let go.
+func (f *Feature) Stop() {
+	f.op.Lock()
+	defer f.op.Unlock()
+	f.stop()
+}
+
+func (f *Feature) start(entity string) {
+	if !Offered(entity) || phone.Get().Busy() {
 		return
 	}
-	f.Stop()
+	f.watch()
+	f.stop()
+	// The view is held through the asking too: a doorbell's view that was about to close must not
+	// close while the camera is still being asked.
+	home.Get().HoldCamera(entity, openWait+holdView)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	f.mu.Lock()
+	f.gen++
+	gen := f.gen
 	f.state = State{Entity: entity, Phase: Opening}
 	f.cancel, f.done = cancel, done
 	f.mu.Unlock()
 	f.Changed.Emit(struct{}{})
 	safe.Go("talk back", func() {
-		defer close(done)
-		err := f.talk(ctx, entity)
-		f.mu.Lock()
-		f.state.Phase, f.state.Left = Idle, 0
-		if err != nil {
-			f.state.Error, f.failAt = err.Error(), time.Now()
-		}
-		f.mu.Unlock()
-		f.Changed.Emit(struct{}{})
+		err := errors.New("the talk stopped unexpectedly") // what a panic in it leaves behind
+		defer func() {
+			f.mu.Lock()
+			if f.gen == gen {
+				f.state.Phase, f.state.Left = Idle, 0
+				if err != nil {
+					f.state.Error, f.failAt = clip(err.Error()), time.Now()
+				}
+			}
+			f.mu.Unlock()
+			close(done)
+			f.Changed.Emit(struct{}{})
+		}()
+		err = f.talk(ctx, gen, entity)
 	})
 }
 
-// Stop ends the talk running, if any, and waits for the camera to have been let go.
-func (f *Feature) Stop() {
+func (f *Feature) stop() {
 	f.mu.Lock()
 	cancel, done := f.cancel, f.done
 	f.cancel, f.done = nil, nil
@@ -179,10 +240,26 @@ func (f *Feature) Stop() {
 	<-done
 }
 
+// watch has everything that can end a talk say so as it happens, on top of the check every second.
+func (f *Feature) watch() {
+	f.watched.Do(func() {
+		poke := func() {
+			select {
+			case f.poke <- struct{}{}:
+			default:
+			}
+		}
+		home.Get().Changed.Listen(func(struct{}) { poke() })
+		security.Get().Changed.Listen(func(struct{}) { poke() })
+		mute.Get().Changed.Listen(func(bool) { poke() })
+		phone.Get().Changed.Listen(func(phone.State) { poke() })
+	})
+}
+
 // errEnded is a talk that something other than the camera ended; it is not a failure to show.
 var errEnded = errors.New("ended")
 
-func (f *Feature) talk(ctx context.Context, entity string) (err error) {
+func (f *Feature) talk(ctx context.Context, gen int, entity string) (err error) {
 	addr, user, pass, ok := Address(entity)
 	if !ok {
 		return errors.New("no address for this camera")
@@ -190,22 +267,28 @@ func (f *Feature) talk(ctx context.Context, entity string) (err error) {
 	octx, cancel := context.WithTimeout(ctx, openWait)
 	s, err := open(octx, addr, user, pass)
 	cancel()
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil
+	if ctx.Err() != nil {
+		if err == nil {
+			s.Close()
 		}
+		return nil
+	}
+	if err != nil {
 		slog.Warn("talk back: the camera would not take it", "entity", entity, "addr", redacted(addr), "err", err)
 		return err
 	}
 	defer s.Close()
 
+	// Nothing is sent until the screen has shown the red bar: whatever happened while the camera was
+	// being asked (the view closed or covered, the switch, a mute) is looked at first.
+	talkingAt := time.Now()
 	f.mu.Lock()
 	f.state.Phase = Talking
-	f.until = time.Now().Add(maxTalk)
+	f.until = talkingAt.Add(maxTalk)
 	f.mu.Unlock()
 	f.Changed.Emit(struct{}{})
-	slog.Info("talk back: talking", "entity", entity, "addr", redacted(addr), "codec", s.Codec())
 	start := time.Now()
+	slog.Info("talk back: talking", "entity", entity, "addr", redacted(addr), "codec", s.Codec())
 	defer func() {
 		why := "ended"
 		if err != nil && err != errEnded {
@@ -216,6 +299,27 @@ func (f *Feature) talk(ctx context.Context, entity string) (err error) {
 			err = nil
 		}
 	}()
+	for {
+		if why := f.over(entity); why != "" {
+			slog.Info("talk back: not starting", "why", why)
+			return errEnded
+		}
+		f.mu.Lock()
+		shown := f.seen == entity && f.seenAt.After(talkingAt)
+		f.mu.Unlock()
+		if shown {
+			break
+		}
+		if time.Since(talkingAt) > seenWithin {
+			slog.Info("talk back: not starting", "why", "the camera page is not on the screen")
+			return errEnded
+		}
+		select {
+		case <-ctx.Done():
+			return errEnded
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
 
 	frames, stop := mic.Get().Listen("talk back")
 	defer stop()
@@ -235,19 +339,36 @@ func (f *Feature) talk(ctx context.Context, entity string) (err error) {
 			if err := s.Write(d.Run(fr)); err != nil {
 				return err
 			}
+		case <-f.poke:
+			if why := f.over(entity); why != "" {
+				slog.Info("talk back: ending", "why", why)
+				return errEnded
+			}
 		case <-t.C:
 			if why := f.over(entity); why != "" {
 				slog.Info("talk back: ending", "why", why)
 				return errEnded
 			}
+			f.mu.Lock()
+			seen := f.seen == entity && time.Since(f.seenAt) < seenWithin
+			f.mu.Unlock()
+			if !seen {
+				slog.Info("talk back: ending", "why", "the camera page is not on the screen")
+				return errEnded
+			}
 			home.Get().HoldCamera(entity, holdView)
+			f.Changed.Emit(struct{}{}) // the countdown
 		}
 	}
 }
 
 // open is onvifback.Open, and a variable so that a test can put a camera of its own behind it.
 var open = func(ctx context.Context, addr, user, pass string) (session, error) {
-	return onvifback.Open(ctx, addr, user, pass)
+	s, err := onvifback.Open(ctx, addr, user, pass)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 // session is what a talk needs of lib/onvifback's.
@@ -258,8 +379,8 @@ type session interface {
 	Close() error
 }
 
-// over is why a running talk to entity has to end, besides the camera or a tap: empty while it may
-// go on.
+// over is why a running talk to entity has to end, besides the camera, a tap or the screen: empty
+// while it may go on.
 func (f *Feature) over(entity string) string {
 	if !config.Get().Security.TalkBack {
 		return "switched off"
@@ -270,6 +391,9 @@ func (f *Feature) over(entity string) string {
 	if m, err := mute.Get().Muted(); err == nil && m {
 		return "the microphones were muted"
 	}
+	if phone.Get().Busy() {
+		return "a call"
+	}
 	f.mu.Lock()
 	late := time.Now().After(f.until)
 	f.mu.Unlock()
@@ -277,6 +401,14 @@ func (f *Feature) over(entity string) string {
 		return "two minutes passed"
 	}
 	return ""
+}
+
+// clip keeps a failure short enough for the camera page.
+func clip(s string) string {
+	if r := []rune(s); len(r) > maxError {
+		return string(r[:maxError-1]) + "…"
+	}
+	return s
 }
 
 // redacted is an address fit for the log: without a login it may carry.

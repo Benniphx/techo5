@@ -74,7 +74,7 @@ func (r *roundRenderer) cameraView(s roundScene) {
 	r.setCameraTalkAt(image.Rectangle{})
 	if s.talkOffered {
 		label := talkLabel(s.talk, v.Entity)
-		b := cameraSoundBox(r.width(r.label, label) + 24).Sub(image.Pt(0, 34+10))
+		b := cameraSoundBox(r.width(r.label, label) + 24).Sub(image.Pt(0, 34+talkGap))
 		band := color.RGBA{0, 0, 0, 150}
 		if s.talk.Entity == v.Entity && s.talk.Phase != talkback.Idle {
 			band = talkLive
@@ -82,6 +82,7 @@ func (r *roundRenderer) cameraView(s roundScene) {
 		r.line(float64(b.Min.X), float64(b.Min.Y+b.Dy()/2), float64(b.Max.X), float64(b.Min.Y+b.Dy()/2), float64(b.Dy()), band)
 		r.centered(r.label, label, b.Min.Y+b.Dy()/2+8, colText)
 		r.setCameraTalkAt(b)
+		talkback.Get().Seen(v.Entity) // a talk goes on only while this is on the screen
 		if s.talk.Error != "" && s.talk.Entity == v.Entity {
 			// Two lines at most, on one dark band that holds both, clear of the bar.
 			lineH := r.small.Metrics().Height.Round() + 4
@@ -105,6 +106,10 @@ func (r *roundRenderer) cameraView(s roundScene) {
 		r.setCameraSoundAt(b)
 	}
 }
+
+// talkGap is between the Talk bar and the sound's below it: more than the two taps' margins together
+// (cameraTalkTapped's 4 and cameraSoundTapped's 10), so no tap is taken for both.
+const talkGap = 18
 
 // cameraSoundBox is where the round camera page's sound control is drawn, and so where a tap on it has to
 // land: a bar across the bottom of the face, inside the rim, and as wide as what it says.

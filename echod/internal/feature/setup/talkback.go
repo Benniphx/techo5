@@ -46,7 +46,7 @@ func talkBackSection(w http.ResponseWriter, token string) {
 	fmt.Fprintf(w, `<label for="tbuser">User</label>
 	 <input id="tbuser" name="user" value="%s" placeholder="admin" autocomplete="off">
 	 <label for="tbpass">Password</label>
-	 <input id="tbpass" name="pass" type="password" value="" placeholder="%s" autocomplete="off">`,
+	 <input id="tbpass" name="pass" type="password" value="" placeholder="%s" autocomplete="new-password">`,
 		html.EscapeString(c.TalkBack.User), hint)
 
 	cams := talkBackCameras()
@@ -60,8 +60,9 @@ func talkBackSection(w http.ResponseWriter, token string) {
 		fmt.Fprint(w, `<p class="note">No other cameras are on the list.</p>`)
 	}
 	fmt.Fprint(w, `<p class="note">A camera's address is its RTSP stream: for a Reolink,
-	  rtsp://<i>address</i>:554/h264Preview_01_main. Leave it empty for a camera with no speaker, and it
-	  gets no Talk. Put the login in User and Password, not in the address.</p>
+	  rtsp://<i>address</i>:554/h264Preview_01_main, with RTSP turned on in the camera's network settings.
+	  Leave it empty for a camera with no speaker, and it gets no Talk. Put the login in User and
+	  Password, not in the address. The device only sends it protected (digest), never in the clear.</p>
 	 <p><button type="submit">Save</button></p></form></fieldset>`)
 }
 
@@ -84,8 +85,12 @@ func talkBackCameras() []config.Camera {
 func saveTalkBack(r *http.Request) string {
 	user := strings.TrimSpace(r.PostFormValue("user"))
 	pass := r.PostFormValue("pass")
-	if strings.ContainsAny(user+pass, "\r\n") {
-		return "the user and password are one line each"
+	if len(user) > 128 || len(pass) > 128 {
+		return "the user and password are 128 characters at most"
+	}
+	control := func(c rune) bool { return c < 0x20 || c == 0x7f }
+	if strings.ContainsFunc(user+pass, control) || strings.ContainsAny(user, `"\`) {
+		return "the user and password are one line each, and the user has no quotes or backslashes"
 	}
 	known := map[string]bool{}
 	for _, cam := range talkBackCameras() {
@@ -96,14 +101,20 @@ func saveTalkBack(r *http.Request) string {
 		return "the form came back incomplete; reload the page and try again"
 	}
 	kept := map[string]string{}
-	// A camera no longer on the list keeps its address, for when it comes back.
+	// A camera no longer on the list keeps its address, for when it comes back; one now on the Reolink
+	// recorder has the recorder's.
 	for e, a := range config.Get().TalkBack.Cameras {
-		if !known[e] {
+		if _, _, _, onRecorder := home.ReolinkRTSP(e); !known[e] && !onRecorder {
 			kept[e] = a
 		}
 	}
 	for i, e := range ents {
 		if !known[e] {
+			if strings.TrimSpace(addrs[i]) != "" {
+				// Home Assistant's list is not to hand (it is offline, or the camera has left it):
+				// saying so beats dropping the address that was typed.
+				return "the camera list isn't available right now, so nothing was saved; try again in a minute"
+			}
 			continue
 		}
 		a := strings.TrimSpace(addrs[i])
@@ -123,10 +134,7 @@ func saveTalkBack(r *http.Request) string {
 	if pass != "" {
 		p = &pass
 	}
-	if err := config.Set().TalkBack().Login(user, p); err != nil {
-		return "could not save it: " + err.Error()
-	}
-	if err := config.Set().TalkBack().Cameras(kept); err != nil {
+	if err := config.Set().TalkBack().Save(user, p, kept); err != nil {
 		return "could not save it: " + err.Error()
 	}
 	slog.Info("setup page: talk back set", "cameras", len(kept), "password", p != nil)

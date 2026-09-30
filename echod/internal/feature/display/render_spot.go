@@ -323,6 +323,10 @@ func (r *roundRenderer) draw(s roundScene) {
 		r.rim(s) // the view clears the panel; the rim still says muted or listening
 	case s.showVolume:
 		r.volume(s)
+		if s.showCamera && s.talkOffered {
+			// The volume over a talk is the person talking turning it: the talk goes on under it.
+			talkback.Get().Seen(s.camera.Entity)
+		}
 	case s.eq != nil:
 		r.turnFace(s)
 	case s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering":
