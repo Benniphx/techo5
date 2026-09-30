@@ -296,65 +296,6 @@ func (r *renderer) wordsStyle(s scene, box image.Rectangle) {
 	r.styleDateIn(r.styleFace(false, at(34)), s, x, y+r.s(at(70)), -1)
 }
 
-// numberWords are the numbers the words style says.
-var numberWords = []string{"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-	"eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"}
-
-func numberWord(n int) string {
-	if n <= 20 {
-		return numberWords[n]
-	}
-	return "twenty-" + numberWords[n-20]
-}
-
-// clockWords is the time as it is said: what comes before the hour ("seven past", "quarter to", empty
-// on the hour), the hour ("two", "two o'clock", "noon", "midnight"), and the part of the day.
-func clockWords(t time.Time) (lead, hour, period string) {
-	h, m := t.Hour(), t.Minute()
-	switch {
-	case m == 0:
-	case m == 1:
-		lead = "a minute past"
-	case m == 15:
-		lead = "quarter past"
-	case m == 30:
-		lead = "half past"
-	case m == 45:
-		lead = "quarter to"
-	case m == 59:
-		lead = "a minute to"
-	case m < 30:
-		lead = numberWord(m) + " past"
-	default:
-		lead = numberWord(60-m) + " to"
-	}
-	said := h
-	if m > 30 {
-		said = (h + 1) % 24
-	}
-	switch {
-	case said == 0 && m == 0:
-		return "", "midnight", ""
-	case said == 12 && m == 0:
-		return "", "noon", ""
-	}
-	hour = numberWords[(said+11)%12+1]
-	if m == 0 {
-		hour += " o'clock"
-	}
-	switch {
-	case h >= 5 && h < 12:
-		period = "in the morning"
-	case h >= 12 && h < 18:
-		period = "in the afternoon"
-	case h >= 18 && h < 22:
-		period = "in the evening"
-	default:
-		period = "at night"
-	}
-	return lead, hour, period
-}
-
 // sunStyle is the day's sun: its path from sunrise to sunset across the top, the sun where it is now,
 // the time under it. It reports whether it drew the weather itself; until home's place is known it
 // is the classic face.

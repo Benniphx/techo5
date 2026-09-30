@@ -1173,6 +1173,7 @@ func (d *Display) frame() time.Duration {
 	}
 	s.call = phone.Get().State()
 	s.weather = home.Get().Weather()
+	s.style = styleFactsFor(clockStyle(), now)
 	s.camera, s.showCamera = home.Get().Camera()
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	s.cameraLive = camera.Get().Running()

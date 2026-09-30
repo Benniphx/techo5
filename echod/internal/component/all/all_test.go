@@ -121,6 +121,7 @@ var registered = []string{
 	"screen_camera_time",
 	"screen_clock_format",
 	"screen_clock_position",
+	"screen_clock_style",
 	"screen_dashboard",
 	"screen_dashboard_idle",
 	"screen_dashboard_kiosk",
