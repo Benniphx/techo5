@@ -863,6 +863,9 @@ func (d *Display) rowTap(id string, p part, opt int) {
 	case "shuffle":
 		_, shuffle, _ := home.Get().SlideshowSettings()
 		home.Get().SetSlideshowShuffle(!shuffle)
+	case "weatherart":
+		home.Get().SetSlideshowArt(!home.Get().SlideshowArt())
+		d.wake()
 	case "subfolders":
 		_, _, subfolders := home.Get().SlideshowSettings()
 		home.Get().SetSlideshowSubfolders(!subfolders)

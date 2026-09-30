@@ -1788,8 +1788,13 @@ func (d *Display) frame() time.Duration {
 	}
 	s.missed = missedNote(now, false)
 
+	var art *image.RGBA
 	if boring {
+		art, s.artFx = sceneArt(now, d.r.w, d.r.h)
 		s.slideshow = home.Get().SlideshowBackground()
+		if art != nil && home.Get().SlideshowMode() == config.SlideshowBackground {
+			s.slideshow = art
+		}
 		if s.slideshow == nil {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
@@ -1805,6 +1810,9 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
+		if art != nil && home.Get().SlideshowMode() == config.SlideshowScreensaver {
+			s.slideshowScreensaver = art
+		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
 	}
 
@@ -1842,6 +1850,9 @@ func (d *Display) frame() time.Duration {
 	}
 	if s.showWeather && s.sky != fxNone && !s.setupAsking {
 		return fxFrame
+	}
+	if s.artFx != fxNone && (s.slideshow != nil || s.slideshowScreensaver != nil) && s.phase == "idle" {
+		return artFxFrame // the weather art's rain or snow is falling
 	}
 	if (s.slideshow != nil || s.slideshowScreensaver != nil) && home.Get().SlideshowTransitioning() {
 		return home.SlideshowFrame

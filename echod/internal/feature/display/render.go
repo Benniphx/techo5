@@ -203,6 +203,9 @@ type scene struct {
 
 	// style is what the clock style in force shows beyond the time (clock_style.go).
 	style styleFacts
+
+	// artFx is the weather moving over the weather art, when the slideshow shows it (weather_art.go).
+	artFx skyFx
 }
 
 // renderer draws scenes onto one canvas. Faces are made once: parsing a font is cheap, but
@@ -217,6 +220,9 @@ type renderer struct {
 
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles.go).
 	styleFaces map[styleFaceKey]font.Face
+
+	// washed is the weather art with its wash on, kept for the frames drawn in the same second.
+	washed washedArt
 
 	// wb is the wave turn screen's working memory, made the first time it is drawn.
 	wb *waveBuf
@@ -506,6 +512,7 @@ func (r *renderer) draw(s scene) {
 		} else {
 			if s.slideshow != nil {
 				r.slideshowBackground(s.slideshow)
+				r.artWeather(s)
 				behind = s.slideshow
 			}
 			r.readableOver(behind, walnut, slideshowWash, func() { r.bigClock(s) })

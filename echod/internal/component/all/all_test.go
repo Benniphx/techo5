@@ -162,6 +162,7 @@ var registered = []string{
 	"slideshow_screensaver_overlay",
 	"slideshow_shuffle",
 	"slideshow_subfolders",
+	"slideshow_weather_art",
 	"speaker",
 	"speaker_eq",
 	"stop_word_sensitivity",

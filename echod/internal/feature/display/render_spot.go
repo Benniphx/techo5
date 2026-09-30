@@ -188,6 +188,9 @@ type roundScene struct {
 	// style is what the clock style in force shows beyond the time (clock_style.go).
 	style styleFacts
 
+	// artFx is the weather moving over the weather art, when the slideshow shows it (weather_art.go).
+	artFx skyFx
+
 	// sheetOpen is the settings screen up, sheetGrid its six categories rather than one; sheet what
 	// it shows.
 	sheetOpen, sheetGrid bool
@@ -216,6 +219,9 @@ type roundRenderer struct {
 
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles_spot.go).
 	styleFaces map[spotFaceKey]font.Face
+
+	// washed is the weather art with its wash on, kept for the frames drawn in the same second.
+	washed washedArt
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {
@@ -326,6 +332,7 @@ func (r *roundRenderer) draw(s roundScene) {
 		}
 		if s.slideshow != nil {
 			r.slideshowBackground(s.slideshow)
+			r.artWeather(s)
 		}
 		r.readableOver(s.slideshow, colBackground, slideshowWash, func() { r.clockFace(s) })
 		if s.callButton && !s.menuOpen && s.phase == "idle" {

@@ -1230,8 +1230,13 @@ func (d *Display) frame() time.Duration {
 	d.alertSceneSpot(&s, now)
 	s.missed = missedNote(now, true)
 
+	var art *image.RGBA
 	if boring {
+		art, s.artFx = sceneArt(now, side, side)
 		s.slideshow = home.Get().SlideshowBackground()
+		if art != nil && home.Get().SlideshowMode() == config.SlideshowBackground {
+			s.slideshow = art
+		}
 		if s.slideshow == nil {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
@@ -1247,6 +1252,9 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
+		if art != nil && home.Get().SlideshowMode() == config.SlideshowScreensaver {
+			s.slideshowScreensaver = art
+		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
 	}
 
@@ -1292,6 +1300,8 @@ func (d *Display) frame() time.Duration {
 		return dialFrame // a finger dragging the page is followed smoothly
 	case s.showDash && !s.menuOpen:
 		return time.Second // what arrives for it wakes the loop itself
+	case s.artFx != fxNone && (s.slideshow != nil || s.slideshowScreensaver != nil) && s.phase == "idle" && !s.menuOpen:
+		return artFxFrame // the weather art's rain or snow is falling
 	case s.eq != nil && !s.showVolume && !s.menuOpen && !s.sheetOpen && !s.showCamera && s.call.Phase == phone.Idle &&
 		!s.ringing.any() && !s.setupAsking && !s.announceRecording && !s.showReminder && !s.showAnnouncement &&
 		!s.showAlert && !(s.phase == "lingering" && s.eq.quiet):

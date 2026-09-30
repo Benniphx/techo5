@@ -17,9 +17,14 @@ const slideshowWash = 90
 
 // slideshowBackground draws a Background-mode photo full-bleed, then the wash over it.
 func (r *renderer) slideshowBackground(img *image.RGBA) {
-	draw.Draw(r.dst, r.dst.Rect, img, img.Bounds().Min, draw.Src)
-	wash := color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash}
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(wash), image.Point{}, draw.Over)
+	r.washed.lay(r.dst, img, color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash})
+}
+
+// artWeather is the rain, snow, storm or fog moving over the weather art, when it is the picture.
+func (r *renderer) artWeather(s scene) {
+	if s.artFx != fxNone {
+		r.sky(s.artFx, s.now, r.dst.Rect, image.Rect(r.w/5, 0, r.w*4/5, r.h/2))
+	}
 }
 
 // slideshowScreensaverPage is Screensaver mode: the photo full-bleed, and — unless the overlay is
@@ -27,6 +32,7 @@ func (r *renderer) slideshowBackground(img *image.RGBA) {
 // without its weather and timers, which belong to the ordinary idle page).
 func (r *renderer) slideshowScreensaverPage(s scene) {
 	draw.Draw(r.dst, r.dst.Rect, s.slideshowScreensaver, s.slideshowScreensaver.Bounds().Min, draw.Src)
+	r.artWeather(s)
 	if s.slideshowOverlay == config.SlideshowOverlayOff {
 		return
 	}
