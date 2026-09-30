@@ -221,8 +221,10 @@ type renderer struct {
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles.go).
 	styleFaces map[styleFaceKey]font.Face
 
-	// washed is the weather art with its wash on, kept for the frames drawn in the same second.
-	washed washedArt
+	// washed is the weather art with its wash on, kept for the frames drawn in the same second;
+	// artDrawn is weather moving over the art in the frame last drawn, which wants the next one soon.
+	washed   washedArt
+	artDrawn bool
 
 	// wb is the wave turn screen's working memory, made the first time it is drawn.
 	wb *waveBuf
@@ -359,6 +361,7 @@ func (r *renderer) draw(s scene) {
 	if !s.showRadar {
 		r.shapes = alertOverlay{} // the alert shapes' picture is the page's size: kept only while the rain map is up
 	}
+	r.artDrawn = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
 	r.setPopupAt(image.Rectangle{})

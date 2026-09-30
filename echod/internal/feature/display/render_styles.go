@@ -16,6 +16,8 @@ import (
 	"golang.org/x/image/font/gofont/gobold"
 	"golang.org/x/image/font/gofont/goregular"
 	"golang.org/x/image/font/opentype"
+
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
 
 // The Show's clock styles other than the classic face (clock_style.go). Each fills a box: the space
@@ -133,19 +135,24 @@ func (r *renderer) dayInk() clockInk {
 	return clockInk{
 		lit: amber, ghost: lerp(walnut, amber, 0.09),
 		cardTop: shift(walnut, 22), cardLower: shift(walnut, 15),
-		hinge: shift(walnut, 40), figure: cream, split: walnut, ground: walnut,
+		hinge: shift(walnut, 40), figure: cream, split: walnut,
 	}
 }
 
 // styleDate is the date line, with the next alarm after it when it is within a day, at x (centered
 // on x, or starting there with align -1), and makes it the tap that opens the calendar.
 func (r *renderer) styleDate(s scene, x, baseline, align int) {
-	r.styleDateIn(r.small, s, x, baseline, align)
+	r.styleDateIn(r.small, s, x, baseline, align, 0)
 }
 
-// styleDateIn is styleDate in face.
-func (r *renderer) styleDateIn(face font.Face, s scene, x, baseline, align int) {
+// styleDateIn is styleDate in face, cut to room when that is more than nothing: the next alarm can
+// make the line longer than the space a style has for it.
+func (r *renderer) styleDateIn(face font.Face, s scene, x, baseline, align, room int) {
 	date := s.now.Format("Monday, January 2") + alarmSuffix(s)
+	if room > 0 && r.width(face, date) > room {
+		// The day and month short first, so the alarm still fits; cut only if that is not enough.
+		date = r.clipTo(face, s.now.Format("Mon, Jan 2")+alarmSuffix(s), room)
+	}
 	w := r.width(face, date)
 	if align == 0 {
 		x -= w / 2
@@ -200,9 +207,10 @@ func (r *renderer) analogStyle(s scene, box image.Rectangle) {
 	mid := box.Min.Y + box.Dy()/2
 	day := r.styleFace(true, 56)
 	r.text(day, s.now.Format("Monday"), x, mid-r.s(44), cream)
-	date := s.now.Format("January 2") + alarmSuffix(s)
-	r.text(r.styleFace(false, 40), date, x, mid+r.s(12), dateColor(dim))
-	r.setDateAt(image.Rect(x, mid-r.s(96), x+max(r.width(day, s.now.Format("Monday")), r.width(r.small, date)), mid+r.s(24)))
+	df := r.styleFace(false, 40)
+	date := r.clipTo(df, s.now.Format("January 2")+alarmSuffix(s), r.w-r.margin-x)
+	r.text(df, date, x, mid+r.s(12), dateColor(dim))
+	r.setDateAt(image.Rect(x, mid-r.s(96), x+max(r.width(day, s.now.Format("Monday")), r.width(df, date)), mid+r.s(24)))
 	if line := weatherText(s); line != "" {
 		wy := mid + r.s(82)
 		ix := x
@@ -293,7 +301,7 @@ func (r *renderer) wordsStyle(s scene, box image.Rectangle) {
 		pf := fit(false, 44, period, room-r.width(hf, hour)-r.s(36))
 		r.text(pf, period, x+r.width(hf, hour)+r.s(30), y, dim)
 	}
-	r.styleDateIn(r.styleFace(false, at(34)), s, x, y+r.s(at(70)), -1)
+	r.styleDateIn(r.styleFace(false, at(34)), s, x, y+r.s(at(70)), -1, box.Max.X-x)
 }
 
 // sunStyle is the day's sun: its path from sunrise to sunset across the top, the sun where it is now,
@@ -342,7 +350,14 @@ func (r *renderer) sunStyle(s scene, box image.Rectangle) bool {
 
 	// The time and date under the horizon, the weather and the light left under those.
 	hm, ampm := clockHM(s.now), clockSuffix(s.now)
-	tf := r.styleFace(true, 118)
+	// The time as large as leaves the date inside the box: smaller when a timer or a strip takes the
+	// foot of the screen.
+	size := 118
+	tf := r.styleFace(true, size)
+	for size > 44 && int(horizon)+r.s(40)+capHeight(tf)+r.s(46) > box.Max.Y+r.s(6) {
+		size -= 12
+		tf = r.styleFace(true, size)
+	}
 	gap := r.s(14)
 	aw := 0
 	if ampm != "" {
@@ -390,20 +405,21 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 	if ampm != "" {
 		r.text(r.title, ampm, box.Min.X+r.width(tf, hm)+r.s(12), base, dateColor(amber))
 	}
-	r.styleDate(s, box.Min.X, base+r.s(50), -1)
-
-	// The next events, in a column on the right.
+	// The next events, in a column on the right, clear of the date and its alarm.
 	col := r.w/2 + r.s(70)
+	r.styleDateIn(r.small, s, box.Min.X, base+r.s(50), -1, col-r.s(50)-box.Min.X)
 	r.fxLine(float64(col-r.s(30)), float64(top+r.s(4)), float64(col-r.s(30)), float64(base+r.s(56)), float64(r.s(2)), ember, 1)
 	r.text(r.styleFace(true, 20), "NEXT", col, top+r.s(20), dim)
 	y := top + r.s(62)
 	if len(s.style.next) == 0 {
 		r.text(r.tiny, "Nothing coming up", col, y, dim)
 	}
+	tx := col + r.s(150)
 	for _, e := range s.style.next {
-		when := dashWhen(e.Start, e.AllDay, s.now)
-		r.text(r.tiny, when, col, y, amber)
-		tx := col + r.s(150)
+		tx = max(tx, col+r.width(r.tiny, dashWhen(e, s.now))+r.s(20))
+	}
+	for _, e := range s.style.next {
+		r.text(r.tiny, dashWhen(e, s.now), col, y, amber)
 		r.text(r.tiny, r.clipTo(r.tiny, e.Summary, r.w-r.margin-tx), tx, y, cream)
 		y += r.s(44)
 	}
@@ -435,11 +451,14 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 	r.setWeatherAt(image.Rect(box.Min.X, row, box.Max.X, row+r.s(150)))
 }
 
-// dashWhen is when an event starts, as the dashboard writes it: its time today, "Tomorrow" and the
-// time after that, "All day" for one with no time.
-func dashWhen(start time.Time, allDay bool, now time.Time) string {
+// dashWhen is when an event starts, as the dashboard writes it: "Now" for one under way, its time
+// today, "Tmrw" and the time after that, "Today" or "Tomorrow" for one with no time.
+func dashWhen(e hass.Event, now time.Time) string {
+	start, allDay := e.Start, e.AllDay
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	switch {
+	case !allDay && !start.After(now):
+		return "Now"
 	case allDay && start.Before(today.AddDate(0, 0, 1)):
 		return "Today"
 	case allDay:

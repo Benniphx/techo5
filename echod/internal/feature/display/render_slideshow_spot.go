@@ -24,6 +24,7 @@ func (r *roundRenderer) slideshowBackground(img *image.RGBA) {
 func (r *roundRenderer) artWeather(s roundScene) {
 	if s.artFx != fxNone {
 		r.sky(s.artFx, s.now, r.dst.Rect, image.Rect(side/4, side/8, side*3/4, side/2))
+		r.artDrawn = true
 	}
 }
 

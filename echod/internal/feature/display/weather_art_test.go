@@ -90,3 +90,10 @@ func BenchmarkWeatherPageFrame(b *testing.B) {
 		i++
 	}
 }
+
+// Snow draws its caps against a ragged line; on the Show 8's panel that used to cost eight times rain.
+func BenchmarkWeatherArtSnowShow8(b *testing.B) {
+	for b.Loop() {
+		paintLandscape(artKey{artSnow, artDay, show8Wide, show8High, 42})
+	}
+}

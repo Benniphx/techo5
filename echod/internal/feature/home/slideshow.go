@@ -303,6 +303,7 @@ func (f *Feature) SetSlideshowArt(on bool) {
 		}
 	})
 	f.slideshowArtSw.Set(on)
+	f.slideshowSel.Set(slideshowLabelFor(config.Get().Home.Slideshow.Mode)) // it may have come on with it
 }
 
 // SlideshowArt is whether the slideshow shows weather art rather than photos.

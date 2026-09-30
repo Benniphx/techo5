@@ -130,7 +130,8 @@ type weatherArt struct {
 	drawing bool
 
 	frame   *image.RGBA
-	frameAt int64 // the second frame was composed for
+	frameAt int64  // the second frame was composed for
+	gen     uint64 // counts the frames composed, so a kept copy of one knows when it is old
 }
 
 // arts is the one weather art a device keeps.
@@ -147,9 +148,16 @@ func artFrame(now time.Time, cond string, rise, set time.Time, sunOK bool, w, h 
 		a.drawing = true
 		safe.Go("weather art", func() {
 			start := time.Now()
+			defer func() { // a landscape that failed to draw is tried again, rather than never
+				a.mu.Lock()
+				a.drawing = false
+				a.mu.Unlock()
+			}()
 			base, clouds := paintLandscape(k)
 			a.mu.Lock()
-			a.key, a.base, a.clouds, a.drawing, a.frameAt = k, base, clouds, false, 0
+			// A new frame too: text laid over the art keeps its patches while the picture under it is
+			// the same one (readable.go), and this is a different picture.
+			a.key, a.base, a.clouds, a.frame, a.frameAt = k, base, clouds, nil, 0
 			a.mu.Unlock()
 			slog.Info("weather art drawn", "cond", k.cond, "time", k.when, "took", time.Since(start).Round(time.Millisecond))
 		})
@@ -167,6 +175,7 @@ func artFrame(now time.Time, cond string, rise, set time.Time, sunOK bool, w, h 
 	}
 	composeArt(a.frame, a.base, a.clouds, sec)
 	a.frameAt = sec
+	a.gen++
 	return a.frame
 }
 
@@ -394,11 +403,10 @@ func artFillAbove(img *image.RGBA, pts, cut [][2]float64, c color.RGBA) {
 	if m == nil {
 		return
 	}
-	for y := m.Rect.Min.Y; y < m.Rect.Max.Y; y++ {
-		for x := m.Rect.Min.X; x < m.Rect.Max.X; x++ {
-			if float64(y) >= hillAt(cut, float64(x)) {
-				m.SetAlpha(x, y, color.Alpha{})
-			}
+	for x := m.Rect.Min.X; x < m.Rect.Max.X; x++ {
+		line := hillAt(cut, float64(x)) // once a column: the cut is hundreds of points long
+		for y := max(m.Rect.Min.Y, int(math.Ceil(line))); y < m.Rect.Max.Y; y++ {
+			m.SetAlpha(x, y, color.Alpha{})
 		}
 	}
 	blendMask(img, m, m.Rect.Min.X, m.Rect.Min.Y, c, 1)
@@ -538,30 +546,30 @@ func sceneArt(now time.Time, w, h int) (*image.RGBA, skyFx) {
 }
 
 // artVersion says whether img is the weather art's frame, and which one: it changes once a second at
-// most, where the rain over it is drawn twelve times a second, so a renderer can keep the frame with
-// its wash laid on rather than washing the whole panel again each time.
-func artVersion(img *image.RGBA) (int64, bool) {
+// most, where the rain over it is drawn eight times a second, so a renderer can keep the frame with its
+// wash laid on rather than washing the whole panel again each time.
+func artVersion(img *image.RGBA) (uint64, bool) {
 	a := &arts
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if img == nil || img != a.frame {
 		return 0, false
 	}
-	return a.frameAt, true
+	return a.gen, true
 }
 
 // washedArt keeps the weather art's frame with the wash on it, for the frames drawn in the same second.
 type washedArt struct {
 	img  *image.RGBA
-	at   int64
+	gen  uint64
 	wash color.RGBA
 }
 
 // lay draws img washed with wash onto dst: from what is kept when img is the weather art's frame it
 // has already washed, else washing it and keeping that when it is the art.
 func (k *washedArt) lay(dst, img *image.RGBA, wash color.RGBA) {
-	at, art := artVersion(img)
-	if art && k.img != nil && k.at == at && k.wash == wash && k.img.Rect == dst.Rect {
+	gen, art := artVersion(img)
+	if art && k.img != nil && k.gen == gen && k.wash == wash && k.img.Rect == dst.Rect {
 		copy(dst.Pix, k.img.Pix)
 		return
 	}
@@ -574,5 +582,5 @@ func (k *washedArt) lay(dst, img *image.RGBA, wash color.RGBA) {
 		k.img = image.NewRGBA(dst.Rect)
 	}
 	copy(k.img.Pix, dst.Pix)
-	k.at, k.wash = at, wash
+	k.gen, k.wash = gen, wash
 }

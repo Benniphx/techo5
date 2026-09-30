@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
@@ -36,6 +37,9 @@ func TestShowClockStylesDraw(t *testing.T) {
 			{Summary: "Trash day", Start: time.Date(2026, 9, 17, 0, 0, 0, 0, time.Local), End: time.Date(2026, 9, 18, 0, 0, 0, 0, time.Local), AllDay: true},
 		},
 	}
+	later := facts
+	later.next = append([]hass.Event{{Summary: "Doctor's appointment", Start: time.Date(2026, 9, 17, 9, 45, 0, 0, time.Local), End: time.Date(2026, 9, 17, 10, 45, 0, 0, time.Local)},
+		{Summary: "Still going", Start: at.Add(-30 * time.Minute), End: at.Add(time.Hour)}}, facts.next[:1]...)
 	running := []timer.Countdown{{Name: "Pasta", Left: 4*time.Minute + 32*time.Second, Total: 10 * time.Minute, Active: true}}
 	chips := []home.Chip{{Icon: "mdi:door", Text: "Back door open"}, {Icon: "mdi:thermometer", Text: "Upstairs 74°"}}
 	scenes := map[string]scene{
@@ -45,6 +49,10 @@ func TestShowClockStylesDraw(t *testing.T) {
 		"-strip": {now: at, phase: "idle", weather: sky, style: facts, strip: true, playing: true,
 			radio: home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}},
 		"-dawn": {now: time.Date(2026, 9, 16, 5, 30, 0, 0, time.Local), phase: "idle", weather: sky, style: facts},
+		// The next alarm makes the date line longer; an event tomorrow at a time makes the when longer.
+		"-alarm": {now: at, phase: "idle", weather: sky, style: later, alarms: alarm.View{Next: &alarm.Upcoming{At: at.Add(16 * time.Hour)}}},
+		"-strip-timer": {now: at, phase: "idle", weather: sky, style: facts, timers: running, strip: true, playing: true,
+			radio: home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}},
 	}
 	dir := os.Getenv("SHOW_PREVIEW")
 	for _, st := range clockStyles {

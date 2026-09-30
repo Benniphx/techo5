@@ -104,14 +104,22 @@ func (r *roundRenderer) footLine(s roundScene, baseline int, otherwise string) {
 		r.centered(r.body, "Timer "+clockDuration(s.timers[0].Left), baseline, colTimer)
 	case s.missed != "":
 		r.centered(r.small, s.missed, baseline, colTimer)
+	case s.slideshowTrouble != "":
+		r.centered(r.small, s.slideshowTrouble, baseline, colDim)
 	case otherwise != "":
 		r.centered(r.small, otherwise, baseline, colDim)
 	}
 }
 
-// statusWord is the word the classic face puts over the time: playing or paused.
+// statusWord is the word the classic face puts over the time.
 func (r *roundRenderer) statusWord(s roundScene, baseline int) {
 	switch {
+	case s.setupAsking:
+		r.centered(r.label, "A BROWSER IS ASKING", baseline, colMuted)
+	case s.muted:
+		r.centered(r.label, "MICROPHONE OFF", baseline, colMuted)
+	case s.btPairing:
+		r.centered(r.label, "BLUETOOTH PAIRING", baseline, colBluetooth)
 	case s.playing:
 		r.centered(r.label, "PLAYING", baseline, colDim)
 	case s.paused:
@@ -392,7 +400,6 @@ func (r *roundRenderer) sunFace(s roundScene) {
 // sunRim is the rim as the whole day: noon at the top, midnight at the bottom, daylight from sunrise
 // to sunset in warm colors, and a dot where now is.
 func (r *roundRenderer) sunRim(s roundScene) {
-	r.arc(rimIn, rimOut, 0, 2*math.Pi, color.RGBA{22, 30, 52, 255})
 	angle := func(t time.Time) float64 {
 		h := float64(t.Hour()) + float64(t.Minute())/60
 		return math.Mod((h-12)/24*2*math.Pi+4*math.Pi, 2*math.Pi)
@@ -401,13 +408,7 @@ func (r *roundRenderer) sunRim(s roundScene) {
 	if a1 < a0 {
 		a1 += 2 * math.Pi
 	}
-	const steps = 36
-	for i := range steps {
-		f := float64(i) / steps
-		edge := math.Abs(f-0.5) * 2
-		c := lerp(color.RGBA{255, 196, 70, 255}, color.RGBA{240, 110, 80, 255}, edge*edge)
-		r.arc(rimIn, rimOut, a0+(a1-a0)*f, a0+(a1-a0)*(f+1.3/steps), c)
-	}
+	r.sunRing(a0, a1)
 	mid := (rimIn + rimOut) / 2.0
 	for _, t := range []time.Time{s.style.rise, s.style.set} {
 		a := angle(t)
@@ -424,6 +425,47 @@ func (r *roundRenderer) sunRim(s roundScene) {
 		a := h.deg * math.Pi / 180
 		d := float64(rimIn) - 20
 		r.centered2(r.tiny, h.label, int(center+d*math.Sin(a)), int(center-d*math.Cos(a))+6, colDim)
+	}
+}
+
+// sunRing is the rim in one pass: night blue all round, and daylight from a0 to a1 (radians from the
+// top, clockwise; a1 may run past a full turn), warm in the middle of the day and rosier at its ends.
+// One pass over the ring rather than an arc per shade, each of which is a pass of its own.
+func (r *roundRenderer) sunRing(a0, a1 float64) {
+	night := color.RGBA{22, 30, 52, 255}
+	noon, edge := color.RGBA{255, 196, 70, 255}, color.RGBA{240, 110, 80, 255}
+	cx, cy := float64(center), float64(center)
+	r0, r1 := float64(rimIn), float64(rimOut)
+	outer, inner := r1+1, r0-1
+	b := r.dst.Rect
+	span := a1 - a0
+	for y := max(int(cy-r1)-1, b.Min.Y); y <= min(int(cy+r1)+1, b.Max.Y-1); y++ {
+		dy := float64(y) + 0.5 - cy
+		if math.Abs(dy) > outer {
+			continue
+		}
+		xo := math.Sqrt(outer*outer-dy*dy) + 1
+		spans := [][2]int{{int(cx - xo), int(cx + xo)}}
+		if math.Abs(dy) < inner-1 {
+			xi := math.Sqrt(inner*inner-dy*dy) - 1
+			spans = [][2]int{{int(cx - xo), int(cx - xi)}, {int(cx+xi) + 1, int(cx + xo)}}
+		}
+		for _, sp := range spans {
+			for x := max(sp[0], b.Min.X); x <= min(sp[1], b.Max.X-1); x++ {
+				dx := float64(x) + 0.5 - cx
+				d := math.Hypot(dx, dy)
+				if d < r0-1 || d > r1+1 {
+					continue
+				}
+				c := night
+				rel := math.Mod(math.Atan2(dx, -dy)-a0+4*math.Pi, 2*math.Pi)
+				if rel <= span {
+					e := math.Abs(rel/span-0.5) * 2
+					c = lerp(noon, edge, e*e)
+				}
+				r.blend(x, y, c, math.Min(math.Min(d-(r0-1), (r1+1)-d), 1))
+			}
+		}
 	}
 }
 
@@ -478,6 +520,8 @@ func dashWhenSpot(start time.Time, allDay bool, now time.Time) string {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	tomorrow := today.AddDate(0, 0, 1)
 	switch {
+	case !allDay && !start.After(now):
+		return "Now"
 	case allDay && start.Before(tomorrow):
 		return "Today"
 	case allDay:

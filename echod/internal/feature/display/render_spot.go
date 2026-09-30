@@ -220,8 +220,10 @@ type roundRenderer struct {
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles_spot.go).
 	styleFaces map[spotFaceKey]font.Face
 
-	// washed is the weather art with its wash on, kept for the frames drawn in the same second.
-	washed washedArt
+	// washed is the weather art with its wash on, kept for the frames drawn in the same second;
+	// artDrawn is weather moving over the art in the frame last drawn, which wants the next one soon.
+	washed   washedArt
+	artDrawn bool
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {
@@ -256,7 +258,7 @@ func (r *roundRenderer) draw(s roundScene) {
 		r.shapes = alertOverlay{} // kept only while the rain map is up
 	}
 	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(colBackground), image.Point{}, draw.Src)
-	r.callDrawn = false
+	r.callDrawn, r.artDrawn = false, false
 	r.clearAlertTaps()
 	r.clearCameraSoundTap()
 

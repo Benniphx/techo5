@@ -5,6 +5,7 @@ package display
 import (
 	"image"
 	"image/png"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -65,4 +66,21 @@ func TestSpotClockStylesDraw(t *testing.T) {
 		}
 	}
 	clock24.Store(false)
+}
+
+// The Sun style's rim is drawn every frame the face is up: one pass over the ring.
+func BenchmarkSunRim(b *testing.B) {
+	at := time.Date(2026, 9, 16, 14, 7, 38, 0, time.Local)
+	s := roundScene{now: at, phase: "idle", style: styleFacts{rise: at.Add(-7 * time.Hour), set: at.Add(5 * time.Hour), sunOK: true}}
+	r := newRoundRenderer(image.NewRGBA(image.Rect(0, 0, side, side)))
+	for b.Loop() {
+		r.sunRim(s)
+	}
+}
+
+func BenchmarkPlainRim(b *testing.B) {
+	r := newRoundRenderer(image.NewRGBA(image.Rect(0, 0, side, side)))
+	for b.Loop() {
+		r.arc(rimIn, rimOut, 0, 2*math.Pi, colTrack)
+	}
 }

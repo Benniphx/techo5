@@ -40,11 +40,10 @@ type clockInk struct {
 	lit, ghost           color.RGBA // an LED segment on and off
 	cardTop, cardLower   color.RGBA // a flip card above and below its split
 	hinge, figure, split color.RGBA
-	ground               color.RGBA // behind the cards
 }
 
 // nightInk is the night clock's.
-var nightInk = clockInk{nightRed, nightGhost, flipTop, flipLower, flipHinge, flipInk, flipSplit, color.RGBA{0, 0, 0, 255}}
+var nightInk = clockInk{nightRed, nightGhost, flipTop, flipLower, flipHinge, flipInk, flipSplit}
 
 // redClockPage is the night as a clock alone.
 func (r *renderer) redClockPage(s scene) {
@@ -359,11 +358,12 @@ func (r *renderer) shade(b image.Rectangle, by float64) {
 	draw.Draw(r.dst, b, image.NewUniform(color.RGBA{0, 0, 0, a}), image.Point{}, draw.Over)
 }
 
-// offscreen is what paint draws, drawn on the ground behind the cards into a picture of just b, not
-// onto the screen.
+// offscreen is what paint draws, over what the screen already has there, into a picture of just b,
+// not onto the screen: the corners of a card being turned show what is behind the card, black at
+// night, a photo or the weather art by day.
 func (r *renderer) offscreen(b image.Rectangle, paint func()) *image.RGBA {
 	img := image.NewRGBA(b)
-	draw.Draw(img, b, image.NewUniform(r.ink.ground), image.Point{}, draw.Src)
+	draw.Draw(img, b, r.dst, b.Min, draw.Src)
 	screen := r.dst
 	r.dst = img
 	paint()
