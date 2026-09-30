@@ -5,6 +5,7 @@ package onvifback
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func TestLiveCamera(t *testing.T) {
 			break
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	start := time.Now()
 	s, err := Open(ctx, addr, user, pass)
@@ -44,7 +45,11 @@ func TestLiveCamera(t *testing.T) {
 	defer s.Close()
 	t.Logf("open in %s, %s", time.Since(start).Round(time.Millisecond), s.Codec())
 	frame := make([]int16, PacketSamples)
-	for i := 0; i < 150; i++ { // 3 s, in time
+	packets := 150 // 3 s; TECHO5_CAM_SECONDS for longer, past the keep-alives
+	if n, err := strconv.Atoi(os.Getenv("TECHO5_CAM_SECONDS")); err == nil && n > 0 {
+		packets = n * 50
+	}
+	for i := 0; i < packets; i++ { // in time
 		if os.Getenv("TECHO5_CAM_TONE") == "1" {
 			for j := range frame {
 				if (i*PacketSamples+j)%16 < 8 {
