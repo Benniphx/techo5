@@ -105,3 +105,52 @@ func (c Client) Search(ctx context.Context, query string, kinds []string, limit 
 func (c Client) Play(ctx context.Context, queueID, uri string) error {
 	return c.do(ctx, "player_queues/play_media", map[string]any{"queue_id": queueID, "media": uri, "option": "replace"}, nil)
 }
+
+// PlayerState is a player as the server sees it: whether it is connected and what it is doing
+// ("playing", "paused", "idle").
+type PlayerState struct {
+	Available bool   `json:"available"`
+	State     string `json:"playback_state"`
+}
+
+// Player is the state of player id. A player the server has never seen is an error.
+func (c Client) Player(ctx context.Context, id string) (PlayerState, error) {
+	var p *PlayerState
+	if err := c.do(ctx, "players/get", map[string]any{"player_id": id}, &p); err != nil {
+		return PlayerState{}, err
+	}
+	if p == nil {
+		return PlayerState{}, errors.New("music assistant does not know this device as a player")
+	}
+	return *p, nil
+}
+
+// PlayChecked plays uri on player and waits, up to within, for the server to say it is playing there,
+// looking every poll. A player the server has no connection to is told as that before anything is
+// asked of it, since nothing it is given could be heard.
+func (c Client) PlayChecked(ctx context.Context, player, uri string, within, poll time.Duration) error {
+	st, err := c.Player(ctx, player)
+	if err != nil {
+		return fmt.Errorf("the music library could not be asked about this device: %v", err)
+	}
+	if !st.Available {
+		return errors.New("this device is not connected to the music library right now, so it cannot play from it")
+	}
+	if err := c.Play(ctx, player, uri); err != nil {
+		return fmt.Errorf("the music library would not play it: %v", err)
+	}
+	deadline := time.Now().Add(within)
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.New("the music library did not answer in time")
+		case <-time.After(poll):
+		}
+		if st, err := c.Player(ctx, player); err == nil && st.State == "playing" {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return errors.New("the music library took it, but nothing started playing on this device")
+		}
+	}
+}

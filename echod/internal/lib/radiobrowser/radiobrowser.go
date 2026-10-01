@@ -21,6 +21,14 @@ var servers = []string{"https://de1.api.radio-browser.info", "https://de2.api.ra
 
 var client = &http.Client{Timeout: 12 * time.Second}
 
+// UseServers points the searches at other servers until the returned function is called: for tests
+// elsewhere, which have no business reaching the real directory.
+func UseServers(s ...string) (restore func()) {
+	was := servers
+	servers = s
+	return func() { servers = was }
+}
+
 // Station is one stream.
 type Station struct {
 	Name, URL, Tags, State, Country, Codec string

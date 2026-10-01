@@ -52,3 +52,25 @@ func TestSearchAndPlay(t *testing.T) {
 		t.Errorf("a wrong token gave %v", err)
 	}
 }
+
+// A player's state as the server reports it, and a player it has never seen.
+func TestPlayer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		json.NewDecoder(r.Body).Decode(&body)
+		if body["args"].(map[string]any)["player_id"] == "aa:bb" {
+			w.Write([]byte(`{"player_id":"aa:bb","available":true,"playback_state":"playing","state":"playing"}`))
+			return
+		}
+		w.Write([]byte(`null`))
+	}))
+	defer srv.Close()
+	c := Client{URL: srv.URL, Token: "tok"}
+	p, err := c.Player(context.Background(), "aa:bb")
+	if err != nil || !p.Available || p.State != "playing" {
+		t.Errorf("%+v %v", p, err)
+	}
+	if _, err := c.Player(context.Background(), "cc:dd"); err == nil {
+		t.Error("an unknown player was not an error")
+	}
+}

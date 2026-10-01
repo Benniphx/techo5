@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
-	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/musicassistant"
 )
@@ -35,13 +34,11 @@ func playMusic(query, kind string) (string, error) {
 	if query == "" {
 		return "", fmt.Errorf("nothing was named to play")
 	}
-	m := config.Get().MusicAssistant
-	player, err := layout.FactoryMAC()
-	if err != nil || player == "" {
-		return "", fmt.Errorf("this device does not know its own player id")
+	c, _, err := maClient()
+	if err != nil {
+		return "", err
 	}
-	c := musicassistant.Client{URL: m.URL, Token: m.Token}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second+maStartWait)
 	defer cancel()
 	kinds := []string{"artist", "album", "playlist", "track"}
 	if kind != "" && kind != "any" {
@@ -55,8 +52,8 @@ func playMusic(query, kind string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("nothing called %q was found in the music library", query)
 	}
-	if err := c.Play(ctx, player, pick.URI); err != nil {
-		return "", fmt.Errorf("the music library could not play it on this device (%v); it may not have this device as a player yet", err)
+	if err := playOnMA(ctx, pick.URI); err != nil {
+		return "", err
 	}
 	what := pick.Name
 	if by := pick.By(); by != "" && pick.MediaType != "artist" {
