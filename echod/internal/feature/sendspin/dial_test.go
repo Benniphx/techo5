@@ -18,7 +18,7 @@ import (
 
 func TestMusicAssistantSendspinAddress(t *testing.T) {
 	for api, want := range map[string]string{
-		"http://100.96.148.25:8095":   "ws://100.96.148.25:8927/sendspin",
+		"http://100.64.0.10:8095":     "ws://100.64.0.10:8927/sendspin",
 		"https://ma.example.com/":     "wss://ma.example.com:8927/sendspin",
 		"http://[fd7a::1]:8095":       "ws://[fd7a::1]:8927/sendspin",
 		"":                            "",
