@@ -67,11 +67,12 @@ func TestANullClearsAndAnOmissionDoesNot(t *testing.T) {
 func TestCleanTitle(t *testing.T) {
 	iheart := `text="Static" song_spot="M" MediaBaseId="3097657" itunesTrackId="0" amgTrackId="-1" amgArtistId="0" TAID="0" TPID="312041972" cartcutId="0442511001" amgArtworkURL="https:///v3/catalog/track/312041972?ops=fit(200,200),format(%22jpeg%22)" length="00:03:25" unsID="-1" spotInstanceId="-1"`
 	for in, want := range map[string]string{
-		iheart:                     "Static",
-		`text="" song_spot="T"`:    "",
-		"I'll Follow You":          "I'll Follow You",
-		`She said text="hi" to me`: `She said text="hi" to me`,
-		`Song "Quoted" Title`:      `Song "Quoted" Title`,
+		iheart:                             "Static",
+		`adContext="aHR0cHM6Ly9uM2NiLWUy"`: "",
+		`text="" song_spot="T"`:            "",
+		"I'll Follow You":                  "I'll Follow You",
+		`She said text="hi" to me`:         `She said text="hi" to me`,
+		`Song "Quoted" Title`:              `Song "Quoted" Title`,
 	} {
 		if got := cleanTitle(in); got != want {
 			t.Errorf("%q came out %q, want %q", in, got, want)

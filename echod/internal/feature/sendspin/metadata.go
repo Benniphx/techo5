@@ -46,14 +46,22 @@ func asText(s *string) string {
 	return *s
 }
 
-// taggedTitle is a title as iHeart's stations send it, the song in text and a run of their own tags
-// after: text="Static" song_spot="M" MediaBaseId="3097657" ... Music Assistant passes it on as it came.
-var taggedTitle = regexp.MustCompile(`^\s*text="([^"]*)"(\s+[A-Za-z_]+="[^"]*")*\s*$`)
+// taggedTitle is a title as iHeart's stations send it: nothing but tags, key="value" after key="value",
+// the song in text when it is a song (text="Static" song_spot="M" MediaBaseId="3097657" ...), and an
+// advert's markers when it is not (adContext="..."). Music Assistant passes it on as it came.
+var (
+	taggedTitle = regexp.MustCompile(`^\s*[A-Za-z_]+="[^"]*"(\s+[A-Za-z_]+="[^"]*")*\s*$`)
+	textTag     = regexp.MustCompile(`(?:^|\s)text="([^"]*)"`)
+)
 
-// cleanTitle is a title fit for the screen: a tagged one's text, anything else as it is.
+// cleanTitle is a title fit for the screen: a tagged one's song, or none for one that has no song (the
+// screen then names the station); anything else as it is.
 func cleanTitle(s string) string {
-	if m := taggedTitle.FindStringSubmatch(s); m != nil {
+	if !taggedTitle.MatchString(s) {
+		return s
+	}
+	if m := textTag.FindStringSubmatch(s); m != nil {
 		return m[1]
 	}
-	return s
+	return ""
 }
