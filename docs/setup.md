@@ -129,8 +129,8 @@ yourself. Each comes as two files, a `.json` and a `.tflite` with the same name 
 
 1. Put both files in Home Assistant's `custom_wake_words` folder, inside its config folder (next
    to `configuration.yaml`). Make the folder if it isn't there.
-2. Reload the device's ESPHome entry in Home Assistant (Settings → Devices & services → ESPHome →
-   the device → ⋮ → Reload), or restart Home Assistant.
+2. Restart Home Assistant. It reads the folder once and keeps what it found, so a word added later
+   only shows up after a restart; reloading the device's ESPHome entry is not enough.
 3. Pick the new wake word in the device's **Wake word** list, on the Assist satellite in Home
    Assistant. The device downloads it from Home Assistant and keeps it.
 
