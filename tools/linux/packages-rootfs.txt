@@ -22,3 +22,5 @@ bluez-btmgmt
 webrtc-audio-processing-1
 # AirPlay receiver (feature/streaming); pulls in avahi, which it announces itself through.
 shairport-sync
+# The Wi-Fi firewall (usr/local/sbin/techo5-firewall): the kernel has iptables, not nftables.
+iptables-legacy

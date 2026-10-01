@@ -144,6 +144,10 @@ func followSpotifyEvents(r io.Reader, told func(title, artist, album string)) {
 		if len(f) < 4 {
 			continue
 		}
+		// The program cuts each field at a byte count, which can fall inside a character.
+		for i := range f {
+			f[i] = strings.ToValidUTF8(f[i], "")
+		}
 		switch f[0] {
 		case "track_changed":
 			told(f[1], f[2], f[3])

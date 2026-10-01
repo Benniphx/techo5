@@ -21,10 +21,11 @@ func item(typ, code, data string) string {
 		hex.EncodeToString([]byte(typ)), hex.EncodeToString([]byte(code)), len(data), base64.StdEncoding.EncodeToString([]byte(data)))
 }
 
-// AirPlay's metadata names the song field by field, and the end of a session clears it.
+// AirPlay's metadata names the song field by field, and the end of a session clears it; what the decoder
+// cannot take on the way is passed over.
 func TestAirPlayMetadata(t *testing.T) {
-	stream := item("ssnc", "mdst", "") + item("core", "minm", "Take It Easy") + item("core", "asar", "Eagles") +
-		item("core", "asal", "Eagles") + item("ssnc", "mden", "") + item("ssnc", "pend", "")
+	stream := item("ssnc", "mdst", "") + item("core", "minm", "Take It Easy") + `<?xml version="2.0"?>` + "</junk>" +
+		item("core", "asar", "Eagles") + item("core", "asal", "Eagles") + item("ssnc", "mden", "") + item("ssnc", "pend", "")
 	var got [][3]string
 	followAirPlayMetadata(strings.NewReader(stream), func(title, artist, album string) {
 		got = append(got, [3]string{title, artist, album})
@@ -40,12 +41,14 @@ func TestSpotifyEvents(t *testing.T) {
 	lines := "track_changed\tHotel California\tEagles, Don Henley\tHotel California\n" +
 		"half a line\n" +
 		"track_changed\t" + strings.Repeat("x", 40<<10) + "\ta\tb\n" +
+		"track_changed\tCaf\xc3\tEagles\tB\n" + // cut inside a character
 		"stopped\t\t\t\n"
 	var got [][3]string
 	followSpotifyEvents(strings.NewReader(lines), func(title, artist, album string) {
 		got = append(got, [3]string{title, artist, album})
 	})
-	if len(got) != 2 || got[0] != [3]string{"Hotel California", "Eagles, Don Henley", "Hotel California"} || got[1] != [3]string{} {
+	if len(got) != 3 || got[0] != [3]string{"Hotel California", "Eagles, Don Henley", "Hotel California"} ||
+		got[1] != [3]string{"Caf", "Eagles", "B"} || got[2] != [3]string{} {
 		t.Errorf("told %v", got)
 	}
 }

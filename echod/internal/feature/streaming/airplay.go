@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -132,10 +131,11 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 }
 
 // followAirPlayMetadata reads items from r until it ends, calling told with the song whenever a field of
-// it changes, and with nothing when the session ends. An item that is not well formed is passed over,
-// and reading goes on after it.
+// it changes, and with nothing when the session ends. Anything the decoder cannot take is passed over,
+// and reading goes on after it: only r failing ends it.
 func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) {
-	br := bufio.NewReaderSize(r, 64<<10)
+	src := &readErr{r: r}
+	br := bufio.NewReaderSize(src, 64<<10)
 	newDecoder := func() *xml.Decoder {
 		// A bufio.Reader is a ByteReader, so the decoder reads no further than it has to: a new one
 		// picks up where an old one gave up.
@@ -145,16 +145,20 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 	}
 	dec := newDecoder()
 	var title, artist, album string
+	failed := 0
 	for {
 		var it metaItem
 		if err := dec.Decode(&it); err != nil {
-			var syntax *xml.SyntaxError
-			if !errors.As(err, &syntax) {
+			// The pipe itself failed (closed as the receivers stop), or the decoder has given up over
+			// and over on what is there with nothing taken: the end.
+			failed++
+			if src.err != nil || failed > 1000 {
 				return
 			}
 			dec = newDecoder()
 			continue
 		}
+		failed = 0
 		typ, code := fourCC(it.Type), fourCC(it.Code)
 		data := ""
 		if d, err := base64.StdEncoding.DecodeString(strings.TrimSpace(it.Data)); err == nil && len(d) <= 1024 {
@@ -174,6 +178,21 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 		}
 		told(title, artist, album)
 	}
+}
+
+// readErr is a reader that keeps the error its reader last gave, so a decoder's own complaints can be
+// told from the pipe failing.
+type readErr struct {
+	r   io.Reader
+	err error
+}
+
+func (e *readErr) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if err != nil {
+		e.err = err
+	}
+	return n, err
 }
 
 // fourCC is a four-character code written as eight hex digits.
