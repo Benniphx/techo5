@@ -1,6 +1,10 @@
 package sendspin
 
-import "github.com/Sendspin/sendspin-go/pkg/protocol"
+import (
+	"regexp"
+
+	"github.com/Sendspin/sendspin-go/pkg/protocol"
+)
 
 // metadata is the track the server last described, kept across the messages that only change part of
 // it rather than replaced by them.
@@ -22,7 +26,7 @@ func (m *metadata) merge(next *protocol.MetadataState) bool {
 	before := *m
 
 	if next.HasField("title") {
-		m.title = asText(next.Title)
+		m.title = cleanTitle(asText(next.Title))
 	}
 	if next.HasField("artist") {
 		m.artist = asText(next.Artist)
@@ -40,4 +44,16 @@ func asText(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// taggedTitle is a title as iHeart's stations send it, the song in text and a run of their own tags
+// after: text="Static" song_spot="M" MediaBaseId="3097657" ... Music Assistant passes it on as it came.
+var taggedTitle = regexp.MustCompile(`^\s*text="([^"]*)"(\s+[A-Za-z_]+="[^"]*")*\s*$`)
+
+// cleanTitle is a title fit for the screen: a tagged one's text, anything else as it is.
+func cleanTitle(s string) string {
+	if m := taggedTitle.FindStringSubmatch(s); m != nil {
+		return m[1]
+	}
+	return s
 }

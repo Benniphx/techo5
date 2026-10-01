@@ -90,13 +90,17 @@ func TestTheLibraryPlaysWhatTheDeviceCannot(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		switch body.Command {
-		case "players/get":
+		case "players/all":
 			state := "idle"
 			if len(played) > 0 {
 				state = "playing"
 			}
-			json.NewEncoder(w).Encode(map[string]any{"available": true, "playback_state": state})
+			json.NewEncoder(w).Encode([]map[string]any{{"player_id": "upc1", "available": true, "playback_state": state,
+				"output_protocols": []map[string]any{{"output_protocol_id": "aa:bb:cc:dd:ee:ff"}}}})
 		case "player_queues/play_media":
+			if body.Args["queue_id"] != "upc1" {
+				t.Errorf("played on %v, not the device's player", body.Args["queue_id"])
+			}
 			played = append(played, body.Args["media"].(string))
 			w.Write([]byte("null"))
 		}

@@ -3,6 +3,7 @@ package assistant
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -124,9 +125,13 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 		if state != "" {
 			queries = append(queries, radiobrowser.Query{Name: q, CountryCode: country, State: state, Codec: codec, Limit: 6})
 		}
-		queries = append(queries,
-			radiobrowser.Query{Name: q, CountryCode: country, Codec: codec, Limit: 6},
-			radiobrowser.Query{Name: q, Codec: codec, Limit: 6})
+		// A frequency is a local thing: 106.7 elsewhere is another station altogether, so one is
+		// looked for only here, and not finding it is the answer.
+		if !isFrequency(q) {
+			queries = append(queries,
+				radiobrowser.Query{Name: q, CountryCode: country, Codec: codec, Limit: 6},
+				radiobrowser.Query{Name: q, Codec: codec, Limit: 6})
+		}
 	}
 	var ss []radiobrowser.Station
 	var err error
@@ -151,6 +156,11 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 	found.Unlock()
 	return ss, nil
 }
+
+// frequencyWords is a station asked for by its frequency alone: "106.7", "106.7 FM", "1080 AM".
+var frequencyWords = regexp.MustCompile(`(?i)^\s*\d{2,4}(\.\d)?\s*(fm|am)?\s*$`)
+
+func isFrequency(q string) bool { return frequencyWords.MatchString(q) }
 
 // nearKm is how far a station can be and still be local: a big city's stations carry farther, but a
 // search by name or frequency within this is very likely the station meant.
@@ -227,6 +237,9 @@ func playRadio(name string) (string, error) {
 		}
 	}
 	if !ok {
+		if isFrequency(name) {
+			return "", fmt.Errorf("no station on %s was found near this device; try its call letters or name", name)
+		}
 		return "", fmt.Errorf("no station called %q was found", name)
 	}
 	// The one asked for, then others from the same search: a station that is down or sends something

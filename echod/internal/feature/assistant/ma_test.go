@@ -35,7 +35,7 @@ func (f *fakeLibrary) serve(t *testing.T) string {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		switch body.Command {
-		case "players/get":
+		case "players/all":
 			state := "idle"
 			if len(f.played) > 0 {
 				f.looks++
@@ -43,8 +43,12 @@ func (f *fakeLibrary) serve(t *testing.T) string {
 					state = "playing"
 				}
 			}
-			json.NewEncoder(w).Encode(map[string]any{"available": f.available, "playback_state": state})
+			json.NewEncoder(w).Encode([]map[string]any{{"player_id": "upc1", "available": f.available, "playback_state": state,
+				"output_protocols": []map[string]any{{"output_protocol_id": "aa:bb:cc:dd:ee:ff"}}}})
 		case "player_queues/play_media":
+			if body.Args["queue_id"] != "upc1" {
+				t.Errorf("played on %v, not the device's player", body.Args["queue_id"])
+			}
 			f.played = append(f.played, body.Args["media"].(string))
 			w.Write([]byte("null"))
 		default:
@@ -174,7 +178,7 @@ func TestWithoutALibraryOnlyPlayableStreamsAreSought(t *testing.T) {
 	placeDenver(t)
 	asked := fakeDirectory(t)
 
-	ss, err := findRadio("106.7", "name")
+	ss, err := findRadio("Zeppelin", "name")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,5 +192,29 @@ func TestWithoutALibraryOnlyPlayableStreamsAreSought(t *testing.T) {
 	}
 	if w := whereFrom(ss[0]); w != " from Athens, Greece" {
 		t.Errorf("a station abroad is from %q", w)
+	}
+}
+
+// A frequency is looked for only near the device and in its state: the same frequency elsewhere is
+// another station, so not finding it here is the answer, with a way forward.
+func TestAFrequencyStaysLocal(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Place(config.Place{Name: "Boise, Idaho", Lat: 43.6, Lon: -116.2, Country: "US"}); err != nil {
+		t.Fatal(err)
+	}
+	asked := fakeDirectory(t)
+	_, err := playRadio("106.7 FM")
+	if err == nil || !strings.Contains(err.Error(), "near this device") || !strings.Contains(err.Error(), "call letters") {
+		t.Errorf("a frequency not found here: %v", err)
+	}
+	for _, q := range *asked {
+		if strings.Contains(q, "name=") && !strings.Contains(q, "geo_lat") && !strings.Contains(q, "state=") {
+			t.Errorf("a frequency was looked for beyond the state: %s", q)
+		}
+	}
+	for q, want := range map[string]bool{"106.7": true, "106.7 FM": true, "1080 am": true, "KBPI": false, "Zeppelin 106.7": false, "3": false} {
+		if isFrequency(q) != want {
+			t.Errorf("isFrequency(%q) = %v", q, !want)
+		}
 	}
 }
