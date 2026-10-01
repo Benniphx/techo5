@@ -34,9 +34,9 @@ whatever paired the device, and isn't something you call from an automation afte
 > nothing, and the camera actions open the view with `hass: no access configured` on it in place of
 > the picture.
 >
-> The URL must be one the device itself can reach — its local IP address or `homeassistant.local`,
-> not an external or Nabu Casa URL — since the device calls it directly rather than through Home
-> Assistant's own connection to the device.
+> The URL must be Home Assistant's local IP address. The device calls it directly rather than
+> through Home Assistant's own connection to the device, it can't look up `.local` names like
+> `homeassistant.local`, and an external or Nabu Casa URL does not work.
 
 ### url (Required)
 
@@ -54,7 +54,7 @@ profile → Security → Long-lived access tokens**).
 ```yaml
 action: esphome.office_home_assistant
 data:
-  url: "http://homeassistant.local:8123"
+  url: "http://192.168.1.10:8123"
   token: !secret techo5_office_token
 ```
 
