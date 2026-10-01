@@ -145,20 +145,25 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 	}
 	dec := newDecoder()
 	var title, artist, album string
-	failed := 0
+	// stuck counts decoder errors in a row that took nothing from the pipe.
+	stuck, at := 0, int64(-1)
 	for {
 		var it metaItem
 		if err := dec.Decode(&it); err != nil {
-			// The pipe itself failed (closed as the receivers stop), or the decoder has given up over
-			// and over on what is there with nothing taken: the end.
-			failed++
-			if src.err != nil || failed > 1000 {
+			// The pipe itself failed (closed as the receivers stop), or the decoder keeps giving up
+			// without taking anything: the end.
+			taken := src.n - int64(br.Buffered())
+			if taken == at {
+				stuck++
+			} else {
+				stuck, at = 0, taken
+			}
+			if src.err != nil || stuck > 100 {
 				return
 			}
 			dec = newDecoder()
 			continue
 		}
-		failed = 0
 		typ, code := fourCC(it.Type), fourCC(it.Code)
 		data := ""
 		if d, err := base64.StdEncoding.DecodeString(strings.TrimSpace(it.Data)); err == nil && len(d) <= 1024 {
@@ -181,14 +186,16 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 }
 
 // readErr is a reader that keeps the error its reader last gave, so a decoder's own complaints can be
-// told from the pipe failing.
+// told from the pipe failing, and how much it has read.
 type readErr struct {
 	r   io.Reader
+	n   int64 // bytes read so far
 	err error
 }
 
 func (e *readErr) Read(p []byte) (int, error) {
 	n, err := e.r.Read(p)
+	e.n += int64(n)
 	if err != nil {
 		e.err = err
 	}

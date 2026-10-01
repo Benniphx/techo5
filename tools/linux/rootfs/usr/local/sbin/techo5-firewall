@@ -9,10 +9,12 @@
 # IPv6 neighbor discovery, and anything answering a connection the device made (calls included).
 # Out: everything, as before.
 #
-# Only wlan0 is filtered, from a chain of its own: loopback, the Wi-Fi setup access point and any other
-# interface are left as they were, and so are rules anything else keeps. The kernel has iptables but not
-# nftables, so the legacy tools are the ones that work. A rule that fails leaves the chain empty, which
-# is open, rather than a device nobody can reach.
+# Only wlan0 is filtered, from a chain of its own: loopback and any other interface are left as they
+# were, and so are rules anything else keeps. Rescue mode (tools/linux/init) runs none of this, on
+# purpose: it is what a unit falls back to, and must stay reachable whatever went wrong.
+#
+# The kernel has iptables but not nftables, so the legacy tools are the ones that work. A rule that
+# fails leaves the chain empty, which is open, rather than a device nobody can reach.
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 
