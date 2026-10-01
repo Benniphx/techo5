@@ -122,6 +122,50 @@ data:
   label: Wake up
 ```
 
+## Set a silent alarm
+
+In YAML, refer to this action as `esphome.<node>_alarm_set_silent`.
+
+The same as `alarm_set`, with the same `time`, `days` and `label`, for an alarm that makes no sound
+and shows no ring: it only fires the `silent` [alarm event](#alarm-events), for an automation to wake
+the house its own way (the radio, the blinds, a light). Setting the same alarm again with
+`alarm_set` makes it ring again.
+
+```yaml
+action: esphome.office_alarm_set_silent
+data:
+  time: "6:45 am"
+  days: weekdays
+  label: Bedroom
+```
+
+## Alarm events
+
+Each step of an alarm fires `esphome.techo5_alarm` on Home Assistant's bus, with:
+
+| Field | |
+|---|---|
+| `event` | `ringing`, `silent` (a silent alarm went off), `snoozed`, or `stopped` (by a press, by voice, from Home Assistant, or after ringing its course) |
+| `id` | The alarm's id, the same for an alarm and its snoozes |
+| `label` | The alarm's label |
+| `due` | When it was due, like `2026-10-01T06:45:00-06:00` |
+| `device` | The device's name |
+
+A snoozed alarm fires `ringing` again when it comes back. Reminders fire nothing here. The device
+needs **Allow the device to perform Home Assistant actions** turned on in its ESPHome integration
+options for events to arrive.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: esphome.techo5_alarm
+    event_data:
+      event: silent
+      label: Bedroom
+actions:
+  - action: script.good_morning
+```
+
 ## Set a reminder
 
 In YAML, refer to this action as `esphome.<node>_reminder_set`.
