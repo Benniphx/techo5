@@ -120,6 +120,10 @@ type Player struct {
 	// Sendspin. The stream is the remote's business; this is only what to call it.
 	extTrack atomic.Value // remoteTrack
 
+	// recvTrack is what a receiver this device runs says it is playing (feature/streaming: AirPlay,
+	// Spotify Connect), for the screen, with the name of the track it belongs to.
+	recvTrack atomic.Value // receivedTrack
+
 	// lastExt is the last track a remote named, kept when it stops naming one: Music Assistant clears
 	// the track just before it says it stopped, so what was playing has to come from here. Only just
 	// before: a name kept longer is whatever played hours ago, and a stream that never named its track
@@ -1128,6 +1132,27 @@ func (p *Player) PlayReceived(name string, src PCMSource, rate, channels int) {
 
 // Receiving names what is being played from a remote, empty when nothing is.
 func (p *Player) Receiving() string { return p.stream.Receiving() }
+
+// receivedTrack is a receiver's song, and the received track it is about.
+type receivedTrack struct{ From, Title, Artist, Album string }
+
+// SetReceivedTrack takes what a receiver says it is playing, for the received track named from. An
+// empty title means it names nothing now.
+func (p *Player) SetReceivedTrack(from, title, artist, album string) {
+	p.recvTrack.Store(receivedTrack{From: from, Title: title, Artist: artist, Album: album})
+	p.refresh()
+}
+
+// ReceivedTrack is what the receiver playing now said it is playing, if anything: only while its own
+// track is the one playing, so a name from an AirPlay session over does not stand for the next.
+func (p *Player) ReceivedTrack() (from, title, artist, album string) {
+	from = p.Receiving()
+	t, _ := p.recvTrack.Load().(receivedTrack)
+	if from == "" || t.From != from {
+		return from, "", "", ""
+	}
+	return from, t.Title, t.Artist, t.Album
+}
 
 // refresh tells Home Assistant what the player is doing. Anything that displaces the noise — a track,
 // a stop, the action button — clears both entities, rather than leaving them naming a sound nobody can

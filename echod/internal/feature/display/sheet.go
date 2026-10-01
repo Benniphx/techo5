@@ -24,6 +24,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/sendspin"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/streaming"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
@@ -109,7 +110,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		if st.muted {
 			mic = "Muted"
 		}
-		return []settingRow{
+		return withStreaming([]settingRow{
 			{id: "volume", label: "Volume", kind: ctlStepper, value: fmt.Sprintf("%d of %d", st.volume, sheetVolumeSteps)},
 			{id: "mic", label: "Microphone", sub: "The mute button does this too", kind: ctlToggle, on: !st.muted, value: mic},
 			{id: "wakeword", label: "Wake word", kind: ctlChoice, value: st.wakeWord},
@@ -124,7 +125,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			{id: "bass", label: "Bass", sub: toneSub(), kind: ctlStepper, value: toneValue(config.Get().Speaker.Bass)},
 			{id: "treble", label: "Treble", kind: ctlStepper, value: toneValue(config.Get().Speaker.Treble)},
 			{id: "sendspin", label: "Music Assistant player", sub: "Play music in sync with other rooms", kind: ctlToggle, on: st.sendspin},
-		}, ""
+		}), ""
 	case catConnections:
 		return connectionRows(sv), ""
 	case catSecurity:
@@ -133,6 +134,18 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		return generalRows(sv), ""
 	}
 	return nil, ""
+}
+
+// withStreaming adds AirPlay and Spotify Connect to the Sound card's rows, where the device has them
+// (feature/streaming).
+func withStreaming(rows []settingRow) []settingRow {
+	if !streaming.Here {
+		return rows
+	}
+	c := config.Get().Streaming
+	return append(rows,
+		settingRow{id: "airplay", label: "AirPlay", sub: "Play to it from an iPhone, iPad or Mac", kind: ctlToggle, on: c.AirPlay},
+		settingRow{id: "spotify", label: "Spotify Connect", sub: "Play to it from the Spotify app (Premium)", kind: ctlToggle, on: c.Spotify})
 }
 
 // securityRows are the Privacy & Security card's: how the device can be reached, and how it reaches
@@ -809,6 +822,10 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		security.Get().SetScreen(!config.Get().Security.Screen)
 	case "talkback":
 		security.Get().SetTalkBack(!config.Get().Security.TalkBack)
+	case "airplay":
+		streaming.Get().SetAirPlay(!config.Get().Streaming.AirPlay)
+	case "spotify":
+		streaming.Get().SetSpotify(!config.Get().Streaming.Spotify)
 	case "sunface":
 		if err := config.Set().Alarms().SunriseFace(!config.Get().Alarms.SunriseFace); err != nil {
 			slog.Warn("saving the sun's face failed", "err", err)

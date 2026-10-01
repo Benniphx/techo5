@@ -14,6 +14,7 @@
 # <indir> layout (what deploy-rootfs.sh stages):
 #   bin/techo5 bin/fbprobe bin/audioprobe bin/rebootto bin/btbridge  Go binaries, armv7
 #   bin/techo5-aec                                         WebRTC echo canceller helper (C++, build-aec.sh), optional
+#   bin/techo5-librespot                                   Spotify Connect receiver (Rust, build-librespot.sh), optional
 #   tools/slotctl tools/techo5-lib.sh tools/packages-rootfs.txt
 #   overlay/                                               tools/linux/rootfs from the repo
 #   inputs/alpine-minirootfs-*-armv7.tar.gz
@@ -87,7 +88,7 @@ fi
 
 # Our binaries and scripts.
 install -d "$R/usr/local/bin" "$R/usr/local/sbin" "$R/lib" "$R/var/lib/bluetooth" "$R/var/lib/bluealsa" "$R/usr/var/lib/bluealsa"
-for b in techo5 fbprobe audioprobe rebootto btbridge techo5-aec; do
+for b in techo5 fbprobe audioprobe rebootto btbridge techo5-aec techo5-librespot; do
 	[ -e "$IN/bin/$b" ] && install -m 755 "$IN/bin/$b" "$R/usr/local/bin/$b"
 done
 install -m 755 "$IN/tools/slotctl" "$R/usr/local/sbin/slotctl"

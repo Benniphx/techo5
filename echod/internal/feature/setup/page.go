@@ -223,6 +223,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveBrain(r)
 	case "music":
 		problem = saveMusic(r)
+	case "streaming":
+		problem = saveStreaming(r)
 	case "screen":
 		problem = saveScreen(r)
 	case "listening":
@@ -322,6 +324,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		stationsSection(w, token)
 		brainSection(w, token)
 		musicSection(ctx, w, token)
+		streamingSection(w, token)
 		listeningSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)

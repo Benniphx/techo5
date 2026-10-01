@@ -13,4 +13,4 @@ var notOnThisDevice = []string{
 	"slideshow_shuffle", "slideshow_subfolders", "slideshow_weather_art", "talk_back", "weather_alerts",
 }
 
-var deviceSpecific = []string{"audio_output"}
+var deviceSpecific = []string{"airplay", "audio_output", "spotify_connect"}
