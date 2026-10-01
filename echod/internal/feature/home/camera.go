@@ -184,7 +184,9 @@ func (f *Feature) fetchFrames(entity string) {
 				// cameras take a while to start a stream, and a view that closes as it opens
 				// is no view at all.
 				if f.cam.Frame == nil {
-					f.cam.Until = time.Now().Add(f.cam.span)
+					if until := time.Now().Add(f.cam.span); until.After(f.cam.Until) {
+						f.cam.Until = until // never shorter than a hold asked for (HoldCamera)
+					}
 				}
 				f.cam.Frame, f.cam.Error = frame, ""
 			}
@@ -235,7 +237,9 @@ func (f *Feature) localFrames() {
 			f.mu.Lock()
 			if f.cam.Entity == LocalCamera {
 				if f.cam.Frame == nil {
-					f.cam.Until = time.Now().Add(f.cam.span)
+					if until := time.Now().Add(f.cam.span); until.After(f.cam.Until) {
+						f.cam.Until = until // never shorter than a hold asked for (HoldCamera)
+					}
 				}
 				f.cam.Frame, f.cam.Error = shown, ""
 			}

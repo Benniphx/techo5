@@ -455,6 +455,8 @@ func (r *renderer) draw(s scene) {
 	if s.showCamera {
 		r.cameraView(s, s.camera)
 		if s.showVolume {
+			// The bar covers the page's controls: what cannot be seen cannot be tapped.
+			r.drawnTalk, r.drawnSound = image.Rectangle{}, image.Rectangle{}
 			r.volumeBar(s)
 		}
 		return

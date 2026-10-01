@@ -197,7 +197,7 @@ func (v *Voice) Action() {
 
 	// Talking through a camera: the press ends it, as it hangs up a call, rather than asking a question
 	// that would go out of the camera's speaker.
-	if micTaken() {
+	if micTaken() && !ring.IsSounding() {
 		if y := yield.Load(); y != nil {
 			go y.release()
 		}

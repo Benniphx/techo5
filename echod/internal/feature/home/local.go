@@ -9,6 +9,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/radiobrowser"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
@@ -281,7 +282,7 @@ func directStations(source string) ([]station, error) {
 		country = "US"
 	}
 	q := radiobrowser.Query{Codec: "MP3", ByListeners: true, Limit: popularMax}
-	if config.Get().MusicAssistant.Set() {
+	if media.LibraryReady() {
 		q.Codec = ""
 	}
 	if source == config.RadioLocal {

@@ -134,6 +134,9 @@ func (s *Session) start(ctx context.Context) error {
 		base = cb
 	}
 	s.control = resolve(base, tk.control)
+	if strings.ContainsAny(s.control+base, " \t") {
+		return errors.New("the camera's talk-back address does not parse")
+	}
 	if !sameHost(s.control, s.base) || !sameHost(base, s.base) {
 		return errors.New("the camera pointed its talk-back channel at another address")
 	}

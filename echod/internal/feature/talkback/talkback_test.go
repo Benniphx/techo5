@@ -62,8 +62,16 @@ func setUp(t *testing.T, err error) (opened chan *fakeSession, showing *atomic.B
 		opened <- s
 		return s, nil
 	}
-	wasCheck := check
+	wasCheck, wasDuck := check, duckRoom
 	check = 10 * time.Millisecond
+	ducked := &atomic.Int32{}
+	duckRoom = func(on bool) {
+		if on {
+			ducked.Add(1)
+		} else {
+			ducked.Add(-1)
+		}
+	}
 	showing = &atomic.Bool{}
 	showing.Store(true)
 	screen, stop := context.WithCancel(context.Background())
@@ -78,7 +86,10 @@ func setUp(t *testing.T, err error) (opened chan *fakeSession, showing *atomic.B
 	t.Cleanup(func() {
 		stop()
 		shared.Stop()
-		open, check = was, wasCheck
+		open, check, duckRoom = was, wasCheck, wasDuck
+		if n := ducked.Load(); n != 0 {
+			t.Errorf("the room was left ducked (%d)", n)
+		}
 		home.Get().HideCamera()
 	})
 	return opened, showing

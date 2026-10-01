@@ -103,11 +103,12 @@ with cameras that have a speaker and take G.711 audio, which includes most Reoli
 
 A tap on **Talk** starts it and another ends it. While it runs the button is red and counts down, the
 view stays up, and neither the wake word nor the action button starts a question; a press of the
-action button ends the talk. The room is only sent while the camera page is on the screen, so the talk
-also ends when the view closes or anything covers it (a call, a ring, the settings), when the
-microphones are muted, the switch goes off, the camera hangs up (a camera's own app taking its
-speaker does that), or after two minutes. If the camera
-will not take it, the page says why for a few seconds.
+action button ends the talk. Music and radio are turned down while it runs, and the screen stays lit.
+The room is only sent while the camera page is on the screen, so the talk also ends when the view
+closes or anything covers it (a call, a ring, an announcement, the settings), when the microphones
+are muted, the switch goes off, the camera hangs up (a camera's own app taking its speaker does
+that), or after two minutes. If the camera will not take it, the page says why for a few seconds:
+a camera on the recorder that has no speaker shows Talk too, and says it has no talk-back channel.
 
 Cameras read straight from a Reolink recorder have no sound on the device, so for those Talk is
 one-way: you are heard at the door, but the visitor is not heard on the device.
@@ -118,6 +119,12 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   finds it on the network with nothing to set up. Several devices can play in sync as a group.
   Read [what this trusts](getting-started.md#after-installing-every-device) first if your Wi-Fi has
   guests on it. **Music Assistant player** under Settings → Sound turns it off.
+- **Music by voice, and any station.** With a Music Assistant set up on the device (setup page →
+  Sound → Music Assistant), "play some Eagles" plays from it, and a station in a format the device
+  cannot play itself (most commercial radio streams) is played through it instead. The setup page
+  says whether Music Assistant is reachable and the device connected to it. A device farther away,
+  over a VPN, connects to Music Assistant itself; it needs to reach ports 8095 and 8927 on its host.
+  A station asked for by name or frequency is looked for near the device first.
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's

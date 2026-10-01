@@ -38,7 +38,7 @@ func playMusic(query, kind string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second+maStartWait)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	kinds := []string{"artist", "album", "playlist", "track"}
 	if kind != "" && kind != "any" {
@@ -52,7 +52,9 @@ func playMusic(query, kind string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("nothing called %q was found in the music library", query)
 	}
-	if err := playOnMA(ctx, pick.URI); err != nil {
+	pctx, pcancel := context.WithTimeout(context.Background(), maStartWait+15*time.Second)
+	defer pcancel()
+	if err := playOnMA(pctx, pick.URI); err != nil {
 		return "", err
 	}
 	what := pick.Name

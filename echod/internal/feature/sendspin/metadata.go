@@ -2,6 +2,7 @@ package sendspin
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/Sendspin/sendspin-go/pkg/protocol"
 )
@@ -58,6 +59,12 @@ var (
 // screen then names the station); anything else as it is.
 func cleanTitle(s string) string {
 	if !taggedTitle.MatchString(s) {
+		// Not split yet ("Artist - text=..." as the station sent it): the song is still its text.
+		if strings.Contains(s, `song_spot="`) || strings.Contains(s, `MediaBaseId="`) {
+			if m := textTag.FindStringSubmatch(s); m != nil {
+				return m[1]
+			}
+		}
 		return s
 	}
 	if m := textTag.FindStringSubmatch(s); m != nil {

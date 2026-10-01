@@ -1189,7 +1189,8 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// that has never been set (no network, no time) can put a new device in its night.
 		// And a browser asking to be let in to the setup page: its Allow has to be seen and pressed,
 		// and whoever is asking is standing at the device.
-		lift := phone.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
+		// A talk through a camera is a conversation at the door: the screen it needs stays lit.
+		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.

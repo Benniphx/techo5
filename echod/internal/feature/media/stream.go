@@ -57,8 +57,13 @@ type Stream struct {
 	ended func(item string)
 
 	// handOff is given a url that Play started and the device turned out not to decode, for the music
-	// library to play instead (library.go); nil leaves it failed.
-	handOff func(url string)
+	// library to play instead (library.go), and whether that is still wanted: it is not once anything
+	// else was played or the stream stopped. nil leaves it failed.
+	handOff func(url string, wanted func() bool)
+
+	// asks counts what was asked of the stream (a play, a stop), so that a hand-off still on its way
+	// can tell it has been overtaken. Under mu.
+	asks uint64
 
 	// bg is the queue of things that play for minutes. A track joins it while it has something to
 	// play and leaves when it stops, so whatever it interrupted carries on afterwards.
@@ -112,6 +117,9 @@ type track struct {
 	// handOff is a track Play started, whose url goes to the stream's handOff if it cannot be decoded.
 	// PlayChecked's caller is waiting for the answer, and hands it on itself.
 	handOff bool
+
+	// ask is the stream's asks when this track was started.
+	ask uint64
 }
 
 // NewStream builds the stream and joins the speaker's backgrounds. changed is called whenever what it
@@ -183,6 +191,10 @@ func (m *Stream) Duck(db int) {
 // long and end on their own, and the track waits behind them rather than talking over them.
 func (m *Stream) Play(url string) { m.play(url, true) }
 
+// PlayOnly is Play for a url the device must play itself or not at all: never handed to the music
+// library when it cannot be decoded.
+func (m *Stream) PlayOnly(url string) { m.play(url, false) }
+
 // PlayChecked starts a url as Play does and waits, up to within, for audio the device can play to arrive
 // from it: nil once it has, or why it did not. A station that does not play says so, rather than the
 // player being taken at its word that it started. Arrived is enough: a voice turn that holds the speaker
@@ -249,7 +261,12 @@ func (m *Stream) play(url string, handOff bool) *track {
 			slog.Error("playing media failed", "err", err)
 			t.failed = err
 			if t.handOff && m.handOff != nil && IsUnplayable(err) {
-				safe.Go("media hand-off", func() { m.handOff(url) })
+				wanted := func() bool {
+					m.mu.Lock()
+					defer m.mu.Unlock()
+					return m.asks == t.ask
+				}
+				safe.Go("media hand-off", func() { m.handOff(url, wanted) })
 			}
 		}
 		itself = ctx.Err() == nil
@@ -306,6 +323,8 @@ func (m *Stream) start(t *track) (*track, context.Context) {
 	t.cancel = cancel
 
 	m.mu.Lock()
+	m.asks++
+	t.ask = m.asks
 	previous := m.track
 	m.track, m.paused, m.rewind = t, false, nil
 	if m.holds == 0 {
@@ -376,6 +395,7 @@ func (m *Stream) Stop() {
 	}
 
 	m.mu.Lock()
+	m.asks++
 	t := m.track
 	m.track, m.paused, m.rewind = nil, false, nil
 	m.forget()

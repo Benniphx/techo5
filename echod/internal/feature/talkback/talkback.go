@@ -31,6 +31,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/halfrate"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/onvifback"
@@ -198,6 +199,10 @@ func (f *Feature) start(entity string) {
 	}
 	f.watch()
 	f.stop()
+	// A voice turn already listening would hear what is said to the door as a question.
+	if voice.Get().Busy() {
+		voice.Get().Cancel()
+	}
 	// The view is held through the asking too: a doorbell's view that was about to close must not
 	// close while the camera is still being asked.
 	home.Get().HoldCamera(entity, openWait+holdView)
@@ -321,6 +326,12 @@ func (f *Feature) talk(ctx context.Context, gen int, entity string) (err error) 
 		}
 	}
 
+	// Music, the radio and the house's music turned down while the room talks to the door, as for a
+	// call: what is left of them after the echo canceller would go out with every word. The camera's
+	// own sound is not background and stays as it is.
+	duckRoom(true)
+	defer duckRoom(false)
+
 	frames, stop := mic.Get().Listen("talk back")
 	defer stop()
 	d := halfrate.NewDown()
@@ -362,6 +373,14 @@ func (f *Feature) talk(ctx context.Context, gen int, entity string) (err error) 
 	}
 }
 
+// duckRoom turns the background down, or lets it back up; a variable for the tests, which have no
+// speaker.
+var duckRoom = func(on bool) {
+	if s := speaker.Sound(); s != nil {
+		s.Backgrounds().Duck("talk back", on)
+	}
+}
+
 // open is onvifback.Open, and a variable so that a test can put a camera of its own behind it.
 var open = func(ctx context.Context, addr, user, pass string) (session, error) {
 	s, err := onvifback.Open(ctx, addr, user, pass)
@@ -388,7 +407,8 @@ func (f *Feature) over(entity string) string {
 	if v, up := home.Get().Camera(); !up || v.Entity != entity {
 		return "the camera page closed"
 	}
-	if m, err := mute.Get().Muted(); err == nil && m {
+	// A mute that cannot be read is taken as one: a talk is the room going out of the house.
+	if m, err := mute.Get().Muted(); err != nil || m {
 		return "the microphones were muted"
 	}
 	if phone.Get().Busy() {

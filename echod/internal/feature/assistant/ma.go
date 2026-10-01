@@ -46,5 +46,5 @@ func playOnMA(ctx context.Context, uri string) error {
 	if err != nil {
 		return err
 	}
-	return c.PlayChecked(ctx, player, uri, maStartWait, maPoll)
+	return c.PlayChecked(ctx, player, uri, maStartWait, maPoll, nil)
 }

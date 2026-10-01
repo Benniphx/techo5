@@ -69,7 +69,12 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 		mid := b.Min.Y + (b.Dy()+m.Ascent.Ceil()-m.Descent.Ceil())/2
 		r.text(r.tiny, label, b.Min.X+(b.Dx()-r.width(r.tiny, label))/2, mid, cream)
 		r.setCameraTalkAt(b)
-		talkback.Get().Seen(v.Entity) // a talk goes on only while this is on the screen
+		// A talk goes on only while this is on the screen. The strips and cards drawn over the page
+		// afterward (an announcement, a recording, a reminder, a pop-up) cover it, so with one up it
+		// is not seen; the volume bar is the person talking turning it, and the talk goes on under it.
+		if !s.announceRecording && !s.showAnnouncement && !s.showReminder && s.popup == nil {
+			talkback.Get().Seen(v.Entity)
+		}
 		end = b.Min.X - r.s(10)
 		if s.talk.Error != "" && s.talk.Entity == v.Entity {
 			hint = "Talk: " + s.talk.Error

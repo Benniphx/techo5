@@ -108,3 +108,22 @@ func TestTalkIsTappableWhileAFrameDraws(t *testing.T) {
 		}
 	}
 }
+
+// The volume bar covers the camera page's controls: under it, neither Talk nor the sound control
+// takes a tap.
+func TestNothingUnderTheVolumeBarIsTapped(t *testing.T) {
+	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local)
+	r := newRenderer(image.NewRGBA(image.Rect(0, 0, showWide, showHigh)))
+	s := scene{now: at, phase: "idle", showCamera: true, talkOffered: true, cameraSound: true,
+		camera: home.CameraView{Entity: "camera.front_door", Name: "Front door", Until: at.Add(time.Hour)}}
+	r.draw(s)
+	talk, sound := r.cameraTalkAt, r.cameraSoundAt
+	s.showVolume = true
+	r.draw(s)
+	for _, b := range []image.Rectangle{talk, sound} {
+		mid := b.Min.Add(image.Pt(b.Dx()/2, b.Dy()/2))
+		if r.cameraTalkTapped(mid) || r.cameraSoundTapped(mid) {
+			t.Errorf("a tap at %v under the volume bar was taken", mid)
+		}
+	}
+}

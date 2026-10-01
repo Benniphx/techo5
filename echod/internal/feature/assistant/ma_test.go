@@ -66,10 +66,11 @@ func withLibrary(t *testing.T, f *fakeLibrary) {
 	if err := config.Set().MusicAssistant().Server(f.serve(t), &tok); err != nil {
 		t.Fatal(err)
 	}
-	wasID, wasWait, wasPoll := playerID, maStartWait, maPoll
+	wasID, wasWait, wasPoll, wasReady := playerID, maStartWait, maPoll, libraryReady
 	playerID = func() (string, error) { return "aa:bb:cc:dd:ee:ff", nil }
 	maStartWait, maPoll = 300*time.Millisecond, 10*time.Millisecond
-	t.Cleanup(func() { playerID, maStartWait, maPoll = wasID, wasWait, wasPoll })
+	libraryReady = func() bool { return f.available }
+	t.Cleanup(func() { playerID, maStartWait, maPoll, libraryReady = wasID, wasWait, wasPoll, wasReady })
 }
 
 // What the library is asked to play counts only once it is playing here, and a device the library
@@ -109,8 +110,8 @@ func fakeDirectory(t *testing.T) *[]string {
 		mu.Lock()
 		*asked = append(*asked, r.URL.RawQuery)
 		mu.Unlock()
-		local := `[{"name":"106.7 KBPI","url_resolved":"https://stream.example.com/kbpi.aac","state":"Colorado","country":"The United States Of America","codec":"AAC"}]`
-		abroad := `[{"name":"Zeppelin 106.7","url_resolved":"https://radio.example.gr/zep","state":"Athens","country":"Greece","codec":"MP3"}]`
+		local := `[{"name":"106.7 KBPI","url_resolved":"https://203.0.113.7/kbpi.aac","state":"Colorado","country":"The United States Of America","codec":"AAC"}]`
+		abroad := `[{"name":"Zeppelin 106.7","url_resolved":"https://203.0.113.8/zep","state":"Athens","country":"Greece","codec":"MP3"}]`
 		switch {
 		case q.Get("geo_lat") != "":
 			w.Write([]byte("[]"))
@@ -150,7 +151,7 @@ func TestALocalStationIsFoundAndPlayedThroughTheLibrary(t *testing.T) {
 	if !strings.Contains(got, "KBPI") || strings.Contains(got, " from ") {
 		t.Errorf("played %q", got)
 	}
-	if len(f.played) != 1 || f.played[0] != "https://stream.example.com/kbpi.aac" {
+	if len(f.played) != 1 || f.played[0] != "https://203.0.113.7/kbpi.aac" {
 		t.Errorf("the library was given %v", f.played)
 	}
 	// The radio page's own list of local stations searches too, with no name: only the searches by

@@ -51,7 +51,7 @@ func TestAnUndecodableStationIsHandedOn(t *testing.T) {
 	s := NewStream(d, speaker.New(), func() {}, func(string) {})
 	var mu sync.Mutex
 	var handed []string
-	s.handOff = func(url string) {
+	s.handOff = func(url string, wanted func() bool) {
 		mu.Lock()
 		handed = append(handed, url)
 		mu.Unlock()
@@ -76,7 +76,7 @@ func TestAnUndecodableStationIsHandedOn(t *testing.T) {
 // The library is asked to play the stream on this device, and the answer is whether it did.
 func TestTheLibraryPlaysWhatTheDeviceCannot(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
-	if err := viaLibrary("https://x.example/a.aac"); err != errNoLibrary {
+	if err := viaLibrary("https://203.0.113.9/a.aac", nil); err != errNoLibrary {
 		t.Errorf("with no library: %v", err)
 	}
 	var mu sync.Mutex
@@ -113,12 +113,66 @@ func TestTheLibraryPlaysWhatTheDeviceCannot(t *testing.T) {
 	was := libraryPlayer
 	libraryPlayer = func() (string, error) { return "aa:bb:cc:dd:ee:ff", nil }
 	defer func() { libraryPlayer = was }()
-	if err := viaLibrary("https://x.example/a.aac"); err != nil {
+	// An address into a home, or one handed on after something else was asked for, is not given.
+	if err := viaLibrary("http://192.168.1.20:8000/a.aac", nil); err == nil {
+		t.Error("an address in the home was handed to the library")
+	}
+	if err := viaLibrary("https://203.0.113.9/a.aac", func() bool { return false }); err != errOvertaken {
+		t.Errorf("an overtaken hand-off: %v", err)
+	}
+	if err := viaLibrary("https://203.0.113.9/a.aac", nil); err != nil {
 		t.Fatal(err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(played) != 1 || played[0] != "https://x.example/a.aac" {
+	if len(played) != 1 || played[0] != "https://203.0.113.9/a.aac" {
 		t.Errorf("the library was given %v", played)
+	}
+}
+
+// A checked play is answered by its caller, which hands on itself: the stream does not hand it off a
+// second time. And a hand-off on its way knows once it is overtaken: by a stop, or another play.
+func TestAHandOffIsOnceAndKnowsWhenItIsOvertaken(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	d := speaker.NewDriver(speaker.New())
+	s := NewStream(d, speaker.New(), func() {}, func(string) {})
+	var mu sync.Mutex
+	var wants []func() bool
+	s.handOff = func(url string, wanted func() bool) {
+		mu.Lock()
+		wants = append(wants, wanted)
+		mu.Unlock()
+	}
+	url := aacStation(t)
+	if err := s.PlayChecked(url, 5*time.Second); !IsUnplayable(err) {
+		t.Fatalf("checked: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	mu.Lock()
+	if len(wants) != 0 {
+		t.Error("a checked play was handed off by the stream as well")
+	}
+	mu.Unlock()
+
+	s.Play(url)
+	for end := time.Now().Add(5 * time.Second); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
+		mu.Lock()
+		n := len(wants)
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(wants) != 1 {
+		t.Fatalf("handed off %d times", len(wants))
+	}
+	if !wants[0]() {
+		t.Error("a hand-off nothing has overtaken is not wanted")
+	}
+	s.Stop()
+	if wants[0]() {
+		t.Error("a hand-off is still wanted after a stop")
 	}
 }

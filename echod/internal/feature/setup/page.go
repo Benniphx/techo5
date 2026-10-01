@@ -118,7 +118,7 @@ func (f *Feature) index(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	f.settingsPage(w, token, tabOf(q.Get("tab")), q.Get("saved"), q.Get("renamed"), q.Get("problem"), q.Get("scan") != "")
+	f.settingsPage(r.Context(), w, token, tabOf(q.Get("tab")), q.Get("saved"), q.Get("renamed"), q.Get("problem"), q.Get("scan") != "")
 }
 
 // wait starts this browser waiting for a press and gives it the cookie the press will let in.
@@ -295,7 +295,7 @@ func (f *Feature) lockedPage(w http.ResponseWriter) {
 	 itself when it is left alone.</p>`)
 }
 
-func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed, problem string, scan bool) {
+func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token, tab, saved, renamed, problem string, scan bool) {
 	head(w)
 	fmt.Fprintf(w, `<div class="wrap"><h1>%s</h1><p class="sub">Setup</p><div class="layout">`, html.EscapeString(deviceName()))
 	nav(w, tab)
@@ -321,7 +321,7 @@ func (f *Feature) settingsPage(w http.ResponseWriter, token, tab, saved, renamed
 		houseSection(w, token)
 		stationsSection(w, token)
 		brainSection(w, token)
-		musicSection(w, token)
+		musicSection(ctx, w, token)
 		listeningSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)

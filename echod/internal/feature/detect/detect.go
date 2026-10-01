@@ -106,7 +106,7 @@ func newDetect() *Detect {
 				ring.End()
 				return
 			}
-			slog.Debug("wake word ignored during a call", "slot", slot+1)
+			slog.Debug("wake word ignored during a call or a talk through a camera", "slot", slot+1)
 			return
 		}
 		if slot == StopSlot {

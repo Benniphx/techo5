@@ -506,7 +506,9 @@ func (p *Player) command(c esphome.MediaCommand) {
 			// last-station memory is told is playing.
 		default:
 			p.ours()
-			p.stream.Play(c.MediaURL)
+			// Home Assistant converts what it sends to what the device plays; one it did not is not
+			// handed on to the music library, which would be given Home Assistant's own address.
+			p.stream.PlayOnly(c.MediaURL)
 			p.OnPlay.Emit(c.MediaURL)
 		}
 	}
@@ -1021,7 +1023,7 @@ func (p *Player) PlayURLChecked(url string, within time.Duration) error {
 	err := p.stream.PlayChecked(url, within)
 	if IsUnplayable(err) {
 		// One the music library can still play: it converts it and plays it here.
-		if lerr := viaLibrary(url); !errors.Is(lerr, errNoLibrary) {
+		if lerr := viaLibrary(url, nil); !errors.Is(lerr, errNoLibrary) {
 			return lerr
 		}
 	}

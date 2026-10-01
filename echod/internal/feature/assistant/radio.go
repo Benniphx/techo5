@@ -11,6 +11,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/radiobrowser"
 )
@@ -109,9 +110,11 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 		state = st
 	}
 	codec := "MP3"
-	if config.Get().MusicAssistant.Set() {
+	if libraryReady() {
 		codec = ""
 	}
+	// "106.7 FM" is named "106.7 The Fox" in the directory, which looks for the words as written.
+	q = strings.TrimSpace(frequencySuffix.ReplaceAllString(q, "$1"))
 	var queries []radiobrowser.Query
 	if by == "genre" {
 		if state != "" {
@@ -159,6 +162,9 @@ func findRadio(q, by string) ([]radiobrowser.Station, error) {
 
 // frequencyWords is a station asked for by its frequency alone: "106.7", "106.7 FM", "1080 AM".
 var frequencyWords = regexp.MustCompile(`(?i)^\s*\d{2,4}(\.\d)?\s*(fm|am)?\s*$`)
+
+// frequencySuffix is a frequency's band, which names in the directory seldom carry as said.
+var frequencySuffix = regexp.MustCompile(`(?i)^(\s*\d{2,4}(?:\.\d)?)\s*(?:fm|am)\s*$`)
 
 func isFrequency(q string) bool { return frequencyWords.MatchString(q) }
 
@@ -260,7 +266,12 @@ func playRadio(name string) (string, error) {
 	found.Unlock()
 	var failed []string
 	var why error
+	// One voice turn waits for all of this: past radioPatience, what has not played is said instead.
+	until := time.Now().Add(radioPatience)
 	for _, t := range tries {
+		if time.Now().After(until) {
+			break
+		}
 		err := playStation(t)
 		if err == nil {
 			name := t.Name + whereFrom(t)
@@ -280,6 +291,12 @@ func playRadio(name string) (string, error) {
 	return "", fmt.Errorf("none of these played: %s (%v)", strings.Join(failed, ", "), why)
 }
 
+// libraryReady is media.LibraryReady; a variable for the tests, which have no player of their own.
+var libraryReady = media.LibraryReady
+
+// radioPatience is the longest a request for a station tries others before saying none played.
+const radioPatience = 35 * time.Second
+
 // playStation plays one directory stream: an MP3 one on the device itself, which decodes it; any other
 // through the music library, which converts it, where there is one.
 func playStation(t radiobrowser.Station) error {
@@ -289,8 +306,16 @@ func playStation(t radiobrowser.Station) error {
 	if !config.Get().MusicAssistant.Set() {
 		return fmt.Errorf("its stream is %s, which this device cannot play without a music library", t.Codec)
 	}
+	if !libraryReady() {
+		return fmt.Errorf("its stream is %s, which this device can play only through the music library, and that is not connected right now", t.Codec)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), maStartWait+20*time.Second)
 	defer cancel()
+	// The library fetches it from where the library is: only an address on the internet is handed
+	// on, never one a directory entry points into a home with.
+	if !radiobrowser.Resolves(ctx, t.URL) {
+		return fmt.Errorf("its stream address is not a public one")
+	}
 	return playOnMA(ctx, t.URL)
 }
 
@@ -299,7 +324,8 @@ func playStation(t radiobrowser.Station) error {
 func whereFrom(t radiobrowser.Station) string {
 	p := config.Get().Home.Place
 	_, state, _ := strings.Cut(p.Name, ", ")
-	if t.State != "" && state != "" && strings.EqualFold(t.State, state) {
+	// Where the device is not known closely enough to compare, nothing is said about where a station is.
+	if state == "" || (t.State != "" && strings.EqualFold(t.State, state)) {
 		return ""
 	}
 	if where := strings.Trim(t.State+", "+t.Country, ", "); where != "" {

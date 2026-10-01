@@ -143,11 +143,23 @@ func (c Client) Player(ctx context.Context, own string) (PlayerState, error) {
 	return PlayerState{}, errors.New("music assistant has no player for this device that this token may use; in Music Assistant, add this device to the user's allowed players")
 }
 
+// Stop stops the player id (its own id at the server, as Player gives it).
+func (c Client) Stop(ctx context.Context, id string) error {
+	return c.do(ctx, "players/cmd/stop", map[string]any{"player_id": id}, nil)
+}
+
+// ErrOvertaken is a play that something asked for since has made unwanted.
+var ErrOvertaken = errors.New("something else was asked for meanwhile")
+
 // PlayChecked plays uri on the player that is this device (own: its id, as Player takes it) and waits,
-// up to within, for the server to say it is playing there, looking every poll. A player the server has
-// no connection to is told as that before anything is asked of it, since nothing it is given could be
-// heard.
-func (c Client) PlayChecked(ctx context.Context, own, uri string, within, poll time.Duration) error {
+// up to within, for the server to say it is playing there, looking every poll, for as long as wanted
+// says it is still wanted (nil for always). A player the server has no connection to is told as that
+// before anything is asked of it, since nothing it is given could be heard.
+//
+// What was playing there is stopped first, so that its "playing" is not taken for this one's. A play
+// that does not start in time, or that something else overtook, is stopped too: otherwise the server
+// can start it late, over whatever the device went on to play.
+func (c Client) PlayChecked(ctx context.Context, own, uri string, within, poll time.Duration, wanted func() bool) error {
 	p, err := c.Player(ctx, own)
 	if err != nil {
 		return err
@@ -155,20 +167,46 @@ func (c Client) PlayChecked(ctx context.Context, own, uri string, within, poll t
 	if !p.Available {
 		return errors.New("this device is not connected to the music library right now, so it cannot play from it")
 	}
+	if p.State == "playing" {
+		_ = c.Stop(ctx, p.ID)
+		for end := time.Now().Add(5 * time.Second); time.Now().Before(end); {
+			if st, err := c.Player(ctx, own); err != nil || st.State != "playing" {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return errors.New("the music library did not answer in time")
+			case <-time.After(poll):
+			}
+		}
+	}
 	if err := c.Play(ctx, p.ID, uri); err != nil {
 		return fmt.Errorf("the music library would not play it: %v", err)
+	}
+	// Whatever comes of it, a play that did not come off is not left to start later. The stop gets
+	// its own few seconds, since ctx may be what ran out.
+	stop := func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = c.Stop(sctx, p.ID)
 	}
 	deadline := time.Now().Add(within)
 	for {
 		select {
 		case <-ctx.Done():
+			stop()
 			return errors.New("the music library did not answer in time")
 		case <-time.After(poll):
+		}
+		if wanted != nil && !wanted() {
+			stop()
+			return ErrOvertaken
 		}
 		if st, err := c.Player(ctx, own); err == nil && st.State == "playing" {
 			return nil
 		}
 		if time.Now().After(deadline) {
+			stop()
 			return errors.New("the music library took it, but nothing started playing on this device")
 		}
 	}

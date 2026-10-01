@@ -52,6 +52,10 @@ func maSendspinURL(api string) string {
 	return (&url.URL{Scheme: scheme, Host: net.JoinHostPort(u.Hostname(), strconv.Itoa(maPort)), Path: path}).String()
 }
 
+// dialUnset is how often a device with no Music Assistant looks again, so that one set up on the
+// setup page is dialed soon after.
+const dialUnset = 15 * time.Second
+
 // dial keeps a session with Music Assistant, dialed from here, until ctx ends.
 func (l *listener) dial(ctx context.Context, name string) {
 	wait := dialFirst
@@ -62,9 +66,8 @@ func (l *listener) dial(ctx context.Context, name string) {
 		}
 		switch {
 		case target == "":
-			// Not set up: look again later, as cheaply as the loop allows.
-			wait = dialMost
-		case !l.take():
+			wait = dialUnset
+		case l.held():
 			// A server already dialed in and holds the room.
 			wait = dialFirst
 		default:
@@ -73,7 +76,6 @@ func (l *listener) dial(ctx context.Context, name string) {
 			} else {
 				wait = min(wait*2, dialMost)
 			}
-			l.give()
 		}
 		select {
 		case <-ctx.Done():
@@ -81,6 +83,13 @@ func (l *listener) dial(ctx context.Context, name string) {
 		case <-time.After(wait):
 		}
 	}
+}
+
+// held is whether a session holds the room now.
+func (l *listener) held() bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.busy
 }
 
 // runSession is a session on a connection made here; a variable so that a test can stand in for the
@@ -91,7 +100,8 @@ var runSession = func(ctx context.Context, l *listener, conn *websocket.Conn, na
 
 // dialOnce connects to Music Assistant and runs a session; it reports whether one ran for long enough to
 // count, so that a server that takes the connection and drops it at once is backed off from like one
-// that does not answer.
+// that does not answer. The room is taken only once the connection is made: a server that dials in
+// meanwhile is not turned away for a dial that may never answer.
 func (l *listener) dialOnce(ctx context.Context, target, name string) (ran bool) {
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	conn, _, err := websocket.DefaultDialer.DialContext(dctx, target, nil)
@@ -103,6 +113,10 @@ func (l *listener) dialOnce(ctx context.Context, target, name string) (ran bool)
 		return false
 	}
 	defer conn.Close()
+	if !l.take() {
+		return true // a server dialed in while this connected: it has the room, and this one goes
+	}
+	defer l.give()
 
 	slog.Info("sendspin connected to music assistant", "url", target)
 	l.report(stateJoined)
