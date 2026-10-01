@@ -17,7 +17,6 @@ type Output string
 const (
 	OutputSpeaker   Output = "speaker"
 	OutputHeadphone Output = "headphone"
-	HasJack                = true
 )
 
 // The playback ring: the Show's, since it is the same LineageOS kernel and AFE driver.
@@ -161,3 +160,6 @@ const OutputBoost = 1.0
 // length of the other devices', and a compressor chosen by power mode — lib/asp knows it as asp.Spot.
 // A unit whose files are missing says so and plays untuned.
 const DriverTuning = true
+
+// HasJack is whether the device has a headphone jack, and so the Audio output choice.
+const HasJack = true

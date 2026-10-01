@@ -86,8 +86,10 @@ type Player struct {
 	volume atomic.Uint32 // linear gain, derived from step and the current output's curve
 	step   atomic.Int32
 
-	pathMu       sync.Mutex
-	out          Output
+	pathMu sync.Mutex
+	out    Output
+	// draining is a switch to the jack waiting for audio at the old gain to clear (setOutput).
+	draining     bool
 	jack         Output
 	outputMode   OutputMode
 	outputModeMu sync.Mutex
@@ -269,6 +271,10 @@ func (p *Player) device() (*alsa.Playback, *alsa.Mixer) {
 func (p *Player) route() {
 	p.pathMu.Lock()
 	defer p.pathMu.Unlock()
+	// A switch to the jack waiting for the old-gain audio to clear opens the path itself after.
+	if p.draining {
+		return
+	}
 	p.apply(pathSequence[p.out])
 }
 
@@ -300,7 +306,9 @@ func (p *Player) Output() Output {
 }
 
 // setOutput moves the codec between the speaker and the headphone jack. The gain is re-derived
-// because each output has its own curve.
+// because each output has its own curve. On a switch to the jack pathMu is let go while the audio
+// already queued at the speaker's gain drains, with both outputs off; draining keeps route from
+// opening the jack meanwhile.
 func (p *Player) setOutput(out Output) {
 	p.pathMu.Lock()
 	if p.out == out {
@@ -315,10 +323,12 @@ func (p *Player) setOutput(out Output) {
 		if _, mixer := p.device(); mixer != nil {
 			// Keep both outputs off until old-gain samples have cleared the playback ring.
 			p.apply(headphoneOff)
+			p.draining = true
 			p.pathMu.Unlock()
 			p.SetVolume(int(p.step.Load()))
 			time.Sleep(time.Duration(period*(periods+1)) * time.Second / Rate)
 			p.pathMu.Lock()
+			p.draining = false
 		}
 	}
 	if out == OutputSpeaker {
