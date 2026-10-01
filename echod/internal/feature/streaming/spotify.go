@@ -103,10 +103,15 @@ func runSpotifyReceiver(ctx context.Context, name string) {
 	})
 }
 
-// librespotWorthLogging keeps librespot's warnings and errors and drops the rest, which names the
-// account that logged in.
+// librespotWorthLogging keeps librespot's warnings and errors, and what it says as it fails to start or
+// crashes, and drops the rest, which names the account that logged in.
 func librespotWorthLogging(line string) bool {
-	return strings.Contains(line, " WARN ") || strings.Contains(line, " ERROR ")
+	for _, s := range []string{" WARN ", " ERROR ", "panicked", "error:", "Usage:"} {
+		if strings.Contains(line, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // readSpotifyEvents follows the event pipe, telling the media player the song. Opened for writing as

@@ -89,8 +89,14 @@ func ensureBus() {
 	}
 	if err := os.Mkdir(busStarting, 0o755); err != nil {
 		// Bluetooth's start has it in hand.
-		waitForBus(5 * time.Second)
-		return
+		if waitForBus(5 * time.Second) {
+			return
+		}
+		// Or had, and died holding it: the lock is taken over rather than waited on for ever.
+		_ = os.Remove(busStarting)
+		if err := os.Mkdir(busStarting, 0o755); err != nil {
+			return
+		}
 	}
 	defer os.Remove(busStarting)
 	if busUp() {
@@ -114,12 +120,14 @@ func busUp() bool {
 	return err == nil && len(out) > 0
 }
 
-func waitForBus(within time.Duration) {
+// waitForBus is whether the system bus is there within the time given.
+func waitForBus(within time.Duration) bool {
 	for end := time.Now().Add(within); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
 		if _, err := os.Stat(busSocket); err == nil {
-			return
+			return true
 		}
 	}
+	return false
 }
 
 // killLeftovers ends any avahi or receiver still running from before: the daemon starts them, and stops
@@ -127,14 +135,14 @@ func waitForBus(within time.Duration) {
 // not start beside the first. Called with none of this daemon's own running.
 func killLeftovers() {
 	ours := map[string]bool{avahiPath: true, shairportPath: true, librespotPath: true}
+	isOurs := func(pid int) bool {
+		exe, err := os.Readlink(filepath.Join("/proc", strconv.Itoa(pid), "exe"))
+		return err == nil && ours[exe]
+	}
 	dirs, _ := os.ReadDir("/proc")
 	var found []int
 	for _, d := range dirs {
-		pid, err := strconv.Atoi(d.Name())
-		if err != nil || pid == os.Getpid() {
-			continue
-		}
-		if exe, err := os.Readlink(filepath.Join("/proc", d.Name(), "exe")); err == nil && ours[exe] {
+		if pid, err := strconv.Atoi(d.Name()); err == nil && pid != os.Getpid() && isOurs(pid) {
 			found = append(found, pid)
 		}
 	}
@@ -147,6 +155,9 @@ func killLeftovers() {
 	}
 	time.Sleep(time.Second)
 	for _, pid := range found {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		// Only what is still one of them: a number freed in that second may be something else's now.
+		if isOurs(pid) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
 	}
 }

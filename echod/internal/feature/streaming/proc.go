@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -100,21 +99,19 @@ func receiverCred() *syscall.Credential {
 			c.Groups = []uint32{uint32(id)}
 		}
 	}
+	if c.Groups == nil {
+		slog.Warn("streaming: no inet group in this image; the receivers may be refused a network socket")
+	}
 	return c
 }
 
-// handTo makes path, and under a directory everything in it, the receivers' user's, where they run as
-// one.
+// handTo makes path the receivers' user's, where they run as one: path alone, never what is under it,
+// which that user could have made links of to anything root owns.
 func handTo(cred *syscall.Credential, path string) {
 	if cred == nil {
 		return
 	}
-	_ = filepath.WalkDir(path, func(p string, _ os.DirEntry, err error) error {
-		if err == nil {
-			_ = os.Lchown(p, int(cred.Uid), int(cred.Gid))
-		}
-		return nil
-	})
+	_ = os.Lchown(path, int(cred.Uid), int(cred.Gid))
 }
 
 // logLines is a program's standard error, in the daemon's log a line at a time, the last ones kept

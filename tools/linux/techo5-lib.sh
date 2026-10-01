@@ -407,6 +407,12 @@ t5_bt_up() {
 			rmdir /run/techo5-dbus-starting
 		else
 			n=0; while [ $n -lt 5 ] && [ ! -S /run/dbus/system_bus_socket ]; do sleep 1; n=$((n+1)); done
+			# Whoever held it died holding it: start the bus after all.
+			if [ ! -S /run/dbus/system_bus_socket ] && ! pidof dbus-daemon >/dev/null; then
+				rmdir /run/techo5-dbus-starting 2>/dev/null
+				dbus-daemon --system --nofork --nopidfile >> "$logdir/dbus.log" 2>&1 &
+				sleep 1
+			fi
 		fi
 	fi
 	bd=$(command -v bluetoothd || echo /usr/lib/bluetooth/bluetoothd)

@@ -68,18 +68,22 @@ func pump(ctx context.Context, name string, r *os.File) {
 // through the listener's queue while the speaker plays something else.
 func drain(ctx context.Context, r *os.File, buf []byte) {
 	const bytesPerSecond = audioRate * audioChannels * 2
-	start, read := time.Now(), 0
+	start, read := time.Now(), int64(0)
 	for ctx.Err() == nil {
-		if ahead := time.Duration(read)*time.Second/bytesPerSecond - time.Since(start); ahead > 0 {
+		switch ahead := time.Duration(read)*time.Second/bytesPerSecond - time.Since(start); {
+		case ahead > 0:
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(ahead):
 			}
+		case ahead < -time.Second:
+			// Behind (the sender stalled): paced from now, rather than read flat out to catch up.
+			start, read = time.Now(), 0
 		}
 		_ = r.SetReadDeadline(time.Now().Add(setAside))
 		n, err := r.Read(buf)
-		read += n
+		read += int64(n)
 		if err != nil {
 			if !errors.Is(err, os.ErrDeadlineExceeded) && ctx.Err() == nil {
 				slog.Warn("streaming: reading a receiver's audio failed", "err", err)
