@@ -40,11 +40,13 @@ func fakeMA(t *testing.T) (port int, dialed *atomic.Int32) {
 			http.NotFound(w, r)
 			return
 		}
+		// Counted as the request arrives: counted after the upgrade, the device can see its session
+		// start before the count does (a flake seen in CI).
+		dialed.Add(1)
 		c, err := up.Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
-		dialed.Add(1)
 		c.ReadMessage() // held until the device hangs up
 		c.Close()
 	}))
