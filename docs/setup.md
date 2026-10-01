@@ -125,6 +125,14 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   says whether Music Assistant is reachable and the device connected to it. A device farther away,
   over a VPN, connects to Music Assistant itself; it needs to reach ports 8095 and 8927 on its host.
   A station asked for by name or frequency is looked for near the device first.
+- **AirPlay and Spotify Connect (new, untested).** On the Show and the Dot, two switches make the
+  device a speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
+  **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under
+  Settings → Sound, on the setup page (Sound & Voice), or in Home Assistant. What they play shows as
+  now playing. A pause on the device stops the stream there; the phone keeps going until it is paused
+  too. Anyone on the same network can play to the device while one is on, as with any AirPlay or
+  Spotify speaker, and Spotify Connect keeps the login a phone hands it until it is turned off. Neither
+  has been tried with an iPhone or a Spotify account yet: if something does not work, open an issue.
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's
