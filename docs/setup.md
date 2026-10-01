@@ -105,7 +105,8 @@ A tap on **Talk** starts it and another ends it. While it runs the button is red
 view stays up, and neither the wake word nor the action button starts a question; a press of the
 action button ends the talk. The room is only sent while the camera page is on the screen, so the talk
 also ends when the view closes or anything covers it (a call, a ring, the settings), when the
-microphones are muted, the switch goes off, the camera hangs up, or after two minutes. If the camera
+microphones are muted, the switch goes off, the camera hangs up (a camera's own app taking its
+speaker does that), or after two minutes. If the camera
 will not take it, the page says why for a few seconds.
 
 Cameras read straight from a Reolink recorder have no sound on the device, so for those Talk is
