@@ -73,13 +73,18 @@ func shairportConf(name, metaPipe string) string {
 sessioncontrol = {
 	session_timeout = 60;
 };
+stdout = {
+	output_rate = %d;
+	output_format = "S16_LE";
+	output_channels = %d;
+};
 metadata = {
 	enabled = "yes";
 	include_cover_art = "no";
 	pipe_name = %s;
 	pipe_timeout = 5000;
 };
-`, confString(name), airplayPort, airplayUDPBase, airplayUDPCount, confString(metaPipe))
+`, confString(name), airplayPort, airplayUDPBase, airplayUDPCount, audioRate, audioChannels, confString(metaPipe))
 }
 
 // confString is s as a libconfig string: quoted, with quotes and backslashes escaped and anything
