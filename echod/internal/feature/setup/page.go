@@ -225,6 +225,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveMusic(r)
 	case "streaming":
 		problem = saveStreaming(r)
+	case "speaker":
+		problem = saveSpeaker(r)
 	case "screen":
 		problem = saveScreen(r)
 	case "listening":
@@ -321,6 +323,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	switch tab {
 	// Within a tab, what is changed most comes first; a long tab is split under group headings.
 	case "sound":
+		speakerSection(w, token)
 		fmt.Fprint(w, `<h3>Music</h3>`)
 		stationsSection(w, token)
 		musicSection(ctx, w, token)

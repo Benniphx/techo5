@@ -120,6 +120,12 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			{id: "volume", label: "Volume", kind: ctlStepper, value: fmt.Sprintf("%d of %d", st.volume, sheetVolumeSteps)},
 			{id: "bass", label: "Bass", sub: toneSub(), kind: ctlStepper, value: toneValue(config.Get().Speaker.Bass)},
 			{id: "treble", label: "Treble", kind: ctlStepper, value: toneValue(config.Get().Speaker.Treble)},
+		}
+		if speaker.HasJack {
+			rows = append(rows, settingRow{id: "output", label: "Audio output", sub: "Where the sound goes with headphones in",
+				kind: ctlChoice, value: media.Get().Output()})
+		}
+		rows = append(rows, []settingRow{
 			{label: "Voice", kind: ctlHeading},
 			{id: "mic", label: "Microphone", sub: "The mute button does this too", kind: ctlToggle, on: !st.muted, value: mic},
 			{id: "wakeword", label: "Wake word", kind: ctlChoice, value: st.wakeWord},
@@ -133,7 +139,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			{id: "dnd", label: "Do not disturb", sub: "Intercom calls from other rooms are turned away", kind: ctlToggle, on: config.Get().Home.DoNotDisturb},
 			{label: "Music", kind: ctlHeading},
 			{id: "sendspin", label: "Music Assistant player", sub: "Play music in sync with other rooms", kind: ctlToggle, on: st.sendspin},
-		}
+		}...)
 		return append(withStreaming(rows),
 			settingRow{label: "Cameras", kind: ctlHeading},
 			settingRow{id: "camerasound", label: "Camera sound", sub: "A camera's own audio, while its view is up", kind: ctlToggle, on: home.CameraSound()},
@@ -511,6 +517,14 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return pickerView{title: "Sleep timer", opts: sleepLabels(), cur: sleepIndex()}, true
 	case "quiet":
 		return pickerView{title: "Quiet hours", opts: quietLabels(), cur: quietIndex()}, true
+	case "output":
+		p := pickerView{title: "Audio output", opts: media.OutputChoices(), cur: -1}
+		for i, o := range p.opts {
+			if o == media.Get().Output() {
+				p.cur = i
+			}
+		}
+		return p, speaker.HasJack
 	case "sunrise":
 		return pickerView{title: "Wake with light", opts: sunriseLabels(), cur: sunriseIndex()}, true
 	case "timezone":
@@ -677,6 +691,10 @@ func (d *Display) choose(id string, i int) {
 		chooseSleep(i)
 	case "quiet":
 		chooseQuiet(i)
+	case "output":
+		if opts := media.OutputChoices(); speaker.HasJack && i < len(opts) {
+			media.Get().SetOutput(opts[i])
+		}
 	case "sunrise":
 		chooseSunrise(i)
 	case "timezone":
@@ -902,7 +920,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		_, _, subfolders := home.Get().SlideshowSettings()
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
-		"timezone", "wakeword", "waketone", "quiet":
+		"timezone", "wakeword", "waketone", "quiet", "output":
 		d.openPicker(id)
 	}
 }

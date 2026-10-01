@@ -457,6 +457,28 @@ func (p *Player) Entities() []esphome.Entity {
 	return out
 }
 
+// OutputChoices are the Audio output choices, as Home Assistant lists them; Output is the one in force,
+// and SetOutput chooses one, as Home Assistant does. Only on a device with a jack (speaker.HasJack).
+func OutputChoices() []string             { return []string{outputAutomatic, outputSpeaker, outputHeadphone} }
+func (p *Player) Output() string          { return p.output.Get() }
+func (p *Player) SetOutput(choice string) { p.output.OnCommand(choice) }
+
+// QuietChoices are the Quiet hours choices, as Home Assistant lists them, Off first; Quiet is the one
+// in force, and SetQuiet chooses one, as Home Assistant does.
+func (p *Player) QuietChoices() []string { return p.quiet.Options }
+func (p *Player) SetQuiet(choice string) { p.quiet.OnCommand(choice) }
+
+// Quiet is read from what is saved: the settings screen saves its choice there directly.
+func (p *Player) Quiet() string {
+	cur := config.Get().Speaker.QuietHours
+	for _, w := range quietWindows {
+		if w == cur {
+			return quietLabel(w)
+		}
+	}
+	return quietOff
+}
+
 // applyOutputMode routes playback and publishes the selected option on devices with a jack.
 func (p *Player) applyOutputMode(mode config.OutputMode) {
 	if !speaker.HasJack {
