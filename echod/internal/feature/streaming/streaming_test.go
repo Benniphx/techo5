@@ -34,10 +34,12 @@ func TestAirPlayMetadata(t *testing.T) {
 	}
 }
 
-// librespot's event lines name a new song, and a stop clears it; anything else is let by.
+// librespot's event lines name a new song, and a stop clears it; anything else is let by, a line far
+// too long included, without losing what comes after it.
 func TestSpotifyEvents(t *testing.T) {
 	lines := "track_changed\tHotel California\tEagles, Don Henley\tHotel California\n" +
 		"half a line\n" +
+		"track_changed\t" + strings.Repeat("x", 40<<10) + "\ta\tb\n" +
 		"stopped\t\t\t\n"
 	var got [][3]string
 	followSpotifyEvents(strings.NewReader(lines), func(title, artist, album string) {
@@ -125,6 +127,47 @@ func TestThePumpLeavesTheSpeakerToWhatWasPlayedLast(t *testing.T) {
 	waitUntil(t, func() bool { return count() == 2 })
 }
 
+// A track that ended on its own, the sender gone quiet (paused on the phone), is simply over: what
+// arrives next plays at once, with nothing set aside.
+func TestAQuietEndIsNotSetAside(t *testing.T) {
+	was, wasAside := play, setAside
+	setAside = 5 * time.Second // long, so a drain would show
+	t.Cleanup(func() { play, setAside = was, wasAside })
+	var mu sync.Mutex
+	started := 0
+	play = func(name string, src media.PCMSource, rate, channels int) {
+		mu.Lock()
+		started++
+		mu.Unlock()
+		// As the player does: reads until the sender has been quiet a while, then closes.
+		go func() {
+			buf := make([]byte, 4096)
+			for {
+				_ = src.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+				if _, err := src.Read(buf); err != nil {
+					src.Close()
+					return
+				}
+			}
+		}()
+	}
+	count := func() int { mu.Lock(); defer mu.Unlock(); return started }
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go pump(ctx, "AirPlay", r)
+
+	w.Write(make([]byte, 4096))
+	waitUntil(t, func() bool { return count() == 1 })
+	time.Sleep(300 * time.Millisecond) // quiet: the track ends
+	w.Write(make([]byte, 4096))
+	waitUntil(t, func() bool { return count() == 2 })
+}
+
 // A program that keeps stopping is started again, each time after a longer pause.
 func TestAProgramIsStartedAgain(t *testing.T) {
 	was, wasMost := restartFirst, restartMost
@@ -133,7 +176,7 @@ func TestAProgramIsStartedAgain(t *testing.T) {
 	runs := filepath.Join(t.TempDir(), "runs")
 	ctx, cancel := context.WithTimeout(context.Background(), 600*time.Millisecond)
 	defer cancel()
-	supervise(ctx, "test", "/bin/sh", []string{"-c", "echo x >> " + runs + "; exit 1"}, nil)
+	supervise(ctx, program{name: "test", path: "/bin/sh", args: []string{"-c", "echo x >> " + runs + "; exit 1"}})
 	b, _ := os.ReadFile(runs)
 	if n := strings.Count(string(b), "x"); n < 3 {
 		t.Errorf("started %d times in 600 ms", n)
@@ -143,10 +186,11 @@ func TestAProgramIsStartedAgain(t *testing.T) {
 // The receivers start only once avahi says it is up, and when avahi stops they stop with it and start
 // again once a new avahi is up: they register with it once, as they start.
 func TestTheReceiversFollowAvahi(t *testing.T) {
-	wasRun, wasUp, wasAir, wasSpot, wasFirst := runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst
+	wasRun, wasUp, wasAir, wasSpot, wasFirst, wasLeft := runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst, leftovers
 	t.Cleanup(func() {
-		runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst = wasRun, wasUp, wasAir, wasSpot, wasFirst
+		runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst, leftovers = wasRun, wasUp, wasAir, wasSpot, wasFirst, wasLeft
 	})
+	leftovers = func() {}
 	restartFirst = 10 * time.Millisecond
 	var mu sync.Mutex
 	var up bool

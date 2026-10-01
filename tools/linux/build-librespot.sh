@@ -13,12 +13,15 @@
 #
 # Built with only what the device uses: the pipe backend (always there), which hands the daemon raw
 # audio on stdout; avahi for being found, the same avahi AirPlay uses; and Rust's own TLS, so it needs
-# no OpenSSL. The version is pinned and the build --locked to librespot's own lockfile; Cargo checks
-# every crate against crates.io's checksums.
+# no OpenSSL. The crate itself is checked against the SHA-256 crates.io's index lists for this version
+# (SHA256, below); the build is --locked to the lockfile inside it, and Cargo checks each dependency
+# against crates.io's checksums.
 set -euo pipefail
 ROOT=${TECHO5_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}
 OUT=$ROOT/bin/techo5-librespot-arm
 VERSION=0.8.0
+# The "cksum" for this version in https://index.crates.io/li/br/librespot.
+SHA256=030c5e98cc06f20283b5948ae23bdac1de0dec58dee2c5ec4c8dafc7aaa796ab
 FEATURES=with-avahi,rustls-tls-webpki-roots
 TARGET=armv7-unknown-linux-musleabihf
 while [ $# -gt 0 ]; do
@@ -36,13 +39,16 @@ WORK=$HOME/librespot-build
 rm -rf "$WORK"; mkdir -p "$WORK"
 echo "== fetching librespot $VERSION from crates.io"
 curl -sSfL -A "techo5 build-librespot.sh" -o "$WORK/librespot.crate" "https://crates.io/api/v1/crates/librespot/$VERSION/download"
+echo "$SHA256  $WORK/librespot.crate" | sha256sum -c - || { echo "the crate is not the one crates.io lists for $VERSION" >&2; exit 1; }
 tar -xzf "$WORK/librespot.crate" -C "$WORK"
 cd "$WORK/librespot-$VERSION"
 [ -f Cargo.lock ] || { echo "the published crate has no Cargo.lock to build --locked from" >&2; exit 1; }
 echo "== building for $TARGET (features: $FEATURES)"
-CARGO_PROFILE_RELEASE_STRIP=true CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 	cargo zigbuild --release --locked --no-default-features --features "$FEATURES" --target "$TARGET"
+CARGO_PROFILE_RELEASE_STRIP=true CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+	cargo zigbuild --release --locked --no-default-features --features "$FEATURES" --target "$TARGET"
 mkdir -p "$(dirname "$OUT")"
 cp "target/$TARGET/release/librespot" "$OUT"
 file "$OUT" 2>/dev/null || true
 ls -la "$OUT"
 echo "built: $OUT"
+sha256sum "$OUT"

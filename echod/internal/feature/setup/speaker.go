@@ -35,6 +35,19 @@ func speakerSection(w http.ResponseWriter, token string) {
 	if models := wake.Lib().Ours(); len(models) > 0 {
 		cur := c.Wake.Slot(0).ID
 		fmt.Fprint(w, `<label for="wakeword">Wake word</label><select id="wakeword" name="wakeword">`)
+		// What is in force now is always the one shown, even when it is none of these (off, or a word
+		// since removed): otherwise the list would show the first, and a save would put it in force.
+		listed := false
+		for _, m := range models {
+			listed = listed || m.ID == cur
+		}
+		if !listed {
+			label := "Off"
+			if cur != "" {
+				label = strings.ReplaceAll(cur, "_", " ")
+			}
+			fmt.Fprintf(w, `<option value="%s" selected>%s</option>`, html.EscapeString(cur), html.EscapeString(label))
+		}
 		for _, m := range models {
 			label := m.Phrase
 			if label == "" {
@@ -91,7 +104,8 @@ func saveSpeaker(r *http.Request) string {
 		}
 		p.Adjust(n - p.Volume())
 	}
-	if v, ok := changed(r, "wakeword"); ok {
+	// Off is shown, but not chosen here: the page offers words, and the screen or Home Assistant turns it off.
+	if v, ok := changed(r, "wakeword"); ok && v != "" {
 		known := false
 		for _, m := range wake.Lib().Ours() {
 			known = known || m.ID == v

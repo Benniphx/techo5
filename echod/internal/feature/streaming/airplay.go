@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -29,11 +30,13 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 	}
 	defer r.Close()
 	defer w.Close()
+	cred := receiverCred()
 	meta := filepath.Join(runDir, "airplay-metadata")
 	_ = os.Remove(meta)
 	if err := syscall.Mkfifo(meta, 0o600); err != nil {
 		slog.Warn("streaming: AirPlay's metadata pipe failed; no song names", "err", err)
 	} else {
+		handTo(cred, meta)
 		safe.Go("airplay metadata", func() { readAirPlayMetadata(ctx, meta) })
 	}
 	conf := filepath.Join(runDir, "shairport-sync.conf")
@@ -42,8 +45,17 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 		return
 	}
 	safe.Go("airplay audio", func() { pump(ctx, home.AirPlayName, r) })
-	supervise(ctx, "shairport-sync", shairportPath, []string{"-c", conf}, w)
+	supervise(ctx, program{name: "shairport-sync", path: shairportPath, args: []string{"-c", conf}, stdout: w, cred: cred})
 }
+
+// The ports AirPlay is reached on, fixed so a firewall can let them through (the Dot's does): the
+// session on airplayPort, and the audio, control and timing on airplayUDPCount ports from
+// airplayUDPBase.
+const (
+	airplayPort     = 5000
+	airplayUDPBase  = 6001
+	airplayUDPCount = 10
+)
 
 // shairportConf is shairport-sync's configuration: the name phones show, the audio to standard output
 // as 16-bit stereo at 44.1 kHz, and what is playing to the metadata pipe. Its volume stays its own: the
@@ -54,6 +66,9 @@ func shairportConf(name, metaPipe string) string {
 	output_backend = "stdout";
 	mdns_backend = "avahi";
 	interpolation = "soxr";
+	port = %d;
+	udp_port_base = %d;
+	udp_port_range = %d;
 };
 sessioncontrol = {
 	session_timeout = 60;
@@ -64,7 +79,7 @@ metadata = {
 	pipe_name = %s;
 	pipe_timeout = 5000;
 };
-`, confString(name), confString(metaPipe))
+`, confString(name), airplayPort, airplayUDPBase, airplayUDPCount, confString(metaPipe))
 }
 
 // confString is s as a libconfig string: quoted, with quotes and backslashes escaped and anything
@@ -112,15 +127,28 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 }
 
 // followAirPlayMetadata reads items from r until it ends, calling told with the song whenever a field of
-// it changes, and with nothing when the session ends.
+// it changes, and with nothing when the session ends. An item that is not well formed is passed over,
+// and reading goes on after it.
 func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) {
-	dec := xml.NewDecoder(bufio.NewReaderSize(r, 64<<10))
-	dec.Strict = false
+	br := bufio.NewReaderSize(r, 64<<10)
+	newDecoder := func() *xml.Decoder {
+		// A bufio.Reader is a ByteReader, so the decoder reads no further than it has to: a new one
+		// picks up where an old one gave up.
+		d := xml.NewDecoder(br)
+		d.Strict = false
+		return d
+	}
+	dec := newDecoder()
 	var title, artist, album string
 	for {
 		var it metaItem
 		if err := dec.Decode(&it); err != nil {
-			return
+			var syntax *xml.SyntaxError
+			if !errors.As(err, &syntax) {
+				return
+			}
+			dec = newDecoder()
+			continue
 		}
 		typ, code := fourCC(it.Type), fourCC(it.Code)
 		data := ""

@@ -28,6 +28,8 @@ func streamingSection(w http.ResponseWriter, token string) {
 	  own name, on the same network.</p>
 	 <p><label><input type="checkbox" name="airplay" value="yes" style="width:auto"%s> AirPlay: from an iPhone, iPad or Mac</label></p>
 	 <p><label><input type="checkbox" name="spotify" value="yes" style="width:auto"%s> Spotify Connect: from the Spotify app (needs Spotify Premium)</label></p>
+	 <p class="note">Anyone on the same network can play to it while one is on, as with any AirPlay or Spotify
+	  speaker. Spotify Connect keeps the login a phone hands it until Spotify Connect is turned off.</p>
 	 <p class="note">New, and not yet tried with an iPhone or a Spotify account: if something does not work, say so on
 	  GitHub.</p>
 	 <p><button type="submit">Save</button></p></form></fieldset>`, checked(c.AirPlay), checked(c.Spotify))

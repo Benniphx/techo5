@@ -71,11 +71,17 @@ if ! $APK --root "$R" $arch --no-cache add "$IN"/inputs/apks312/*.apk; then
 fi
 $APK --root "$R" $arch info -v | sort > "$R/etc/techo5-packages"
 
-# avahi (AirPlay, Spotify Connect): it drops root for its own user, and these Android kernels give a
-# network socket only to a member of the inet group (3003); and it announces nothing of its own, where
-# the package would have it announce SSH.
+# avahi and the receivers (AirPlay, Spotify Connect; feature/streaming): these Android kernels give a
+# network socket only to a member of the inet group (3003). avahi drops root for its own user; the
+# receivers run as their own, streaming, which owns nothing else. avahi announces nothing of its own,
+# where the package would have it announce SSH.
 if [ -d "$R/etc/avahi" ]; then
-	grep -q '^inet:' "$R/etc/group" || echo 'inet:x:3003:avahi' >> "$R/etc/group"
+	grep -q '^streaming:' "$R/etc/group" || echo 'streaming:x:88:' >> "$R/etc/group"
+	grep -q '^streaming:' "$R/etc/passwd" || echo 'streaming:x:88:88:streaming:/var/empty:/sbin/nologin' >> "$R/etc/passwd"
+	grep -q '^inet:' "$R/etc/group" || echo 'inet:x:3003:' >> "$R/etc/group"
+	for u in avahi streaming; do
+		grep -Eq "^inet:.*[:,]$u(,|\$)" "$R/etc/group" || sed -i -E "/^inet:/{s/:\$/:$u/;t;s/\$/,$u/}" "$R/etc/group"
+	done
 	rm -f "$R"/etc/avahi/services/*.service
 fi
 

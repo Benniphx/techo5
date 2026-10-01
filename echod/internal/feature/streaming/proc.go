@@ -6,6 +6,10 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"os/user"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -18,18 +22,30 @@ var (
 	ranLong      = 30 * time.Second
 )
 
-// supervise runs the program at path with args until ctx ends, starting it again whenever it stops.
-// stdout is where its standard output goes (nil for nowhere), and env is added to the daemon's own
-// environment for it; what it logs goes to the daemon's log, line by line, under name.
-func supervise(ctx context.Context, name, path string, args []string, stdout io.Writer, env ...string) {
+// program is one of the programs this runs: what to run, where its standard output goes (nil for
+// nowhere), what is added to the daemon's environment for it, and who it runs as (nil for root).
+// What it logs goes to the daemon's log, a line at a time, under name, and only the lines keep says
+// are worth keeping (nil keeps every one).
+type program struct {
+	name   string
+	path   string
+	args   []string
+	stdout io.Writer
+	env    []string
+	cred   *syscall.Credential
+	keep   func(line string) bool
+}
+
+// supervise runs p until ctx ends, starting it again whenever it stops.
+func supervise(ctx context.Context, p program) {
 	wait := restartFirst
 	for ctx.Err() == nil {
 		start := time.Now()
-		err := runProgram(ctx, name, path, args, stdout, env...)
+		err := runProgram(ctx, p)
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("streaming: a program stopped", "program", name, "after", time.Since(start).Round(time.Second), "err", err)
+		slog.Warn("streaming: a program stopped", "program", p.name, "after", time.Since(start).Round(time.Second), "err", err)
 		if time.Since(start) > ranLong {
 			wait = restartFirst
 		} else {
@@ -43,24 +59,69 @@ func supervise(ctx context.Context, name, path string, args []string, stdout io.
 	}
 }
 
-// runProgram runs the program at path once, until it stops or ctx ends. Asked to stop, it gets a
-// moment to say goodbye on the network before it is killed.
-func runProgram(ctx context.Context, name, path string, args []string, stdout io.Writer, env ...string) error {
-	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Stdout = stdout
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+// runProgram runs p once, until it stops or ctx ends. Asked to stop, it gets a moment to say goodbye
+// on the network before it is killed.
+func runProgram(ctx context.Context, p program) error {
+	cmd := exec.CommandContext(ctx, p.path, p.args...)
+	cmd.Stdout = p.stdout
+	if len(p.env) > 0 {
+		cmd.Env = append(os.Environ(), p.env...)
 	}
-	cmd.Stderr = &logLines{name: name}
+	if p.cred != nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: p.cred}
+	}
+	cmd.Stderr = &logLines{name: p.name, keep: p.keep}
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = 3 * time.Second
 	return cmd.Run()
+}
+
+// receiverUser is who the receivers run as: they take in what any phone on the network sends, and
+// need no more than a socket (the kernel gives one only to the inet group) and their pipes.
+const receiverUser = "streaming"
+
+// receiverCred is the receivers' user, or nil, with a warning, on an image that has not got one: then
+// they run as root, as they did before the image made it.
+func receiverCred() *syscall.Credential {
+	u, err := user.Lookup(receiverUser)
+	if err != nil {
+		slog.Warn("streaming: no user for the receivers in this image; they run as root", "user", receiverUser, "err", err)
+		return nil
+	}
+	uid, err1 := strconv.ParseUint(u.Uid, 10, 32)
+	gid, err2 := strconv.ParseUint(u.Gid, 10, 32)
+	if err1 != nil || err2 != nil || uid == 0 {
+		slog.Warn("streaming: the receivers' user is not one to run as; they run as root", "user", receiverUser)
+		return nil
+	}
+	c := &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+	if g, err := user.LookupGroup("inet"); err == nil {
+		if id, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
+			c.Groups = []uint32{uint32(id)}
+		}
+	}
+	return c
+}
+
+// handTo makes path, and under a directory everything in it, the receivers' user's, where they run as
+// one.
+func handTo(cred *syscall.Credential, path string) {
+	if cred == nil {
+		return
+	}
+	_ = filepath.WalkDir(path, func(p string, _ os.DirEntry, err error) error {
+		if err == nil {
+			_ = os.Lchown(p, int(cred.Uid), int(cred.Gid))
+		}
+		return nil
+	})
 }
 
 // logLines is a program's standard error, in the daemon's log a line at a time, the last ones kept
 // short: these programs say a lot, and only what goes wrong is worth the space.
 type logLines struct {
 	name string
+	keep func(string) bool
 	part []byte
 }
 
@@ -71,9 +132,9 @@ func (l *logLines) Write(p []byte) (int, error) {
 		if i < 0 {
 			break
 		}
-		line := string(l.part[:i])
+		line := strings.TrimRight(string(l.part[:i]), "\r")
 		l.part = l.part[i+1:]
-		if line != "" {
+		if line != "" && (l.keep == nil || l.keep(line)) {
 			slog.Debug("streaming: program says", "program", l.name, "line", clip(line, 300))
 		}
 	}

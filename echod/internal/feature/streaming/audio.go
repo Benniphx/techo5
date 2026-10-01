@@ -53,17 +53,34 @@ func pump(ctx context.Context, name string, r *os.File) {
 			return
 		case <-src.done:
 		}
-		// The track is over: the receiver went quiet, or something else was played. Either way, what it
-		// sends now is set aside until it has been quiet a moment.
-		drain(ctx, r, buf)
+		// A track that ended because the receiver went quiet is simply over: what it sends next is a new
+		// one. One that was taken from it (something else played, or it was paused here, which no phone
+		// hears of) leaves the receiver still sending: that is set aside until it has been quiet a
+		// moment, which a pause on the phone gives.
+		if !src.wentQuiet() {
+			drain(ctx, r, buf)
+		}
 	}
 }
 
-// drain reads and drops what r sends until it has sent nothing for setAside.
+// drain reads and drops what r sends until it has sent nothing for setAside. It reads no faster than
+// the audio would play: librespot writes as fast as it is read, and drained flat out it would race
+// through the listener's queue while the speaker plays something else.
 func drain(ctx context.Context, r *os.File, buf []byte) {
+	const bytesPerSecond = audioRate * audioChannels * 2
+	start, read := time.Now(), 0
 	for ctx.Err() == nil {
+		if ahead := time.Duration(read)*time.Second/bytesPerSecond - time.Since(start); ahead > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(ahead):
+			}
+		}
 		_ = r.SetReadDeadline(time.Now().Add(setAside))
-		if _, err := r.Read(buf); err != nil {
+		n, err := r.Read(buf)
+		read += n
+		if err != nil {
 			if !errors.Is(err, os.ErrDeadlineExceeded) && ctx.Err() == nil {
 				slog.Warn("streaming: reading a receiver's audio failed", "err", err)
 			}
@@ -79,6 +96,7 @@ type pipeSource struct {
 	mu      sync.Mutex
 	pending []byte
 	closed  bool
+	quiet   bool // the track's last read found the receiver quiet
 	once    sync.Once
 	done    chan struct{}
 }
@@ -96,7 +114,25 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 		return n, nil
 	}
 	s.mu.Unlock()
-	return s.f.Read(p)
+	n, err := s.f.Read(p)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch {
+	case s.closed:
+		// Over while the read waited: what it took belongs to whatever reads the pipe next, and is
+		// dropped rather than queued to a track that has ended.
+		return 0, os.ErrClosed
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		s.quiet = true
+	}
+	return n, err
+}
+
+// wentQuiet is whether the track ended on the receiver going quiet, not by being closed.
+func (s *pipeSource) wentQuiet() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.quiet
 }
 
 func (s *pipeSource) SetReadDeadline(t time.Time) error { return s.f.SetReadDeadline(t) }

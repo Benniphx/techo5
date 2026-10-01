@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -42,6 +44,8 @@ func runAvahiOnce(ctx context.Context) {
 	if host == "" {
 		host = "techo5"
 	}
+	// A DNS label is at most 63 characters, -media included.
+	host = strings.TrimRight(host[:min(len(host), 57)], "-")
 	if err := os.WriteFile(conf, []byte(avahiConf(host+"-media")), 0o644); err != nil {
 		slog.Error("streaming: writing avahi's configuration failed", "err", err)
 		return
@@ -49,7 +53,8 @@ func runAvahiOnce(ctx context.Context) {
 	// Where avahi keeps its pid; /run is cleared at boot.
 	_ = os.MkdirAll("/run/avahi-daemon", 0o755)
 	ensureBus()
-	err := runProgram(ctx, "avahi", avahiPath, []string{"-f", conf, "--no-rlimits"}, nil)
+	// avahi drops root for its own user by itself.
+	err := runProgram(ctx, program{name: "avahi", path: avahiPath, args: []string{"-f", conf, "--no-rlimits"}})
 	if ctx.Err() == nil {
 		slog.Warn("streaming: avahi stopped", "err", err)
 	}
@@ -71,14 +76,24 @@ var (
 	dbusPath  = "/usr/bin/dbus-daemon"
 )
 
+// busStarting is held while the system bus is being started, by whichever of this and Bluetooth's start
+// (techo5-lib.sh on the Show, techo5-bt on the Dot) gets there first, so the two never start two.
+const busStarting = "/run/techo5-dbus-starting"
+
 // ensureBus starts the system bus when nothing has yet. Bluetooth's start brings it up too, but only
 // once the radio is there, and avahi will not run without it. Started detached, as Bluetooth's start
 // does, so it outlives the daemon; that start sees it running and leaves it be.
 func ensureBus() {
-	if _, err := os.Stat(busSocket); err == nil {
+	if busUp() {
 		return
 	}
-	if out, err := exec.Command("pidof", "dbus-daemon").Output(); err == nil && len(out) > 0 {
+	if err := os.Mkdir(busStarting, 0o755); err != nil {
+		// Bluetooth's start has it in hand.
+		waitForBus(5 * time.Second)
+		return
+	}
+	defer os.Remove(busStarting)
+	if busUp() {
 		return
 	}
 	_ = os.MkdirAll(filepath.Dir(busSocket), 0o755)
@@ -87,9 +102,51 @@ func ensureBus() {
 		slog.Warn("streaming: starting the system bus failed; avahi needs it", "err", err)
 		return
 	}
-	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
+	waitForBus(3 * time.Second)
+}
+
+// busUp is whether there is a system bus, or one on its way.
+func busUp() bool {
+	if _, err := os.Stat(busSocket); err == nil {
+		return true
+	}
+	out, err := exec.Command("pidof", "dbus-daemon").Output()
+	return err == nil && len(out) > 0
+}
+
+func waitForBus(within time.Duration) {
+	for end := time.Now().Add(within); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
 		if _, err := os.Stat(busSocket); err == nil {
 			return
 		}
+	}
+}
+
+// killLeftovers ends any avahi or receiver still running from before: the daemon starts them, and stops
+// them on its way out, but one that crashed or was killed leaves them behind, and a second avahi will
+// not start beside the first. Called with none of this daemon's own running.
+func killLeftovers() {
+	ours := map[string]bool{avahiPath: true, shairportPath: true, librespotPath: true}
+	dirs, _ := os.ReadDir("/proc")
+	var found []int
+	for _, d := range dirs {
+		pid, err := strconv.Atoi(d.Name())
+		if err != nil || pid == os.Getpid() {
+			continue
+		}
+		if exe, err := os.Readlink(filepath.Join("/proc", d.Name(), "exe")); err == nil && ours[exe] {
+			found = append(found, pid)
+		}
+	}
+	if len(found) == 0 {
+		return
+	}
+	slog.Warn("streaming: ending what an earlier run left behind", "pids", found)
+	for _, pid := range found {
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+	}
+	time.Sleep(time.Second)
+	for _, pid := range found {
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 }

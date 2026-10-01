@@ -1095,8 +1095,26 @@ func (p *Player) Track() (title, artist, album string) {
 // the speaker from.
 func (p *Player) Playing() (playing, paused bool) { return p.stream.Playing() }
 
-// Pause leaves the track where it is, so it can be picked up again.
-func (p *Player) Pause() { p.stream.Pause() }
+// Pause leaves the track where it is, so it can be picked up again. A received track whose sender no
+// pause reaches (StopOnPause) is stopped instead: held, it would hold the sender up mid-write while
+// the phone shows it playing, and the speaker with it.
+func (p *Player) Pause() {
+	if from := p.Receiving(); from != "" {
+		if _, ok := stopOnPause.Load(from); ok {
+			slog.Info("pausing a receiver that cannot be told: stopping it here", "from", from)
+			p.stream.Stop()
+			return
+		}
+	}
+	p.stream.Pause()
+}
+
+// stopOnPause holds the received sources that a pause here cannot reach (StopOnPause).
+var stopOnPause sync.Map
+
+// StopOnPause marks the received source name as one a pause on the device cannot reach: AirPlay and
+// Spotify Connect hear nothing back from the speaker, where a phone over Bluetooth is told.
+func StopOnPause(name string) { stopOnPause.Store(name, true) }
 
 // Resume picks a paused track up again. (Stream.Resume is something else: it gives the speaker back
 // after a turn, and leaves a track the listener paused where it is.)

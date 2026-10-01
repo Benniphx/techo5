@@ -18,16 +18,41 @@ import (
 
 // spotifyEvent is the program librespot runs on each player event: it writes one line, the event and
 // the song, tab-separated, to a pipe the daemon reads. Tabs and newlines in what it writes are made
-// spaces, so a song's name cannot end the line early.
+// spaces, so a song's name cannot end the line early, and each field is cut short. The pipe is opened
+// for reading as well as writing (1<>), which never waits: a pipe nobody reads any more, as when the
+// receivers are stopped, cannot leave the program stuck.
 const spotifyEvent = `#!/bin/sh
 case "$PLAYER_EVENT" in
 track_changed|stopped|session_disconnected) ;;
 *) exit 0 ;;
 esac
-clean() { printf '%s' "$1" | tr '\t\n' '  '; }
-artists() { printf '%s' "$ARTISTS" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }' | tr '\t' ' '; }
-printf '%s\t%s\t%s\t%s\n' "$PLAYER_EVENT" "$(clean "$NAME")" "$(artists)" "$(clean "$ALBUM")" > "$TECHO5_SPOTIFY_EVENTS"
+clean() { printf '%s' "$1" | tr '\t\n' '  ' | cut -c1-300; }
+artists() { printf '%s' "$ARTISTS" | awk 'NR > 1 { printf ", " } { printf "%s", $0 }' | tr '\t' ' ' | cut -c1-300; }
+printf '%s\t%s\t%s\t%s\n' "$PLAYER_EVENT" "$(clean "$NAME")" "$(artists)" "$(clean "$ALBUM")" 1<>"$TECHO5_SPOTIFY_EVENTS"
 `
+
+// spotifyPort is where librespot listens for the Spotify app handing it a login: fixed, so a firewall
+// can let it through (the Dot's does).
+const spotifyPort = "4070"
+
+// spotifyCache is where the login a phone hands over is kept, so the device is still the account's
+// after a restart: on userdata beside the device's own state, not in it (that is root's alone, and
+// librespot runs as the receivers' user), readable by that user alone. Turning Spotify Connect off
+// forgets it (forgetSpotify).
+func spotifyCache() string { return filepath.Join(filepath.Dir(layout.StateDir), "techo5-spotify") }
+
+// forgetSpotify removes the kept login: a device switched off from Spotify Connect, or given away, is
+// no longer the account's.
+func forgetSpotify() {
+	if _, err := os.Stat(spotifyCache()); err != nil {
+		return
+	}
+	if err := os.RemoveAll(spotifyCache()); err != nil {
+		slog.Warn("streaming: forgetting the Spotify login failed", "err", err)
+		return
+	}
+	slog.Info("streaming: Spotify login forgotten")
+}
 
 // runSpotifyReceiver runs librespot under the device's name until ctx ends, playing what it sends and
 // showing what it says is playing.
@@ -39,6 +64,7 @@ func runSpotifyReceiver(ctx context.Context, name string) {
 	}
 	defer r.Close()
 	defer w.Close()
+	cred := receiverCred()
 	events := filepath.Join(runDir, "spotify-events")
 	script := filepath.Join(runDir, "spotify-event")
 	_ = os.Remove(events)
@@ -47,25 +73,40 @@ func runSpotifyReceiver(ctx context.Context, name string) {
 	} else if err := os.WriteFile(script, []byte(spotifyEvent), 0o755); err != nil {
 		slog.Warn("streaming: writing Spotify's event program failed; no song names", "err", err)
 	} else {
+		handTo(cred, events)
 		safe.Go("spotify events", func() { readSpotifyEvents(ctx, events) })
 	}
-	// The login a phone hands over by Spotify Connect is kept, so the device is still the account's
-	// after a restart: in the device's own state, readable by root alone.
-	cache := filepath.Join(layout.StateDir, "spotify")
+	cache := spotifyCache()
 	_ = os.MkdirAll(cache, 0o700)
+	_ = os.Chmod(cache, 0o700)
+	handTo(cred, cache)
 	safe.Go("spotify audio", func() { pump(ctx, home.SpotifyName, r) })
-	args := []string{
-		"--name", name,
-		"--backend", "pipe",
-		"--format", "S16",
-		"--bitrate", "160",
-		"--device-type", "speaker",
-		"--disable-audio-cache",
-		"--cache", cache,
-		"--onevent", script,
-		"--initial-volume", "100",
-	}
-	supervise(ctx, "librespot", librespotPath, args, w, "TECHO5_SPOTIFY_EVENTS="+events)
+	supervise(ctx, program{
+		name: "librespot",
+		path: librespotPath,
+		args: []string{
+			"--name", name,
+			"--backend", "pipe",
+			"--format", "S16",
+			"--bitrate", "160",
+			"--device-type", "speaker",
+			"--disable-audio-cache",
+			"--cache", cache,
+			"--zeroconf-port", spotifyPort,
+			"--onevent", script,
+			"--initial-volume", "100",
+		},
+		stdout: w,
+		env:    []string{"TECHO5_SPOTIFY_EVENTS=" + events},
+		cred:   cred,
+		keep:   librespotWorthLogging,
+	})
+}
+
+// librespotWorthLogging keeps librespot's warnings and errors and drops the rest, which names the
+// account that logged in.
+func librespotWorthLogging(line string) bool {
+	return strings.Contains(line, " WARN ") || strings.Contains(line, " ERROR ")
 }
 
 // readSpotifyEvents follows the event pipe, telling the media player the song. Opened for writing as
@@ -85,12 +126,16 @@ func readSpotifyEvents(ctx context.Context, path string) {
 }
 
 // followSpotifyEvents reads event lines from r until it ends, calling told with the song on a new
-// track, and with nothing when playing stops.
+// track, and with nothing when playing stops. A line too long to be one of the program's is skipped,
+// not taken as the end.
 func followSpotifyEvents(r io.Reader, told func(title, artist, album string)) {
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 4096), 16<<10)
-	for sc.Scan() {
-		f := strings.Split(sc.Text(), "\t")
+	br := bufio.NewReaderSize(r, 4096)
+	for {
+		line, err := readLine(br, 16<<10)
+		if err != nil {
+			return
+		}
+		f := strings.Split(line, "\t")
 		if len(f) < 4 {
 			continue
 		}
@@ -101,4 +146,28 @@ func followSpotifyEvents(r io.Reader, told func(title, artist, album string)) {
 			told("", "", "")
 		}
 	}
+}
+
+// readLine is the next line from br without its newline, or "" for one longer than most, which is read
+// through and dropped.
+func readLine(br *bufio.Reader, most int) (string, error) {
+	var line []byte
+	over := false
+	for {
+		part, isPrefix, err := br.ReadLine()
+		if err != nil {
+			return "", err
+		}
+		if !over {
+			line = append(line, part...)
+			over = len(line) > most
+		}
+		if !isPrefix {
+			break
+		}
+	}
+	if over {
+		return "", nil
+	}
+	return string(line), nil
 }

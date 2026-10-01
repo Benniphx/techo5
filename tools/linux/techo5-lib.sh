@@ -398,9 +398,16 @@ t5_bt_up() {
 	for d in /var/lib/bluealsa /usr/var/lib/bluealsa; do
 		[ -d "$d" ] && { mountpoint -q "$d" || mount --bind /data/misc/techo5/bluealsa "$d"; }
 	done
+	# The daemon starts the bus too, for AirPlay and Spotify Connect (feature/streaming): whichever
+	# holds /run/techo5-dbus-starting starts it, and the other waits for it.
 	if ! pidof dbus-daemon >/dev/null; then
-		dbus-daemon --system --nofork --nopidfile >> "$logdir/dbus.log" 2>&1 &
-		sleep 1
+		if mkdir /run/techo5-dbus-starting 2>/dev/null; then
+			pidof dbus-daemon >/dev/null || dbus-daemon --system --nofork --nopidfile >> "$logdir/dbus.log" 2>&1 &
+			sleep 1
+			rmdir /run/techo5-dbus-starting
+		else
+			n=0; while [ $n -lt 5 ] && [ ! -S /run/dbus/system_bus_socket ]; do sleep 1; n=$((n+1)); done
+		fi
 	fi
 	bd=$(command -v bluetoothd || echo /usr/lib/bluetooth/bluetoothd)
 	[ -x "$bd" ] && "$bd" -n >> "$logdir/bluetoothd.log" 2>&1 &

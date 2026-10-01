@@ -23,6 +23,8 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
@@ -30,6 +32,8 @@ import (
 func init() {
 	if Here {
 		component.Register(component.Network, Get(), component.Order(80))
+		media.StopOnPause(home.AirPlayName)
+		media.StopOnPause(home.SpotifyName)
 	}
 }
 
@@ -134,6 +138,9 @@ func (f *Feature) settle(parent context.Context) {
 		return
 	}
 	f.stop()
+	if !want[1] {
+		forgetSpotify()
+	}
 	if !want[0] && !want[1] {
 		f.mu.Lock()
 		f.wanted = want

@@ -13,6 +13,7 @@ var avahiReadyWithin = 15 * time.Second
 // Seams for the tests: what runs avahi until ctx ends or it stops, whether it is up, and the receivers.
 var (
 	runAvahi   = runAvahiOnce
+	leftovers  = killLeftovers
 	avahiUp    = avahiRunning
 	runAirPlay = runAirPlayReceiver
 	runSpotify = runSpotifyReceiver
@@ -24,6 +25,7 @@ var (
 func runGroup(ctx context.Context, name string, airplay, spotify bool) {
 	wait := restartFirst
 	for ctx.Err() == nil {
+		leftovers()
 		start := time.Now()
 		gctx, cancel := context.WithCancel(ctx)
 		avahiDone := make(chan struct{})
