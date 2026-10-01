@@ -13,16 +13,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
-
-// avahiWait is how long shairport-sync is held back after avahi starts: it gives up when avahi is not
-// there yet, and is then only started again after the supervisor's pause.
-var avahiWait = 3 * time.Second
 
 // runAirPlayReceiver runs shairport-sync under the device's name until ctx ends, playing what it sends
 // and showing what it says is playing.
@@ -47,11 +42,6 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 		return
 	}
 	safe.Go("airplay audio", func() { pump(ctx, home.AirPlayName, r) })
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(avahiWait):
-	}
 	supervise(ctx, "shairport-sync", shairportPath, []string{"-c", conf}, w)
 }
 
@@ -66,7 +56,7 @@ func shairportConf(name, metaPipe string) string {
 	interpolation = "soxr";
 };
 sessioncontrol = {
-	session_timeout = 20;
+	session_timeout = 60;
 };
 metadata = {
 	enabled = "yes";

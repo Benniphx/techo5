@@ -71,6 +71,14 @@ if ! $APK --root "$R" $arch --no-cache add "$IN"/inputs/apks312/*.apk; then
 fi
 $APK --root "$R" $arch info -v | sort > "$R/etc/techo5-packages"
 
+# avahi (AirPlay, Spotify Connect): it drops root for its own user, and these Android kernels give a
+# network socket only to a member of the inet group (3003); and it announces nothing of its own, where
+# the package would have it announce SSH.
+if [ -d "$R/etc/avahi" ]; then
+	grep -q '^inet:' "$R/etc/group" || echo 'inet:x:3003:avahi' >> "$R/etc/group"
+	rm -f "$R"/etc/avahi/services/*.service
+fi
+
 # Vendor tree: Wi-Fi/BT modules, firmware (firmware_class.path=/vendor/firmware on
 # the kernel command line), the audio tuning the daemon reads. It is Amazon's and the chip makers',
 # so an image leaves /vendor empty: the unit's own tree, kept in the store, is mounted there at boot.

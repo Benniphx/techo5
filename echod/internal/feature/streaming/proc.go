@@ -24,17 +24,8 @@ var (
 func supervise(ctx context.Context, name, path string, args []string, stdout io.Writer, env ...string) {
 	wait := restartFirst
 	for ctx.Err() == nil {
-		cmd := exec.CommandContext(ctx, path, args...)
-		cmd.Stdout = stdout
-		if len(env) > 0 {
-			cmd.Env = append(os.Environ(), env...)
-		}
-		cmd.Stderr = &logLines{name: name}
-		// Asked to stop, a program gets a moment to say goodbye on the network before it is killed.
-		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
-		cmd.WaitDelay = 3 * time.Second
 		start := time.Now()
-		err := cmd.Run()
+		err := runProgram(ctx, name, path, args, stdout, env...)
 		if ctx.Err() != nil {
 			return
 		}
@@ -50,6 +41,20 @@ func supervise(ctx context.Context, name, path string, args []string, stdout io.
 		case <-time.After(wait):
 		}
 	}
+}
+
+// runProgram runs the program at path once, until it stops or ctx ends. Asked to stop, it gets a
+// moment to say goodbye on the network before it is killed.
+func runProgram(ctx context.Context, name, path string, args []string, stdout io.Writer, env ...string) error {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Stdout = stdout
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
+	cmd.Stderr = &logLines{name: name}
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 3 * time.Second
+	return cmd.Run()
 }
 
 // logLines is a program's standard error, in the daemon's log a line at a time, the last ones kept

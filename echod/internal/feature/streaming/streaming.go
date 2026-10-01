@@ -48,6 +48,7 @@ type Feature struct {
 
 	mu      sync.Mutex
 	running context.CancelFunc // what runs for the switches as they were last settled
+	done    chan struct{}      // closed once what running stops has stopped
 	wanted  [2]bool            // AirPlay, Spotify, as last settled
 	wake    chan struct{}
 
@@ -160,23 +161,28 @@ func (f *Feature) settle(parent context.Context) {
 		return
 	}
 	name := config.Get().Device.Name
-	safe.Go("streaming avahi", func() { superviseAvahi(ctx) })
-	if runAirPlay {
-		safe.Go("streaming airplay", func() { runAirPlayReceiver(ctx, name) })
-	}
-	if runSpotify {
-		safe.Go("streaming spotify", func() { runSpotifyReceiver(ctx, name) })
-	}
+	done := make(chan struct{})
+	f.mu.Lock()
+	f.done = done
+	f.mu.Unlock()
+	safe.Go("streaming", func() {
+		defer close(done)
+		runGroup(ctx, name, runAirPlay, runSpotify)
+	})
 	slog.Info("streaming: on", "airplay", runAirPlay, "spotify", runSpotify, "name", name)
 }
 
-// stop ends whatever runs, and waits for nothing: each program is stopped by its own supervisor.
+// stop ends whatever runs and waits for it to be gone, so a new avahi never starts beside one still
+// on its way out.
 func (f *Feature) stop() {
 	f.mu.Lock()
-	cancel := f.running
-	f.running = nil
+	cancel, done := f.running, f.done
+	f.running, f.done = nil, nil
 	f.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if done != nil {
+		<-done
 	}
 }

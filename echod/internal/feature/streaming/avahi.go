@@ -6,12 +6,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
 // avahiConf announces what the receivers register and nothing of its own: no workstation record and no
-// host details. The daemon announces itself (ESPHome, Sendspin) on its own, beside avahi.
-const avahiConf = `[server]
+// host details. The daemon announces itself (ESPHome, Sendspin) on its own, beside avahi. The host name
+// is the device's own with -media after it: every image is called techo5, which would have a house of
+// them renaming each other, and the device's own name is what the daemon already answers for.
+func avahiConf(host string) string {
+	return `[server]
+host-name=` + host + `
 use-ipv4=yes
 use-ipv6=yes
 ratelimit-interval-usec=1000000
@@ -25,18 +33,36 @@ publish-workstation=no
 enable-reflector=no
 [rlimits]
 `
+}
 
-// superviseAvahi runs avahi-daemon for the receivers to register with, until ctx ends.
-func superviseAvahi(ctx context.Context) {
+// runAvahiOnce runs avahi-daemon for the receivers to register with, until it stops or ctx ends.
+func runAvahiOnce(ctx context.Context) {
 	conf := filepath.Join(runDir, "avahi-daemon.conf")
-	if err := os.WriteFile(conf, []byte(avahiConf), 0o644); err != nil {
+	host := layout.Slug(config.Get().Device.Name)
+	if host == "" {
+		host = "techo5"
+	}
+	if err := os.WriteFile(conf, []byte(avahiConf(host+"-media")), 0o644); err != nil {
 		slog.Error("streaming: writing avahi's configuration failed", "err", err)
 		return
 	}
 	// Where avahi keeps its pid; /run is cleared at boot.
 	_ = os.MkdirAll("/run/avahi-daemon", 0o755)
 	ensureBus()
-	supervise(ctx, "avahi", avahiPath, []string{"-f", conf, "--no-rlimits"}, nil)
+	err := runProgram(ctx, "avahi", avahiPath, []string{"-f", conf, "--no-rlimits"}, nil)
+	if ctx.Err() == nil {
+		slog.Warn("streaming: avahi stopped", "err", err)
+	}
+}
+
+// avahiRunning is whether avahi says, on the system bus, that it is up and its name is settled.
+func avahiRunning(ctx context.Context) bool {
+	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cctx, "dbus-send", "--system", "--print-reply", "--dest=org.freedesktop.Avahi",
+		"/", "org.freedesktop.Avahi.Server.GetState").Output()
+	// AVAHI_SERVER_RUNNING is 2.
+	return err == nil && strings.Contains(string(out), "int32 2")
 }
 
 // busSocket is the system bus avahi registers on; dbusPath starts one.

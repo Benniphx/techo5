@@ -140,6 +140,69 @@ func TestAProgramIsStartedAgain(t *testing.T) {
 	}
 }
 
+// The receivers start only once avahi says it is up, and when avahi stops they stop with it and start
+// again once a new avahi is up: they register with it once, as they start.
+func TestTheReceiversFollowAvahi(t *testing.T) {
+	wasRun, wasUp, wasAir, wasSpot, wasFirst := runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst
+	t.Cleanup(func() {
+		runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst = wasRun, wasUp, wasAir, wasSpot, wasFirst
+	})
+	restartFirst = 10 * time.Millisecond
+	var mu sync.Mutex
+	var up bool
+	var avahis, airplays, spotifies, running int
+	stopAvahi := make(chan struct{}, 1)
+	runAvahi = func(ctx context.Context) {
+		mu.Lock()
+		avahis++
+		first := avahis == 1
+		mu.Unlock()
+		if first {
+			time.Sleep(400 * time.Millisecond) // slow to come up
+		}
+		mu.Lock()
+		up = true
+		mu.Unlock()
+		select {
+		case <-ctx.Done():
+		case <-stopAvahi:
+		}
+		mu.Lock()
+		up = false
+		mu.Unlock()
+	}
+	avahiUp = func(context.Context) bool { mu.Lock(); defer mu.Unlock(); return up }
+	receiver := func(count *int) func(context.Context, string) {
+		return func(ctx context.Context, _ string) {
+			mu.Lock()
+			if !up {
+				t.Error("a receiver started before avahi was up")
+			}
+			*count++
+			running++
+			mu.Unlock()
+			<-ctx.Done()
+			mu.Lock()
+			running--
+			mu.Unlock()
+		}
+	}
+	runAirPlay, runSpotify = receiver(&airplays), receiver(&spotifies)
+	get := func() (int, int, int, int) { mu.Lock(); defer mu.Unlock(); return avahis, airplays, spotifies, running }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { runGroup(ctx, "Kitchen", true, true); close(done) }()
+	waitUntil(t, func() bool { _, a, s, r := get(); return a == 1 && s == 1 && r == 2 })
+	stopAvahi <- struct{}{}
+	waitUntil(t, func() bool { n, a, s, r := get(); return n == 2 && a == 2 && s == 2 && r == 2 })
+	cancel()
+	<-done
+	if _, _, _, r := get(); r != 0 {
+		t.Errorf("%d receivers still running after the group ended", r)
+	}
+}
+
 func waitUntil(t *testing.T, ok func() bool) {
 	t.Helper()
 	for end := time.Now().Add(3 * time.Second); time.Now().Before(end); time.Sleep(10 * time.Millisecond) {
