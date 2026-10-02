@@ -323,7 +323,9 @@ func TestTheSpotifyEventProgram(t *testing.T) {
 	}
 	run := func(env ...string) {
 		cmd := exec.Command("/bin/sh", script)
-		cmd.Env = append([]string{"TECHO5_SPOTIFY_EVENTS=" + out}, env...)
+		// The script's tr, cut and awk are found on the test machine's PATH, as on the device they are
+		// on the daemon's: not every system keeps them in the shell's default /bin and /usr/bin.
+		cmd.Env = append([]string{"PATH=" + os.Getenv("PATH"), "TECHO5_SPOTIFY_EVENTS=" + out}, env...)
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("%v: %s", err, b)
 		}
