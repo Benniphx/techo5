@@ -138,8 +138,8 @@ func TestSpotifyVolumeIsTheDevicesVolume(t *testing.T) {
 	}
 }
 
-// A lower volume's larger gain waits until the audio already in the pipe, and any read from it but not
-// yet played, has gone through; a higher volume's smaller one applies at once.
+// A lower volume's larger gain waits until the audio already in the pipe, any read from it but not yet
+// played, and a read's worth more have gone through; a higher volume's smaller one applies at once.
 func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	l := newLevel()
 	l.fromPipe(1000)
@@ -148,8 +148,8 @@ func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	if g := l.gain(); g != 1 {
 		t.Fatalf("gain %v before the old audio was played", g)
 	}
-	l.fromPipe(600)
-	l.passed(599)
+	l.fromPipe(600 + inFlight)
+	l.passed(600 + inFlight - 1)
 	if g := l.gain(); g != 1 {
 		t.Fatalf("gain %v with a byte of the old audio left", g)
 	}
@@ -163,14 +163,10 @@ func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	}
 	l.set(8, 100)
 	l.set(1, 100) // turned back up before the lower one came in: at once, and the lower one is dropped
-	l.fromPipe(100)
-	l.passed(100)
+	l.fromPipe(100 + inFlight)
+	l.passed(100 + inFlight)
 	if g := l.gain(); g != 1 {
 		t.Fatalf("gain %v, want 1", g)
-	}
-	l.set(3, 0) // nothing in the pipe and nothing held: at once
-	if g := l.gain(); g != 3 {
-		t.Fatalf("gain %v with nothing waiting, want 3", g)
 	}
 
 	// Read ahead of playing (the pump's first read of a track), with the pipe itself empty: the gain
@@ -178,12 +174,66 @@ func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	l = newLevel()
 	l.fromPipe(16384)
 	l.set(5, 0)
-	if g := l.gain(); g != 1 {
-		t.Fatalf("gain %v over audio read but not played", g)
-	}
 	l.passed(16384)
+	if g := l.gain(); g != 1 {
+		t.Fatalf("gain %v over audio read ahead", g)
+	}
+	l.fromPipe(inFlight)
+	l.passed(inFlight)
 	if g := l.gain(); g != 5 {
 		t.Fatalf("gain %v once it was played, want 5", g)
+	}
+}
+
+// Every byte read from the pipe is counted as gone through exactly once, however it went: played in
+// odd-sized reads, a half sample held back, dropped when the track ended, or drained after it.
+func TestEveryByteIsCountedOnce(t *testing.T) {
+	was := setAside
+	setAside = 50 * time.Millisecond
+	t.Cleanup(func() { setAside = was })
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	l := newLevel()
+	l.set(2, 0)
+
+	// What the pump read before the track started, odd-sized.
+	first := make([]byte, 1001)
+	if _, err := w.Write(first); err != nil {
+		t.Fatal(err)
+	}
+	n, err := r.Read(make([]byte, 1001))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.fromPipe(n)
+	src := &pipeSource{f: r, pending: first[:n], lv: l, done: make(chan struct{})}
+
+	if _, err := w.Write(make([]byte, 3333)); err != nil {
+		t.Fatal(err)
+	}
+	buf := make([]byte, 7)
+	for range 100 { // part of it played, in odd-sized reads
+		if _, err := src.Read(buf); err != nil {
+			t.Fatal(err)
+		}
+	}
+	src.Close() // the track ends with some read and not played
+	if _, err := w.Write(make([]byte, 4097)); err != nil {
+		t.Fatal(err)
+	}
+	drain(context.Background(), r, make([]byte, 16384), l) // what it went on sending, set aside
+	w.Close()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.read != l.through {
+		t.Errorf("read %d bytes, counted %d as gone through", l.read, l.through)
+	}
+	if l.read != 1001+3333+4097 {
+		t.Errorf("read %d bytes, want all %d", l.read, 1001+3333+4097)
 	}
 }
 
@@ -228,8 +278,7 @@ func TestScaledReadsStayInStep(t *testing.T) {
 		binary.LittleEndian.PutUint16(raw[2*i:], uint16(v))
 	}
 	// The first byte arrives with what pump read before the track; the rest splits mid-sample.
-	lv := newLevel()
-	lv.set(2, 0)
+	lv := &level{now: 2} // a gain already in force
 	src := &pipeSource{f: r, pending: raw[:3], lv: lv, done: make(chan struct{})}
 	go func() {
 		_, _ = w.Write(raw[3:5])

@@ -1289,6 +1289,11 @@ func (p *Player) Mute(muted bool) {
 // Adjust moves the level by a step and says so, which is what the buttons and Home Assistant's own
 // up and down both do.
 func (p *Player) Adjust(delta int) {
+	// Somebody reaching for the volume wants to hear it: a speaker muted from Home Assistant and
+	// forgotten comes back with the press, as on any speaker.
+	if p.muted.Load() {
+		p.Mute(false)
+	}
 	p.Set(p.Volume() + delta)
 	speaker.Sound().Chime(speaker.ToneVolume)
 }

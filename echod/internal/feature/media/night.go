@@ -144,11 +144,15 @@ func (p *Player) nightStartLocked(fresh bool) {
 	if !fresh && night != "" && night == c.NightOf {
 		return
 	}
-	if night != c.NightOf {
-		if err := config.Set().Speaker().NightOf(night); err != nil {
-			slog.Error("saving the night looked at failed", "err", err)
+	// Saved last, after the level: a fault in between leaves the night still to look at, rather than
+	// marked as looked at with the device still loud.
+	defer func() {
+		if night != config.Get().Speaker.NightOf {
+			if err := config.Set().Speaker().NightOf(night); err != nil {
+				slog.Error("saving the night looked at failed", "err", err)
+			}
 		}
-	}
+	}()
 	from := p.Volume()
 	to, keep := turnDown(c.NightVolume, from, c.DayVolume)
 	if to == from {

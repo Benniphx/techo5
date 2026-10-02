@@ -47,15 +47,20 @@ type level struct {
 
 func newLevel() *level { return &level{now: 1} }
 
+// inFlight is a read's worth of audio that can be between the pipe and the count: taken by a read that
+// has not reached fromPipe yet, it is in neither the pipe's queue nor read. A lower volume waits that
+// much longer, which errs on the side of a moment too quiet.
+const inFlight = 16384
+
 // set takes a new gain, with queued bytes still in the pipe from before it.
 func (l *level) set(g float64, queued int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if g <= l.now || (queued <= 0 && l.through >= l.read) {
+	if g <= l.now {
 		l.now, l.waiting = g, false
 		return
 	}
-	l.next, l.at, l.waiting = g, l.read+int64(max(queued, 0)), true
+	l.next, l.at, l.waiting = g, l.read+int64(max(queued, 0))+inFlight, true
 }
 
 // fromPipe counts n bytes read from the pipe.
