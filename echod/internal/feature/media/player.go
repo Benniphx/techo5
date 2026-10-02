@@ -27,10 +27,13 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/noise"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
+	"github.com/HuskerMinion/techo5/echod/internal/service"
 )
 
 func init() {
-	component.Register(component.Device, Get(), component.Order(25))
+	// Supervised for its loop, the night volume (night.go): a fault there should not end it for good.
+	component.Register(component.Device, Get(), component.Order(25),
+		component.Supervise(service.Restart(time.Second, time.Minute)))
 }
 
 // VolumeSteps runs 0..30, the range Android gives STREAM_MUSIC and the one the vendor's volume
@@ -137,7 +140,13 @@ type Player struct {
 	// play has come since.
 	stoppedAt atomic.Uint64
 
-	step int
+	// step is the level, written by the buttons, Home Assistant, the setup page, Music Assistant,
+	// Spotify and the night volume alike.
+	step atomic.Int32
+	// muted is Home Assistant's mute: the speaker is silent whatever the level.
+	muted atomic.Bool
+	// nightMu keeps one night volume change at a time (night.go).
+	nightMu sync.Mutex
 
 	// OnVolume fires with the new step whenever the level is changed on purpose — a button, a swipe,
 	// Home Assistant — so a screen can show it. A restore is silent, as it is on the ring.
@@ -1248,7 +1257,7 @@ func (p *Player) Set(step int) {
 // readout of the current level.
 func (p *Player) apply(step int, tell bool) int {
 	step = max(0, min(step, VolumeSteps))
-	p.step = step
+	p.step.Store(int32(step))
 
 	p.mp.SetVolume(float32(step) / VolumeSteps)
 	speaker.Get().SetVolume(step)
@@ -1264,18 +1273,19 @@ func (p *Player) apply(step int, tell bool) int {
 
 // Mute drops the output without losing the level it was at.
 func (p *Player) Mute(muted bool) {
+	p.muted.Store(muted)
 	p.mp.SetMuted(muted)
 	if muted {
 		speaker.Get().SetVolume(0)
 		return
 	}
-	speaker.Get().SetVolume(p.step)
+	speaker.Get().SetVolume(p.Volume())
 }
 
 // Adjust moves the level by a step and says so, which is what the buttons and Home Assistant's own
 // up and down both do.
 func (p *Player) Adjust(delta int) {
-	p.Set(p.step + delta)
+	p.Set(p.Volume() + delta)
 	speaker.Sound().Chime(speaker.ToneVolume)
 }
 
@@ -1288,4 +1298,4 @@ func (p *Player) show(step int) {
 }
 
 // Volume is the current level in steps, 0..VolumeSteps.
-func (p *Player) Volume() int { return p.step }
+func (p *Player) Volume() int { return int(p.step.Load()) }

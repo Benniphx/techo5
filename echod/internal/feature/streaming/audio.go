@@ -29,11 +29,57 @@ var play = func(name string, src media.PCMSource, rate, channels int) {
 	media.Get().PlayReceived(name, src, rate, channels)
 }
 
+// level is a gain on what a receiver sends that has to change in step with the audio, not with the
+// moment it is told: Spotify's, which undoes librespot's own volume. What is already in the pipe was
+// scaled at the old volume, so a lower volume, whose gain is larger, waits until that has been read:
+// applied at once, it would multiply audio still at the old level into a clipped burst. A higher volume
+// applies at once, since its smaller gain on the old audio only makes a moment of it quieter.
+type level struct {
+	mu      sync.Mutex
+	read    int64   // bytes taken from the pipe so far
+	now     float64 // the gain in force
+	next    float64 // the gain waiting for the pipe to reach at
+	at      int64
+	waiting bool
+}
+
+func newLevel() *level { return &level{now: 1} }
+
+// set takes a new gain, with queued bytes still in the pipe from before it.
+func (l *level) set(g float64, queued int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if g <= l.now || queued <= 0 {
+		l.now, l.waiting = g, false
+		return
+	}
+	l.next, l.at, l.waiting = g, l.read+int64(queued), true
+}
+
+// took counts n bytes read from the pipe, and brings a waiting gain in once the pipe has reached it.
+func (l *level) took(n int) {
+	if l == nil || n <= 0 {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.read += int64(n)
+	if l.waiting && l.read >= l.at {
+		l.now, l.waiting = l.next, false
+	}
+}
+
+func (l *level) gain() float64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.now
+}
+
 // pump plays what a receiver writes to r as the track named name: a track starts whenever audio arrives
 // and none of the receiver's own is playing, and runs until the receiver goes quiet or something else
-// takes the speaker. r stays open across tracks and across the program's restarts. gain, when there is
-// one, scales every sample by what it says at the time (Spotify's, which undoes librespot's own volume).
-func pump(ctx context.Context, name string, r *os.File, gain func() float64) {
+// takes the speaker. r stays open across tracks and across the program's restarts. lv, when there is
+// one, scales every sample (Spotify's, which undoes librespot's own volume); nil leaves them as sent.
+func pump(ctx context.Context, name string, r *os.File, lv *level) {
 	buf := make([]byte, 16384)
 	for ctx.Err() == nil {
 		_ = r.SetReadDeadline(time.Time{})
@@ -44,10 +90,11 @@ func pump(ctx context.Context, name string, r *os.File, gain func() float64) {
 			}
 			return
 		}
+		lv.took(n)
 		if n == 0 {
 			continue
 		}
-		src := &pipeSource{f: r, pending: append([]byte(nil), buf[:n]...), gain: gain, done: make(chan struct{})}
+		src := &pipeSource{f: r, pending: append([]byte(nil), buf[:n]...), lv: lv, done: make(chan struct{})}
 		slog.Info("streaming: audio arrived", "from", name)
 		play(name, src, audioRate, audioChannels)
 		select {
@@ -61,7 +108,7 @@ func pump(ctx context.Context, name string, r *os.File, gain func() float64) {
 		// hears of) leaves the receiver still sending: that is set aside until it has been quiet a
 		// moment, which a pause on the phone gives.
 		if !src.wentQuiet() {
-			drain(ctx, r, buf)
+			drain(ctx, r, buf, lv)
 		}
 	}
 }
@@ -69,7 +116,7 @@ func pump(ctx context.Context, name string, r *os.File, gain func() float64) {
 // drain reads and drops what r sends until it has sent nothing for setAside. It reads no faster than
 // the audio would play: librespot writes as fast as it is read, and drained flat out it would race
 // through the listener's queue while the speaker plays something else.
-func drain(ctx context.Context, r *os.File, buf []byte) {
+func drain(ctx context.Context, r *os.File, buf []byte, lv *level) {
 	const bytesPerSecond = audioRate * audioChannels * 2
 	start, read := time.Now(), int64(0)
 	for ctx.Err() == nil {
@@ -87,6 +134,7 @@ func drain(ctx context.Context, r *os.File, buf []byte) {
 		_ = r.SetReadDeadline(time.Now().Add(setAside))
 		n, err := r.Read(buf)
 		read += int64(n)
+		lv.took(n)
 		if err != nil {
 			if !errors.Is(err, os.ErrDeadlineExceeded) && ctx.Err() == nil {
 				slog.Warn("streaming: reading a receiver's audio failed", "err", err)
@@ -104,7 +152,7 @@ type pipeSource struct {
 	pending []byte
 	closed  bool
 	quiet   bool // the track's last read found the receiver quiet
-	gain    func() float64
+	lv      *level
 	once    sync.Once
 	done    chan struct{}
 }
@@ -115,9 +163,14 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 		s.mu.Unlock()
 		return 0, os.ErrClosed
 	}
+	// Scaled, a read hands on whole samples only, and a buffer too small for one gets nothing.
+	if s.lv != nil && len(p) < 2 {
+		s.mu.Unlock()
+		return 0, nil
+	}
 	// A lone byte kept back by scale is half a sample: it leads the next read from the pipe rather
 	// than being handed out alone, which scale would only keep back again.
-	if len(s.pending) > 1 || (len(s.pending) == 1 && s.gain == nil) {
+	if len(s.pending) > 1 || (len(s.pending) == 1 && s.lv == nil) {
 		n := copy(p, s.pending)
 		s.pending = s.pending[n:]
 		n = s.scale(p, n)
@@ -125,11 +178,12 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 		return n, nil
 	}
 	lead := 0
-	if len(s.pending) == 1 && len(p) > 1 {
+	if len(s.pending) == 1 {
 		p[0], s.pending, lead = s.pending[0], nil, 1
 	}
 	s.mu.Unlock()
 	n, err := s.f.Read(p[lead:])
+	s.lv.took(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
@@ -148,14 +202,14 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 // whatever the gain is: one read out of step would put every sample after it out of step. Called with
 // mu held.
 func (s *pipeSource) scale(p []byte, n int) int {
-	if s.gain == nil || n <= 0 {
+	if s.lv == nil || n <= 0 {
 		return n
 	}
 	if n%2 == 1 {
 		n--
 		s.pending = append([]byte{p[n]}, s.pending...)
 	}
-	g := s.gain()
+	g := s.lv.gain()
 	if g == 1 {
 		return n
 	}

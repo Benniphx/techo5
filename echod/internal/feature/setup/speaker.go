@@ -98,15 +98,33 @@ func changed(r *http.Request, name string) (string, bool) {
 	return v, v != r.PostFormValue("was_"+name)
 }
 
+// level reads a 0..VolumeSteps field that changed, and whether it did; a bad one is a problem to show.
+func level(r *http.Request, name, what string) (n int, ok bool, problem string) {
+	v, ok := changed(r, name)
+	if !ok {
+		return 0, false, ""
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 || n > media.VolumeSteps {
+		return 0, false, fmt.Sprintf("the %s is a number from 0 to %d", what, media.VolumeSteps)
+	}
+	return n, true, ""
+}
+
 func saveSpeaker(r *http.Request) string {
 	_ = r.ParseForm()
 	p := media.Get()
-	if v, ok := changed(r, "volume"); ok {
-		n, err := strconv.Atoi(strings.TrimSpace(v))
-		if err != nil || n < 0 || n > media.VolumeSteps {
-			return fmt.Sprintf("the volume is a number from 0 to %d", media.VolumeSteps)
-		}
-		p.Adjust(n - p.Volume())
+	// The numbers are read before anything is saved, so a mistyped one saves nothing rather than half.
+	vol, volChanged, problem := level(r, "volume", "volume")
+	if problem != "" {
+		return problem
+	}
+	night, nightChanged, problem := level(r, "night", "night volume")
+	if problem != "" {
+		return problem
+	}
+	if volChanged {
+		p.Adjust(vol - p.Volume())
 	}
 	// Off is shown, but not chosen here: the page offers words, and the screen or Home Assistant turns it off.
 	if v, ok := changed(r, "wakeword"); ok && v != "" {
@@ -126,12 +144,8 @@ func saveSpeaker(r *http.Request) string {
 		}
 		p.SetQuiet(v)
 	}
-	if v, ok := changed(r, "night"); ok {
-		n, err := strconv.Atoi(strings.TrimSpace(v))
-		if err != nil || n < 0 || n > media.VolumeSteps {
-			return fmt.Sprintf("the night volume is a number from 0 to %d", media.VolumeSteps)
-		}
-		p.SetNightVolume(n)
+	if nightChanged {
+		p.SetNightVolume(night)
 	}
 	if v, ok := changed(r, "output"); ok && speaker.HasJack {
 		if !oneOf(v, media.OutputChoices()) {

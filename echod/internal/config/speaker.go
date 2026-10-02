@@ -14,9 +14,11 @@ type Speaker struct {
 
 	// NightVolume is the most the device plays at through quiet hours, in volume steps, 0 for no limit.
 	// DayVolume is the level it was turned down from, kept so it goes back there when the hours end,
-	// 0 when it was not turned down. See media/night.go.
+	// 0 when it was not turned down; NightSet is the level it was turned down to, which is how a level
+	// somebody chose overnight is told from the one night volume set. See media/night.go.
 	NightVolume int `json:"night_volume,omitempty"`
 	DayVolume   int `json:"day_volume,omitempty"`
+	NightSet    int `json:"night_set,omitempty"`
 
 	// Bass and Treble are the listener's own shelves in dB, zero for the tuning as the vendor left
 	// it. They apply only while the tuning is on, since they are a stage of it (lib/asp/tone.go).
@@ -86,8 +88,10 @@ func (w SpeakerWriter) NightVolume(v int) error {
 	return w.st.Update(func(c *Config) { c.Speaker.NightVolume = v })
 }
 
-func (w SpeakerWriter) DayVolume(v int) error {
-	return w.st.Update(func(c *Config) { c.Speaker.DayVolume = v })
+// Night saves where night volume turned the device down from and to, together; 0, 0 when it is not
+// turned down.
+func (w SpeakerWriter) Night(day, set int) error {
+	return w.st.Update(func(c *Config) { c.Speaker.DayVolume, c.Speaker.NightSet = day, set })
 }
 
 // Daytime is the volume the device is at outside quiet hours: the level night volume turned it down

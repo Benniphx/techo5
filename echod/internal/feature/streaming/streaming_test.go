@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -59,49 +58,72 @@ func TestSpotifyEvents(t *testing.T) {
 	}
 }
 
-// The app's volume is passed on; the one librespot says as a phone connects is marked as only that,
-// and so is nothing after it once a moment has passed. A volume that is not one is let by.
+// The app's volume is passed on, marked as only where librespot was left for everything in the moments
+// after a phone connects, however many it says. A volume that is not one is let by.
 func TestSpotifyVolumeEvents(t *testing.T) {
-	now := time.Unix(1000, 0)
-	lines := []string{
-		"volume_changed\t\t\t\t\t32768",
-		"session_connected\t\t\t\t\t",
-		"volume_changed\t\t\t\t\t65535", // as the phone connected
-		"volume_changed\t\t\t\t\t13107",
-		"session_connected\t\t\t\t\t",
-		"later",
-		"volume_changed\t\t\t\t\t0", // long after that connect: the app's
-		"volume_changed\t\t\t\t\t70000",
-		"volume_changed\t\t\t\t\tloud",
+	lines := "volume_changed\t\t\t\t\t32768\n" +
+		"session_connected\t\t\t\t\t\n" +
+		"volume_changed\t\t\t\t\t65535\n" + // as the phone connected
+		"volume_changed\t\t\t\t\t13107\n" + // and again, still connecting
+		"session_connected\t\t\t\t\t\n" +
+		"volume_changed\t\t\t\t\t0\n" + // long after that connect: the app's
+		"volume_changed\t\t\t\t\t70000\n" +
+		"volume_changed\t\t\t\t\tloud\n"
+	// The clock as each line that asks for it is read: the connect, two volumes a second apart, then
+	// the second connect and a volume well after it.
+	clock := []int64{1000, 1001, 1002, 2000, 2100}
+	now := func() time.Time {
+		if len(clock) == 0 {
+			t.Fatal("asked the time more often than expected")
+		}
+		v := clock[0]
+		clock = clock[1:]
+		return time.Unix(v, 0)
 	}
 	type vol struct {
 		v          int
 		connecting bool
 	}
 	var got []vol
-	r, w := io.Pipe()
-	go func() {
-		for _, l := range lines {
-			if l == "later" {
-				now = now.Add(time.Minute)
-				continue
-			}
-			_, _ = w.Write([]byte(l + "\n"))
-		}
-		w.Close()
-	}()
-	followSpotifyEvents(r, spotifyEvents{
+	followSpotifyEvents(strings.NewReader(lines), spotifyEvents{
 		track:  func(string, string, string, string) {},
 		volume: func(v int, connecting bool) { got = append(got, vol{v, connecting}) },
-		now:    func() time.Time { return now },
+		now:    now,
 	})
-	want := []vol{{32768, false}, {65535, true}, {13107, false}, {0, false}}
+	want := []vol{{32768, false}, {65535, true}, {13107, true}, {0, false}}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
 
-// The app's slider runs the device's volume steps end to end, and the pump undoes librespot's linear
+// The slider moves the device by as many steps as it moves: the first level heard and those heard as a
+// phone connects only mark where it is, so a slider at 100% over a quiet device does not send it to full
+// at the first nudge.
+func TestTheSliderMovesTheDeviceByWhatItMoved(t *testing.T) {
+	s := slider{last: -1}
+	for i, c := range []struct {
+		v          int
+		connecting bool
+		by         int
+	}{
+		{65535, true, 0},   // connected at 100%
+		{61166, false, -2}, // nudged down: two steps, not to 28
+		{61166, false, 0},  // said again
+		{65535, false, 2},
+		{0, false, -30},
+		{32768, true, 0}, // a reconnect at half
+		{39321, false, 3},
+	} {
+		if by := s.moved(c.v, c.connecting); by != c.by {
+			t.Errorf("%d: moved %d, want %d", i, by, c.by)
+		}
+	}
+	if by := (&slider{last: -1}).moved(30000, false); by != 0 {
+		t.Errorf("the first level ever heard moved %d", by)
+	}
+}
+
+// The app's slider runs the device's volume steps end to end, and the gain undoes librespot's linear
 // scaling exactly.
 func TestSpotifyVolumeIsTheDevicesVolume(t *testing.T) {
 	for v, step := range map[int]int{0: 0, 65535: 30, 32768: 15, 2184: 1, 1000: 0} {
@@ -109,13 +131,43 @@ func TestSpotifyVolumeIsTheDevicesVolume(t *testing.T) {
 			t.Errorf("app volume %d is step %d, want %d", v, got, step)
 		}
 	}
-	was := spotifyVolume.Load()
-	t.Cleanup(func() { spotifyVolume.Store(was) })
-	for v, g := range map[int32]float64{65535: 1, 0: 1, 32768: 65535.0 / 32768, 6553: 65535.0 / 6553} {
-		spotifyVolume.Store(v)
-		if got := spotifyGain(); got != g {
+	for v, g := range map[int]float64{65535: 1, 0: 1, 32768: 65535.0 / 32768, 6553: 65535.0 / 6553} {
+		if got := spotifyGain(v); got != g {
 			t.Errorf("app volume %d undone by %v, want %v", v, got, g)
 		}
+	}
+}
+
+// A lower volume's larger gain waits until the audio already in the pipe, scaled at the old volume, has
+// been read; a higher volume's smaller one applies at once.
+func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
+	l := newLevel()
+	l.took(1000)
+	l.set(4, 600) // turned down, with 600 bytes at the old level still in the pipe
+	if g := l.gain(); g != 1 {
+		t.Fatalf("gain %v before the old audio was read", g)
+	}
+	l.took(599)
+	if g := l.gain(); g != 1 {
+		t.Fatalf("gain %v with a byte of the old audio left", g)
+	}
+	l.took(1)
+	if g := l.gain(); g != 4 {
+		t.Fatalf("gain %v once the old audio was read, want 4", g)
+	}
+	l.set(2, 600) // turned up: at once
+	if g := l.gain(); g != 2 {
+		t.Fatalf("gain %v after turning up, want 2", g)
+	}
+	l.set(8, 100)
+	l.set(1, 100) // turned back up before the lower one came in: at once, and the lower one is dropped
+	l.took(200)
+	if g := l.gain(); g != 1 {
+		t.Fatalf("gain %v, want 1", g)
+	}
+	l.set(3, 0) // nothing in the pipe: at once
+	if g := l.gain(); g != 3 {
+		t.Fatalf("gain %v with an empty pipe, want 3", g)
 	}
 }
 
@@ -133,13 +185,18 @@ func TestScaledReadsStayInStep(t *testing.T) {
 		binary.LittleEndian.PutUint16(raw[2*i:], uint16(v))
 	}
 	// The first byte arrives with what pump read before the track; the rest splits mid-sample.
-	src := &pipeSource{f: r, pending: raw[:3], gain: func() float64 { return 2 }, done: make(chan struct{})}
+	lv := newLevel()
+	lv.set(2, 0)
+	src := &pipeSource{f: r, pending: raw[:3], lv: lv, done: make(chan struct{})}
 	go func() {
 		_, _ = w.Write(raw[3:5])
 		time.Sleep(20 * time.Millisecond)
 		_, _ = w.Write(raw[5:])
 		w.Close()
 	}()
+	if n, err := src.Read(make([]byte, 1)); n != 0 || err != nil {
+		t.Fatalf("a one-byte read took %d bytes (%v)", n, err)
+	}
 	var out []byte
 	buf := make([]byte, 7)
 	for len(out) < len(raw) {

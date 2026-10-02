@@ -14,16 +14,25 @@ import (
 // a level somebody chose, so the first answer at bedtime is not a shout; as they end, it goes back to
 // where it was.
 //
-// It turns the volume down once, as the hours start (or as the limit is set inside them), and never
-// again that night: somebody who turns it up at two in the morning wanted it up. And it puts the level
-// back only if nobody has chosen another since, so a level picked overnight is not undone by the
-// morning. The level it came down from is saved, so a restart in the night still puts it back.
+// It turns the volume down once, as the hours start, and never again that night: somebody who turns it
+// up at two in the morning wanted it up. It puts the level back only if it is still the one night
+// volume set, so a level picked overnight is not undone by the morning. Changing the night volume
+// inside the hours moves a device still at the old one to the new one, and none, or one above where it
+// was, puts it straight back. Where it came down from and to are saved, so a restart in the night still
+// puts it back, and a device that starts inside the hours is turned down then.
+//
+// Muted, the level still moves, but the speaker stays silent: unmuting is somebody's choice.
 //
 // Alarms and timers ring at their own volume (config.Alarms.Ring), which starts from the daytime level
 // rather than this one.
 
 // nightCheck is how often the hours are looked at: a minute late at worst is fine for a volume.
 const nightCheck = 30 * time.Second
+
+// nightSettle is how long after a start the hours are first looked at. The clock can be hours out at
+// boot until the network sets it, and a device turned back up at midnight by a wrong clock would be
+// turned down again a moment later, loudly in between.
+var nightSettle = 2 * time.Minute
 
 func newNight() *esphome.Number {
 	return &esphome.Number{
@@ -48,20 +57,40 @@ func turnDown(limit, step, day int) (to, keep int) {
 	return limit, step
 }
 
-// turnUp is the level as quiet hours end: back to where it was turned down from, unless somebody set
-// another level since. Either way nothing is remembered after.
-func turnUp(limit, step, day int) (to, keep int) {
-	if day > 0 && step == limit {
-		return day, 0
+// turnUp is the level as quiet hours end: back to where it was turned down from if it is still at the
+// level night volume set, else where somebody put it since.
+func turnUp(set, step, day int) int {
+	if day > 0 && step == set {
+		return day
 	}
-	return step, 0
+	return step
+}
+
+// relimit is the level when the night volume changes to limit while the device is turned down: the new
+// limit for a device still at the old one, straight back for none or for one above where it was, and
+// unchanged for a level somebody chose. It says what to remember after, as turnDown does.
+func relimit(limit, step, day, set int) (to, keepDay, keepSet int) {
+	if day == 0 || step != set {
+		return step, day, set
+	}
+	if limit <= 0 || limit >= day {
+		return day, 0, 0
+	}
+	return limit, day, limit
 }
 
 // Run follows quiet hours for the night volume until ctx ends.
 func (p *Player) Run(ctx context.Context) error {
-	quiet := config.Get().Speaker.Quiet(time.Now())
-	// Turned down before a restart that outlasted the night: the morning's turn up was missed.
-	if !quiet {
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(nightSettle):
+	}
+	quiet := quietNow()
+	// Whatever happened while the daemon was not running: a night that started, or one that ended.
+	if quiet {
+		p.nightStart()
+	} else {
 		p.nightEnd()
 	}
 	t := time.NewTicker(nightCheck)
@@ -72,7 +101,7 @@ func (p *Player) Run(ctx context.Context) error {
 			return nil
 		case <-t.C:
 		}
-		now := config.Get().Speaker.Quiet(time.Now())
+		now := quietNow()
 		switch {
 		case now && !quiet:
 			p.nightStart()
@@ -83,14 +112,19 @@ func (p *Player) Run(ctx context.Context) error {
 	}
 }
 
+func quietNow() bool { return config.Get().Speaker.Quiet(time.Now()) }
+
 // nightStart turns the volume down to the night volume, if it is over it.
 func (p *Player) nightStart() {
+	p.nightMu.Lock()
+	defer p.nightMu.Unlock()
 	c := config.Get().Speaker
-	to, keep := turnDown(c.NightVolume, p.Volume(), c.DayVolume)
-	if to == p.Volume() {
+	from := p.Volume()
+	to, keep := turnDown(c.NightVolume, from, c.DayVolume)
+	if to == from {
 		return
 	}
-	if err := config.Set().Speaker().DayVolume(keep); err != nil {
+	if err := config.Set().Speaker().Night(keep, to); err != nil {
 		slog.Error("saving the daytime volume failed", "err", err)
 		return
 	}
@@ -100,12 +134,14 @@ func (p *Player) nightStart() {
 
 // nightEnd puts the volume back where night volume found it.
 func (p *Player) nightEnd() {
+	p.nightMu.Lock()
+	defer p.nightMu.Unlock()
 	c := config.Get().Speaker
 	if c.DayVolume == 0 {
 		return
 	}
-	to, _ := turnUp(c.NightVolume, p.Volume(), c.DayVolume)
-	if err := config.Set().Speaker().DayVolume(0); err != nil {
+	to := turnUp(c.NightSet, p.Volume(), c.DayVolume)
+	if err := config.Set().Speaker().Night(0, 0); err != nil {
 		slog.Error("saving the daytime volume failed", "err", err)
 	}
 	if to == p.Volume() {
@@ -117,16 +153,22 @@ func (p *Player) nightEnd() {
 }
 
 // setQuietly applies and saves a level without the arc: nobody turned it, and at night a ring lighting
-// up in a dark room is the opposite of the point.
+// up in a dark room is the opposite of the point. A muted device takes the level but stays silent.
 func (p *Player) setQuietly(step int) {
-	applied := p.apply(step, false)
-	if err := config.Set().Speaker().Volume(applied); err != nil {
+	step = max(0, min(step, VolumeSteps))
+	if p.muted.Load() {
+		p.step.Store(int32(step))
+		p.mp.SetVolume(float32(step) / VolumeSteps)
+	} else {
+		step = p.apply(step, false)
+	}
+	if err := config.Set().Speaker().Volume(step); err != nil {
 		slog.Error("saving volume failed", "err", err)
 	}
 }
 
 // SetNightVolume chooses the night volume, 0 for none, as Home Assistant and the setup page do. Chosen
-// inside quiet hours, it applies at once.
+// inside quiet hours it applies at once (relimit, or turnDown for a device not yet turned down).
 func (p *Player) SetNightVolume(n int) {
 	n = max(0, min(n, VolumeSteps))
 	if err := config.Set().Speaker().NightVolume(n); err != nil {
@@ -135,9 +177,27 @@ func (p *Player) SetNightVolume(n int) {
 	}
 	p.night.Set(float32(n))
 	slog.Info("setting changed", "setting", p.night.ObjectID, "using", n)
-	if config.Get().Speaker.Quiet(time.Now()) {
-		p.nightStart()
+	if !quietNow() {
+		return
 	}
+	if config.Get().Speaker.DayVolume == 0 {
+		p.nightStart()
+		return
+	}
+	p.nightMu.Lock()
+	defer p.nightMu.Unlock()
+	c := config.Get().Speaker
+	from := p.Volume()
+	to, day, set := relimit(n, from, c.DayVolume, c.NightSet)
+	if to == from && day == c.DayVolume && set == c.NightSet {
+		return
+	}
+	if err := config.Set().Speaker().Night(day, set); err != nil {
+		slog.Error("saving the daytime volume failed", "err", err)
+		return
+	}
+	p.setQuietly(to)
+	slog.Info("night volume: moved with the setting", "from", from, "to", to)
 }
 
 // NightVolume is the night volume, 0 for none.

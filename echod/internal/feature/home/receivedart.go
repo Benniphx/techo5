@@ -18,6 +18,8 @@ var received struct {
 	mu         sync.Mutex
 	from, url  string
 	art, thumb *image.RGBA
+	cancel     context.CancelFunc // the fetch under way, ended when another song takes its place
+	fetch      int                // which fetch is the current one; each new song's is the next
 }
 
 // coverWait is how long a cover may take to arrive before the page goes on without it.
@@ -34,9 +36,23 @@ func ReceivedArt(from, u string) {
 		u = ""
 	}
 	received.mu.Lock()
-	same := received.from == from && received.url == u
+	// The same cover again (the next song on an album) is left as it is, unless the last fetch of it
+	// failed: that gets another go.
+	same := received.from == from && received.url == u && (u == "" || received.art != nil || received.cancel != nil)
+	var ctx context.Context
+	var fetch int
 	if !same {
 		received.from, received.url, received.art, received.thumb = from, u, nil, nil
+		// Skipping through songs starts a fetch for each: only the newest is worth finishing.
+		if received.cancel != nil {
+			received.cancel()
+			received.cancel = nil
+		}
+		received.fetch++
+		fetch = received.fetch
+		if u != "" {
+			ctx, received.cancel = context.WithTimeout(context.Background(), coverWait)
+		}
 	}
 	received.mu.Unlock()
 	if same {
@@ -47,21 +63,28 @@ func ReceivedArt(from, u string) {
 		return
 	}
 	safe.Go("receiver cover", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), coverWait)
-		defer cancel()
 		art, thumb, err := fetchArt(ctx, u, false)
+		received.mu.Lock()
+		// The same song can come round again while an older fetch for it is still out, so it is the
+		// fetch that is checked, not the song.
+		current := received.fetch == fetch
+		if current {
+			if err == nil {
+				received.art, received.thumb = art, thumb
+			}
+			received.cancel()
+			received.cancel = nil
+		}
+		received.mu.Unlock()
+		if !current {
+			// A newer song's cover is on its way; this one was called off or is not wanted.
+			return
+		}
 		if err != nil {
 			// The page's own stand-in is what a song without a picture gets, and so does this one.
 			slog.Info("receiver cover", "from", from, "err", err)
 			return
 		}
-		received.mu.Lock()
-		if received.from != from || received.url != u {
-			received.mu.Unlock()
-			return
-		}
-		received.art, received.thumb = art, thumb
-		received.mu.Unlock()
 		slog.Info("receiver cover", "from", from, "shown", art != nil)
 		Get().Changed.Emit(struct{}{})
 	})
