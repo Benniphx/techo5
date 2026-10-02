@@ -606,12 +606,13 @@ func (f *Feature) Radio() Radio {
 // what runs the server it talks to here is Music Assistant, so that is what the page calls it.
 func carried(r Radio) Radio {
 	// A receiver this device runs (AirPlay, Spotify Connect: feature/streaming) is playing to it: the
-	// page names the app, and the song where it said one.
+	// page names the app, and the song and its cover where it gave them.
 	if from, title, artist, album := media.Get().ReceivedTrack(); Receiver(from) {
 		r.Chosen = ""
 		r.Playing, r.Paused = media.Get().Playing()
 		r.Now, r.Title, r.Artist, r.Album = from, title, artist, album
-		r.Art, r.Thumb, r.Logo, r.Music = nil, nil, false, true
+		r.Art, r.Thumb = receivedArt(from)
+		r.Logo, r.Music = false, true
 		return r
 	}
 	if !media.Get().Carried() {

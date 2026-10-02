@@ -2,8 +2,10 @@ package streaming
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"log/slog"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -29,8 +31,9 @@ var play = func(name string, src media.PCMSource, rate, channels int) {
 
 // pump plays what a receiver writes to r as the track named name: a track starts whenever audio arrives
 // and none of the receiver's own is playing, and runs until the receiver goes quiet or something else
-// takes the speaker. r stays open across tracks and across the program's restarts.
-func pump(ctx context.Context, name string, r *os.File) {
+// takes the speaker. r stays open across tracks and across the program's restarts. gain, when there is
+// one, scales every sample by what it says at the time (Spotify's, which undoes librespot's own volume).
+func pump(ctx context.Context, name string, r *os.File, gain func() float64) {
 	buf := make([]byte, 16384)
 	for ctx.Err() == nil {
 		_ = r.SetReadDeadline(time.Time{})
@@ -44,7 +47,7 @@ func pump(ctx context.Context, name string, r *os.File) {
 		if n == 0 {
 			continue
 		}
-		src := &pipeSource{f: r, pending: append([]byte(nil), buf[:n]...), done: make(chan struct{})}
+		src := &pipeSource{f: r, pending: append([]byte(nil), buf[:n]...), gain: gain, done: make(chan struct{})}
 		slog.Info("streaming: audio arrived", "from", name)
 		play(name, src, audioRate, audioChannels)
 		select {
@@ -101,6 +104,7 @@ type pipeSource struct {
 	pending []byte
 	closed  bool
 	quiet   bool // the track's last read found the receiver quiet
+	gain    func() float64
 	once    sync.Once
 	done    chan struct{}
 }
@@ -111,14 +115,21 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 		s.mu.Unlock()
 		return 0, os.ErrClosed
 	}
-	if len(s.pending) > 0 {
+	// A lone byte kept back by scale is half a sample: it leads the next read from the pipe rather
+	// than being handed out alone, which scale would only keep back again.
+	if len(s.pending) > 1 || (len(s.pending) == 1 && s.gain == nil) {
 		n := copy(p, s.pending)
 		s.pending = s.pending[n:]
+		n = s.scale(p, n)
 		s.mu.Unlock()
 		return n, nil
 	}
+	lead := 0
+	if len(s.pending) == 1 && len(p) > 1 {
+		p[0], s.pending, lead = s.pending[0], nil, 1
+	}
 	s.mu.Unlock()
-	n, err := s.f.Read(p)
+	n, err := s.f.Read(p[lead:])
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
@@ -129,7 +140,31 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		s.quiet = true
 	}
-	return n, err
+	return s.scale(p, lead+n), err
+}
+
+// scale applies the gain to the n bytes read into p and says how many to hand on. Samples are two
+// bytes, and a pipe may end a read between them, so an odd byte waits in pending for its other half
+// whatever the gain is: one read out of step would put every sample after it out of step. Called with
+// mu held.
+func (s *pipeSource) scale(p []byte, n int) int {
+	if s.gain == nil || n <= 0 {
+		return n
+	}
+	if n%2 == 1 {
+		n--
+		s.pending = append([]byte{p[n]}, s.pending...)
+	}
+	g := s.gain()
+	if g == 1 {
+		return n
+	}
+	for i := 0; i < n; i += 2 {
+		v := float64(int16(binary.LittleEndian.Uint16(p[i:]))) * g
+		v = math.Max(math.Min(math.Round(v), math.MaxInt16), math.MinInt16)
+		binary.LittleEndian.PutUint16(p[i:], uint16(int16(v)))
+	}
+	return n
 }
 
 // wentQuiet is whether the track ended on the receiver going quiet, not by being closed.

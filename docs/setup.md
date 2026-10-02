@@ -129,8 +129,9 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   device a speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
   **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under
   Settings → Sound, on the setup page (Sound & Voice), or in Home Assistant. What they play shows as
-  now playing. A pause on the device stops the stream there; the phone keeps going until it is paused
-  too. Anyone on the same network can play to the device while one is on, as with any AirPlay or
+  now playing, with the song's cover from Spotify. The Spotify app's volume slider sets the device's
+  volume; the device's own buttons do not move the app's slider. A pause on the device stops the
+  stream there; the phone keeps going until it is paused too. Anyone on the same network can play to the device while one is on, as with any AirPlay or
   Spotify speaker, and Spotify Connect keeps the login a phone hands it until it is turned off. Neither
   has been tried with an iPhone or a Spotify account yet: if something does not work, open an issue.
 - **Radio.** The Radio drawer and its favorites are set with
@@ -161,6 +162,11 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
   the screen and music.
 - **Wake word sensitivity**: raise it if the device wakes by mistake.
 - **Quiet hours** and **Do not disturb**.
+
+On the setup page (Sound & Voice) or in Home Assistant, **Night volume** turns the device down to that
+level as quiet hours start, if it is louder, and back to where it was as they end. Turned up or down
+during the night, it stays where it was put. 0 means no night volume. Alarms and timers keep their own
+**Ring volume**.
 
 ### A wake word of your own
 

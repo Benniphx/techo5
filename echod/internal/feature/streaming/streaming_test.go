@@ -3,11 +3,14 @@ package streaming
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -35,21 +38,128 @@ func TestAirPlayMetadata(t *testing.T) {
 	}
 }
 
-// librespot's event lines name a new song, and a stop clears it; anything else is let by, a line far
-// too long included, without losing what comes after it.
+// librespot's event lines name a new song and its cover, and a stop clears it; anything else is let
+// by, a line far too long included, without losing what comes after it.
 func TestSpotifyEvents(t *testing.T) {
-	lines := "track_changed\tHotel California\tEagles, Don Henley\tHotel California\n" +
+	lines := "track_changed\tHotel California\tEagles, Don Henley\tHotel California\thttps://i.scdn.co/image/a\t\n" +
 		"half a line\n" +
-		"track_changed\t" + strings.Repeat("x", 40<<10) + "\ta\tb\n" +
-		"track_changed\tCaf\xc3\tEagles\tB\n" + // cut inside a character
-		"stopped\t\t\t\n"
-	var got [][3]string
-	followSpotifyEvents(strings.NewReader(lines), func(title, artist, album string) {
-		got = append(got, [3]string{title, artist, album})
+		"track_changed\t" + strings.Repeat("x", 40<<10) + "\ta\tb\t\t\n" +
+		"track_changed\tCaf\xc3\tEagles\tB\t\t\n" + // cut inside a character
+		"stopped\t\t\t\t\t\n"
+	var got [][4]string
+	followSpotifyEvents(strings.NewReader(lines), spotifyEvents{
+		track: func(title, artist, album, cover string) {
+			got = append(got, [4]string{title, artist, album, cover})
+		},
+		now: time.Now,
 	})
-	if len(got) != 3 || got[0] != [3]string{"Hotel California", "Eagles, Don Henley", "Hotel California"} ||
-		got[1] != [3]string{"Caf", "Eagles", "B"} || got[2] != [3]string{} {
+	if len(got) != 3 || got[0] != [4]string{"Hotel California", "Eagles, Don Henley", "Hotel California", "https://i.scdn.co/image/a"} ||
+		got[1] != [4]string{"Caf", "Eagles", "B", ""} || got[2] != [4]string{} {
 		t.Errorf("told %v", got)
+	}
+}
+
+// The app's volume is passed on; the one librespot says as a phone connects is marked as only that,
+// and so is nothing after it once a moment has passed. A volume that is not one is let by.
+func TestSpotifyVolumeEvents(t *testing.T) {
+	now := time.Unix(1000, 0)
+	lines := []string{
+		"volume_changed\t\t\t\t\t32768",
+		"session_connected\t\t\t\t\t",
+		"volume_changed\t\t\t\t\t65535", // as the phone connected
+		"volume_changed\t\t\t\t\t13107",
+		"session_connected\t\t\t\t\t",
+		"later",
+		"volume_changed\t\t\t\t\t0", // long after that connect: the app's
+		"volume_changed\t\t\t\t\t70000",
+		"volume_changed\t\t\t\t\tloud",
+	}
+	type vol struct {
+		v          int
+		connecting bool
+	}
+	var got []vol
+	r, w := io.Pipe()
+	go func() {
+		for _, l := range lines {
+			if l == "later" {
+				now = now.Add(time.Minute)
+				continue
+			}
+			_, _ = w.Write([]byte(l + "\n"))
+		}
+		w.Close()
+	}()
+	followSpotifyEvents(r, spotifyEvents{
+		track:  func(string, string, string, string) {},
+		volume: func(v int, connecting bool) { got = append(got, vol{v, connecting}) },
+		now:    func() time.Time { return now },
+	})
+	want := []vol{{32768, false}, {65535, true}, {13107, false}, {0, false}}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// The app's slider runs the device's volume steps end to end, and the pump undoes librespot's linear
+// scaling exactly.
+func TestSpotifyVolumeIsTheDevicesVolume(t *testing.T) {
+	for v, step := range map[int]int{0: 0, 65535: 30, 32768: 15, 2184: 1, 1000: 0} {
+		if got := spotifyStep(v); got != step {
+			t.Errorf("app volume %d is step %d, want %d", v, got, step)
+		}
+	}
+	was := spotifyVolume.Load()
+	t.Cleanup(func() { spotifyVolume.Store(was) })
+	for v, g := range map[int32]float64{65535: 1, 0: 1, 32768: 65535.0 / 32768, 6553: 65535.0 / 6553} {
+		spotifyVolume.Store(v)
+		if got := spotifyGain(); got != g {
+			t.Errorf("app volume %d undone by %v, want %v", v, got, g)
+		}
+	}
+}
+
+// Scaled samples come out whole and in step, an odd byte from the pipe waiting for its other half, and
+// a sample that would pass full scale stops there.
+func TestScaledReadsStayInStep(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	in := []int16{100, -200, 300, 20000, -20000}
+	raw := make([]byte, 2*len(in))
+	for i, v := range in {
+		binary.LittleEndian.PutUint16(raw[2*i:], uint16(v))
+	}
+	// The first byte arrives with what pump read before the track; the rest splits mid-sample.
+	src := &pipeSource{f: r, pending: raw[:3], gain: func() float64 { return 2 }, done: make(chan struct{})}
+	go func() {
+		_, _ = w.Write(raw[3:5])
+		time.Sleep(20 * time.Millisecond)
+		_, _ = w.Write(raw[5:])
+		w.Close()
+	}()
+	var out []byte
+	buf := make([]byte, 7)
+	for len(out) < len(raw) {
+		n, err := src.Read(buf)
+		if n%2 != 0 {
+			t.Fatalf("read handed on %d bytes, half a sample", n)
+		}
+		out = append(out, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	want := []int16{200, -400, 600, 32767, -32768}
+	for i, v := range want {
+		if 2*i+1 >= len(out) {
+			t.Fatalf("only %d bytes came out", len(out))
+		}
+		if got := int16(binary.LittleEndian.Uint16(out[2*i:])); got != v {
+			t.Errorf("sample %d: %d, want %d", i, got, v)
+		}
 	}
 }
 
@@ -68,15 +178,22 @@ func TestTheSpotifyEventProgram(t *testing.T) {
 			t.Fatalf("%v: %s", err, b)
 		}
 	}
-	run("PLAYER_EVENT=track_changed", "NAME=One\tTwo", "ARTISTS=Eagles\nDon Henley", "ALBUM=Hotel California")
+	run("PLAYER_EVENT=track_changed", "NAME=One\tTwo", "ARTISTS=Eagles\nDon Henley", "ALBUM=Hotel California",
+		"COVERS=https://i.scdn.co/image/big\nhttps://i.scdn.co/image/small")
 	b, _ := os.ReadFile(out)
-	if got := string(b); got != "track_changed\tOne Two\tEagles, Don Henley\tHotel California\n" {
+	if got := string(b); got != "track_changed\tOne Two\tEagles, Don Henley\tHotel California\thttps://i.scdn.co/image/big\t\n" {
 		t.Errorf("wrote %q", got)
 	}
 	_ = os.Remove(out)
-	run("PLAYER_EVENT=volume_changed")
+	run("PLAYER_EVENT=volume_changed", "VOLUME=32768")
+	b, _ = os.ReadFile(out)
+	if got := string(b); got != "volume_changed\t\t\t\t\t32768\n" {
+		t.Errorf("wrote %q", got)
+	}
+	_ = os.Remove(out)
+	run("PLAYER_EVENT=playing")
 	if _, err := os.Stat(out); err == nil {
-		t.Error("an event that is not a song's wrote a line")
+		t.Error("an event nothing reads wrote a line")
 	}
 }
 
@@ -109,7 +226,7 @@ func TestThePumpLeavesTheSpeakerToWhatWasPlayedLast(t *testing.T) {
 	defer w.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go pump(ctx, "AirPlay", r)
+	go pump(ctx, "AirPlay", r, nil)
 
 	w.Write(make([]byte, 4096))
 	waitUntil(t, func() bool { return count() == 1 })
@@ -162,7 +279,7 @@ func TestAQuietEndIsNotSetAside(t *testing.T) {
 	defer w.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go pump(ctx, "AirPlay", r)
+	go pump(ctx, "AirPlay", r, nil)
 
 	w.Write(make([]byte, 4096))
 	waitUntil(t, func() bool { return count() == 1 })

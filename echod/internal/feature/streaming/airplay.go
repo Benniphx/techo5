@@ -43,7 +43,7 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 		slog.Error("streaming: writing shairport-sync's configuration failed", "err", err)
 		return
 	}
-	safe.Go("airplay audio", func() { pump(ctx, home.AirPlayName, r) })
+	safe.Go("airplay audio", func() { pump(ctx, home.AirPlayName, r, nil) })
 	supervise(ctx, program{name: "shairport-sync", path: shairportPath, args: []string{"-c", conf}, stdout: w, cred: cred})
 }
 
