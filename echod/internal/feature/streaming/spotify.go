@@ -177,7 +177,10 @@ func readSpotifyEvents(ctx context.Context, path string) {
 				slog.Info("streaming: Spotify connected", "volume", spotifyStep(v))
 				return
 			}
-			media.Get().Set(spotifyStep(v))
+			// The app says each level more than once as the slider moves; one already in force is not set again.
+			if step := spotifyStep(v); step != media.Get().Volume() {
+				media.Get().Set(step)
+			}
 		},
 		now: time.Now,
 	})
