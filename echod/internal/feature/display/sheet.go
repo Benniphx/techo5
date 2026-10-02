@@ -132,6 +132,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			{id: "wakesens", label: "Wake word sensitivity", sub: "Higher wakes by mistake less often", kind: ctlStepper,
 				value: fmt.Sprintf("%.2f", config.Get().Wake.Slot(0).Threshold)},
 			{id: "waketone", label: "Wake sound", kind: ctlChoice, value: config.Get().Wake.Slot(0).Tone.Label()},
+			voiceRow(),
 			{id: "hasounds", label: "Home Assistant sounds", sub: "For muting and timers", kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds},
 			{label: "Quiet", kind: ctlHeading},
 			{id: "quiet", label: "Quiet hours", sub: quietSub(), kind: ctlChoice, value: quietValue()},
@@ -450,6 +451,8 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 			}
 		}
 		return p, len(p.opts) > 0
+	case "ttsvoice":
+		return voicePicker()
 	case "waketone":
 		p := pickerView{title: "Wake sound", opts: config.Labels(speaker.WakeTones()), cur: -1}
 		cur := config.Get().Wake.Slot(0).Tone.Label()
@@ -647,6 +650,8 @@ func (d *Display) choose(id string, i int) {
 			id := models[i].ID
 			safe.Go("wake word from the screen", func() { voice.Get().ChooseWakeWord(id) })
 		}
+	case "ttsvoice":
+		chooseVoice(i)
 	case "waketone":
 		if tones := config.Labels(speaker.WakeTones()); i < len(tones) {
 			wakeword.Get().SetTone(0, tones[i])
@@ -920,7 +925,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		_, _, subfolders := home.Get().SlideshowSettings()
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
-		"timezone", "wakeword", "waketone", "quiet", "output":
+		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output":
 		d.openPicker(id)
 	}
 }

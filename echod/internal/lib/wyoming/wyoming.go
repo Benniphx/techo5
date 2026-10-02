@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -213,6 +214,70 @@ func Synthesize(ctx context.Context, addr, text, voice string) ([]int16, Format,
 			return nil, Format{}, fmt.Errorf("wyoming: %s", msg)
 		}
 	}
+}
+
+// Voices asks a text-to-speech server which voices it can speak in now, and returns their names,
+// like en_US-ryan-medium, for the language given ("en" or "en_US"; "" for all). A voice the server
+// lists but has not downloaded is left out: asking for it would fail or stall the reply while it
+// fetches.
+func Voices(ctx context.Context, addr, language string) ([]string, error) {
+	c, err := dial(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	defer c.close()
+	if err := c.send("describe", nil, nil); err != nil {
+		return nil, err
+	}
+	for {
+		typ, data, _, err := c.recv()
+		if err != nil {
+			return nil, err
+		}
+		if typ == "info" {
+			return voicesIn(data, language), nil
+		}
+	}
+}
+
+// voicesIn picks the voice names out of an info event's data.
+func voicesIn(data map[string]any, language string) []string {
+	var names []string
+	programs, _ := data["tts"].([]any)
+	for _, p := range programs {
+		prog, _ := p.(map[string]any)
+		voices, _ := prog["voices"].([]any)
+		for _, v := range voices {
+			voice, _ := v.(map[string]any)
+			name, _ := voice["name"].(string)
+			if installed, ok := voice["installed"].(bool); name == "" || (ok && !installed) {
+				continue
+			}
+			if language == "" || speaks(voice, name, language) {
+				names = append(names, name)
+			}
+		}
+	}
+	return names
+}
+
+// speaks reports whether a voice is in language, from its languages list or else its name's prefix.
+// "en" takes en_US and en_GB; "en_US" takes only en_US.
+func speaks(voice map[string]any, name, language string) bool {
+	match := func(l string) bool {
+		l = strings.ReplaceAll(l, "-", "_")
+		return strings.EqualFold(l, language) || strings.HasPrefix(strings.ToLower(l), strings.ToLower(language)+"_")
+	}
+	if langs, ok := voice["languages"].([]any); ok && len(langs) > 0 {
+		for _, l := range langs {
+			if s, _ := l.(string); match(s) {
+				return true
+			}
+		}
+		return false
+	}
+	lang, _, _ := strings.Cut(name, "-")
+	return match(lang)
 }
 
 func formatOf(data map[string]any) Format {
