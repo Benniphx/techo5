@@ -14,12 +14,13 @@ import (
 // a level somebody chose, so the first answer at bedtime is not a shout; as they end, it goes back to
 // where it was.
 //
-// It turns the volume down once, as the hours start, and never again that night: somebody who turns it
-// up at two in the morning wanted it up. It puts the level back only if it is still the one night
-// volume set, so a level picked overnight is not undone by the morning. Changing the night volume
-// inside the hours moves a device still at the old one to the new one, and none, or one above where it
-// was, puts it straight back. Where it came down from and to are saved, so a restart in the night still
-// puts it back, and a device that starts inside the hours is turned down then.
+// It turns the volume down once a night, as the hours start, and never again that night: somebody who
+// turns it up at two in the morning wanted it up, and a restart does not undo that, since the night it
+// last looked at is saved. It puts the level back only if it is still the one night volume set, so a
+// level picked overnight is not undone by the morning. Changing the night volume inside the hours moves
+// a device still at the old one to the new one, and none, or one above where it was, puts it straight
+// back. Where it came down from and to are saved, so a restart in the night still puts it back, and a
+// device that starts inside hours it has not looked at yet is turned down then.
 //
 // Muted, the level still moves, but the speaker stays silent: unmuting is somebody's choice.
 //
@@ -79,6 +80,21 @@ func relimit(limit, step, day, set int) (to, keepDay, keepSet int) {
 	return limit, day, limit
 }
 
+// nightOf names the night now belongs to in quiet hours window: the date the hours began, so the small
+// hours of a window across midnight belong to the evening before, and a day belongs to the night to
+// come. Empty for a window that does not parse.
+func nightOf(window string, now time.Time) string {
+	from, to, ok := config.ParseWindow(window)
+	if !ok {
+		return ""
+	}
+	day := now
+	if m := now.Hour()*60 + now.Minute(); from > to && m < to {
+		day = now.AddDate(0, 0, -1)
+	}
+	return day.Format("2006-01-02")
+}
+
 // Run follows quiet hours for the night volume until ctx ends.
 func (p *Player) Run(ctx context.Context) error {
 	select {
@@ -89,7 +105,7 @@ func (p *Player) Run(ctx context.Context) error {
 	quiet := quietNow()
 	// Whatever happened while the daemon was not running: a night that started, or one that ended.
 	if quiet {
-		p.nightStart()
+		p.nightStart(false)
 	} else {
 		p.nightEnd()
 	}
@@ -104,7 +120,7 @@ func (p *Player) Run(ctx context.Context) error {
 		now := quietNow()
 		switch {
 		case now && !quiet:
-			p.nightStart()
+			p.nightStart(true)
 		case !now && quiet:
 			p.nightEnd()
 		}
@@ -114,11 +130,25 @@ func (p *Player) Run(ctx context.Context) error {
 
 func quietNow() bool { return config.Get().Speaker.Quiet(time.Now()) }
 
-// nightStart turns the volume down to the night volume, if it is over it.
-func (p *Player) nightStart() {
+// nightStart turns the volume down to the night volume, if it is over it. Unless fresh (the hours have
+// just begun, or the night volume was just chosen), a night already looked at is left alone.
+func (p *Player) nightStart(fresh bool) {
 	p.nightMu.Lock()
 	defer p.nightMu.Unlock()
+	p.nightStartLocked(fresh)
+}
+
+func (p *Player) nightStartLocked(fresh bool) {
 	c := config.Get().Speaker
+	night := nightOf(c.QuietHours, time.Now())
+	if !fresh && night != "" && night == c.NightOf {
+		return
+	}
+	if night != c.NightOf {
+		if err := config.Set().Speaker().NightOf(night); err != nil {
+			slog.Error("saving the night looked at failed", "err", err)
+		}
+	}
 	from := p.Volume()
 	to, keep := turnDown(c.NightVolume, from, c.DayVolume)
 	if to == from {
@@ -140,7 +170,12 @@ func (p *Player) nightEnd() {
 	if c.DayVolume == 0 {
 		return
 	}
-	to := turnUp(c.NightSet, p.Volume(), c.DayVolume)
+	// Turned down by a build that did not save the level it set: that was the night volume.
+	set := c.NightSet
+	if set == 0 {
+		set = c.NightVolume
+	}
+	to := turnUp(set, p.Volume(), c.DayVolume)
 	if err := config.Set().Speaker().Night(0, 0); err != nil {
 		slog.Error("saving the daytime volume failed", "err", err)
 	}
@@ -153,24 +188,23 @@ func (p *Player) nightEnd() {
 }
 
 // setQuietly applies and saves a level without the arc: nobody turned it, and at night a ring lighting
-// up in a dark room is the opposite of the point. A muted device takes the level but stays silent.
+// up in a dark room is the opposite of the point. A muted device takes the level and stays silent
+// (apply).
 func (p *Player) setQuietly(step int) {
-	step = max(0, min(step, VolumeSteps))
-	if p.muted.Load() {
-		p.step.Store(int32(step))
-		p.mp.SetVolume(float32(step) / VolumeSteps)
-	} else {
-		step = p.apply(step, false)
-	}
-	if err := config.Set().Speaker().Volume(step); err != nil {
+	applied := p.apply(step, false)
+	if err := config.Set().Speaker().Volume(applied); err != nil {
 		slog.Error("saving volume failed", "err", err)
 	}
 }
 
 // SetNightVolume chooses the night volume, 0 for none, as Home Assistant and the setup page do. Chosen
-// inside quiet hours it applies at once (relimit, or turnDown for a device not yet turned down).
+// inside quiet hours it applies at once (relimit, or turnDown for a device not yet turned down). The
+// setting is saved under the same lock it is applied under, so two changes at once end where the last
+// saved one says.
 func (p *Player) SetNightVolume(n int) {
 	n = max(0, min(n, VolumeSteps))
+	p.nightMu.Lock()
+	defer p.nightMu.Unlock()
 	if err := config.Set().Speaker().NightVolume(n); err != nil {
 		slog.Error("saving a setting failed", "setting", p.night.ObjectID, "err", err)
 		return
@@ -180,13 +214,11 @@ func (p *Player) SetNightVolume(n int) {
 	if !quietNow() {
 		return
 	}
-	if config.Get().Speaker.DayVolume == 0 {
-		p.nightStart()
+	c := config.Get().Speaker
+	if c.DayVolume == 0 {
+		p.nightStartLocked(true)
 		return
 	}
-	p.nightMu.Lock()
-	defer p.nightMu.Unlock()
-	c := config.Get().Speaker
 	from := p.Volume()
 	to, day, set := relimit(n, from, c.DayVolume, c.NightSet)
 	if to == from && day == c.DayVolume && set == c.NightSet {

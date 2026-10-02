@@ -30,15 +30,17 @@ var play = func(name string, src media.PCMSource, rate, channels int) {
 }
 
 // level is a gain on what a receiver sends that has to change in step with the audio, not with the
-// moment it is told: Spotify's, which undoes librespot's own volume. What is already in the pipe was
-// scaled at the old volume, so a lower volume, whose gain is larger, waits until that has been read:
-// applied at once, it would multiply audio still at the old level into a clipped burst. A higher volume
-// applies at once, since its smaller gain on the old audio only makes a moment of it quieter.
+// moment it is told: Spotify's, which undoes librespot's own volume. What is already in the pipe, and
+// what was read from it but not yet played, was scaled at the old volume, so a lower volume, whose gain
+// is larger, waits until all of that has gone through: applied at once, it would multiply audio still
+// at the old level into a clipped burst. A higher volume applies at once, since its smaller gain on the
+// old audio only makes a moment of it quieter.
 type level struct {
 	mu      sync.Mutex
 	read    int64   // bytes taken from the pipe so far
+	through int64   // bytes of those played, or thrown away
 	now     float64 // the gain in force
-	next    float64 // the gain waiting for the pipe to reach at
+	next    float64 // the gain waiting for through to reach at
 	at      int64
 	waiting bool
 }
@@ -49,22 +51,33 @@ func newLevel() *level { return &level{now: 1} }
 func (l *level) set(g float64, queued int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if g <= l.now || queued <= 0 {
+	if g <= l.now || (queued <= 0 && l.through >= l.read) {
 		l.now, l.waiting = g, false
 		return
 	}
-	l.next, l.at, l.waiting = g, l.read+int64(queued), true
+	l.next, l.at, l.waiting = g, l.read+int64(max(queued, 0)), true
 }
 
-// took counts n bytes read from the pipe, and brings a waiting gain in once the pipe has reached it.
-func (l *level) took(n int) {
+// fromPipe counts n bytes read from the pipe.
+func (l *level) fromPipe(n int) {
 	if l == nil || n <= 0 {
 		return
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.read += int64(n)
-	if l.waiting && l.read >= l.at {
+}
+
+// passed counts n bytes played or thrown away, and brings a waiting gain in once the audio from
+// before it has all gone.
+func (l *level) passed(n int) {
+	if l == nil || n <= 0 {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.through += int64(n)
+	if l.waiting && l.through >= l.at {
 		l.now, l.waiting = l.next, false
 	}
 }
@@ -90,7 +103,7 @@ func pump(ctx context.Context, name string, r *os.File, lv *level) {
 			}
 			return
 		}
-		lv.took(n)
+		lv.fromPipe(n)
 		if n == 0 {
 			continue
 		}
@@ -134,7 +147,8 @@ func drain(ctx context.Context, r *os.File, buf []byte, lv *level) {
 		_ = r.SetReadDeadline(time.Now().Add(setAside))
 		n, err := r.Read(buf)
 		read += int64(n)
-		lv.took(n)
+		lv.fromPipe(n)
+		lv.passed(n) // thrown away
 		if err != nil {
 			if !errors.Is(err, os.ErrDeadlineExceeded) && ctx.Err() == nil {
 				slog.Warn("streaming: reading a receiver's audio failed", "err", err)
@@ -183,13 +197,14 @@ func (s *pipeSource) Read(p []byte) (int, error) {
 	}
 	s.mu.Unlock()
 	n, err := s.f.Read(p[lead:])
-	s.lv.took(n)
+	s.lv.fromPipe(n)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
 	case s.closed:
 		// Over while the read waited: what it took belongs to whatever reads the pipe next, and is
 		// dropped rather than queued to a track that has ended.
+		s.lv.passed(lead + max(n, 0))
 		return 0, os.ErrClosed
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		s.quiet = true
@@ -209,15 +224,17 @@ func (s *pipeSource) scale(p []byte, n int) int {
 		n--
 		s.pending = append([]byte{p[n]}, s.pending...)
 	}
+	// The gain as these bytes begin: one waiting for audio partway through them comes in after, which
+	// leaves the newer audio in them a moment quiet rather than any older audio loud.
 	g := s.lv.gain()
-	if g == 1 {
-		return n
+	if g != 1 {
+		for i := 0; i < n; i += 2 {
+			v := float64(int16(binary.LittleEndian.Uint16(p[i:]))) * g
+			v = math.Max(math.Min(math.Round(v), math.MaxInt16), math.MinInt16)
+			binary.LittleEndian.PutUint16(p[i:], uint16(int16(v)))
+		}
 	}
-	for i := 0; i < n; i += 2 {
-		v := float64(int16(binary.LittleEndian.Uint16(p[i:]))) * g
-		v = math.Max(math.Min(math.Round(v), math.MaxInt16), math.MinInt16)
-		binary.LittleEndian.PutUint16(p[i:], uint16(int16(v)))
-	}
+	s.lv.passed(n)
 	return n
 }
 
@@ -234,6 +251,9 @@ func (s *pipeSource) Close() error {
 	s.once.Do(func() {
 		s.mu.Lock()
 		s.closed = true
+		// What was read for this track and never played is gone with it.
+		s.lv.passed(len(s.pending))
+		s.pending = nil
 		s.mu.Unlock()
 		// A read waiting on the pipe is let go now, rather than whenever the receiver next writes.
 		_ = s.f.SetReadDeadline(time.Now())

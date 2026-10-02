@@ -1260,7 +1260,11 @@ func (p *Player) apply(step int, tell bool) int {
 	p.step.Store(int32(step))
 
 	p.mp.SetVolume(float32(step) / VolumeSteps)
-	speaker.Get().SetVolume(step)
+	// Muted, the level moves but the speaker stays silent: Home Assistant still says muted, and only
+	// an unmute makes it audible again, at whatever level it has reached by then.
+	if !p.muted.Load() {
+		speaker.Get().SetVolume(step)
+	}
 	if !tell {
 		return step
 	}

@@ -138,22 +138,24 @@ func TestSpotifyVolumeIsTheDevicesVolume(t *testing.T) {
 	}
 }
 
-// A lower volume's larger gain waits until the audio already in the pipe, scaled at the old volume, has
-// been read; a higher volume's smaller one applies at once.
+// A lower volume's larger gain waits until the audio already in the pipe, and any read from it but not
+// yet played, has gone through; a higher volume's smaller one applies at once.
 func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	l := newLevel()
-	l.took(1000)
+	l.fromPipe(1000)
+	l.passed(1000)
 	l.set(4, 600) // turned down, with 600 bytes at the old level still in the pipe
 	if g := l.gain(); g != 1 {
-		t.Fatalf("gain %v before the old audio was read", g)
+		t.Fatalf("gain %v before the old audio was played", g)
 	}
-	l.took(599)
+	l.fromPipe(600)
+	l.passed(599)
 	if g := l.gain(); g != 1 {
 		t.Fatalf("gain %v with a byte of the old audio left", g)
 	}
-	l.took(1)
+	l.passed(1)
 	if g := l.gain(); g != 4 {
-		t.Fatalf("gain %v once the old audio was read, want 4", g)
+		t.Fatalf("gain %v once the old audio was played, want 4", g)
 	}
 	l.set(2, 600) // turned up: at once
 	if g := l.gain(); g != 2 {
@@ -161,13 +163,54 @@ func TestTheGainChangesInStepWithTheAudio(t *testing.T) {
 	}
 	l.set(8, 100)
 	l.set(1, 100) // turned back up before the lower one came in: at once, and the lower one is dropped
-	l.took(200)
+	l.fromPipe(100)
+	l.passed(100)
 	if g := l.gain(); g != 1 {
 		t.Fatalf("gain %v, want 1", g)
 	}
-	l.set(3, 0) // nothing in the pipe: at once
+	l.set(3, 0) // nothing in the pipe and nothing held: at once
 	if g := l.gain(); g != 3 {
-		t.Fatalf("gain %v with an empty pipe, want 3", g)
+		t.Fatalf("gain %v with nothing waiting, want 3", g)
+	}
+
+	// Read ahead of playing (the pump's first read of a track), with the pipe itself empty: the gain
+	// still waits for what was read.
+	l = newLevel()
+	l.fromPipe(16384)
+	l.set(5, 0)
+	if g := l.gain(); g != 1 {
+		t.Fatalf("gain %v over audio read but not played", g)
+	}
+	l.passed(16384)
+	if g := l.gain(); g != 5 {
+		t.Fatalf("gain %v once it was played, want 5", g)
+	}
+}
+
+// What is waiting in the pipe is measured as it is: the bytes written and not yet read.
+func TestSpotifyQueuedMeasuresThePipe(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	if n := spotifyQueued(); n != 0 {
+		t.Fatalf("no pipe: %d queued", n)
+	}
+	spotifyPipe.Store(r)
+	t.Cleanup(func() { spotifyPipe.Store(nil) })
+	if _, err := w.Write(make([]byte, 1234)); err != nil {
+		t.Fatal(err)
+	}
+	if n := spotifyQueued(); n != 1234 {
+		t.Fatalf("%d queued, want 1234", n)
+	}
+	if _, err := r.Read(make([]byte, 234)); err != nil {
+		t.Fatal(err)
+	}
+	if n := spotifyQueued(); n != 1000 {
+		t.Fatalf("%d queued after a read, want 1000", n)
 	}
 }
 

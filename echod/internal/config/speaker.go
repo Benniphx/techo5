@@ -19,6 +19,9 @@ type Speaker struct {
 	NightVolume int `json:"night_volume,omitempty"`
 	DayVolume   int `json:"day_volume,omitempty"`
 	NightSet    int `json:"night_set,omitempty"`
+	// NightOf is the night night volume last looked at as quiet hours started, the date they began
+	// on, so a restart inside the same hours does not turn down a device somebody turned up since.
+	NightOf string `json:"night_of,omitempty"`
 
 	// Bass and Treble are the listener's own shelves in dB, zero for the tuning as the vendor left
 	// it. They apply only while the tuning is on, since they are a stage of it (lib/asp/tone.go).
@@ -86,6 +89,10 @@ func (w SpeakerWriter) Volume(v int) error {
 
 func (w SpeakerWriter) NightVolume(v int) error {
 	return w.st.Update(func(c *Config) { c.Speaker.NightVolume = v })
+}
+
+func (w SpeakerWriter) NightOf(v string) error {
+	return w.st.Update(func(c *Config) { c.Speaker.NightOf = v })
 }
 
 // Night saves where night volume turned the device down from and to, together; 0, 0 when it is not
