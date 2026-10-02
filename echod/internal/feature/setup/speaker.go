@@ -59,6 +59,10 @@ func speakerSection(w http.ResponseWriter, token string) {
 	}
 
 	choiceField(w, "quiet", "Quiet hours: the device's own sounds only; alarms and timers still sound", p.QuietChoices(), p.Quiet())
+	night := p.NightVolume()
+	fmt.Fprintf(w, `<label for="night">Night volume: turned down to this as quiet hours start, and back after; 0 for none</label>
+	 <input id="night" name="night" type="number" min="0" max="%d" value="%d"><input type="hidden" name="was_night" value="%d">`,
+		media.VolumeSteps, night, night)
 	if speaker.HasJack {
 		choiceField(w, "output", "Audio output", media.OutputChoices(), p.Output())
 	}
@@ -121,6 +125,13 @@ func saveSpeaker(r *http.Request) string {
 			return "that is not one of the quiet hours"
 		}
 		p.SetQuiet(v)
+	}
+	if v, ok := changed(r, "night"); ok {
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil || n < 0 || n > media.VolumeSteps {
+			return fmt.Sprintf("the night volume is a number from 0 to %d", media.VolumeSteps)
+		}
+		p.SetNightVolume(n)
 	}
 	if v, ok := changed(r, "output"); ok && speaker.HasJack {
 		if !oneOf(v, media.OutputChoices()) {

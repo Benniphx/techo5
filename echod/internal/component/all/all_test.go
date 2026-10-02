@@ -87,6 +87,7 @@ var registered = []string{
 	"missed_ring",
 	"mute_led_brightness",
 	"next_alarm",
+	"night_volume",
 	"noise_layer_1",
 	"noise_layer_2",
 	"phone",

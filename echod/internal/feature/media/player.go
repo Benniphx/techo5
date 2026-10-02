@@ -68,6 +68,9 @@ type Player struct {
 	bass, treble *esphome.Number
 	quiet        *esphome.Select
 
+	// night is the night volume, the most quiet hours play at (night.go).
+	night *esphome.Number
+
 	// nearMiss ducks a playing track for a few seconds after a wake word that nearly fired, so the
 	// next try is heard; see feature/detect/nearmiss.go.
 	nearMiss *esphome.Switch
@@ -284,11 +287,12 @@ func build() *Player {
 		},
 	}
 	p.quiet = newQuiet()
+	p.night = newNight()
 	p.layers = noiseLayers()
 
 	// The player itself stays on the device: it is what people reach for. These are how it behaves.
 	bases := []*esphome.Base{&p.resampling.Base, &p.onTurn.Base, &p.duck.Base, &p.jack.Base, &p.asp.Base,
-		&p.bass.Base, &p.treble.Base, &p.quiet.Base, &p.nearMiss.Base, &p.haSounds.Base}
+		&p.bass.Base, &p.treble.Base, &p.quiet.Base, &p.night.Base, &p.nearMiss.Base, &p.haSounds.Base}
 	if speaker.HasJack {
 		bases = append(bases, &p.output.Base)
 	}
@@ -361,6 +365,7 @@ func build() *Player {
 	}
 
 	p.haSounds.OnCommand = p.SetHASounds
+	p.night.OnCommand = func(v float32) { p.SetNightVolume(int(v)) }
 
 	p.nearMiss.OnCommand = func(v bool) {
 		p.nearMiss.Set(v)
@@ -447,7 +452,7 @@ func (p *Player) SetHASounds(on bool) {
 
 func (p *Player) Entities() []esphome.Entity {
 	out := []esphome.Entity{p.mp, p.jack, p.resampling, p.onTurn, p.duck, p.asp, p.bass, p.treble,
-		p.quiet, p.nearMiss, p.haSounds, p.sleep.sel}
+		p.quiet, p.night, p.nearMiss, p.haSounds, p.sleep.sel}
 	if speaker.HasJack {
 		out = append(out, p.output)
 	}
@@ -529,6 +534,8 @@ func (p *Player) Restore(c config.Config) {
 	slog.Info("restored", "what", p.asp.ObjectID, "using", settled, "asked", want)
 
 	restoreQuiet(p.quiet, c)
+	p.night.Set(float32(c.Speaker.NightVolume))
+	slog.Info("restored", "what", p.night.ObjectID, "using", c.Speaker.NightVolume, "daytime", c.Speaker.DayVolume)
 	p.bass.Set(float32(c.Speaker.Bass))
 	p.treble.Set(float32(c.Speaker.Treble))
 	p.applyTone()

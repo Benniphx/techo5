@@ -12,6 +12,12 @@ type Speaker struct {
 	// quiet.go for what that does and does not cover.
 	QuietHours string `json:"quiet_hours,omitempty"`
 
+	// NightVolume is the most the device plays at through quiet hours, in volume steps, 0 for no limit.
+	// DayVolume is the level it was turned down from, kept so it goes back there when the hours end,
+	// 0 when it was not turned down. See media/night.go.
+	NightVolume int `json:"night_volume,omitempty"`
+	DayVolume   int `json:"day_volume,omitempty"`
+
 	// Bass and Treble are the listener's own shelves in dB, zero for the tuning as the vendor left
 	// it. They apply only while the tuning is on, since they are a stage of it (lib/asp/tone.go).
 	Bass   float64 `json:"bass,omitempty"`
@@ -74,6 +80,25 @@ type SpeakerWriter struct{ st *Store }
 
 func (w SpeakerWriter) Volume(v int) error {
 	return w.st.Update(func(c *Config) { c.Speaker.Volume = v })
+}
+
+func (w SpeakerWriter) NightVolume(v int) error {
+	return w.st.Update(func(c *Config) { c.Speaker.NightVolume = v })
+}
+
+func (w SpeakerWriter) DayVolume(v int) error {
+	return w.st.Update(func(c *Config) { c.Speaker.DayVolume = v })
+}
+
+// Daytime is the volume the device is at outside quiet hours: the level night volume turned it down
+// from while it is turned down, else the volume itself. Anything that starts from the media volume
+// and is not music, like an alarm's first ring volume, starts from this, so a night limit does not
+// carry into it.
+func (s Speaker) Daytime() int {
+	if s.DayVolume > 0 {
+		return s.DayVolume
+	}
+	return s.Volume
 }
 
 func (w SpeakerWriter) Resampling(v Resampling) error {
