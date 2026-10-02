@@ -144,10 +144,11 @@ func (p *Player) nightStartLocked(fresh bool) {
 	if !fresh && night != "" && night == c.NightOf {
 		return
 	}
-	// Saved last, after the level: a fault in between leaves the night still to look at, rather than
-	// marked as looked at with the device still loud.
+	// Saved last, and only once the night is dealt with: a level that could not be saved leaves the
+	// night still to look at, rather than marked as looked at with the device still loud.
+	done := false
 	defer func() {
-		if night != config.Get().Speaker.NightOf {
+		if done && night != config.Get().Speaker.NightOf {
 			if err := config.Set().Speaker().NightOf(night); err != nil {
 				slog.Error("saving the night looked at failed", "err", err)
 			}
@@ -156,6 +157,7 @@ func (p *Player) nightStartLocked(fresh bool) {
 	from := p.Volume()
 	to, keep := turnDown(c.NightVolume, from, c.DayVolume)
 	if to == from {
+		done = true
 		return
 	}
 	if err := config.Set().Speaker().Night(keep, to); err != nil {
@@ -163,6 +165,7 @@ func (p *Player) nightStartLocked(fresh bool) {
 		return
 	}
 	p.setQuietly(to)
+	done = true
 	slog.Info("night volume: turned down", "from", keep, "to", to)
 }
 

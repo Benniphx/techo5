@@ -199,12 +199,13 @@ func TestEveryByteIsCountedOnce(t *testing.T) {
 	l := newLevel()
 	l.set(2, 0)
 
-	// What the pump read before the track started, odd-sized.
-	first := make([]byte, 1001)
+	// What the pump read before the track started, odd-sized and short, so most of what the track
+	// plays comes from the pipe itself.
+	first := make([]byte, 101)
 	if _, err := w.Write(first); err != nil {
 		t.Fatal(err)
 	}
-	n, err := r.Read(make([]byte, 1001))
+	n, err := r.Read(make([]byte, 101))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +216,7 @@ func TestEveryByteIsCountedOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	buf := make([]byte, 7)
-	for range 100 { // part of it played, in odd-sized reads
+	for range 100 { // the pending bytes, then part of the pipe's, played in odd-sized reads
 		if _, err := src.Read(buf); err != nil {
 			t.Fatal(err)
 		}
@@ -232,8 +233,8 @@ func TestEveryByteIsCountedOnce(t *testing.T) {
 	if l.read != l.through {
 		t.Errorf("read %d bytes, counted %d as gone through", l.read, l.through)
 	}
-	if l.read != 1001+3333+4097 {
-		t.Errorf("read %d bytes, want all %d", l.read, 1001+3333+4097)
+	if l.read != 101+3333+4097 {
+		t.Errorf("read %d bytes, want all %d", l.read, 101+3333+4097)
 	}
 }
 
