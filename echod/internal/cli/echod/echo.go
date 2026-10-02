@@ -2,11 +2,13 @@ package echod
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
 	"math/rand/v2"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,6 +16,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
+	stream "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
 )
 
 // maxLag is how far apart the reference and a microphone may be, in samples at the capture rate.
@@ -24,10 +27,12 @@ const maxLag = 800
 
 func newEchoCmd() *cobra.Command {
 	var (
-		secs  float64
-		level float64
-		save  string
-		white bool
+		secs      float64
+		level     float64
+		save      string
+		white     bool
+		realtime  bool
+		freezeAEC bool
 	)
 
 	c := &cobra.Command{
@@ -44,6 +49,9 @@ func newEchoCmd() *cobra.Command {
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			out := cmd.OutOrStdout()
+			if secs <= 0 || secs > 30 || level < 0 || level > 1 {
+				return fmt.Errorf("secs must be 0..30 and level 0..1")
+			}
 
 			source, err := mic.Acquire()
 			if err != nil {
@@ -67,19 +75,84 @@ func newEchoCmd() *cobra.Command {
 
 			raw, unlisten := source.ListenRaw()
 			defer unlisten()
+			mono, unmono := source.Listen("realtime-spike")
+			defer unmono()
+			source.SetAdapting(!freezeAEC)
+			var metricMu sync.Mutex
+			var monoEnergy float64
+			var monoSamples int
+			metricDone := make(chan struct{})
+			go func() {
+				defer close(metricDone)
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case samples, ok := <-mono:
+						if !ok {
+							return
+						}
+						metricMu.Lock()
+						for _, s := range samples {
+							monoEnergy += float64(s) * float64(s)
+							monoSamples++
+						}
+						metricMu.Unlock()
+					}
+				}
+			}()
+			defer func() { stop(); <-metricDone }()
 
 			signal, what := speaker.VoiceSweep(), "a sweep"
 			if white {
 				signal, what = noise(int(secs*1000)), "white noise"
 			}
 			fmt.Fprintf(out, "playing %s for %.1fs at level %.2f\n", what, secs, level)
-			p.PlayVoice(amplify(signal, level))
+			if realtime {
+				rate := 24000
+				signal = noiseAt(int(secs*1000), rate)
+				if !white {
+					for i := range signal {
+						env := math.Min(1, math.Min(float64(i), float64(len(signal)-i))/480)
+						signal[i] = int16(16383 * env * math.Sin(2*math.Pi*1000*float64(i)/float64(rate)))
+					}
+				}
+				signal = amplify(signal, level)
+				data := make([]byte, len(signal)*2)
+				for i, s := range signal {
+					binary.LittleEndian.PutUint16(data[i*2:], uint16(s))
+				}
+				var resampler stream.Resampler
+				for offset := 0; offset < len(data); offset += 1920 {
+					p.Play(resampler.Run(data[offset:min(offset+1920, len(data))]))
+				}
+				fmt.Fprintf(out, "realtime 24kHz to 48kHz stereo, AEC adapting=%v\n", !freezeAEC)
+			} else {
+				p.PlayVoice(amplify(signal, level))
+			}
 
 			frames, err := collect(ctx, raw, secs)
 			if err != nil {
 				return err
 			}
-			report(out, frames)
+			unlisten()
+			stop()
+			<-metricDone
+			metricMu.Lock()
+			energy, count := monoEnergy, monoSamples
+			metricMu.Unlock()
+			if count > 0 {
+				fmt.Fprintf(out, "AEC-processed mono %.1f dBFS, dropped frames %d, playback underruns %d\n", 20*math.Log10(math.Max(1, math.Sqrt(energy/float64(count)))/32768), source.Dropped(), p.Underruns())
+			}
+			if realtime {
+				// Correlation is O(samples*lags), expensive on the ARM CPU.
+				// Use the final500ms at max12.5ms lag; report this limit explicitly.
+				window := realtimeAnalysis(frames)
+				fmt.Fprintln(out, "reference fit: final500ms, lag search±12.5ms")
+				reportAt(out, window, 200)
+			} else {
+				report(out, frames)
+			}
 
 			if save != "" {
 				if err := os.WriteFile(save, frames, 0o644); err != nil {
@@ -94,6 +167,8 @@ func newEchoCmd() *cobra.Command {
 	c.Flags().Float64Var(&secs, "secs", 4, "how long to capture")
 	c.Flags().Float64Var(&level, "level", 0.25, "scales the sweep, 1 being the half-scale one the speaker uses")
 	c.Flags().StringVar(&save, "save", "", "write the raw interleaved capture here, for sizing a filter off the device")
+	c.Flags().BoolVar(&realtime, "realtime", false, "exercise the native Realtime 24kHz to 48kHz stereo path")
+	c.Flags().BoolVar(&freezeAEC, "freeze-aec", false, "freeze AEC adaptation for comparison")
 	c.Flags().BoolVar(&white, "noise", false, "play white noise for the whole capture instead of the 1.5s sweep")
 	return c
 }
@@ -103,13 +178,14 @@ func newEchoCmd() *cobra.Command {
 // frequency at a time, so an adaptive filter only ever converges where it currently is.
 //
 // The sequence is fixed rather than seeded from the clock, so two captures are comparable.
-func noise(ms int) []int16 {
-	frames := speaker.VoiceRate * ms / 1000
+func noise(ms int) []int16 { return noiseAt(ms, speaker.VoiceRate) }
+func noiseAt(ms, rate int) []int16 {
+	frames := rate * ms / 1000
 	out := make([]int16, frames)
 
 	r := rand.New(rand.NewPCG(1, 2))
 	for i := range out {
-		env := math.Min(1, math.Min(float64(i), float64(frames-i))/float64(speaker.VoiceRate/50))
+		env := math.Min(1, math.Min(float64(i), float64(frames-i))/float64(rate/50))
 		out[i] = int16(0.5 * env * math.MaxInt16 * (r.Float64()*2 - 1))
 	}
 	return out
@@ -136,7 +212,15 @@ func collect(ctx context.Context, raw <-chan []byte, secs float64) ([]byte, erro
 	}
 }
 
-func report(w io.Writer, frames []byte) {
+func realtimeAnalysis(frames []byte) []byte {
+	frameBytes := mic.Channels * mic.Bits / 8
+	complete := len(frames) / frameBytes * frameBytes
+	n := min(complete, mic.Rate/2*frameBytes)
+	return frames[complete-n : complete]
+}
+
+func report(w io.Writer, frames []byte) { reportAt(w, frames, maxLag) }
+func reportAt(w io.Writer, frames []byte, lagLimit int) {
 	mics := mic.Decode(frames)
 	refs := mic.Reference(frames)
 	if len(mics) == 0 || len(refs) == 0 || len(mics[0]) == 0 {
@@ -165,7 +249,7 @@ func report(w io.Writer, frames []byte) {
 			got[i] = float64(v)
 		}
 
-		lag, _ := audio.BestLag(ref, got, maxLag)
+		lag, _ := audio.BestLag(ref, got, min(lagLimit, len(ref)-1))
 		res := residual(got, ref, lag)
 
 		fmt.Fprintf(w, "%4d %10.1f %8d %8.2f %10.1f %8.1f\n",

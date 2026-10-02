@@ -19,6 +19,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
@@ -41,8 +42,9 @@ const Features = esphome.DefaultVoiceFeatures |
 	esphome.FeatureTimers
 
 type Voice struct {
-	vs   *esphome.VoiceSatellite
-	turn *conversation
+	vs       *esphome.VoiceSatellite
+	turn     *conversation
+	realtime *realtime
 }
 
 var (
@@ -98,6 +100,12 @@ func build() *Voice {
 		},
 	}
 	v.turn = newConversation(v.vs)
+	v.realtime = &realtime{}
+	mute.Get().Changed.Listen(func(on bool) {
+		if on {
+			v.realtime.stop()
+		}
+	})
 	slog.Info("wake words", "ours", len(ours), "active", active)
 
 	v.vs.OnTimer = timer.Get().Event
@@ -147,6 +155,8 @@ func (v *Voice) Handle(ctx context.Context, c *esphome.Conn, msg proto.Message) 
 // Run owns the conversation until ctx is canceled. Nothing happens on a wake word until it is
 // running.
 func (v *Voice) Run(ctx context.Context) error {
+	v.realtime.attach(ctx)
+	defer v.realtime.shutdown()
 	v.turn.Run(ctx)
 	return nil
 }
@@ -154,7 +164,9 @@ func (v *Voice) Run(ctx context.Context) error {
 // Ready reports whether Home Assistant has a voice pipeline listening. Wake detection runs before
 // that happens, but nothing can be done with a detection until it does, so this is what the device
 // shows on the ring while it comes up.
-func (v *Voice) Ready() bool { return v.vs.Subscribed() || config.Get().Brain.Direct() }
+func (v *Voice) Ready() bool {
+	return v.vs.Subscribed() || config.Get().Brain.Direct() || realtimeChosen()
+}
 
 // Start asks for a turn as if that slot's wake word had fired, which is how detection and the
 // buttons both reach a pipeline. What that means from the phase the conversation is already in is
@@ -171,16 +183,32 @@ func (v *Voice) Start(slot int) {
 	if ring.IsSounding() && ring.Silence() {
 		slog.Info("wake word over a ring, silencing it")
 	}
+	if v.realtime.busy.Load() {
+		return
+	}
+	if realtimeChosen() && v.turn.Busy() {
+		return
+	}
+	if realtimeChosen() {
+		if !v.realtime.backingOff() {
+			v.realtime.start()
+		}
+		return
+	}
 	v.turn.Start(slot)
 }
 
 // Busy reports whether a turn is running, for anything that has to leave the speaker alone while one
 // is.
-func (v *Voice) Busy() bool { return v.turn.Busy() }
+func (v *Voice) Busy() bool { return v.turn.Busy() || v.realtime.busy.Load() }
+
+// RealtimeBusy distinguishes server-VAD sessions from one-shot Assist turns.
+func (v *Voice) RealtimeBusy() bool { return v.realtime.busy.Load() }
 
 // Cancel stops a turn that is running, for a gesture that turned out to mean something else: the
 // second tap of a double, the way a long hold already undoes the turn its hold began.
 func (v *Voice) Cancel() {
+	v.realtime.stop()
 	if v.turn.Busy() {
 		v.turn.Cancel()
 	}
@@ -212,7 +240,7 @@ func (v *Voice) Action() {
 
 	// No wake word, so no slot to pair with: the first pipeline is the one Home Assistant falls back
 	// to for anything that reports no phrase.
-	v.turn.Start(0)
+	v.Start(0)
 }
 
 // Interrupt is the stop word.
@@ -222,6 +250,10 @@ func (v *Voice) Action() {
 // would be worse than not listening for it at all. Nothing is playing then, so there is nothing the word
 // could sensibly mean.
 func (v *Voice) Interrupt() {
+	// Spoken stop belongs to server VAD during a live session.
+	if v.realtime.busy.Load() {
+		return
+	}
 	// "<wake word>, stop" over music: the stop word hears "stop" while the turn the wake word opened is
 	// still listening, and it is the music that was meant, not the question that has not been asked.
 	if v.turn.Phase() == phaseListening && !ring.IsSounding() {
@@ -258,6 +290,11 @@ func (v *Voice) Stop() bool {
 		return true
 	}
 
+	if v.realtime.busy.Load() {
+		v.realtime.stop()
+		return true
+	}
+
 	if v.turn.Busy() {
 		v.turn.Cancel()
 		return true
@@ -289,10 +326,7 @@ func (v *Voice) ActionHold() {
 			return
 		}
 	}
-	if micTaken() {
-		return
-	}
-	v.turn.Start(1)
+	v.Start(1)
 }
 
 // A feature that sends the microphones somewhere of its own (feature/talkback, which cannot be imported

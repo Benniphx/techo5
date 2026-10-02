@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
+	stream "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
 )
 
 func newVoiceCmd() *cobra.Command {
@@ -54,6 +55,16 @@ func newVoiceCmd() *cobra.Command {
 			time.Sleep(1500 * time.Millisecond)
 
 			switch {
+			case rate == 24000 && channels == 1:
+				var resampler stream.Resampler
+				for offset := 0; offset < len(pcm); offset += 960 {
+					samples := pcm[offset:min(offset+960, len(pcm))]
+					data := make([]byte, len(samples)*2)
+					for i, s := range samples {
+						binary.LittleEndian.PutUint16(data[i*2:], uint16(s))
+					}
+					p.Play(resampler.Run(data))
+				}
 			case rate == speaker.VoiceRate && channels == 1:
 				fmt.Fprintln(cmd.OutOrStdout(), "queueing through the resampler")
 				p.PlayVoice(pcm)

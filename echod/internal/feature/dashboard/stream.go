@@ -43,6 +43,7 @@ type stream struct {
 	f    *Feature
 	w, h int
 
+	touchMu sync.Mutex
 	mu      sync.Mutex
 	conn    net.Conn
 	view    View
@@ -108,6 +109,8 @@ func (f *Feature) Touch(kind string, x, y int) {
 	if s == nil {
 		return
 	}
+	s.touchMu.Lock()
+	defer s.touchMu.Unlock()
 	// Written by whoever touched, which is the touch reader, outside the lock the page draws under,
 	// and given a moment at most: a server that has stopped reading must not freeze the screen.
 	s.mu.Lock()
@@ -133,6 +136,7 @@ func (s *stream) close() {
 func (s *stream) problem(text string) {
 	s.mu.Lock()
 	s.view.Problem = text
+	s.view.Ready = false
 	s.mu.Unlock()
 	s.f.Changed.Emit(struct{}{})
 }
@@ -201,11 +205,14 @@ func (s *stream) once() error {
 		return nil
 	}
 	s.conn, s.enc = c, enc
+	s.view.Ready = false
+	s.frame = nil
 	s.view.Problem = ""
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		s.conn, s.enc = nil, nil
+		s.view.Ready = false
 		s.mu.Unlock()
 	}()
 	slog.Info("dashboard stream connected", "server", d.Server, "path", path)

@@ -675,17 +675,22 @@ func (p *Player) render() []int16 {
 // Audio offered while the device is not held is dropped rather than queued. Nothing is draining the
 // queue then, so it would grow for as long as the speaker stayed away — and a device that cannot play
 // should say so in the log rather than in memory.
-func (p *Player) Play(samples []int16) {
+func (p *Player) Play(samples []int16) { p.TryPlay(samples) }
+
+// TryPlay reports whether audio was accepted into the playback queue. Streaming
+// clients use this to avoid counting dropped samples as heard conversation.
+func (p *Player) TryPlay(samples []int16) bool {
 	if pb, _ := p.device(); pb == nil {
 		if n := p.deaf.Add(1); n == 1 || n%100 == 0 {
 			slog.Warn("audio dropped, no playback device", "times", n)
 		}
-		return
+		return false
 	}
 
 	p.mu.Lock()
 	p.pending = append(p.pending, samples...)
 	p.mu.Unlock()
+	return true
 }
 
 // Take empties the queue and hands back what had not been played, so a sound that yields to another

@@ -58,7 +58,9 @@ type Engine struct {
 	slots []slot
 
 	// quiet is the microphones being cut: the backends are dropped while it holds. See Quiet.
-	quiet bool
+	quiet      bool
+	paused     bool
+	generation uint64
 
 	// Threshold is asked for every score, so a change in Home Assistant takes effect at once. It is
 	// per slot because the models disagree on scale.
@@ -351,7 +353,7 @@ func (e *Engine) score(frame []int16, source *mic.Source) {
 	defer e.mu.Unlock()
 
 	// Nothing to hear and nothing to do. See Quiet.
-	if e.quiet {
+	if e.quiet || e.paused {
 		return
 	}
 
@@ -446,7 +448,15 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 	s.crossing, s.peak = score, score
 
 	if e.OnDetect != nil {
-		safe.Go("wake detected", func() { e.OnDetect(n) })
+		generation := e.generation
+		safe.Go("wake detected", func() {
+			e.mu.Lock()
+			valid := generation == e.generation && !e.paused
+			e.mu.Unlock()
+			if valid {
+				e.OnDetect(n)
+			}
+		})
 	}
 }
 
@@ -496,4 +506,17 @@ func (e *Engine) Quiet(on bool) {
 		back = append(back, s.model.ID)
 	}
 	slog.Info("wake words listening again", "active", back)
+}
+
+// Pause skips inference during server-VAD conversations without changing mute.
+func (e *Engine) Pause(on bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.paused = on
+	e.generation++
+	for i := range e.slots {
+		e.slots[i].quiet = time.Now().Add(Refractory)
+		e.slots[i].holding = false
+		e.slots[i].peak = 0
+	}
 }

@@ -8,6 +8,7 @@
 package mute
 
 import (
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -128,6 +129,15 @@ func (m *Mute) Entities() []esphome.Entity {
 func (m *Mute) Muted() (bool, error) {
 	if m.line == nil {
 		return false, nil
+	}
+	return m.line.Get()
+}
+
+// MutedStrict fails closed if the privacy backend is unavailable. Cloud audio
+// must not interpret missing hardware as permission to send microphone history.
+func (m *Mute) MutedStrict() (bool, error) {
+	if m.line == nil {
+		return true, errors.New("microphone privacy state unavailable")
 	}
 	return m.line.Get()
 }

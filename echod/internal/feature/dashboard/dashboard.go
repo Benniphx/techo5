@@ -62,6 +62,7 @@ type Feature struct {
 	kiosk *esphome.Switch
 	board *esphome.Select
 
+	leases    int
 	mu        sync.Mutex
 	stream    *stream  // while the page is up in streamed mode
 	drawn     *session // while the page is up drawn, for drawnPath
@@ -141,6 +142,20 @@ func Get() *Feature {
 			slog.Info("dashboard: header", "hidden", on)
 			f.setMode(f.Mode())
 		}
+		// Realtime owns a stream lease even while another scene hides it.
+		var leaseMu sync.Mutex
+		var release func()
+		voice.RealtimeActive.Listen(func(on bool) {
+			leaseMu.Lock()
+			defer leaseMu.Unlock()
+			if on && release == nil {
+				release = f.HoldStream()
+			}
+			if !on && release != nil {
+				release()
+				release = nil
+			}
+		})
 		shared = f
 	})
 	return shared
@@ -261,7 +276,7 @@ func (f *Feature) closeUnused() {
 	f.mu.Lock()
 	var s *stream
 	var d *session
-	if f.stream != nil && time.Since(f.streamUsed) > unused {
+	if f.leases == 0 && f.stream != nil && time.Since(f.streamUsed) > unused {
 		s, f.stream = f.stream, nil
 	}
 	if f.drawn != nil && time.Since(f.drawnUsed) > unused {
@@ -394,4 +409,14 @@ func (f *Feature) Actions() []*esphome.Action {
 			},
 		},
 	}
+}
+
+// HoldStream keeps the selected dashboard connection warm while voice hides it.
+// Mode/server/path changes and stream recovery remain authoritative.
+func (f *Feature) HoldStream() func() {
+	f.mu.Lock()
+	f.leases++
+	f.mu.Unlock()
+	var once sync.Once
+	return func() { once.Do(func() { f.mu.Lock(); defer f.mu.Unlock(); f.leases--; f.streamUsed = time.Now() }) }
 }

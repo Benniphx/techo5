@@ -53,3 +53,15 @@ func TestKeepAfterARing(t *testing.T) {
 		}
 	}
 }
+
+func TestStrictMuteRequiresPrivacyBackend(t *testing.T) {
+	if cut, err := (&Mute{}).MutedStrict(); !cut || err == nil {
+		t.Fatal("missing privacy backend permitted cloud capture")
+	}
+	for _, want := range []bool{false, true} {
+		m := &Mute{line: &fakeLine{muted: want}}
+		if got, err := m.MutedStrict(); err != nil || got != want {
+			t.Fatal("strict state differs from privacy line")
+		}
+	}
+}

@@ -40,15 +40,17 @@ var shade = color.RGBA{0x00, 0x00, 0x00, 0x90}
 
 // scene is one frame's worth of facts.
 type scene struct {
-	now     time.Time
-	phase   string  // idle, listening, thinking, replying, lingering
-	eq      *eqView // a turn's bars, when turns are drawn as the equalizer
-	heard   string
-	reply   string
-	since   time.Time
-	playing bool
-	paused  bool
-	muted   bool
+	realtime  bool
+	remaining int
+	now       time.Time
+	phase     string  // idle, listening, thinking, replying, lingering
+	eq        *eqView // a turn's bars, when turns are drawn as the equalizer
+	heard     string
+	reply     string
+	since     time.Time
+	playing   bool
+	paused    bool
+	muted     bool
 
 	// glance is the glance strip's chips (feature/home/glance.go), drawn at the foot of the clock page.
 	glance []home.Chip
@@ -494,9 +496,17 @@ func (r *renderer) draw(s scene) {
 	}
 	if s.showDash {
 		r.dashboardPage(s)
+		if s.realtime && s.phase != "idle" {
+			r.realtimeCard(s)
+		}
 		if s.showVolume {
 			r.volumeBar(s)
 		}
+		return
+	}
+
+	if s.realtime && s.phase != "idle" {
+		r.realtimeCard(s)
 		return
 	}
 
@@ -945,4 +955,19 @@ func (r *renderer) footer(s scene) {
 	if right != "" {
 		r.text(r.tiny, right, r.w-r.margin-r.width(r.tiny, right), y, dim)
 	}
+}
+
+// realtimeCard is native UI above the continuously decoded dashboard.
+func (r *renderer) realtimeCard(s scene) {
+	top := r.h / 5
+	bottom := r.h - 40
+	draw.Draw(r.dst, image.Rect(r.margin, top, r.w-r.margin, bottom), image.NewUniform(walnut), image.Point{}, draw.Src)
+	label := map[string]string{"connecting": "Verbinde…", "listening": "Ich höre zu…", "thinking": "Ich denke…", "replying": "Ich spreche…", "error": "Verbindung fehlgeschlagen"}[s.phase]
+	r.text(r.small, label, r.margin+20, top+38, cream)
+	if s.remaining > 0 {
+		r.text(r.small, fmt.Sprintf("Sitzung endet in %d s", s.remaining), r.margin+20, top+76, dim)
+	}
+	r.words(s.heard, s.reply, top+90)
+	draw.Draw(r.dst, image.Rect(r.margin+10, bottom-50, r.w-r.margin-10, bottom-5), image.NewUniform(ember), image.Point{}, draw.Src)
+	r.text(r.small, "Tippen zum Beenden", r.margin+20, bottom-18, cream)
 }

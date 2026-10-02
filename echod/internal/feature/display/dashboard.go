@@ -95,9 +95,9 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	away := time.Now().Before(d.dashAwayUntil)
 	d.mu.Unlock()
 
-	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer &&
+	want := mode != config.DashboardOff && (s.phase == "idle" || (s.realtime && s.phase != "idle")) && !sheetOrDrawer &&
 		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showWifi && !s.bt.Pairing &&
-		(asked || (f.Idle() && !away && !s.nowPlaying))
+		(s.realtime && s.phase != "idle" || asked || (f.Idle() && !away && !s.nowPlaying))
 	s.showDash, s.dashMode = want, mode
 
 	streamed := want && mode == config.DashboardStreamed
@@ -123,7 +123,7 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	d.dashShowing = want
 	// Either way the page wants every finger as it moves: streamed, to scroll the page under it;
 	// drawn, to scroll and to slide a tile's level. The rest of the screen wants swipes.
-	follow := want
+	follow := want && !(s.realtime && s.phase != "idle")
 	changed := follow != d.dashFollow
 	d.dashFollow = follow
 	d.mu.Unlock()

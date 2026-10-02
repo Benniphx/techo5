@@ -158,7 +158,7 @@ slot system, phone calls, and a minimal Alpine root filesystem in place of Andro
 |  |  |
 |---|---|
 | 🐧 **Real Linux, no Android** | The Show boots straight into a minimal Alpine Linux root filesystem. No Android framework, no Google services, no app store: one daemon drives the microphones, speaker, screen, camera and radios directly. |
-| 🚫 **No Alexa, no Amazon account, no Amazon cloud** | Your voice goes only to *your* Home Assistant, over its encrypted ESPHome API. The Show reaches the internet just for what you use: update checks against this repo, network time, radio streams with their song and cover lookups, the rain radar map, and in the U.S. the National Weather Service's weather alerts. Voice and control keep working with the internet down, as long as your Home Assistant pipeline is local. |
+| 🚫 **No Alexa, no Amazon account, no Amazon cloud** | By default, your voice goes to *your* Home Assistant over its encrypted ESPHome API. Optional direct modes use the configured speech/chat services or [OpenAI Realtime](docs/native-realtime.md); enabling Realtime sends audio to OpenAI and requires a paid API account. The Show reaches the internet just for what you use: update checks against this repo, network time, radio streams with their song and cover lookups, the rain radar map, and in the U.S. the National Weather Service's weather alerts. In the default Home Assistant mode, voice and control keep working with the internet down as long as your pipeline is local. |
 | 🎙️ **Wake word on the device** | microWakeWord runs locally: twelve wake words, "Alexa", "Okay Nabu", "Hey Jarvis", "Hey Mycroft", "Computer" and more, chosen on the screen or in Home Assistant. Echo cancellation keeps it listening over music. |
 | 🔐 **Secure by default** | SSH is keys-only and off until you turn it on; keys arrive only through Home Assistant. The camera and screen web pages start closed, and a firewall lets in nothing on Wi-Fi but what the device serves. No password logins, not even in rescue. |
 | 🔄 **Updates that can't brick it** | Releases install over the air from Home Assistant's update card into the spare of two root filesystem slots, boot on trial, and fall back on their own if the new one doesn't settle. |
@@ -206,7 +206,7 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 |---|---|---|
 | Operating system | Fire OS (Android) | Alpine Linux, one daemon |
 | Voice assistant | Alexa, in Amazon's cloud | Home Assistant Assist, with any pipeline you run |
-| Where your voice goes | Amazon | Your Home Assistant, encrypted |
+| Where your voice goes | Amazon | Your Home Assistant, encrypted, by default; optional direct services or OpenAI Realtime |
 | Wake word | "Alexa", processed for Amazon | On the device: Alexa, Okay Nabu, Hey Jarvis, Hey Mycroft and eight more |
 | Screen | Alexa cards and ads | Clock, weather, now playing, Home Assistant dashboards, cameras, timers, alarms, settings |
 | Music | Amazon Music and skills | Home Assistant radio lists with cover art, Music Assistant (Sendspin), Home Assistant media, AirPlay and Spotify Connect (new, untested) |

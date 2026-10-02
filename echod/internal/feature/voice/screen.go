@@ -9,11 +9,16 @@ import "github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 // Phase is the conversation's own name for it: idle, listening, thinking, replying. Heard and Reply
 // are kept through the idle that follows a turn, so whoever shows them can let them linger.
 type State struct {
-	Phase string
-	Heard string
-	Reply string
+	Realtime  bool
+	Remaining int
+	Phase     string
+	Heard     string
+	Reply     string
 }
 
 // Changed fires on every phase change and whenever a transcript or a reply arrives. It runs on the
 // conversation's goroutine, so listeners must not block.
 var Changed hook.Hook[State]
+
+// RealtimeActive lets hardware listeners pause local wake scoring during a session.
+var RealtimeActive hook.Hook[bool]

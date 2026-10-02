@@ -126,6 +126,7 @@ type Display struct {
 	dash          bool
 	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not dashForget
 	dashTouched   time.Time
+	realtimeEnded bool
 	dashShowing   bool
 	dashFollow    bool
 	dashEdge      int // edgeNone, or the edge the finger on it started at
@@ -531,9 +532,20 @@ func (d *Display) lux(float64) {
 // records and wakes the loop.
 func (d *Display) changed(s voice.State) {
 	d.mu.Lock()
-	newHeard := s.Heard != "" && s.Heard != d.view.Heard
+	newHeard := !s.Realtime && s.Heard != "" && s.Heard != d.view.Heard
+	beginRealtime := s.Realtime && s.Phase != "idle" && (!d.view.Realtime || d.view.Phase == "idle")
+	endRealtime := s.Realtime && s.Phase == "idle" && d.view.Realtime && d.view.Phase != "idle"
+	if beginRealtime {
+		point := d.dashEdgeAt
+		go dashboard.Get().Touch("up", point.X, point.Y)
+		d.dashEdge = edgeNone
+		d.nightGlow = false
+	}
 	if s.Phase == "listening" && d.view.Phase != "listening" {
 		d.quiet = false
+	}
+	if endRealtime {
+		d.realtimeEnded = true
 	}
 	d.view = s
 	d.viewAt = time.Now()
@@ -681,6 +693,20 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		d.wake()
 		return
+	}
+
+	// Native realtime card owns touch, never the dashboard behind it.
+	if voice.Get().RealtimeBusy() {
+		d.mu.Lock()
+		settings := d.sheet || d.wifiOpen
+		d.mu.Unlock()
+		if !settings {
+			if g.Kind == touch.Tap {
+				voice.Get().Cancel()
+			}
+			d.wake()
+			return
+		}
 	}
 
 	// The microphone open for an announcement: the strip along the bottom is the way to end it, a tap
@@ -1561,6 +1587,8 @@ func (d *Display) Run(ctx context.Context) error {
 func (d *Display) frame() time.Duration {
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
+	realtimeEnded := d.realtimeEnded
+	d.realtimeEnded = false
 	volume, volAt := d.volume, d.volAt
 	d.mu.Unlock()
 
@@ -1570,6 +1598,17 @@ func (d *Display) frame() time.Duration {
 	call := phone.Get().State()
 	_, reminding := remind.Get().Showing()
 	night := nightNow(now)
+	if realtimeEnded && night {
+		d.mu.Lock()
+		d.nightDark = true
+		d.mu.Unlock()
+		d.apply(false, d.ceilingOrDefault(), false)
+		on = false
+	}
+	if !on && view.Realtime && view.Phase != "idle" {
+		d.apply(true, d.ceilingOrDefault(), true)
+		on = true
+	}
 	if !on && (call.Phase != phone.Idle || (!night && (ring.any() || reminding))) {
 		// A call lights a dark panel, at night to half brightness (relight): its page is how it is
 		// answered. By day a ring and a reminder do too, the ring's page being how it is stopped and a
@@ -1655,7 +1694,7 @@ func (d *Display) frame() time.Duration {
 		return 80 * time.Millisecond
 	}
 
-	s := scene{now: now, phase: view.Phase, heard: view.Heard, reply: view.Reply, since: at, ring: ring, call: call}
+	s := scene{realtime: view.Realtime, remaining: view.Remaining, now: now, phase: view.Phase, heard: view.Heard, reply: view.Reply, since: at, ring: ring, call: call}
 	s.snooze = config.Get().Alarms.Snooze()
 	s.alarms = alarm.Get().View(now)
 	s.timers = timer.Get().List(now)
@@ -1670,7 +1709,7 @@ func (d *Display) frame() time.Duration {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
-	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
+	if !s.realtime && equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
 		s.eq = eqFor(s.phase, nightNow(now), now)
 		s.eq.wave = waveOn()
 	}

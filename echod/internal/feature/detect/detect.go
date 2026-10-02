@@ -90,6 +90,9 @@ func newDetect() *Detect {
 	}
 
 	e.OnDetect = func(slot int) {
+		if voice.Get().RealtimeBusy() {
+			return
+		}
 		// A call has the microphones and the speaker. The far end talking through the speaker is not
 		// someone in the room, and a turn would take the call's audio away mid-sentence. A talk through
 		// a camera (feature/talkback) is the same: whoever is at the door is being spoken to.
@@ -124,6 +127,7 @@ func newDetect() *Detect {
 	// A cut microphone hands on silence, and running the models over it is work that cannot find
 	// anything. The engines go down with the microphones and come back with them.
 	mute.Get().Changed.Listen(e.Quiet)
+	voice.RealtimeActive.Listen(e.Pause)
 	e.OnReady = d.busy.scored
 
 	// The engine loads on every start, including a restart. Home Assistant only pushes a selection when
