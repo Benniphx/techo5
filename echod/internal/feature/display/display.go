@@ -81,8 +81,9 @@ const (
 	flipFrame   = 33 * time.Millisecond
 	activeFrame = 150 * time.Millisecond
 
-	// floor is the dimmest an "on" backlight goes: Fire OS's own floor in a dark room. The night light
-	// glows lower still (glowSteps), so the panel is plainly lit here.
+	// floor is the dimmest an "on" backlight goes: Fire OS's own floor in a dark room. The night light's
+	// lowest steps glow at 1 to 3 (glowSteps), so the panel is plainly lit here. It is under a Brightness
+	// of 1 or 2 percent too, which gives 4 and 5 rather than 8.
 	floor = 4
 
 	// Auto-brightness: the fraction of the ceiling the room's light allows, from the dimmest (the
@@ -90,6 +91,7 @@ const (
 	// to the full ceiling at brightLux. Applied through a running average so a passing shadow does not
 	// flicker the panel.
 	defaultDimmest = 12
+	darkLux        = 2.0
 	brightLux      = 400.0
 	autoSmooth     = 0.25
 )
@@ -119,10 +121,15 @@ type Display struct {
 	autoOn  bool
 	level   float64 // backlight actually applied, 0..BacklightMax, as a running average
 	settled bool    // level has reached the target; settle steps it there between readings
-	view    voice.State
-	viewAt  time.Time
-	volume  int
-	volAt   time.Time
+	// lightMu makes each relight one step, from working out the level to writing it.
+	lightMu sync.Mutex
+	// sunriseLit is the light before an alarm having been on at the last settle tick (autobright.go).
+	sunriseLit bool
+
+	view   voice.State
+	viewAt time.Time
+	volume int
+	volAt  time.Time
 
 	// The dashboard page: asked for, when last touched, whether the last frame drew it, whether the
 	// touchscreen was put in follow mode for it, and a finger that started at its left edge.
@@ -480,6 +487,10 @@ func (d *Display) setAuto(on bool, save bool) {
 // relight works out the backlight from the ceiling, the room and whether the panel is on, and
 // applies it. jump skips the smoothing, for a change the user just asked for.
 func (d *Display) relight(jump bool) {
+	// One at a time from working out the level to writing it: the settle ticker, a reading and a
+	// setting changed on the screen all relight, and a level worked out first must not land last.
+	d.lightMu.Lock()
+	defer d.lightMu.Unlock()
 	d.mu.Lock()
 	target := 0.0
 	if d.on {
@@ -501,7 +512,13 @@ func (d *Display) relight(jump bool) {
 	} else {
 		d.level += (target - d.level) * autoSmooth
 	}
-	d.settled = math.Abs(target-d.level) < 0.5
+	// Close enough is the target itself: smoothing alone would stop up to half a step short, which
+	// rounds a step under it (25% at the default dimmest settled on 7, not 8).
+	if math.Abs(target-d.level) < 0.5 {
+		d.level, d.settled = target, true
+	} else {
+		d.settled = false
+	}
 	level := int(math.Round(d.level))
 	glowing := d.nightGlow
 	d.mu.Unlock()
@@ -526,11 +543,12 @@ func dayBacklight(ceiling int, auto bool, lux, dark float64) float64 {
 }
 
 // allowed is the fraction of the ceiling a room this bright gets, dark the fraction a dark room gets.
-// The curve starts at 1 lux: these sensors read a dark room as 0, 1 or 2 depending on the unit, and a
+// The curve starts at darkLux: these sensors read a dark room as 0, 1 or 2 depending on the unit, and a
 // curve from 0 put a room at 1 lux a tenth of the ceiling above a room at 0, which is where a dark
-// bedroom's panel stayed too bright (#78).
+// bedroom's panel stayed too bright (#78). Starting at 2 also keeps a reading that wavers between 1
+// and 2 from stepping the panel up and down.
 func allowed(lux, dark float64) float64 {
-	f := dark + (1-dark)*math.Log10(math.Max(lux, 1))/math.Log10(brightLux)
+	f := dark + (1-dark)*math.Log10(math.Max(lux, darkLux)/darkLux)/math.Log10(brightLux/darkLux)
 	return math.Min(math.Max(f, dark), 1)
 }
 
@@ -539,10 +557,11 @@ func dimmest() float64 {
 	return float64(dimmestSetting()) / 100
 }
 
-// dimmestSetting is the Dimmest setting in percent: the one set, or the default.
+// dimmestSetting is the Dimmest setting in percent: the one set, kept in range however it got into
+// the file, or the default.
 func dimmestSetting() int {
 	if v := config.Get().Screen.AutoDimmest; v > 0 {
-		return v
+		return min(v, 50)
 	}
 	return defaultDimmest
 }
@@ -599,7 +618,8 @@ func dimmestNumber(d *Display) *esphome.Number {
 		Min: 1, Max: 50, Step: 1, Unit: "%",
 		Mode: esphome.NumberBox,
 	}
-	n.OnCommand = func(v float32) { d.setDimmest(int(v)) }
+	// Rounded, and at least 1: a value under 1 would otherwise be 0, which means the default.
+	n.OnCommand = func(v float32) { d.setDimmest(max(int(math.Round(float64(v))), 1)) }
 	return n
 }
 

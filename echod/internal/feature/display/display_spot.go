@@ -195,6 +195,10 @@ type Display struct {
 
 	// wasNight is whether the last backlight was set for the night, so the change of hour relights.
 	wasNight bool
+	// lightMu makes each relight one step, from working out the level to writing it.
+	lightMu sync.Mutex
+	// sunriseLit is the light before an alarm having been on at the last settle tick (autobright.go).
+	sunriseLit bool
 
 	// slideshowIdleSince is when the face last became the plain idle clock (nothing else showing);
 	// zero while it is not. Screensaver mode waits for this to run long enough before taking over.
@@ -380,8 +384,17 @@ func (d *Display) setAuto(on bool, save bool) {
 }
 
 func (d *Display) relight(jump bool) {
+	// One at a time from working out the level to writing it: the settle ticker, a reading and a
+	// setting changed on the screen all relight, and a level worked out first must not land last.
+	d.lightMu.Lock()
+	defer d.lightMu.Unlock()
 	night := inNight(time.Now())
 	d.mu.Lock()
+	// The hour turning is a change to show at once, whoever relights first: the settle ticker taking
+	// it would otherwise leave the frame nothing to jump for, and it would fade in.
+	if d.wasNight != night {
+		jump = true
+	}
 	d.wasNight = night
 	target := 0.0
 	if d.on {
@@ -407,7 +420,13 @@ func (d *Display) relight(jump bool) {
 	} else {
 		d.level += (target - d.level) * autoSmooth
 	}
-	d.settled = math.Abs(target-d.level) < 0.5
+	// Close enough is the target itself: smoothing alone would stop up to half a step short, which
+	// rounds a step under it.
+	if math.Abs(target-d.level) < 0.5 {
+		d.level, d.settled = target, true
+	} else {
+		d.settled = false
+	}
 	level := int(math.Round(d.level))
 	d.mu.Unlock()
 

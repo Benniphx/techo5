@@ -43,3 +43,26 @@ func TestAutoBrightnessFinishesWithoutMoreReadings(t *testing.T) {
 		t.Fatalf("with no more readings the backlight stopped at %.1f of %.1f (it was %.1f after the reading)", got, target, partway)
 	}
 }
+
+// Close enough is the target itself: the settled backlight is the room's level, not the step under it
+// that smoothing alone stops on.
+func TestSettleLandsOnTheTarget(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "config.json"))
+
+	d := &Display{on: true, autoOn: true, ceiling: 100}
+	d.relight(true)
+	d.mu.Lock()
+	target := d.level
+	d.level = 1
+	d.mu.Unlock()
+	d.relight(false) // the one reading the change sent
+	for range 100 {
+		d.settleStep()
+	}
+	d.mu.Lock()
+	got, settled := d.level, d.settled
+	d.mu.Unlock()
+	if got != target || !settled {
+		t.Fatalf("settled=%t at %.3f, want exactly %.3f", settled, got, target)
+	}
+}

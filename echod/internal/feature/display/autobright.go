@@ -28,11 +28,22 @@ func (d *Display) settle(ctx context.Context) {
 }
 
 // settleStep takes one smoothed step toward the room's level, if the backlight is not there yet.
+//
+// It also drives the light before an alarm, whose level is a matter of the time rather than of the
+// room: nothing else relights while it rises, so without this the panel stayed where the sunrise
+// started until the alarm. And once more as it ends, back to the room's level.
 func (d *Display) settleStep() {
+	rising := sunriseProgress(time.Now()) > 0
 	d.mu.Lock()
+	rising = rising && d.on
+	ended := d.sunriseLit && !rising
+	d.sunriseLit = rising
 	due := d.autoOn && d.on && !d.settled
 	d.mu.Unlock()
-	if due {
+	switch {
+	case rising || ended:
+		d.relight(true)
+	case due:
 		d.relight(false)
 	}
 }

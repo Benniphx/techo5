@@ -4,10 +4,14 @@ package display
 
 import (
 	"math"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
-// A dark room, at 0 or 1 lux, gets exactly the dimmest; brighter rooms rise on the log curve to the
+// A dark room, at 0, 1 or 2 lux, gets exactly the dimmest; brighter rooms rise on the log curve to the
 // whole ceiling at brightLux and stay there (#78).
 func TestAllowed(t *testing.T) {
 	for _, c := range []struct {
@@ -16,6 +20,7 @@ func TestAllowed(t *testing.T) {
 		{0, 0.12, 0.12},
 		{1, 0.12, 0.12},
 		{1, 0.03, 0.03},
+		{2, 0.12, 0.12},
 		{brightLux, 0.12, 1},
 		{10 * brightLux, 0.03, 1},
 		{-5, 0.12, 0.12},
@@ -25,8 +30,8 @@ func TestAllowed(t *testing.T) {
 		}
 	}
 	// Between, it climbs with the room and stays under the ceiling.
-	prev := allowed(1, 0.05)
-	for _, lux := range []float64{2, 5, 20, 100, 399} {
+	prev := allowed(2, 0.05)
+	for _, lux := range []float64{3, 5, 20, 100, 399} {
 		got := allowed(lux, 0.05)
 		if got <= prev || got >= 1 {
 			t.Errorf("allowed(%v) = %v after %v", lux, got, prev)
@@ -81,5 +86,36 @@ func TestDayBacklight(t *testing.T) {
 	// The old curve, for the record of what changed: 1 lux at 25% was about 14.
 	if old := 63.75 * (0.12 + 0.88*math.Log10(2)/math.Log10(401)); math.Round(old) != 14 {
 		t.Errorf("old curve at 1 lux, 25%%: %.2f", old)
+	}
+}
+
+// The light before an alarm rises with the clock, not the room: the settle ticker follows it while it
+// runs, and puts the screen back to its own level once it is over.
+func TestSettleDrivesTheSunrise(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "config.json"))
+	was := sunriseProgress
+	t.Cleanup(func() { sunriseProgress = was })
+
+	progress := 0.2
+	sunriseProgress = func(time.Time) float64 { return progress }
+	d := &Display{on: true, ceiling: 100}
+	d.relight(true)
+
+	level := func() float64 {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		return d.level
+	}
+	start := level()
+	progress = 0.8
+	d.settleStep()
+	if risen := level(); risen <= start {
+		t.Fatalf("the sunrise did not rise: %.1f at 20%%, %.1f at 80%%", start, risen)
+	}
+
+	progress = 0
+	d.settleStep()
+	if got, want := level(), dayBacklight(100, false, 0, dimmest()); got != want {
+		t.Fatalf("after the sunrise the backlight is %.1f, want the screen's own %.1f", got, want)
 	}
 }
