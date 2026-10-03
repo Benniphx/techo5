@@ -206,7 +206,12 @@ func (a *API) Run(ctx context.Context) error {
 			stop()
 		}()
 
-		err = a.srv.Serve(serving, ln)
+		// The device always serves Noise: a plaintext hello is told so (plainhint.go).
+		served := ln
+		if a.srv.PSK != nil {
+			served = hintListener{ln}
+		}
+		err = a.srv.Serve(serving, served)
 		stop()
 
 		if err != nil || ctx.Err() != nil {
