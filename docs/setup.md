@@ -124,7 +124,11 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   cannot play itself (most commercial radio streams) is played through it instead. The setup page
   says whether Music Assistant is reachable and the device connected to it. A device farther away,
   over a VPN, connects to Music Assistant itself; it needs to reach ports 8095 and 8927 on its host.
-  A station asked for by name or frequency is looked for near the device first.
+  A station asked for by name or frequency is looked for near the device first. **Music source**,
+  under the same section, picks a service to search first (YouTube Music, Spotify, a folder of files);
+  the rest of the library is searched only when it has nothing by that name. Naming the service picks
+  one for that request: "play Taylor Swift on YouTube Music". This is for a device whose voice
+  assistant answers directly; under Home Assistant, its own Music Assistant support decides.
 - **AirPlay and Spotify Connect (new).** On the Show and the Dot, two switches make the device a
   speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
   **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under

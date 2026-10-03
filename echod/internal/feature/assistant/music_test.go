@@ -1,8 +1,13 @@
 package assistant
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/musicassistant"
 )
 
@@ -32,4 +37,44 @@ func TestChooseMusic(t *testing.T) {
 	if _, ok := chooseMusic(musicassistant.Results{}, "x", ""); ok {
 		t.Error("nothing found chose something")
 	}
+}
+
+// The service searched first: the one named aloud when the server has it, else the setting's, else
+// none; and a server that will not list its services still gets the common names and the setting.
+func TestMusicSource(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "config.json"))
+	forbid := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if forbid {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Write([]byte(`[{"instance_id":"ytmusic--a1","domain":"ytmusic","name":"YouTube Music","available":true},
+			{"instance_id":"spotify--b2","domain":"spotify","name":"Spotify","available":true}]`))
+	}))
+	defer srv.Close()
+	c := musicassistant.Client{URL: srv.URL, Token: "tok"}
+	ctx := context.Background()
+
+	check := func(label, said, wantID, wantNamed string) {
+		t.Helper()
+		from, named := musicSource(ctx, c, said)
+		if from.InstanceID != wantID || named != wantNamed {
+			t.Errorf("%s: %q gave %q (named %q), want %q (named %q)", label, said, from.InstanceID, named, wantID, wantNamed)
+		}
+	}
+	check("nothing named, no setting", "", "", "")
+	check("named", "YouTube Music", "ytmusic--a1", "YouTube Music")
+	check("named, not on this server", "Tidal", "", "Tidal")
+
+	if err := config.Set().MusicAssistant().SetSource("spotify--b2"); err != nil {
+		t.Fatal(err)
+	}
+	check("the setting", "", "spotify--b2", "")
+	check("named over the setting", "youtube music", "ytmusic--a1", "youtube music")
+
+	forbid = true
+	check("not listed: the setting as it is", "", "spotify--b2", "")
+	check("not listed: a common name", "YouTube Music", "ytmusic", "YouTube Music")
+	check("not listed: an unknown name", "my mixtapes", "", "my mixtapes")
 }

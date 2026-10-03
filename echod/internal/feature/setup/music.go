@@ -43,9 +43,57 @@ func musicSection(ctx context.Context, w http.ResponseWriter, token string) {
 	 <input id="maurl" name="url" value="%s" placeholder="http://192.168.1.20:8095" autocomplete="off">
 	 <label for="matoken">Token</label>
 	 <input id="matoken" name="matoken" type="password" value="" placeholder="%s" autocomplete="off">
-	 <p><label><input type="checkbox" name="notoken" value="yes" style="width:auto"> Remove the token</label></p>
-	 <p><button type="submit">Save</button></p></form></fieldset>`,
+	 <p><label><input type="checkbox" name="notoken" value="yes" style="width:auto"> Remove the token</label></p>`,
 		html.EscapeString(strings.Join(addrs, ", ")), html.EscapeString(m.URL), html.EscapeString(held))
+	if m.Set() {
+		sourceField(ctx, w, m)
+	}
+	fmt.Fprint(w, `<p><button type="submit">Save</button></p></form></fieldset>`)
+}
+
+// sourceField is the Music source choice: the services Music Assistant has, asked for as the page is
+// drawn. One it will not list is said so, and the saved choice is kept.
+func sourceField(ctx context.Context, w http.ResponseWriter, m config.MusicAssistant) {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	providers, err := musicassistant.Client{URL: m.URL, Token: m.Token}.MusicProviders(ctx)
+	fmt.Fprint(w, `<label for="masource">Music source</label><select id="masource" name="source">`)
+	option := func(value, label string) {
+		sel := ""
+		if value == m.Source {
+			sel = " selected"
+		}
+		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, html.EscapeString(value), sel, html.EscapeString(label))
+	}
+	option("", "Any: the whole library")
+	listed := m.Source == ""
+	for _, p := range providers {
+		option(p.InstanceID, p.Name)
+		listed = listed || p.InstanceID == m.Source
+	}
+	if !listed {
+		option(m.Source, m.Source+" (saved)")
+	}
+	fmt.Fprint(w, `</select>`)
+	note := `By voice, this service is searched first, and the rest of the library only when it has nothing by
+	  that name. Saying the service ("play Taylor Swift on YouTube Music") picks one for that request.`
+	if err != nil {
+		note = "Music Assistant would not list its services (" + err.Error() + "), so only the saved choice is shown. " + note
+	}
+	fmt.Fprintf(w, `<p class="note">%s</p>`, html.EscapeString(note))
+}
+
+// sourceOK is whether a Music source is one that could be a Music Assistant instance id or domain.
+func sourceOK(v string) bool {
+	if len(v) > 64 {
+		return false
+	}
+	for _, r := range v {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.') {
+			return false
+		}
+	}
+	return true
 }
 
 func saveMusic(r *http.Request) string {
@@ -74,7 +122,17 @@ func saveMusic(r *http.Request) string {
 	if err := config.Set().MusicAssistant().Server(addr, tok); err != nil {
 		return "could not save it: " + err.Error()
 	}
-	slog.Info("setup page: music assistant set", "url", addr, "token", tok != nil)
+	// Only a form that showed the choice carries it: one drawn before a server was set does not.
+	if _, shown := r.PostForm["source"]; shown {
+		src := strings.TrimSpace(r.PostFormValue("source"))
+		if !sourceOK(src) {
+			return "that is not a Music Assistant service"
+		}
+		if err := config.Set().MusicAssistant().SetSource(src); err != nil {
+			return "could not save the music source: " + err.Error()
+		}
+	}
+	slog.Info("setup page: music assistant set", "url", addr, "token", tok != nil, "source", config.Get().MusicAssistant.Source)
 	return ""
 }
 

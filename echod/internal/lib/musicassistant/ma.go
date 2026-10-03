@@ -94,15 +94,90 @@ type Results struct {
 }
 
 // Search looks for query among the given kinds (artist, album, track, playlist, radio; none means all),
-// limit of each.
-func (c Client) Search(ctx context.Context, query string, kinds []string, limit int) (Results, error) {
+// limit of each, in the given services (their instance ids or domains, "library" for the library
+// itself; none means the library and every service). Music Assistant 2.10 and later.
+func (c Client) Search(ctx context.Context, query string, kinds []string, limit int, providers ...string) (Results, error) {
 	args := map[string]any{"search_query": query, "limit": limit}
 	if len(kinds) > 0 {
 		args["media_types"] = kinds
 	}
+	if len(providers) > 0 {
+		args["providers"] = providers
+	}
 	var r Results
 	err := c.do(ctx, "music/search", args, &r)
 	return r, err
+}
+
+// Provider is one of the server's music services: YouTube Music, Spotify, a folder of files.
+type Provider struct {
+	InstanceID string `json:"instance_id"`
+	Domain     string `json:"domain"`
+	Name       string `json:"name"`
+	Available  bool   `json:"available"`
+}
+
+// MusicProviders are the music services the server has running, as this token may see them.
+func (c Client) MusicProviders(ctx context.Context) ([]Provider, error) {
+	var all []Provider
+	if err := c.do(ctx, "providers", map[string]any{"provider_type": "music"}, &all); err != nil {
+		return nil, err
+	}
+	var out []Provider
+	for _, p := range all {
+		if p.Available && p.InstanceID != "" {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// FindProvider is the service a name means: its instance id, domain or display name, ignoring case,
+// spaces and punctuation, so "YouTube Music", "youtube music" and "ytmusic" all find YouTube Music.
+func FindProvider(providers []Provider, name string) (Provider, bool) {
+	want := squash(name)
+	if want == "" {
+		return Provider{}, false
+	}
+	for _, p := range providers {
+		if squash(p.InstanceID) == want || squash(p.Domain) == want || squash(p.Name) == want {
+			return p, true
+		}
+	}
+	// A service renamed in Music Assistant is still found by what it is: "YouTube Music" is ytmusic.
+	if d, ok := knownDomains[want]; ok {
+		for _, p := range providers {
+			if p.Domain == d {
+				return p, true
+			}
+		}
+	}
+	return Provider{}, false
+}
+
+// knownDomains are the Music Assistant services people name aloud, by what they say, squashed.
+var knownDomains = map[string]string{
+	"youtubemusic": "ytmusic", "youtube": "ytmusic", "ytmusic": "ytmusic",
+	"spotify": "spotify", "applemusic": "apple_music", "tidal": "tidal", "qobuz": "qobuz",
+	"deezer": "deezer", "soundcloud": "soundcloud", "plex": "plex", "jellyfin": "jellyfin",
+	"audible": "audible", "library": "library", "mylibrary": "library",
+}
+
+// KnownDomain is the service domain a spoken name means, for a server that will not list its services.
+func KnownDomain(name string) (string, bool) {
+	d, ok := knownDomains[squash(name)]
+	return d, ok
+}
+
+// squash keeps letters and digits, lowercased.
+func squash(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // Play plays uri on the player queueID, replacing what its queue held.
