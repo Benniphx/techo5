@@ -70,8 +70,12 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		rows := []settingRow{
 			{id: "brightness", label: "Brightness", kind: ctlStepper, value: fmt.Sprintf("%d%%", st.brightness)},
 			{id: "auto", label: "Auto-brightness", sub: "Follows the room's light", kind: ctlToggle, on: st.auto},
-			{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)},
 		}
+		if hasDimmest && st.auto {
+			rows = append(rows, settingRow{id: "dimmest", label: "Dimmest", sub: "How dark auto-brightness goes in a dark room",
+				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
+		}
+		rows = append(rows, settingRow{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)})
 		if hasNightLight && st.night != "" {
 			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: "Dark, a faint glow, or a clock alone until touched",
 				kind: ctlChoice, value: atNightOptions[atNightIndex()]})
@@ -773,6 +777,13 @@ func (d *Display) rowTap(id string, p part, opt int) {
 			d.stepBrightness(-25)
 		case partPlus:
 			d.stepBrightness(+25)
+		}
+	case "dimmest":
+		switch p {
+		case partMinus:
+			d.stepDimmest(-1)
+		case partPlus:
+			d.stepDimmest(+1)
 		}
 	case "auto":
 		d.mu.Lock()

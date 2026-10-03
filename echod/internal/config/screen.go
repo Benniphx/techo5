@@ -26,6 +26,10 @@ type Screen struct {
 	// NightLightLevel is how bright the night light is, 1 to 10; none is the panel's own default.
 	NightLightLevel int `json:"night_light_level,omitempty"`
 
+	// AutoDimmest is how far auto-brightness takes a Show's screen down in a dark room, in percent of
+	// Brightness, 1 to 50; none is the default (display.go).
+	AutoDimmest int `json:"auto_dimmest,omitempty"`
+
 	// Theme names the screen's palette; empty is the first one, "Custom" is Palette.
 	Theme   string  `json:"theme,omitempty"`
 	Palette Palette `json:"palette,omitempty"`
@@ -125,6 +129,10 @@ func (w ScreenWriter) Theme(v string) error {
 
 func (w ScreenWriter) NightLightLevel(v int) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightLightLevel = min(max(v, 0), 10) })
+}
+
+func (w ScreenWriter) AutoDimmest(v int) error {
+	return w.st.Update(func(c *Config) { c.Screen.AutoDimmest = min(max(v, 0), 50) })
 }
 
 func (w ScreenWriter) NightLight(v bool) error {
