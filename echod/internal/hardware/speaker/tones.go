@@ -53,7 +53,7 @@ var alarmSounds = []struct {
 	name  string
 	notes []Note
 }{
-	{"Home Assistant", []Note{ClipTimer.Note()}},
+	{"Home Assistant", []Note{ClipTimer.stockNote()}},
 	{"Beeps", ToneTimer},
 	{"Chimes", []Note{{Freq: 523, Ms: 90}, {Freq: 659, Ms: 90}, {Freq: 784, Ms: 90}, {Freq: 1047, Ms: 320}}},
 	{"Bells", []Note{{Freq: 1319, Ms: 320}, {Ms: 80}, {Freq: 1047, Ms: 520}}},
@@ -86,7 +86,7 @@ func AlarmSound(name string) []Note {
 // wakeTones is what a detection can sound like. They are told apart by shape rather than pitch, so
 // two wake words set to different ones are distinguishable without knowing which is which.
 var wakeTones = map[config.Tone][]Note{
-	config.ToneHA:    {ClipWake.Note()},
+	config.ToneHA:    {ClipWake.stockNote()},
 	config.ToneNone:  nil,
 	config.ToneChirp: {{Freq: 784, Ms: 60}, {Freq: 1175, Ms: 90}},
 	config.ToneDing:  {{Freq: 1319, Ms: 200}},
@@ -144,8 +144,8 @@ func FailureSound() []Note { return ownOr(ClipFailure, ToneTrouble) }
 func CancelSound() []Note { return ownOr(ClipCanceled, ToneCancel) }
 
 func ownOr(c *Clip, notes []Note) []Note {
-	if c.Own() {
-		return []Note{c.Note()}
+	if n, ok := c.ownNote(); ok {
+		return []Note{n}
 	}
 	return notes
 }

@@ -4,12 +4,14 @@ import (
 	"embed"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
@@ -50,17 +52,20 @@ type Clip struct {
 	quietMs int     // how long it stays within 30 dB (Audible, with no canceller)
 
 	// The last rendering and the gain it was made at: a ring plays the same clip at the same level
-	// round after round.
+	// round after round. Kept for the stock recordings only: an owner's can be ten seconds of
+	// stereo, and is quick enough to render again.
 	lastGain float64
 	last     []int16
 }
 
 // recording is the file of the owner's own a clip was read from, as of when it was read; the zero
-// value is none. A file replaced or taken away no longer matches it.
+// value is none. A file replaced or taken away no longer matches it: a copy that keeps the old
+// file's time and size still changes the inode or the change time.
 type recording struct {
-	path  string
-	mtime int64
-	size  int64
+	path         string
+	mtime, ctime int64
+	ino          uint64
+	size         int64
 }
 
 var (
@@ -83,7 +88,11 @@ func (c *Clip) ownRecording() recording {
 	if err != nil {
 		return recording{}
 	}
-	return recording{c.ownPath(), info.ModTime().UnixNano(), info.Size()}
+	r := recording{path: c.ownPath(), mtime: info.ModTime().UnixNano(), size: info.Size()}
+	if st, ok := info.Sys().(*syscall.Stat_t); ok {
+		r.ino, r.ctime = st.Ino, st.Ctim.Nano()
+	}
+	return r
 }
 
 // load reads the clip if it has not been read, or if the owner's recording has changed since. It is
@@ -129,8 +138,16 @@ func (c *Clip) set(samples []int16) {
 // readOwn is the owner's recording at path as the device plays it. It has to be at the output's rate
 // already: a recording at another rate played as if it were right is the right sound at the wrong
 // speed.
+//
+// What is checked is what was opened, so a file swapped for something else on the way is still
+// caught: opening does not wait on a pipe, and no more is read than the size allowed.
 func readOwn(path string) ([]int16, error) {
-	info, err := os.Stat(path)
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	info, err := file.Stat()
 	if err != nil {
 		return nil, err
 	}
@@ -140,9 +157,12 @@ func readOwn(path string) ([]int16, error) {
 	if info.Size() > largestOwn {
 		return nil, fmt.Errorf("%d bytes is longer than a sound needs to be", info.Size())
 	}
-	b, err := os.ReadFile(path)
+	b, err := io.ReadAll(io.LimitReader(file, largestOwn+1))
 	if err != nil {
 		return nil, err
+	}
+	if len(b) > largestOwn {
+		return nil, fmt.Errorf("more than %d bytes is longer than a sound needs to be", largestOwn)
 	}
 	samples, f, err := MonoWAV(b)
 	if err != nil {
@@ -205,6 +225,11 @@ func (c *Clip) Ms() int {
 			return len(c.samples) * 1000 / Rate
 		}
 	}
+	return c.stockMs()
+}
+
+// stockMs is how long the stock recording plays, from the file's size; 0 where there is none.
+func (c *Clip) stockMs() int {
 	info, err := fs.Stat(clipFiles, "sounds/"+c.file+".pcm")
 	if err != nil {
 		return 0
@@ -238,6 +263,23 @@ func (c *Clip) Own() bool {
 // Note is the clip as a note, so it goes wherever notes go: a chime, a ring, one round of an alarm.
 func (c *Clip) Note() Note { return Note{Clip: c, Ms: c.Ms()} }
 
+// stockNote is the clip as a note without reading anything, for the tables made as the program
+// starts: an owner's file read then would be read before there is a log to say why it cannot play,
+// and not read again. Length and Audible ask the clip itself, so the length in it is only a default.
+func (c *Clip) stockNote() Note { return Note{Clip: c, Ms: c.stockMs()} }
+
+// ownNote is the owner's recording as a note, and whether there is one, read once so that the answer
+// and the length agree.
+func (c *Clip) ownNote() (Note, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.load()
+	if !c.own {
+		return Note{}, false
+	}
+	return Note{Clip: c, Ms: len(c.samples) * 1000 / Rate}, true
+}
+
 // render is the clip at level. A tone's level is its peak, and a clip is recorded at its own; at the
 // feedback tones' level it plays as it was recorded, louder in proportion to a louder level, and
 // never past full scale, since a recording mixed near the top has nowhere left to go.
@@ -259,6 +301,8 @@ func (c *Clip) render(level float64) []int16 {
 			out[i*Channels+ch] = v
 		}
 	}
-	c.last, c.lastGain = out, gain
+	if !c.own {
+		c.last, c.lastGain = out, gain
+	}
 	return out
 }

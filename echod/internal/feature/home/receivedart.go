@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"image"
 	"log/slog"
 	"strings"
@@ -23,6 +24,7 @@ var received struct {
 	art, thumb *image.RGBA
 	cancel     context.CancelFunc // the fetch under way, ended when another song takes its place
 	fetch      int                // which fetch is the current one; each new song's is the next
+	bad        string             // the key of the last picture sent that could not be read
 }
 
 // coverWait is how long a cover may take to arrive before the page goes on without it.
@@ -39,26 +41,57 @@ func ReceivedArt(from, u string) {
 }
 
 // ReceivedPicture takes the cover a receiver sent for its song as the encoded picture itself, as
-// AirPlay does: empty for none. It is decoded aside and shown by ReceivedArt's rules, the same picture
-// again (the next song on an album) left as it is.
+// AirPlay does: empty for none. It is shown by ReceivedArt's rules, the same picture again (the next
+// song on an album) left as it is.
+//
+// The picture is decoded here, before it returns, so a sender with picture after picture is held to
+// one decode at a time rather than starting one for each. One that could not be read is not tried
+// again when it is sent again: the page shows its stand-in for it.
 func ReceivedPicture(from string, b []byte) {
+	if !hasScreen {
+		return
+	}
 	key := ""
 	if len(b) > 0 {
 		sum := sha256.Sum256(b)
 		key = "sha256:" + hex.EncodeToString(sum[:])
 	}
-	receive(from, key, func(context.Context) (*image.RGBA, *image.RGBA, error) {
-		return layoutArt(b, false, "cover art from "+from)
-	})
+	received.mu.Lock()
+	shown := key != "" && received.from == from && received.key == key && received.art != nil
+	bad := key != "" && received.bad == key
+	received.mu.Unlock()
+	if shown {
+		return
+	}
+	var art, thumb *image.RGBA
+	var err error
+	switch {
+	case bad:
+		err = errors.New("could not be read when it was sent before")
+	case key != "":
+		art, thumb, err = layoutArt(b, false, "cover art from "+from)
+		if err != nil {
+			received.mu.Lock()
+			received.bad = key
+			received.mu.Unlock()
+		}
+	}
+	receive(from, key, func(context.Context) (*image.RGBA, *image.RGBA, error) { return art, thumb, err })
 }
 
 // receive puts the cover named by key ("" for none) in place of the last song's, loading it aside with
-// load.
+// load. A receiver saying it has none clears only its own cover: one ending its session does not
+// take the picture from the other receiver, which has the speaker now. A from of "" clears whatever
+// is there.
 func receive(from, key string, load func(context.Context) (*image.RGBA, *image.RGBA, error)) {
 	if !hasScreen {
 		return
 	}
 	received.mu.Lock()
+	if key == "" && from != "" && received.from != from && received.from != "" {
+		received.mu.Unlock()
+		return
+	}
 	// The same cover again (the next song on an album) is left as it is, unless the last fetch of it
 	// failed: that gets another go.
 	same := received.from == from && received.key == key && (key == "" || received.art != nil || received.cancel != nil)

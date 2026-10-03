@@ -6,13 +6,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
@@ -81,6 +84,7 @@ stdout = {
 metadata = {
 	enabled = "yes";
 	include_cover_art = "%s";
+	cover_art_cache_directory = "";
 	pipe_name = %s;
 	pipe_timeout = 5000;
 };
@@ -145,6 +149,49 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 // (home.fetchArt); a bigger one is passed over.
 const largestPicture = 4 << 20
 
+// largestItem is the most the decoder may read for one item: a largest picture in base64, with room
+// for the line breaks and the markup around it. An item past it is given up on part way, so it is
+// never held whole, and reading picks up after it.
+var largestItem int64 = largestPicture * 3 / 2
+
+// coverGrace is how near a new song's title its cover has to come. Phones send the cover apart from
+// the song's fields, before or after them, and send none for a song without one: a new title with no
+// picture within coverGrace of it, either side, takes the last song's cover down.
+var coverGrace = 3 * time.Second
+
+// errItemTooBig is what the decoder is given once an item has had all it may read.
+var errItemTooBig = errors.New("metadata item too big")
+
+// itemBudget is the decoder's reader, allowing it left more bytes before it fails. It reads a byte at
+// a time where the decoder asks, so the decoder reads no further ahead than it would from br itself.
+type itemBudget struct {
+	br   *bufio.Reader
+	left int64
+}
+
+func (b *itemBudget) Read(p []byte) (int, error) {
+	if b.left <= 0 {
+		return 0, errItemTooBig
+	}
+	if int64(len(p)) > b.left {
+		p = p[:b.left]
+	}
+	n, err := b.br.Read(p)
+	b.left -= int64(n)
+	return n, err
+}
+
+func (b *itemBudget) ReadByte() (byte, error) {
+	if b.left <= 0 {
+		return 0, errItemTooBig
+	}
+	c, err := b.br.ReadByte()
+	if err == nil {
+		b.left--
+	}
+	return c, err
+}
+
 // followAirPlayMetadata reads items from r until it ends, calling told with the song whenever a field of
 // it changes, and pictured with its cover as the phone sends one; both with nothing when the session
 // ends. Anything the decoder cannot take is passed over, and reading goes on after it: only r failing
@@ -152,10 +199,11 @@ const largestPicture = 4 << 20
 func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), pictured func(picture []byte)) {
 	src := &readErr{r: r}
 	br := bufio.NewReaderSize(src, 64<<10)
+	budget := &itemBudget{br: br}
 	newDecoder := func() *xml.Decoder {
-		// A bufio.Reader is a ByteReader, so the decoder reads no further than it has to: a new one
+		// The budget is a ByteReader, so the decoder reads no further than it has to: a new one
 		// picks up where an old one gave up.
-		d := xml.NewDecoder(br)
+		d := xml.NewDecoder(budget)
 		d.Strict = false
 		return d
 	}
@@ -163,8 +211,53 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 	var title, artist, album string
 	// stuck counts decoder errors in a row that took nothing from the pipe.
 	stuck, at := 0, int64(-1)
+
+	// The cover is told under mu, from here and from the timer that takes a song's cover down, so the
+	// two never cross: gen moves on with every cover told, and a timer from an older one does nothing.
+	var (
+		mu       sync.Mutex
+		gen      int
+		lastPict time.Time
+		pending  *time.Timer
+	)
+	cover := func(b []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		gen++
+		if b != nil {
+			lastPict = time.Now()
+		}
+		pictured(b)
+	}
+	newTitle := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if time.Since(lastPict) < coverGrace {
+			return // its cover came first
+		}
+		gen++
+		g := gen
+		pending = time.AfterFunc(coverGrace, func() {
+			mu.Lock()
+			defer mu.Unlock()
+			if gen == g {
+				gen++
+				pictured(nil)
+			}
+		})
+	}
+	defer func() {
+		mu.Lock()
+		defer mu.Unlock()
+		gen++
+		if pending != nil {
+			pending.Stop()
+		}
+	}()
+
 	for {
 		var it metaItem
+		budget.left = largestItem
 		if err := dec.Decode(&it); err != nil {
 			// The pipe itself failed (closed as the receivers stop), or the decoder keeps giving up
 			// without taking anything: the end.
@@ -186,7 +279,7 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 			// will not decode, is passed over: the last one stays.
 			if b64 := strings.TrimSpace(it.Data); base64.StdEncoding.DecodedLen(len(b64)) <= largestPicture {
 				if b, err := base64.StdEncoding.DecodeString(b64); err == nil {
-					pictured(b)
+					cover(b)
 				}
 			}
 			continue
@@ -197,6 +290,9 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 		}
 		switch {
 		case typ == "core" && code == "minm":
+			if data != title && data != "" {
+				newTitle()
+			}
 			title = data
 		case typ == "core" && code == "asar":
 			artist = data
@@ -204,7 +300,7 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 			album = data
 		case typ == "ssnc" && (code == "pend" || code == "disc"):
 			title, artist, album = "", "", ""
-			pictured(nil)
+			cover(nil)
 		default:
 			continue
 		}

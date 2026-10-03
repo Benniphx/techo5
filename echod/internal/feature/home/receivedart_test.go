@@ -83,13 +83,73 @@ func TestReceivedPictureShowsTheCover(t *testing.T) {
 	if a, _ := receivedArt(AirPlayName); a != first {
 		t.Error("the same picture was laid out again")
 	}
-	ReceivedPicture(AirPlayName, []byte("not a picture"))
-	if a, _ := receivedArt(AirPlayName); a != nil {
-		t.Error("the last song's cover stayed")
-	}
 	ReceivedPicture(AirPlayName, nil)
 	if a, _ := receivedArt(AirPlayName); a != nil {
 		t.Error("no picture left a cover")
+	}
+}
+
+// A picture that cannot be read shows nothing, even once its decode has had time to finish, and is not
+// decoded again when it is sent again.
+func TestReceivedPictureThatCannotBeRead(t *testing.T) {
+	if !hasScreen {
+		t.Skip("no screen")
+	}
+	t.Cleanup(func() { ReceivedPicture("", nil) })
+	ReceivedPicture(AirPlayName, testJPEG(t, 300, 300))
+	if !waitFor(func() bool { a, _ := receivedArt(AirPlayName); return a != nil }) {
+		t.Fatal("the cover never came")
+	}
+	junk := []byte("not a picture")
+	ReceivedPicture(AirPlayName, junk)
+	if !waitFor(func() bool {
+		received.mu.Lock()
+		defer received.mu.Unlock()
+		return received.cancel == nil
+	}) {
+		t.Fatal("the decode never finished")
+	}
+	if a, _ := receivedArt(AirPlayName); a != nil {
+		t.Error("a picture that cannot be read left a cover")
+	}
+	received.mu.Lock()
+	bad := received.bad
+	received.mu.Unlock()
+	if bad == "" {
+		t.Error("the picture that cannot be read was not remembered")
+	}
+	ReceivedPicture(AirPlayName, junk)
+	if a, _ := receivedArt(AirPlayName); a != nil {
+		t.Error("sent again, it left a cover")
+	}
+}
+
+// One receiver saying it has no cover, as its session ends, leaves the other receiver's alone.
+func TestOneReceiverDoesNotClearTheOthersCover(t *testing.T) {
+	if !hasScreen {
+		t.Skip("no screen")
+	}
+	srv, _ := coverServer(t, 0, 0)
+	ReceivedArt(SpotifyName, srv.URL+"/a")
+	if !waitFor(func() bool { a, _ := receivedArt(SpotifyName); return a != nil }) {
+		t.Fatal("Spotify's cover never came")
+	}
+	ReceivedPicture(AirPlayName, nil)
+	ReceivedArt(AirPlayName, "")
+	if a, _ := receivedArt(SpotifyName); a == nil {
+		t.Error("AirPlay ending took Spotify's cover")
+	}
+	ReceivedPicture(AirPlayName, testJPEG(t, 300, 300))
+	if !waitFor(func() bool { a, _ := receivedArt(AirPlayName); return a != nil }) {
+		t.Fatal("AirPlay's cover never came")
+	}
+	ReceivedArt(SpotifyName, "")
+	if a, _ := receivedArt(AirPlayName); a == nil {
+		t.Error("Spotify stopping took AirPlay's cover")
+	}
+	ReceivedPicture(AirPlayName, nil)
+	if a, _ := receivedArt(AirPlayName); a != nil {
+		t.Error("AirPlay ending left its own cover")
 	}
 }
 

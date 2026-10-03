@@ -145,3 +145,86 @@ func TestAPipeIsNotRead(t *testing.T) {
 		t.Fatal("reading the pipe hung")
 	}
 }
+
+// A recording overwritten by another of the same size, with the old one's time put back as a copy that
+// keeps times does, is still noticed.
+func TestARecordingReplacedInPlaceIsNoticed(t *testing.T) {
+	dir := ownSounds(t)
+	c := &Clip{file: "timer_finished"}
+	own := filepath.Join(dir, "timer_finished.wav")
+	writeWAV(t, own, Rate, 1, 500)
+	if got := c.render(toneLevel); len(got) == 0 || got[0] <= 0 {
+		t.Fatalf("the first recording did not play: %d samples", len(got))
+	}
+	info, err := os.Stat(own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 44; i+1 < len(b); i += 2 {
+		binary.LittleEndian.PutUint16(b[i:], uint16(0xffff-8000+1)) // -8000
+	}
+	if err := os.WriteFile(own, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(own, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.render(toneLevel); len(got) == 0 || got[0] >= 0 {
+		t.Error("the old recording still plays")
+	}
+}
+
+// A WAVE file that is not plain PCM is not played, whatever its fmt chunk says about bits.
+func TestARecordingNotPCMIsNotPlayed(t *testing.T) {
+	dir := ownSounds(t)
+	c := &Clip{file: "mute_switch_off"}
+	stock := c.Ms()
+	own := filepath.Join(dir, "mute_switch_off.wav")
+	writeWAV(t, own, Rate, 1, 250)
+	b, err := os.ReadFile(own)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary.LittleEndian.PutUint16(b[20:], 3) // IEEE float
+	if err := os.WriteFile(own, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c.Own() || c.Ms() != stock {
+		t.Errorf("a recording that is not PCM was taken: own %v, %d ms", c.Own(), c.Ms())
+	}
+}
+
+// The notes made as the program starts read no file of the owner's: one that cannot play is read the
+// first time it is wanted, when there is a log to say why.
+func TestStockNotesReadNothing(t *testing.T) {
+	dir := ownSounds(t)
+	c := &Clip{file: "timer_finished"}
+	writeWAV(t, filepath.Join(dir, "timer_finished.wav"), 44100, 1, 250)
+	n := c.stockNote()
+	c.mu.Lock()
+	loaded := c.loaded
+	c.mu.Unlock()
+	if loaded || n.Ms != c.stockMs() || n.Clip != c {
+		t.Errorf("stock note %+v, read %v", n, loaded)
+	}
+}
+
+// The failure sound with a recording of the owner's is that recording, at its length, from one look.
+func TestFailureNoteHasItsOwnLength(t *testing.T) {
+	dir := ownSounds(t)
+	t.Cleanup(func() {
+		// Read again on its next use, from the real folder.
+		ClipFailure.mu.Lock()
+		ClipFailure.loaded = false
+		ClipFailure.mu.Unlock()
+	})
+	writeWAV(t, filepath.Join(dir, "failure.wav"), Rate, 1, 300)
+	notes := FailureSound()
+	if len(notes) != 1 || notes[0].Clip != ClipFailure || notes[0].Ms != 300 {
+		t.Errorf("failure sound %+v", notes)
+	}
+}

@@ -5,10 +5,18 @@ import (
 	"fmt"
 )
 
-// WAVFormat is what a WAVE file's fmt chunk said about its audio.
+// WAVFormat is what a WAVE file's fmt chunk said about its audio. Format is the format tag: 1 for
+// plain PCM, 0xFFFE for WAVE_FORMAT_EXTENSIBLE.
 type WAVFormat struct {
-	Channels, Rate, Bits int
+	Format, Channels, Rate, Bits int
 }
+
+// The format tags MonoWAV takes: PCM, and the extensible header that converters write for PCM with
+// more than two channels or more than 16 bits.
+const (
+	wavPCM        = 1
+	wavExtensible = 0xFFFE
+)
 
 // MonoWAV takes 16-bit samples out of a RIFF/WAVE body as one channel at the file's own rate, walking
 // the chunks rather than assuming a 44-byte header: a converted file can carry extra chunks before the
@@ -17,7 +25,7 @@ type WAVFormat struct {
 // Sizes are handled as uint64. A 32-bit int cannot hold a large RIFF size, and a chunk claiming
 // one turns negative, which slips past a bounds check and panics on the slice.
 func MonoWAV(body []byte) ([]int16, WAVFormat, error) {
-	f := WAVFormat{Channels: 1, Rate: VoiceRate, Bits: 16}
+	f := WAVFormat{Format: wavPCM, Channels: 1, Rate: VoiceRate, Bits: 16}
 	if len(body) < 12 || string(body[0:4]) != "RIFF" || string(body[8:12]) != "WAVE" {
 		return nil, f, fmt.Errorf("not a WAVE file: %d bytes", len(body))
 	}
@@ -36,11 +44,15 @@ func MonoWAV(body []byte) ([]int16, WAVFormat, error) {
 		switch id {
 		case "fmt ":
 			if end-off >= 16 {
+				f.Format = int(binary.LittleEndian.Uint16(body[off:]))
 				f.Channels = int(binary.LittleEndian.Uint16(body[off+2:]))
 				f.Rate = int(binary.LittleEndian.Uint32(body[off+4:]))
 				f.Bits = int(binary.LittleEndian.Uint16(body[off+14:]))
 			}
 		case "data":
+			if f.Format != wavPCM && f.Format != wavExtensible {
+				return nil, f, fmt.Errorf("unsupported WAVE: format %#x, not PCM", f.Format)
+			}
 			if f.Bits != 16 || f.Channels < 1 {
 				return nil, f, fmt.Errorf("unsupported WAVE: %d-bit, %d channels", f.Bits, f.Channels)
 			}

@@ -208,10 +208,11 @@ in the device's sounds folder, over SSH
 | `timer_finished.wav` | a finished timer, and the Home Assistant alarm sound |
 | `mute_switch_on.wav`, `mute_switch_off.wav` | muting and unmuting the microphones |
 
-The timer and mute files play where **Home Assistant sounds** is on. A file has to be 16-bit, at
+The timer and mute files play where **Home Assistant sounds** is on, and an alarm set to the
+Home Assistant sound plays `timer_finished.wav` either way. A file has to be 16-bit, at
 48 kHz, mono or stereo, and at most 10 seconds long. It plays at the level it was recorded at, as the
 stock sounds do. Keep the wake sound short: the device listens for the request only once the wake
-sound has finished, so a long one cuts off the first words. ffmpeg converts anything else:
+sound fades, so a long one cuts off the first words. ffmpeg converts anything else:
 
 ```sh
 ffmpeg -i chime.flac -ac 1 -ar 48000 -c:a pcm_s16le wake_word_triggered.wav

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,6 +46,63 @@ func TestAirPlayMetadata(t *testing.T) {
 	}
 	if len(pictures) != 2 || pictures[0] != picture || pictures[1] != "" {
 		t.Errorf("pictured %d times: %q", len(pictures), pictures)
+	}
+}
+
+// An item past what the decoder may read for one is given up on part way, and the items after it are
+// still read.
+func TestAirPlayMetadataPassesOverAnItemTooBig(t *testing.T) {
+	was := largestItem
+	largestItem = 4096
+	t.Cleanup(func() { largestItem = was })
+	stream := item("ssnc", "PICT", strings.Repeat("p", 8192)) + item("core", "minm", "After") +
+		item("ssnc", "PICT", "small") + item("ssnc", "pend", "")
+	var titles, pictures []string
+	followAirPlayMetadata(strings.NewReader(stream), func(title, artist, album string) {
+		titles = append(titles, title)
+	}, func(b []byte) {
+		pictures = append(pictures, string(b))
+	})
+	if !slices.Equal(titles, []string{"After", ""}) || !slices.Equal(pictures, []string{"small", ""}) {
+		t.Errorf("titles %q, pictures %q", titles, pictures)
+	}
+}
+
+// A new song's cover may come before its title or after it, and stays either way; a song with no
+// cover of its own takes the last one down once coverGrace has gone by without one.
+func TestAirPlayCoverForEachSong(t *testing.T) {
+	was := coverGrace
+	coverGrace = 100 * time.Millisecond
+	t.Cleanup(func() { coverGrace = was })
+	pr, pw := io.Pipe()
+	var mu sync.Mutex
+	var pictures []string
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		followAirPlayMetadata(pr, func(string, string, string) {}, func(b []byte) {
+			mu.Lock()
+			pictures = append(pictures, string(b))
+			mu.Unlock()
+		})
+	}()
+	send := func(s string) {
+		if _, err := io.WriteString(pw, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	send(item("ssnc", "PICT", "one") + item("core", "minm", "One")) // cover first
+	time.Sleep(250 * time.Millisecond)
+	send(item("core", "minm", "Two") + item("ssnc", "PICT", "two")) // cover after
+	time.Sleep(250 * time.Millisecond)
+	send(item("core", "minm", "Three")) // no cover
+	time.Sleep(250 * time.Millisecond)
+	pw.Close()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(pictures, []string{"one", "two", ""}) {
+		t.Errorf("pictured %q", pictures)
 	}
 }
 
