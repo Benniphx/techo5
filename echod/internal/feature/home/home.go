@@ -165,7 +165,9 @@ type Feature struct {
 	// slideshowArtSw is weather art in place of the photos (Weather art).
 	slideshowArtSw        *esphome.Switch
 	slideshowSubfoldersSw *esphome.Switch
-	slideshow             slideshowState
+	// slideshowWholeSw shows photos whole, with blurred sides, instead of cropped to fill.
+	slideshowWholeSw *esphome.Switch
+	slideshow        slideshowState
 }
 
 // forecastEvery is how often the forecast is refreshed while there is a weather entity.
@@ -361,6 +363,7 @@ func (f *Feature) Restore(c config.Config) {
 		f.slideshowShuffleSw.Set(!c.Home.Slideshow.InOrder)
 		f.slideshowArtSw.Set(c.Home.Slideshow.Art)
 		f.slideshowSubfoldersSw.Set(!c.Home.Slideshow.TopOnly)
+		f.slideshowWholeSw.Set(c.Home.Slideshow.WholePhoto)
 	}
 	f.want(c.Home)
 }

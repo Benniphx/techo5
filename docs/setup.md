@@ -57,6 +57,8 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
      whole screen after a while with nothing happening.
    - **Photo folder**: pick the folder, then **Use this folder**.
    - **Time per photo**, **Shuffle photos** and **Include subfolders** are optional.
+   - **Show whole photo** shows each photo in full, with a blurred copy of it filling the sides.
+     Off, photos fill the screen, which crops tall ones.
 
 The same settings are entities in Home Assistant, and the folder can be set with the
 [`home_slideshow` action](actions.md#set-the-slideshows-photo-source).

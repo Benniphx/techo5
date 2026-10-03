@@ -14,7 +14,7 @@ func screenSettings(c config.Config) []string {
 	return []string{
 		fmt.Sprintf("screen: on=%t brightness=%d auto=%t auto_dimmest=%d night=%q language=%q",
 			c.Screen.On, c.Screen.Brightness, c.Screen.Auto, c.Screen.AutoDimmest, c.Screen.Night, c.Screen.Language),
-		fmt.Sprintf("slideshow: mode=%q every=%ds subfolders=%t",
-			c.Home.Slideshow.Mode, c.Home.Slideshow.EverySeconds, !c.Home.Slideshow.TopOnly),
+		fmt.Sprintf("slideshow: mode=%q every=%ds subfolders=%t whole=%t",
+			c.Home.Slideshow.Mode, c.Home.Slideshow.EverySeconds, !c.Home.Slideshow.TopOnly, c.Home.Slideshow.WholePhoto),
 	}
 }

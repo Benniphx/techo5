@@ -935,6 +935,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 	case "subfolders":
 		_, _, subfolders := home.Get().SlideshowSettings()
 		home.Get().SetSlideshowSubfolders(!subfolders)
+	case "wholephoto":
+		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output":
 		d.openPicker(id)

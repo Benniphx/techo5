@@ -165,6 +165,7 @@ var registered = []string{
 	"slideshow_shuffle",
 	"slideshow_subfolders",
 	"slideshow_weather_art",
+	"slideshow_whole_photo",
 	"speaker",
 	"speaker_eq",
 	"stop_word_sensitivity",
