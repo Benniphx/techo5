@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 )
 
@@ -23,17 +24,27 @@ func item(typ, code, data string) string {
 		hex.EncodeToString([]byte(typ)), hex.EncodeToString([]byte(code)), len(data), base64.StdEncoding.EncodeToString([]byte(data)))
 }
 
-// AirPlay's metadata names the song field by field, and the end of a session clears it; what the decoder
-// cannot take on the way is passed over.
+// AirPlay's metadata names the song field by field, and its cover apart, and the end of a session
+// clears both; what the decoder cannot take on the way is passed over, a cover that will not decode
+// included.
 func TestAirPlayMetadata(t *testing.T) {
+	picture := strings.Repeat("\xff\xd8 a picture ", 200) // past the 1024 bytes a field may hold
+	badPicture := "<item><type>73736e63</type><code>50494354</code><length>3</length>\n<data encoding=\"base64\">\n!!!</data></item>\n"
 	stream := item("ssnc", "mdst", "") + item("core", "minm", "Take It Easy") + `<?xml version="2.0"?>` + "</junk>" +
-		item("core", "asar", "Eagles") + item("core", "asal", "Eagles") + item("ssnc", "mden", "") + item("ssnc", "pend", "")
+		item("core", "asar", "Eagles") + item("core", "asal", "Eagles") + item("ssnc", "mden", "") +
+		item("ssnc", "PICT", picture) + badPicture + item("ssnc", "pend", "")
 	var got [][3]string
+	var pictures []string
 	followAirPlayMetadata(strings.NewReader(stream), func(title, artist, album string) {
 		got = append(got, [3]string{title, artist, album})
+	}, func(b []byte) {
+		pictures = append(pictures, string(b))
 	})
 	if len(got) != 4 || got[2] != [3]string{"Take It Easy", "Eagles", "Eagles"} || got[3] != [3]string{} {
 		t.Errorf("told %v", got)
+	}
+	if len(pictures) != 2 || pictures[0] != picture || pictures[1] != "" {
+		t.Errorf("pictured %d times: %q", len(pictures), pictures)
 	}
 }
 
@@ -349,11 +360,15 @@ func TestTheSpotifyEventProgram(t *testing.T) {
 	}
 }
 
-// A name is a libconfig string whatever was typed for it.
+// A name is a libconfig string whatever was typed for it, and covers are asked for only where there is
+// a screen to show them.
 func TestShairportConf(t *testing.T) {
 	c := shairportConf(`Den's "Desk" \ one`+"\x01", "/run/x")
 	if !strings.Contains(c, `name = "Den's \"Desk\" \\ one";`) {
 		t.Errorf("conf:\n%s", c)
+	}
+	if want := fmt.Sprintf(`include_cover_art = "%s";`, yesNo(home.HasScreen())); !strings.Contains(c, want) {
+		t.Errorf("conf without %s:\n%s", want, c)
 	}
 }
 

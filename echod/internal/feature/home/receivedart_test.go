@@ -66,6 +66,33 @@ func TestReceivedArtShowsTheSongsCover(t *testing.T) {
 	}
 }
 
+// A cover sent as the picture itself (AirPlay's) is shown for that receiver, the same picture again is
+// left as it is, and none clears it.
+func TestReceivedPictureShowsTheCover(t *testing.T) {
+	if !hasScreen {
+		t.Skip("no screen")
+	}
+	t.Cleanup(func() { ReceivedPicture("", nil) })
+	pic := testJPEG(t, 300, 300)
+	ReceivedPicture(AirPlayName, pic)
+	if !waitFor(func() bool { a, _ := receivedArt(AirPlayName); return a != nil }) {
+		t.Fatal("the cover never came")
+	}
+	first, _ := receivedArt(AirPlayName)
+	ReceivedPicture(AirPlayName, append([]byte(nil), pic...)) // the next song on the album
+	if a, _ := receivedArt(AirPlayName); a != first {
+		t.Error("the same picture was laid out again")
+	}
+	ReceivedPicture(AirPlayName, []byte("not a picture"))
+	if a, _ := receivedArt(AirPlayName); a != nil {
+		t.Error("the last song's cover stayed")
+	}
+	ReceivedPicture(AirPlayName, nil)
+	if a, _ := receivedArt(AirPlayName); a != nil {
+		t.Error("no picture left a cover")
+	}
+}
+
 // Skipping on calls off the fetch for the song left behind, and only the newest song's cover is shown,
 // even when the same song comes round again while its first fetch is still out.
 func TestReceivedArtKeepsOnlyTheNewest(t *testing.T) {
@@ -80,7 +107,7 @@ func TestReceivedArtKeepsOnlyTheNewest(t *testing.T) {
 		t.Fatal("the newest cover never came")
 	}
 	received.mu.Lock()
-	url, cancel := received.url, received.cancel
+	url, cancel := received.key, received.cancel
 	received.mu.Unlock()
 	if url != srv.URL+"/a" || cancel != nil {
 		t.Errorf("shown for %q with a fetch still out: %v", url, cancel != nil)

@@ -57,8 +57,9 @@ const (
 )
 
 // shairportConf is shairport-sync's configuration: the name phones show, the audio to standard output
-// as 16-bit stereo at 44.1 kHz, and what is playing to the metadata pipe. Its volume stays its own: the
-// phone's slider scales what it sends, and the device's volume is applied on top as for anything else.
+// as 16-bit stereo at 44.1 kHz, and what is playing to the metadata pipe, with its cover where there is
+// a screen to show it. Its volume stays its own: the phone's slider scales what it sends, and the
+// device's volume is applied on top as for anything else.
 func shairportConf(name, metaPipe string) string {
 	return fmt.Sprintf(`general = {
 	name = %s;
@@ -79,11 +80,19 @@ stdout = {
 };
 metadata = {
 	enabled = "yes";
-	include_cover_art = "no";
+	include_cover_art = "%s";
 	pipe_name = %s;
 	pipe_timeout = 5000;
 };
-`, confString(name), airplayPort, airplayUDPBase, airplayUDPCount, audioRate, audioChannels, confString(metaPipe))
+`, confString(name), airplayPort, airplayUDPBase, airplayUDPCount, audioRate, audioChannels, yesNo(home.HasScreen()), confString(metaPipe))
+}
+
+// yesNo is b as shairport-sync's configuration writes it.
+func yesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
 }
 
 // confString is s as a libconfig string: quoted, with quotes and backslashes escaped and anything
@@ -127,13 +136,20 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 	defer f.Close()
 	followAirPlayMetadata(f, func(title, artist, album string) {
 		media.Get().SetReceivedTrack(home.AirPlayName, title, artist, album)
+	}, func(picture []byte) {
+		home.ReceivedPicture(home.AirPlayName, picture)
 	})
 }
 
+// largestPicture is the most a cover sent over the metadata pipe may hold, as for one fetched
+// (home.fetchArt); a bigger one is passed over.
+const largestPicture = 4 << 20
+
 // followAirPlayMetadata reads items from r until it ends, calling told with the song whenever a field of
-// it changes, and with nothing when the session ends. Anything the decoder cannot take is passed over,
-// and reading goes on after it: only r failing ends it.
-func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) {
+// it changes, and pictured with its cover as the phone sends one; both with nothing when the session
+// ends. Anything the decoder cannot take is passed over, and reading goes on after it: only r failing
+// ends it.
+func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), pictured func(picture []byte)) {
 	src := &readErr{r: r}
 	br := bufio.NewReaderSize(src, 64<<10)
 	newDecoder := func() *xml.Decoder {
@@ -165,6 +181,16 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 			continue
 		}
 		typ, code := fourCC(it.Type), fourCC(it.Code)
+		if typ == "ssnc" && code == "PICT" {
+			// The cover, which phones send apart from the song's fields. One past the limit, or that
+			// will not decode, is passed over: the last one stays.
+			if b64 := strings.TrimSpace(it.Data); base64.StdEncoding.DecodedLen(len(b64)) <= largestPicture {
+				if b, err := base64.StdEncoding.DecodeString(b64); err == nil {
+					pictured(b)
+				}
+			}
+			continue
+		}
 		data := ""
 		if d, err := base64.StdEncoding.DecodeString(strings.TrimSpace(it.Data)); err == nil && len(d) <= 1024 {
 			data = string(d)
@@ -178,6 +204,7 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string)) 
 			album = data
 		case typ == "ssnc" && (code == "pend" || code == "disc"):
 			title, artist, album = "", "", ""
+			pictured(nil)
 		default:
 			continue
 		}
