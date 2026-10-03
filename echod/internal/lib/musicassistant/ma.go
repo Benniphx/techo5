@@ -71,6 +71,39 @@ type Item struct {
 	Artists   []struct {
 		Name string `json:"name"`
 	} `json:"artists"`
+	// Provider is where the item is held: a service's instance id, or "library"; Mappings are the
+	// services it is found on, a library item's included.
+	Provider string `json:"provider"`
+	Mappings []struct {
+		Instance string `json:"provider_instance"`
+		Domain   string `json:"provider_domain"`
+	} `json:"provider_mappings"`
+}
+
+// From is whether the item is on the service with this instance id or domain, by where it is held,
+// the services it is mapped to, or its URI's scheme (a service's own items are "ytmusic--a1://...").
+// An instance id is its domain, "--" and a suffix, so a domain alone matches its instances too.
+func (i Item) From(instance, domain string) bool {
+	is := func(id string) bool {
+		return id != "" && (id == instance || id == domain || domain != "" && strings.HasPrefix(id, domain+"--"))
+	}
+	if is(i.Provider) {
+		return true
+	}
+	if k := strings.Index(i.URI, "://"); k > 0 && is(i.URI[:k]) {
+		return true
+	}
+	for _, m := range i.Mappings {
+		if is(m.Instance) || is(m.Domain) {
+			return true
+		}
+	}
+	return false
+}
+
+// Sourced is whether the item says where it came from at all.
+func (i Item) Sourced() bool {
+	return i.Provider != "" || len(i.Mappings) > 0 || strings.Contains(i.URI, "://")
 }
 
 // By is who it is by, for saying what is playing: the artists' names, or nothing.

@@ -68,4 +68,9 @@ func TestMusicSourceSaved(t *testing.T) {
 			t.Errorf("%q was saved", bad)
 		}
 	}
+	// A refused source saves nothing else from the form either.
+	before := config.Get().MusicAssistant.URL
+	if post(url.Values{"url": {"http://192.168.1.20:8096"}, "source": {"a b"}}) == "" || config.Get().MusicAssistant.URL != before {
+		t.Errorf("a refused form changed the address to %q", config.Get().MusicAssistant.URL)
+	}
 }

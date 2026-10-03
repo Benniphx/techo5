@@ -130,7 +130,8 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   under the same section, picks a service to search first (YouTube Music, Spotify, a folder of files);
   the rest of the library is searched only when it has nothing by that name. Naming the service picks
   one for that request: "play Taylor Swift on YouTube Music". This is for a device whose voice
-  assistant answers directly; under Home Assistant, its own Music Assistant support decides.
+  assistant answers directly; under Home Assistant, its own Music Assistant support decides. It needs
+  Music Assistant 2.10 or later.
 - **AirPlay and Spotify Connect (new).** On the Show and the Dot, two switches make the device a
   speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
   **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under
