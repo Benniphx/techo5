@@ -97,10 +97,37 @@ func TestShowPaths(t *testing.T) {
 	if v, ok := level(paths[OutputSpeaker])["OUT Playback Switch"]; !ok || v != 1 {
 		t.Error("speaker: the line-out is not unmuted")
 	}
+	both := level(paths[OutputBoth])
+	for _, name := range []string{"OUT Playback Switch", "HPVOL Playback Switch", "HPO MIX HPVOL Switch", "HP Playback Switch"} {
+		if v, ok := both[name]; !ok || v != 1 {
+			t.Errorf("both: %s not on", name)
+		}
+	}
 	hpOff := level(off)
 	for _, name := range []string{"HPVOL Playback Switch", "HPO MIX HPVOL Switch", "HP Playback Switch"} {
 		if v, ok := hpOff[name]; !ok || v != 0 {
 			t.Errorf("headphoneOff: %s not off", name)
 		}
+	}
+}
+
+// Both plays the two outputs only while something is plugged in and only where the board can; with
+// nothing in the jack it is the speaker, and where it cannot it follows the jack as Automatic does.
+func TestDesiredOutputBoth(t *testing.T) {
+	was := HasBoth
+	t.Cleanup(func() { HasBoth = was })
+	p := &Player{outputMode: OutputModeBoth}
+
+	HasBoth = true
+	if got := p.desiredOutput(OutputHeadphone); got != OutputBoth {
+		t.Errorf("plugged in: %s, want both", got)
+	}
+	if got := p.desiredOutput(OutputSpeaker); got != OutputSpeaker {
+		t.Errorf("nothing plugged in: %s, want the speaker", got)
+	}
+
+	HasBoth = false
+	if got := p.desiredOutput(OutputHeadphone); got != OutputHeadphone {
+		t.Errorf("a board without both: %s, want the headphones, as Automatic", got)
 	}
 }

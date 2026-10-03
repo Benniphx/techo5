@@ -20,6 +20,8 @@ type Output string
 const (
 	OutputSpeaker   Output = "speaker"
 	OutputHeadphone Output = "headphone"
+	// OutputBoth is the speaker and the jack at once (HasBoth).
+	OutputBoth Output = "both"
 )
 
 // The playback ring: the vendor HAL's period at twice its depth.
@@ -117,7 +119,7 @@ var pathSequence, headphoneOff = showPaths(HasJack)
 // left alone and were not needed.
 func showPaths(jack bool) (map[Output][]kctl, []kctl) {
 	if !jack {
-		return map[Output][]kctl{OutputSpeaker: {}, OutputHeadphone: {}}, []kctl{}
+		return map[Output][]kctl{OutputSpeaker: {}, OutputHeadphone: {}, OutputBoth: {}}, []kctl{}
 	}
 	return map[Output][]kctl{
 			OutputSpeaker: {
@@ -125,6 +127,14 @@ func showPaths(jack bool) (map[Output][]kctl, []kctl) {
 			},
 			OutputHeadphone: {
 				{name: "OUT Playback Switch", level: 0},
+				{name: "HPVOL Playback Switch", level: 1},
+				{name: "HPO MIX HPVOL Switch", level: 1},
+				{name: "HP Playback Switch", level: 1},
+			},
+			// Both is the headphone path with the line-out left open: the speaker and the jack play
+			// the same audio at the same volume.
+			OutputBoth: {
+				{name: "OUT Playback Switch", level: 1},
 				{name: "HPVOL Playback Switch", level: 1},
 				{name: "HPO MIX HPVOL Switch", level: 1},
 				{name: "HP Playback Switch", level: 1},
@@ -219,3 +229,8 @@ const DriverTuning = true
 // HasJack is whether the device has a headphone jack, and so the Audio output choice: the 1st gen
 // Show 5 does; the 2nd gen Show 5 has none, and the Show 8 is not known to.
 var HasJack = layout.Checkers()
+
+// HasBoth is whether the speaker and the jack can play at once, and so the Both choice: wherever
+// there is a jack, since the speaker is the line-out and the jack the headphone pins, and the codec
+// drives both from the one mixer (heard on a 1st gen 2026-10-03).
+var HasBoth = HasJack

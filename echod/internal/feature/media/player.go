@@ -51,6 +51,7 @@ const (
 	outputAutomatic = "Automatic"
 	outputSpeaker   = "Internal speaker"
 	outputHeadphone = "Headphones / AUX"
+	outputBoth      = "Speaker and headphones"
 )
 
 type Player struct {
@@ -222,7 +223,7 @@ func build() *Player {
 				Icon:     "mdi:speaker-multiple",
 				Category: esphome.CategoryConfig,
 			},
-			Options: []string{outputAutomatic, outputSpeaker, outputHeadphone},
+			Options: OutputChoices(),
 		},
 		resampling: &esphome.Select{
 			Base: esphome.Base{
@@ -323,6 +324,11 @@ func build() *Player {
 			mode = config.OutputModeSpeaker
 		case outputHeadphone:
 			mode = config.OutputModeHeadphone
+		case outputBoth:
+			if !speaker.HasBoth {
+				return
+			}
+			mode = config.OutputModeBoth
 		default:
 			return
 		}
@@ -473,7 +479,13 @@ func (p *Player) Entities() []esphome.Entity {
 
 // OutputChoices are the Audio output choices, as Home Assistant lists them; Output is the one in force,
 // and SetOutput chooses one, as Home Assistant does. Only on a device with a jack (speaker.HasJack).
-func OutputChoices() []string             { return []string{outputAutomatic, outputSpeaker, outputHeadphone} }
+func OutputChoices() []string {
+	choices := []string{outputAutomatic, outputSpeaker, outputHeadphone}
+	if speaker.HasBoth {
+		choices = append(choices, outputBoth)
+	}
+	return choices
+}
 func (p *Player) Output() string          { return p.output.Get() }
 func (p *Player) SetOutput(choice string) { p.output.OnCommand(choice) }
 
@@ -507,6 +519,15 @@ func (p *Player) applyOutputMode(mode config.OutputMode) {
 	case config.OutputModeHeadphone:
 		speaker.Get().SetOutputMode(speaker.OutputModeHeadphone)
 		p.output.Set(outputHeadphone)
+
+	case config.OutputModeBoth:
+		if !speaker.HasBoth {
+			speaker.Get().SetOutputMode(speaker.OutputModeAuto)
+			p.output.Set(outputAutomatic)
+			return
+		}
+		speaker.Get().SetOutputMode(speaker.OutputModeBoth)
+		p.output.Set(outputBoth)
 
 	default:
 		speaker.Get().SetOutputMode(speaker.OutputModeAuto)

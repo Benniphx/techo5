@@ -153,13 +153,14 @@ func (w SpeakerWriter) ASP(v bool) error {
 	return w.st.Update(func(c *Config) { c.Speaker.ASP, c.Speaker.ASPChosen = v, true })
 }
 
-// OutputMode selects automatic routing, the speaker, or headphones when plugged in.
+// OutputMode selects automatic routing, the speaker, headphones when plugged in, or both at once.
 type OutputMode string
 
 const (
 	OutputModeAuto      OutputMode = ""
 	OutputModeSpeaker   OutputMode = "speaker"
 	OutputModeHeadphone OutputMode = "headphone"
+	OutputModeBoth      OutputMode = "both"
 )
 
 // Resampling is how the 16 kHz voice a pipeline sends is stretched to the 48 kHz the codec takes.

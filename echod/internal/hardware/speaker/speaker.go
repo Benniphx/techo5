@@ -53,7 +53,7 @@ const (
 	PlaybackDevice = 23
 )
 
-// OutputMode selects automatic routing, the speaker, or headphones when plugged in.
+// OutputMode selects automatic routing, the speaker, headphones when plugged in, or both at once.
 type OutputMode int32
 
 const (
@@ -63,6 +63,9 @@ const (
 	OutputModeSpeaker
 	// OutputModeHeadphone selects headphones when plugged in, otherwise the speaker.
 	OutputModeHeadphone
+	// OutputModeBoth plays the speaker and, when plugged in, the headphones too, where the board can
+	// (HasBoth); elsewhere it is OutputModeAuto.
+	OutputModeBoth
 )
 
 // Player owns the speaker: one playback stream held open for the life of the process, with the
@@ -356,6 +359,11 @@ func (p *Player) desiredOutput(detected Output) Output {
 			return OutputHeadphone
 		}
 		return OutputSpeaker
+	case OutputModeBoth:
+		if HasBoth && detected == OutputHeadphone {
+			return OutputBoth
+		}
+		return detected
 	default:
 		return detected
 	}
@@ -549,7 +557,8 @@ func (p *Player) fill(buf []byte) {
 	// everything panned left. The line-out is not: it gets both channels as they came. Neither is a
 	// sink, which is stereo and untuned: it has its own driver and its own tuning.
 	sinking := p.sink.Load() != nil
-	mono := p.Output() == OutputSpeaker && !sinking
+	out := p.Output()
+	mono := (out == OutputSpeaker || out == OutputBoth) && !sinking
 
 	// The write loop runs whether or not anything is playing, since the amplifier hisses when nothing
 	// drives the DAC, and tuning silence costs what tuning music costs. The block after the audio stops
