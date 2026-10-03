@@ -5,6 +5,7 @@ package speaker
 import (
 	"math"
 	"testing"
+	"time"
 )
 
 // The Show's curve is linear in dB: −45 dB at the first step, −24 dB at half, −6 dB at the top.
@@ -73,7 +74,7 @@ func TestShowInit(t *testing.T) {
 // without a jack touch nothing.
 func TestShowPaths(t *testing.T) {
 	paths, off := showPaths(false)
-	if len(paths[OutputSpeaker]) != 0 || len(paths[OutputHeadphone]) != 0 || len(off) != 0 {
+	if len(paths[OutputSpeaker]) != 0 || len(paths[OutputHeadphone]) != 0 || len(paths[OutputBoth]) != 0 || len(off) != 0 {
 		t.Errorf("no jack: %+v %+v", paths, off)
 	}
 
@@ -126,8 +127,43 @@ func TestDesiredOutputBoth(t *testing.T) {
 		t.Errorf("nothing plugged in: %s, want the speaker", got)
 	}
 
+	// The other choices are as they were beside it.
+	for _, c := range []struct {
+		mode     OutputMode
+		detected Output
+		want     Output
+	}{
+		{OutputModeSpeaker, OutputHeadphone, OutputSpeaker},
+		{OutputModeHeadphone, OutputHeadphone, OutputHeadphone},
+		{OutputModeHeadphone, OutputSpeaker, OutputSpeaker},
+		{OutputModeAuto, OutputHeadphone, OutputHeadphone},
+	} {
+		q := &Player{outputMode: c.mode}
+		if got := q.desiredOutput(c.detected); got != c.want {
+			t.Errorf("mode %d, %s detected: %s, want %s", c.mode, c.detected, got, c.want)
+		}
+	}
+
 	HasBoth = false
 	if got := p.desiredOutput(OutputHeadphone); got != OutputHeadphone {
 		t.Errorf("a board without both: %s, want the headphones, as Automatic", got)
+	}
+}
+
+// Output answers from what was last set without the path lock, so the write loop never waits on a
+// switch: held here as setOutput holds it across the codec writes.
+func TestOutputDoesNotWaitOnASwitch(t *testing.T) {
+	p := New()
+	p.pathMu.Lock()
+	defer p.pathMu.Unlock()
+	done := make(chan Output, 1)
+	go func() { done <- p.Output() }()
+	select {
+	case got := <-done:
+		if got != OutputSpeaker {
+			t.Errorf("Output = %s, want the speaker on a board with no jack", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Output waited on the path lock")
 	}
 }

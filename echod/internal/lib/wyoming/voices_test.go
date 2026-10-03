@@ -4,8 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -96,5 +98,59 @@ func TestVoicesOddInfo(t *testing.T) {
 		if got := voicesIn(data, "en"); len(got) != 0 {
 			t.Errorf("%s: got %v", info, got)
 		}
+	}
+}
+
+// A server listing a voice twice, names too long or unprintable to show, and more voices than anyone
+// scrolls through gives each good name once, short ones only, and no more than maxVoices.
+func TestVoicesBounded(t *testing.T) {
+	long := strings.Repeat("x", maxVoiceName+1)
+	var voices []any
+	voices = append(voices,
+		map[string]any{"name": "en_US-ryan-medium"},
+		map[string]any{"name": "en_US-ryan-medium"},
+		map[string]any{"name": "en_US-" + long + "-medium"},
+		map[string]any{"name": "en_US-bad\x07-medium"},
+		map[string]any{"name": "en_US-\xff-medium"},
+	)
+	for i := range maxVoices + 50 {
+		voices = append(voices, map[string]any{"name": fmt.Sprintf("en_US-v%d-medium", i)})
+	}
+	got := voicesIn(map[string]any{"tts": []any{map[string]any{"voices": voices}}}, "en")
+	if len(got) != maxVoices {
+		t.Fatalf("got %d voices, want %d", len(got), maxVoices)
+	}
+	if got[0] != "en_US-ryan-medium" || got[1] == got[0] {
+		t.Errorf("duplicates or the first voice lost: %v", got[:3])
+	}
+	for _, n := range got {
+		if !fitName(n) {
+			t.Errorf("unfit name kept: %q", n)
+		}
+	}
+}
+
+// The language is free text: "en-US" means en_US.
+func TestVoicesLanguageWithDash(t *testing.T) {
+	var data map[string]any
+	if err := json.Unmarshal([]byte(pipersInfo), &data); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := voicesIn(data, "en-US"), []string{"en_US-ryan-medium", "en_US-joe-medium"}; !slices.Equal(got, want) {
+		t.Errorf("en-US: got %v, want %v", got, want)
+	}
+}
+
+// A header with no newline is refused once it passes the limit, rather than read for as long as the
+// server keeps sending; one within it is read whole, past the reader's own buffer.
+func TestReadLineBounded(t *testing.T) {
+	endless := bufio.NewReaderSize(strings.NewReader(strings.Repeat("a", 10000)), 16)
+	if _, err := readLine(endless, 1000); err == nil {
+		t.Error("an endless header was read")
+	}
+	ok := bufio.NewReaderSize(strings.NewReader(strings.Repeat("b", 500)+"\nrest"), 16)
+	line, err := readLine(ok, 1000)
+	if err != nil || len(line) != 501 {
+		t.Errorf("a long header: %d bytes, %v", len(line), err)
 	}
 }

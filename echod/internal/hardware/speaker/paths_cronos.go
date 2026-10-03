@@ -227,8 +227,15 @@ const OutputBoost = 1.0
 const DriverTuning = true
 
 // HasJack is whether the device has a headphone jack, and so the Audio output choice: the 1st gen
-// Show 5 does; the 2nd gen Show 5 has none, and the Show 8 is not known to.
-var HasJack = layout.Checkers()
+// Show 5 does; the 2nd gen Show 5 has none, and the Show 8 is not known to. The kernel's jack switch
+// has to be there as well: a board told apart by the mute driver alone, with no panel name, could be
+// a Show 8 taken for a 1st gen Show 5.
+var HasJack = layout.Checkers() && exists(jackState)
+
+func exists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
 
 // HasBoth is whether the speaker and the jack can play at once, and so the Both choice: wherever
 // there is a jack, since the speaker is the line-out and the jack the headphone pins, and the codec

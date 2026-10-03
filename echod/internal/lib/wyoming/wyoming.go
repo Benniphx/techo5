@@ -16,6 +16,8 @@ import (
 	"net"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Format is raw PCM: samples a second, bytes a sample, channels.
@@ -80,7 +82,7 @@ func (c *conn) send(typ string, data any, payload []byte) error {
 }
 
 func (c *conn) recv() (string, map[string]any, []byte, error) {
-	line, err := c.r.ReadBytes('\n')
+	line, err := readLine(c.r, maxBody)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -110,6 +112,23 @@ func (c *conn) recv() (string, map[string]any, []byte, error) {
 		}
 	}
 	return h.Type, data, payload, nil
+}
+
+// readLine reads up to a newline, as ReadBytes does, but gives up past max bytes: a header can carry
+// its data inline, so it may be long, but not endless. A server that never sends the newline would
+// otherwise have the device hold everything it sent until the turn's time ran out.
+func readLine(r *bufio.Reader, max int) ([]byte, error) {
+	var line []byte
+	for {
+		part, err := r.ReadSlice('\n')
+		if len(line)+len(part) > max {
+			return nil, errors.New("wyoming: header too long")
+		}
+		line = append(line, part...)
+		if err != bufio.ErrBufferFull {
+			return line, err
+		}
+	}
 }
 
 // Transcriber is one utterance on its way to a speech-to-text server: audio goes in as it is heard,
@@ -240,9 +259,19 @@ func Voices(ctx context.Context, addr, language string) ([]string, error) {
 	}
 }
 
-// voicesIn picks the voice names out of an info event's data.
+// Limits on what a server may list: more voices than anyone scrolls through, and names longer than
+// any real voice's, are a server that is broken or not what it says.
+const (
+	maxVoices    = 500
+	maxVoiceName = 100
+)
+
+// voicesIn picks the voice names out of an info event's data: each once, at most maxVoices of them,
+// and only names that are short and printable, since they are shown on the screen.
 func voicesIn(data map[string]any, language string) []string {
 	var names []string
+	seen := map[string]bool{}
+	language = strings.ReplaceAll(language, "-", "_")
 	programs, _ := data["tts"].([]any)
 	for _, p := range programs {
 		prog, _ := p.(map[string]any)
@@ -250,15 +279,32 @@ func voicesIn(data map[string]any, language string) []string {
 		for _, v := range voices {
 			voice, _ := v.(map[string]any)
 			name, _ := voice["name"].(string)
-			if installed, ok := voice["installed"].(bool); name == "" || (ok && !installed) {
+			if installed, ok := voice["installed"].(bool); !fitName(name) || seen[name] || (ok && !installed) {
 				continue
 			}
 			if language == "" || speaks(voice, name, language) {
+				seen[name] = true
 				names = append(names, name)
+				if len(names) == maxVoices {
+					return names
+				}
 			}
 		}
 	}
 	return names
+}
+
+// fitName is whether a voice name can be offered: not empty, not overlong, and printable throughout.
+func fitName(name string) bool {
+	if name == "" || len(name) > maxVoiceName || !utf8.ValidString(name) {
+		return false
+	}
+	for _, r := range name {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
 }
 
 // speaks reports whether a voice is in language, from its languages list or else its name's prefix.
