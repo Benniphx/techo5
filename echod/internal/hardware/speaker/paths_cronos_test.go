@@ -67,3 +67,40 @@ func TestShowInit(t *testing.T) {
 		t.Error("AmpSwitch must stay empty: switching it resets the 2nd gen's amplifier and silences the 1st gen's")
 	}
 }
+
+// The 1st gen's jack: headphones open the codec's headphone pins and mute the line-out that feeds the
+// speaker; the speaker opens the line-out again, after headphoneOff has closed the pins. The boards
+// without a jack touch nothing.
+func TestShowPaths(t *testing.T) {
+	paths, off := showPaths(false)
+	if len(paths[OutputSpeaker]) != 0 || len(paths[OutputHeadphone]) != 0 || len(off) != 0 {
+		t.Errorf("no jack: %+v %+v", paths, off)
+	}
+
+	paths, off = showPaths(true)
+	level := func(seq []kctl) map[string]int32 {
+		m := map[string]int32{}
+		for _, k := range seq {
+			m[k.name] = k.level
+		}
+		return m
+	}
+	hp := level(paths[OutputHeadphone])
+	for _, name := range []string{"HPVOL Playback Switch", "HPO MIX HPVOL Switch", "HP Playback Switch"} {
+		if v, ok := hp[name]; !ok || v != 1 {
+			t.Errorf("headphone: %s not on", name)
+		}
+	}
+	if v, ok := hp["OUT Playback Switch"]; !ok || v != 0 {
+		t.Error("headphone: the speaker's line-out is not muted")
+	}
+	if v, ok := level(paths[OutputSpeaker])["OUT Playback Switch"]; !ok || v != 1 {
+		t.Error("speaker: the line-out is not unmuted")
+	}
+	hpOff := level(off)
+	for _, name := range []string{"HPVOL Playback Switch", "HPO MIX HPVOL Switch", "HP Playback Switch"} {
+		if v, ok := hpOff[name]; !ok || v != 0 {
+			t.Errorf("headphoneOff: %s not off", name)
+		}
+	}
+}
