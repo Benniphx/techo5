@@ -2,6 +2,7 @@ package security
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func TestTheSettingsLock(t *testing.T) {
 	if err := f.SetPIN("2468"); err != nil {
 		t.Fatal(err)
 	}
-	if stored := config.Get().Security.LockPIN; stored == "" || stored == "2468" {
+	if stored := config.Get().Security.LockPIN; stored == "" || stored == "2468" || !strings.HasPrefix(stored, "pbkdf2:") {
 		t.Fatalf("the PIN is kept as %q", stored)
 	}
 	if !webPages {

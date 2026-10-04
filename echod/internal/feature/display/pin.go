@@ -91,9 +91,16 @@ func relockOnClose(open bool) {
 
 // answerSetup answers a browser asking to be let in to the setup page. Allow is behind the settings
 // lock too: the setup page is every setting and more.
+//
+// The PIN lets in the browser that was asking when Allow was tapped, and no other: one that asked
+// while the PIN was being typed was never seen. Nor does the PIN leave the settings open behind it.
 func answerSetup(allow bool) {
 	if allow && security.Locked() {
-		openPIN(func() { setup.Get().Answer(true) })
+		asking := setup.Get().Asking()
+		openPIN(func() {
+			setup.Get().AllowAsking(asking)
+			security.Relock()
+		})
 		return
 	}
 	setup.Get().Answer(allow)

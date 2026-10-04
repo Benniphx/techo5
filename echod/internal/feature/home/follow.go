@@ -43,7 +43,7 @@ var followed struct {
 	picture string // entity_picture, as Home Assistant gives it
 	artFor  string // the picture art and thumb were made from
 
-	fetching  bool          // a cover is being fetched now
+	fetching  string        // the picture whose cover is being fetched now, or ""
 	coverAt   time.Time     // not before this is the cover tried again, after a failure
 	coverWait time.Duration // the wait after the last failure, doubling to five minutes
 	art       *image.RGBA
@@ -124,7 +124,9 @@ func (f *Feature) ChooseFollow(entity string) {
 
 // NextFollow moves to the next option, for the settings sheet.
 func (f *Feature) NextFollow() {
+	f.mu.Lock()
 	opts := f.followSel.Options
+	f.mu.Unlock()
 	i := slices.Index(opts, followOption(config.Get().Home))
 	f.ChooseFollow(followEntity(opts[(i+1)%len(opts)]))
 }
@@ -136,8 +138,9 @@ func (f *Feature) FollowChoices() (entities, names []string, cur int) {
 	chosen := followOption(config.Get().Home)
 	f.mu.Lock()
 	known := append([]hass.Entity(nil), f.players...)
+	opts := f.followSel.Options
 	f.mu.Unlock()
-	for i, o := range f.followSel.Options {
+	for i, o := range opts {
 		e := followEntity(o)
 		entities = append(entities, e)
 		names = append(names, playerName(e, known))
@@ -200,10 +203,15 @@ func (f *Feature) refreshPlayers() {
 		}
 	}
 	opts := followOptions(config.Get().Home)
-	if slices.Equal(opts, f.followSel.Options) {
+	f.mu.Lock()
+	same := slices.Equal(opts, f.followSel.Options)
+	if !same {
+		f.followSel.Options = opts // a new slice: one being read elsewhere is left as it was
+	}
+	f.mu.Unlock()
+	if same {
 		return
 	}
-	f.followSel.Options = opts
 	// New options reach Home Assistant at the next connection.
 	f.rewire()
 }
@@ -218,7 +226,7 @@ func (f *Feature) restartFollow() {
 	}
 	followed.entity, followed.state, followed.title, followed.artist, followed.album = entity, "", "", "", ""
 	followed.name, followed.picture, followed.artFor, followed.art, followed.thumb = "", "", "", nil, nil
-	followed.dismissed, followed.coverAt, followed.coverWait = "", time.Time{}, 0
+	followed.dismissed, followed.coverAt, followed.coverWait, followed.fetching = "", time.Time{}, 0, ""
 	followed.pos, followed.posSet = media.Position{}, false
 	if entity == "" {
 		followed.mu.Unlock()
@@ -294,13 +302,13 @@ func (f *Feature) heard(entity string, e hass.LiveEntity) {
 		followed.coverWait, followed.coverAt = 0, time.Time{} // a new cover is tried at once
 	}
 	// A cover not made yet is tried again on a later state, waiting longer each time it fails.
-	fetch := pic != "" && pic != followed.artFor && !followed.fetching && time.Now().After(followed.coverAt)
+	fetch := pic != "" && pic != followed.artFor && pic != followed.fetching && time.Now().After(followed.coverAt)
 	followed.picture = pic
 	if pic == "" {
 		followed.artFor, followed.art, followed.thumb = "", nil, nil
 	}
 	if fetch {
-		followed.fetching = true
+		followed.fetching = pic
 	}
 	followed.mu.Unlock()
 	if fetch {
@@ -345,7 +353,14 @@ func fetchFollowedArt(entity, pic string) {
 		art, thumb, err = layoutArt(b, false, "the followed player's cover")
 	}
 	followed.mu.Lock()
-	followed.fetching = false
+	if followed.fetching == pic {
+		followed.fetching = ""
+	}
+	if followed.entity != entity || followed.picture != pic {
+		// Another picture since: this one's result, and its failure, are not the new one's.
+		followed.mu.Unlock()
+		return
+	}
 	if err != nil {
 		slog.Debug("home: the followed player's cover", "err", err)
 		followed.coverWait = min(max(followed.coverWait*2, 10*time.Second), 5*time.Minute)

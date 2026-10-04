@@ -84,7 +84,8 @@ var fetchClient = &http.Client{
 	},
 }
 
-// refuseOwn refuses a connection to an address that is the device itself, link-local or multicast.
+// refuseOwn refuses a connection to an address that is the device itself (loopback, or one of its own
+// addresses on the network, which the kernel would carry over loopback too), link-local or multicast.
 func refuseOwn(network, address string, _ syscall.RawConn) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -92,10 +93,25 @@ func refuseOwn(network, address string, _ syscall.RawConn) error {
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
-		ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() || ownAddress(ip) {
 		return fmt.Errorf("dlna: not fetching from %s", host)
 	}
 	return nil
+}
+
+// ownAddress is whether ip is one of the device's own interface addresses. Read at each connection:
+// the address can change with the network.
+func ownAddress(ip net.IP) bool {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return true // not knowing its own addresses, the device fetches nothing rather than maybe itself
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 // coverMost bounds a cover's size.
@@ -387,11 +403,11 @@ func (r *renderer) stop() {
 		r.state = stNoMedia
 	}
 	r.mu.Unlock()
-	if was == stPlaying || was == stPaused {
+	if (was == stPlaying || was == stPaused) && media.Get().Receiving() == home.DLNAName {
+		// Only while the speaker is still the song's: a source that has just taken it over keeps
+		// the position it has published.
 		media.ClearPosition()
-		if media.Get().Receiving() == home.DLNAName {
-			media.Get().Stop()
-		}
+		media.Get().Stop()
 	}
 	r.f.e.changed()
 }

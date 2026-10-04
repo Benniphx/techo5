@@ -526,11 +526,28 @@ func (d *Display) OpenSheet(name string) bool {
 	if !ok && !grid {
 		return false
 	}
-	d.mu.Lock()
-	d.openSettings()
-	if !grid {
-		d.cat, d.sheetGrid = cat, false
+	open := func() {
+		d.openSettingsNow()
+		if !grid {
+			d.cat, d.sheetGrid = cat, false
+		}
 	}
+	if security.Locked() {
+		// The PIN first, then the settings on the page asked for. Called back without d.mu.
+		d.mu.Lock()
+		d.closeMenu()
+		d.mu.Unlock()
+		openPIN(func() {
+			d.mu.Lock()
+			open()
+			d.mu.Unlock()
+			d.wake()
+		})
+		d.wake()
+		return true
+	}
+	d.mu.Lock()
+	open()
 	d.mu.Unlock()
 	d.wake()
 	return true

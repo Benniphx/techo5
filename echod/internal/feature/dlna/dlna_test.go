@@ -3,6 +3,7 @@ package dlna
 import (
 	"encoding/xml"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,6 +28,7 @@ func call(t *testing.T, f *Feature, service, action, args string) (int, string) 
 	body, header := soap(service, action, args)
 	req := httptest.NewRequest(http.MethodPost, pathPrefix+service+"/control", strings.NewReader(body))
 	req.Header.Set("SOAPACTION", header)
+	req.Host = "192.0.2.20:8181" // the address the device announced
 	w := httptest.NewRecorder()
 	f.serve(w, req)
 	return w.Code, w.Body.String()
@@ -140,5 +142,39 @@ func TestTimes(t *testing.T) {
 	}
 	if parseHMS("bad") != 0 {
 		t.Error("a bad time was read")
+	}
+}
+
+// A request by a name rather than the address (a web page that pointed its own name at the device, DNS
+// rebinding) is refused; by the address, with or without a port, it is served.
+func TestOnlyTheAddressIsServed(t *testing.T) {
+	f := &Feature{}
+	f.r.f = f
+	for host, want := range map[string]int{"evil.example:8181": http.StatusForbidden, "192.0.2.20:8181": http.StatusOK, "192.0.2.20": http.StatusOK, "[2001:db8::1]:8181": http.StatusOK} {
+		req := httptest.NewRequest(http.MethodGet, pathPrefix+"device.xml", nil)
+		req.Host = host
+		w := httptest.NewRecorder()
+		f.serve(w, req)
+		if w.Code != want {
+			t.Errorf("Host %s: %d, want %d", host, w.Code, want)
+		}
+	}
+}
+
+// The device never fetches from its own addresses on the network, which would reach it over loopback.
+func TestNotFromItself(t *testing.T) {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Skip(err)
+	}
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok {
+			if err := refuseOwn("tcp", net.JoinHostPort(n.IP.String(), "80"), nil); err == nil {
+				t.Errorf("its own address %s was allowed", n.IP)
+			}
+		}
+	}
+	if err := refuseOwn("tcp", "192.0.2.99:80", nil); err != nil {
+		t.Errorf("a host on the network was refused: %v", err)
 	}
 }

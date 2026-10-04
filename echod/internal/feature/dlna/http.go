@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 )
@@ -17,6 +18,12 @@ import (
 const mostSOAP = 64 << 10
 
 func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
+	if !hostIsAddress(r.Host) {
+		// Controllers use the address the device announced. A name here is a web page that pointed
+		// a name of its own at the device (DNS rebinding) to reach it from a browser: refused.
+		http.Error(w, "use the device's address", http.StatusForbidden)
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, pathPrefix)
 	switch {
 	case path == "device.xml" && r.Method == http.MethodGet:
@@ -34,6 +41,14 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// hostIsAddress is whether a request's Host is an IP address, with or without a port.
+func hostIsAddress(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return net.ParseIP(strings.Trim(host, "[]")) != nil
 }
 
 func writeXML(w http.ResponseWriter, body string) {

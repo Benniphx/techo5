@@ -43,17 +43,20 @@ func (d *Display) awayTick(now time.Time, on, busy, night bool) bool {
 	case dark && on:
 		// Lit by something else since: a touch, a ring, Home Assistant. The room no longer owns it.
 		set(false)
+	case dark && !on && presence.Blind():
+		// The camera stopped (the mute button, the shutter) with the screen out for an empty room: it
+		// is left as it is, for a touch or the camera's return to light.
 	case dark && !on && !night && (after == 0 || presence.Present()):
 		slog.Info("screen: somebody near, on again")
 		set(false)
 		d.apply(true, d.ceilingOrDefault(), false)
 		return true
 	case !dark && on && !night && !busy && after > 0 && presence.EmptyFor(now) >= after:
-		slog.Info("screen: nobody near, off", "after", after)
 		if litFor < after {
 			// Lit a moment ago (a touch, a ring) with nobody seen since: it gets its full wait.
 			return false
 		}
+		slog.Info("screen: nobody near, off", "after", after)
 		set(true)
 		d.apply(false, d.ceilingOrDefault(), false)
 		return true

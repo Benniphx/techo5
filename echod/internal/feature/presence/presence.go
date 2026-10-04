@@ -203,6 +203,18 @@ func Hush() {
 
 // ScreenOffAfter is how long the room must be empty before the screen goes dark: 0 when it never does
 // (the setting is 0, presence is off, or the camera is not watching now).
+// Blind is whether presence detection is on and the screen goes by the room, but the camera is not
+// watching now (the mute button, the shutter, a restart): nobody near is not known either way.
+func Blind() bool {
+	if !On() || !config.Get().Presence.On || config.Get().Presence.PresenceScreenOff() == 0 {
+		return false
+	}
+	f := Get()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.watching
+}
+
 // watchBreak is how long the watching can stop for before the screen stops going by the room.
 const watchBreak = 30 * time.Second
 

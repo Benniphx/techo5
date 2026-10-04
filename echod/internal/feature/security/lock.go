@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -70,6 +71,11 @@ func TryPIN(pin string) (ok bool, wait time.Duration) {
 	}
 	if pinMatches(c.LockPIN, pin) {
 		lock.unlockedUntil = now.Add(unlockFor)
+		if !strings.HasPrefix(c.LockPIN, "pbkdf2:") {
+			if err := config.Set().Security().LockPIN(hashPIN(pin)); err != nil {
+				slog.Warn("settings lock: keeping the PIN the slow way failed", "err", err)
+			}
+		}
 		if c.LockFails != 0 || c.LockBlockedUntil != 0 {
 			saveTries(0, 0)
 		}
@@ -136,16 +142,29 @@ func validPIN(pin string) bool {
 	return true
 }
 
-// hashPIN is the PIN as it is kept: a random salt and the SHA-256 of salt and PIN, in hex.
+// pinRounds is PBKDF2's rounds for a PIN: a few tenths of a second on the device, once per try, so a
+// copy of the config is slow to guess a PIN from. A PIN is only digits, so this slows a guesser down
+// rather than stops one; the config itself is only readable as root.
+const pinRounds = 100_000
+
+// hashPIN is the PIN as it is kept: "pbkdf2:" then a random salt and PBKDF2-SHA-256 of the PIN, in hex.
 func hashPIN(pin string) string {
 	salt := make([]byte, 16)
 	_, _ = rand.Read(salt)
-	sum := sha256.Sum256(append(append([]byte{}, salt...), pin...))
-	return hex.EncodeToString(salt) + ":" + hex.EncodeToString(sum[:])
+	return "pbkdf2:" + hex.EncodeToString(salt) + ":" + hex.EncodeToString(pinKey(pin, salt))
+}
+
+func pinKey(pin string, salt []byte) []byte {
+	key, err := pbkdf2.Key(sha256.New, pin, salt, pinRounds, sha256.Size)
+	if err != nil {
+		return nil
+	}
+	return key
 }
 
 func pinMatches(stored, pin string) bool {
-	s, h, ok := strings.Cut(stored, ":")
+	rest, slow := strings.CutPrefix(stored, "pbkdf2:")
+	s, h, ok := strings.Cut(rest, ":")
 	if !ok {
 		return false
 	}
@@ -154,8 +173,15 @@ func pinMatches(stored, pin string) bool {
 	if err1 != nil || err2 != nil {
 		return false
 	}
-	sum := sha256.Sum256(append(append([]byte{}, salt...), pin...))
-	return subtle.ConstantTimeCompare(sum[:], want) == 1
+	var got []byte
+	if slow {
+		got = pinKey(pin, salt)
+	} else {
+		// A PIN kept by a test build before 1.0: a single SHA-256, taken once and kept again the slow way.
+		sum := sha256.Sum256(append(append([]byte{}, salt...), pin...))
+		got = sum[:]
+	}
+	return got != nil && subtle.ConstantTimeCompare(got, want) == 1
 }
 
 func (f *Feature) buildLock() {

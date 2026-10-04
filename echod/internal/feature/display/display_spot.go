@@ -1160,8 +1160,9 @@ func (d *Display) frame() time.Duration {
 	}
 	d.mu.Unlock()
 
+	_, reminding := remind.Get().Showing()
 	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen() ||
-		sunriseProgress(now) > 0 || setup.Get().Waiting()
+		sunriseProgress(now) > 0 || setup.Get().Waiting() || reminding
 	if d.awayTick(now, on, busy, inNight(now)) {
 		d.mu.Lock()
 		on = d.on
