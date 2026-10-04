@@ -1660,7 +1660,7 @@ func (d *Display) OpenSheet(name string) bool {
 	}
 	if security.Locked() {
 		// Asked for from Home Assistant or by voice, the settings are behind the lock all the same.
-		openPIN(open)
+		openPINRemote(open)
 		d.wake()
 		return true
 	}

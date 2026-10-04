@@ -537,7 +537,7 @@ func (d *Display) OpenSheet(name string) bool {
 		d.mu.Lock()
 		d.closeMenu()
 		d.mu.Unlock()
-		openPIN(func() {
+		openPINRemote(func() {
 			d.mu.Lock()
 			open()
 			d.mu.Unlock()

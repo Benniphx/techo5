@@ -76,7 +76,14 @@ func TryPIN(pin string) (ok bool, wait time.Duration) {
 	}
 	lock.mu.Lock()
 	defer lock.mu.Unlock()
+	stored := c.LockPIN
 	c = config.Get().Security // the count as it is now: tries are one at a time from the pad, but not only
+	if c.LockPIN != stored {
+		return false, 0 // the PIN changed while this one was being checked: it is not the PIN now
+	}
+	if until := time.Unix(c.LockBlockedUntil, 0); c.LockBlockedUntil > 0 && now.Before(until) {
+		return false, until.Sub(now) // a wrong try just before this one started the wait
+	}
 	if matched {
 		lock.unlockedUntil = now.Add(unlockFor)
 		if upgraded != "" {

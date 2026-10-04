@@ -42,12 +42,17 @@ var pinPad struct {
 	first   string
 }
 
-// openPIN puts the pad up, with after to run once the right PIN is in. A pad already up for something
-// else keeps it: the PIN being typed is for what the person at the device asked for, not for a request
-// that arrived meanwhile.
-func openPIN(after func()) {
+// openPIN puts the pad up for a tap on the device, with after to run once the right PIN is in: the
+// person at the device decides what the PIN is for.
+func openPIN(after func()) { putPINUp(after, false) }
+
+// openPINRemote is openPIN for a request from elsewhere (Home Assistant, a link): it leaves a pad that
+// is already up as it is, since the PIN being typed there is for what the person at the device asked.
+func openPINRemote(after func()) { putPINUp(after, true) }
+
+func putPINUp(after func(), keepOpen bool) {
 	pinPad.mu.Lock()
-	if pinPad.open && time.Since(pinPad.at) <= pinIdle {
+	if keepOpen && pinPad.open && time.Since(pinPad.at) <= pinIdle {
 		pinPad.mu.Unlock()
 		return
 	}
