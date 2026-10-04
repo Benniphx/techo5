@@ -189,9 +189,10 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   a call, an alarm or with the settings open. Nothing the camera sees is kept or sent: a couple of
   times a second the newest frame is compared with the last as a small grid of brightness, on the
   device. The mute button and the lens shutter stop it, and then the screen is left as it is. On the
-  Show 8 (and possibly other Shows), the kernel keeps the camera off from the first press of the mute
-  button until the next restart, so presence, the camera page and camera stills come back after a
-  restart (Settings → General → Restart, or the Restart button in Home Assistant).
+  Show 8 and the 1st gen Show 5, a quick tap of the mute button to unmute leaves the camera switched
+  off inside Amazon's kernel: **hold the mute button for a second** (it chimes and stays unmuted) and
+  the camera, presence and camera stills come back. A restart does the same. Holding the button to
+  unmute in the first place avoids it. The 2nd gen Show 5 is not affected.
 - **Settings lock** (Show and Spot, off by default): a PIN the device asks for before its settings
   open, so guests and children can use everything else without changing anything. Set it under
   Settings → Privacy & Security, on the setup page (Privacy), or with the

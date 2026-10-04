@@ -43,6 +43,8 @@ var errNone = errors.New("no camera on this device")
 
 func (c *Camera) Acquire() (func(), error)                     { return nil, errNone }
 func (c *Camera) AcquireSlow() (func(), error)                 { return nil, errNone }
+func (c *Camera) SetSlowEvery(time.Duration)                   {}
+func (c *Camera) Unwedge()                                     {}
 func (c *Camera) Snapshot(ctx context.Context) (*Frame, error) { return nil, errNone }
 func (c *Camera) Last() *Frame                                 { return nil }
 func (c *Camera) Running() bool                                { return false }

@@ -236,13 +236,15 @@ func (f *Feature) watch(ctx context.Context) {
 		release, err := camera.Get().AcquireSlow()
 		if err != nil {
 			if errors.Is(err, camera.ErrNeedsReboot) {
-				// Nothing to ask again until the device restarts; said once.
-				slog.Warn("presence: the camera needs a reboot; not watching until then")
+				// Nothing to ask again until the mute button is held or the device restarts; said once.
+				slog.Warn("presence: the camera is held off since the mute button was tapped; hold it for a second to bring it back")
+				stop := camera.Unwedged.Listen(func(struct{}) { f.poke() })
 				select {
 				case <-ctx.Done():
 				case <-f.wake:
 				}
-				return
+				stop()
+				continue
 			} else {
 				slog.Debug("presence: the camera is not available", "err", err)
 			}

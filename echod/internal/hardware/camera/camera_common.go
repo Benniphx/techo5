@@ -72,8 +72,9 @@ type Camera struct {
 
 	mu      sync.Mutex
 	users   int
-	fast    int       // users that want every frame; the rest (AcquireSlow) take one every slowEvery
-	sent    time.Time // when the last frame went out, for the slow users
+	fast    int           // users that want every frame; the rest (AcquireSlow) take one every slowEvery
+	sent    time.Time     // when the last frame went out, for the slow users
+	every   time.Duration // how often the slow users get one (SetSlowEvery); zero is slowEvery
 	running bool
 	powered bool // the sensor is on (running, and not held off by the mute)
 	stop    chan struct{}
@@ -105,22 +106,17 @@ type Camera struct {
 	wedged error
 }
 
-// ErrNeedsReboot is the sensor refusing to open in a way that only a reboot clears.
-//
-// Measured on a Show 8 (2026-10-04, kernel log): once the mute button has been pressed, the kernel's
-// camera driver keeps its own "gating mode" on until the next boot, whatever the latch's state file
-// says and however long after the unmute the camera is opened (tried at 0.15 s, 1.6 s and 72 s, with
-// the camera open and with it closed through the mute). An open in that state logs "Failed to enable
-// CAM, GATING Mode is ON" and its way out runs the power-down that fails on the sensor's regulator.
-// The latch's enable file takes only 1, so nothing here can clear it.
-//
-// The mute latch cuts the camera's power without telling the sensor driver, which goes on believing
-// the sensor is powered; the power-down it runs before the next power-on then fails on VCAMD and
-// takes the open with it. Every open after that returns EIO, for the life of the boot. The fix
-// belongs in the kernel - amazon-gating cutting the camera behind imgsensor's back - and this is
-// only about not sitting in the failure: it was found as three and a half hours of the same error
-// every twenty seconds, one per still Home Assistant asked for.
-var ErrNeedsReboot = errors.New("the camera needs a reboot: the sensor did not come back after the microphone latch")
+// ErrNeedsReboot is the sensor refusing to open because the kernel's camera driver still believes
+// the privacy latch is on. On the Show 8 and the 1st gen Show 5 (amazon-gating, OV9734), the latch is
+// let go in hardware by any press of the mute button, but the driver tells the camera so only on a
+// long press: a short press to unmute leaves the camera's own "gating mode" on, and every open fails
+// ("Failed to enable CAM, GATING Mode is ON", then a power-down that unbalances the sensor's
+// regulator) however long after. Measured on a Show 8, 2026-10-04: opens at 0.15 s, 1.6 s and 72 s
+// after a short unmute all failed; a hold of the mute button for a second (Unwedge) brought the
+// camera straight back, without muting. The kernel's fix is amazon-oss android_kernel_amazon_mt8163
+// fac5c8e ("Fix camera dying when booting with privacy on"). A reboot clears it too. The 2nd gen
+// Show 5 (cronos) has another privacy driver and never gets here.
+var ErrNeedsReboot = errors.New("the camera is held off since the mute button was tapped: hold the mute button for a second, or restart the device")
 
 var (
 	once   sync.Once
@@ -175,14 +171,29 @@ func (c *Camera) Acquire() (release func(), err error) { return c.acquire(true) 
 // every slowEvery, and the rest are not even copied; the exposure still follows every one.
 func (c *Camera) AcquireSlow() (release func(), err error) { return c.acquire(false) }
 
-// slowEvery is how often the slow users get a frame.
+// slowEvery is how often the slow users get a frame unless one asks for more (SetSlowEvery).
 const slowEvery = 500 * time.Millisecond
+
+// SetSlowEvery is how often the slow users get a frame: more often while a gesture could mean
+// something, back to slowEvery after. Zero is slowEvery.
+func (c *Camera) SetSlowEvery(d time.Duration) {
+	if d <= 0 {
+		d = slowEvery
+	}
+	c.mu.Lock()
+	c.every = d
+	c.mu.Unlock()
+}
 
 // wanted says whether the frame the sensor just made goes out, and marks it sent if so.
 func (c *Camera) wanted(now time.Time) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.fast == 0 && now.Sub(c.sent) < slowEvery {
+	every := c.every
+	if every <= 0 {
+		every = slowEvery
+	}
+	if c.fast == 0 && now.Sub(c.sent) < every-every/8 {
 		return false
 	}
 	c.sent = now
@@ -512,6 +523,24 @@ func (c *Camera) Wedged() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.wedged
+}
+
+// Unwedged fires when the camera may be opened again after being held off (Unwedge). Listeners must
+// not block.
+var Unwedged hook.Hook[struct{}]
+
+// Unwedge lets the camera be tried again: the mute button was held, which is what tells the kernel's
+// camera driver that the privacy latch is off (see ErrNeedsReboot). If it still will not open, the
+// next try finds that out again.
+func (c *Camera) Unwedge() {
+	c.mu.Lock()
+	was := c.wedged != nil
+	c.wedged = nil
+	c.mu.Unlock()
+	if was {
+		slog.Info("camera: the mute button was held; trying the camera again")
+		Unwedged.Emit(struct{}{})
+	}
 }
 
 // heapNew returns a new T that is certain to live on the heap. The compat ioctls take pointers
