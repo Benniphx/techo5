@@ -179,6 +179,14 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   [LRCLIB](https://lrclib.net), a free lyrics database, so the song's title and artist are sent there.
   Words are only kept in time for music whose position is known: Music Assistant, and a followed
   player. Radio stations, AirPlay and Spotify show the song without words.
+- **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, or
+  *Nothing*, for a panel you only talk to. A voice request under way still takes the tap. Also on the
+  setup page's Screen & Photos tab. See [Dashboards](dashboards.md) for the rest of a panel setup.
+- **Screen language** (Settings → General): the clock's day and date, the forecast's days, the
+  weather's words and the alarm after the date are written in it: German, Spanish, French, Italian or
+  Dutch, and English for *Match all* or *English*. It also picks which words the screen listens for.
+  It doesn't change what the assistant understands or says, and the rest of the screen stays in
+  English.
 - **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines and
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted

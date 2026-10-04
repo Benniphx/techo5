@@ -252,7 +252,7 @@ func generalRows(sv sheetView) []settingRow {
 	return append(rows,
 		settingRow{id: "weather", label: "Weather", sub: "Shown with the clock", kind: ctlChoice, value: st.weather, button: "Show"},
 		settingRow{id: "timezone", label: "Time zone", sub: zoneSub(), kind: ctlChoice, value: zoneValue()},
-		settingRow{id: "screenlang", label: "Screen language", sub: "What this screen listens for, not what the assistant speaks",
+		settingRow{id: "screenlang", label: "Screen language", sub: "Its dates, its weather, and what it listens for",
 			kind: ctlChoice, value: langOptions[langIndex()]},
 		updates,
 		settingRow{label: "About", kind: ctlValue, value: deviceModel + " · slot " + st.slot},

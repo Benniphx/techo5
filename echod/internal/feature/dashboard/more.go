@@ -93,6 +93,34 @@ func tilesSelect(f *Feature) *esphome.Select {
 	return s
 }
 
+// HasTiles is whether this device offers the Dashboard tiles setting: the Show does.
+func HasTiles() bool { return hasTiles }
+
+// Back and Tiles are the two settings' current choices, by label.
+func Back() string  { return backLabel(config.Get().Dashboard.ReturnAfter) }
+func Tiles() string { return tilesLabel(config.Get().Dashboard.Tiles) }
+
+// ChooseMode and ChooseIdle are the Dashboard and Dashboard when idle settings set from somewhere other
+// than Home Assistant - the setup page - and shown there as well.
+func (f *Feature) ChooseMode(m config.DashboardMode) error {
+	if err := config.Set().Dashboard().Mode(m); err != nil {
+		return err
+	}
+	f.mode.Set(m.Label())
+	f.setMode(m)
+	slog.Info("dashboard: mode", "mode", m.Label())
+	return nil
+}
+
+func (f *Feature) ChooseIdle(on bool) error {
+	if err := config.Set().Dashboard().Idle(on); err != nil {
+		return err
+	}
+	f.idle.Set(on)
+	f.Changed.Emit(struct{}{})
+	return nil
+}
+
 // SetBack saves how long a dashboard opened by hand stays up, by its label.
 func (f *Feature) SetBack(label string) {
 	for _, c := range backChoices {

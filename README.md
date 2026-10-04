@@ -86,6 +86,9 @@ Home Assistant:
   screen only what changes, encrypted with a key of your choosing. It looks exactly as Home Assistant
   draws it, custom cards included, and it can show built-in pages like Energy and History.
 
+For a Show on a wall, a tap on the clock can open the dashboard, a few tiles can fill the whole
+screen, and the clock comes back on its own after the time you choose.
+
 Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs/dashboards.md)**.
 
 <table>
