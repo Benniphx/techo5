@@ -102,6 +102,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		rows = append(rows,
 			settingRow{id: "musicstrip", label: "Now playing", sub: "Full page, or a strip over the clock", kind: ctlChoice, value: stripOptionText()},
 			settingRow{id: "follow", label: "Now playing follows", sub: "Another speaker's music, while this one is quiet", kind: ctlChoice, value: followText(st.demo)},
+			settingRow{id: "lyrics", label: "Lyrics", sub: "The words in time, looked up at LRCLIB", kind: ctlToggle, on: home.LyricsOn()},
 			settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()},
 			settingRow{label: "Weather", kind: ctlHeading},
 			settingRow{id: "weatherfx", label: "Weather animation", sub: "Rain, snow and storms move on the forecast", kind: ctlToggle, on: weatherAnimation.Load()},
@@ -814,6 +815,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetAlertsOn(!home.AlertsOn())
 	case "camerasound":
 		home.Get().SetCameraSound(!home.CameraSound())
+	case "lyrics":
+		safe.Go("lyrics from the screen", func() { home.Get().SetLyricsOn(!home.LyricsOn()) })
 	case "weatherfx":
 		setWeatherAnimationSaved(d.weatherFx, !weatherAnimation.Load())
 	case "dnd":

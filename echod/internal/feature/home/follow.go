@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"log/slog"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -44,6 +45,11 @@ var followed struct {
 	art     *image.RGBA
 	thumb   *image.RGBA
 
+	// pos is where the song is, from media_position and the time Home Assistant took it, when the
+	// player says (posSet); for the lyrics.
+	pos    media.Position
+	posSet bool
+
 	// dismissed is the track the page was put away on with Done: the followed player is somebody
 	// else's music, so Done does not stop it, it only puts it away until the next track.
 	dismissed string
@@ -83,11 +89,14 @@ func followOptions(h config.Home) []string {
 // followEntity is the entity an option names, "" for none.
 func followEntity(v string) string {
 	v = strings.TrimSpace(v)
-	if v == followNone || !strings.HasPrefix(v, "media_player.") {
+	if !strings.HasPrefix(v, "media_player.") || !entityID.MatchString(v) {
 		return ""
 	}
 	return v
 }
+
+// entityID is what an entity id looks like; anything else is not used, since an id goes into a template.
+var entityID = regexp.MustCompile(`^[a-z0-9_]+\.[a-z0-9_]+$`)
 
 func followOption(h config.Home) string {
 	if h.FollowPlayer != "" {
@@ -205,6 +214,7 @@ func (f *Feature) restartFollow() {
 	followed.entity, followed.state, followed.title, followed.artist, followed.album = entity, "", "", "", ""
 	followed.name, followed.picture, followed.artFor, followed.art, followed.thumb = "", "", "", nil, nil
 	followed.dismissed = ""
+	followed.pos, followed.posSet = media.Position{}, false
 	if entity == "" {
 		followed.mu.Unlock()
 		return
@@ -273,6 +283,7 @@ func (f *Feature) heard(entity string, e hass.LiveEntity) {
 	followed.state = e.State
 	followed.name = str("friendly_name")
 	followed.title, followed.artist, followed.album = str("media_title"), str("media_artist"), str("media_album_name")
+	followed.pos, followed.posSet = followedPosition(followed.title, e)
 	pic := str("entity_picture")
 	fetch := pic != "" && pic != followed.picture
 	followed.picture = pic
@@ -284,6 +295,33 @@ func (f *Feature) heard(entity string, e hass.LiveEntity) {
 		safe.Go("followed cover", func() { fetchFollowedArt(entity, pic) })
 	}
 	f.Changed.Emit(struct{}{})
+}
+
+// followedPosition reads where the song is from a player's attributes: media_position seconds into it
+// at media_position_updated_at, media_duration long, moving while the player is playing.
+func followedPosition(title string, e hass.LiveEntity) (media.Position, bool) {
+	pos, ok := e.Attrs["media_position"].(float64)
+	if !ok {
+		return media.Position{}, false
+	}
+	at := time.Now()
+	if s, _ := e.Attrs["media_position_updated_at"].(string); s != "" {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil && !t.After(at) {
+			at = t
+		}
+	}
+	dur, _ := e.Attrs["media_duration"].(float64)
+	rate := 0.0
+	if e.State == "playing" {
+		rate = 1
+	}
+	return media.Position{
+		Title: title,
+		At:    at,
+		Pos:   time.Duration(pos * float64(time.Second)),
+		Dur:   time.Duration(dur * float64(time.Second)),
+		Rate:  rate,
+	}, true
 }
 
 // fetchFollowedArt makes the page's picture from the cover Home Assistant named, unless another has

@@ -66,6 +66,7 @@ var registered = []string{
 	"last_wake_word",
 	"load_average",
 	"lux",
+	"lyrics",
 	"max_listen_1",
 	"max_listen_2",
 	"max_think_1",

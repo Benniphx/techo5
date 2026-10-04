@@ -519,12 +519,37 @@ func (s *session) noticed(st protocol.ServerStateMessage) {
 	if st.Metadata == nil {
 		return
 	}
-	if !s.meta.merge(st.Metadata) {
+	changed := s.meta.merge(st.Metadata)
+	s.progress(st.Metadata)
+	if !changed {
 		return
 	}
 	media.Get().ExternalTrack(s.meta.title, s.meta.artist, s.meta.album)
 	slog.Info("sendspin now playing",
 		"title", s.meta.title, "artist", s.meta.artist, "album", s.meta.album)
+}
+
+// progress records how far into the track the server says it is, for what is shown in time with it
+// (the lyrics). The server's timestamp is its own clock's, put on this device's here.
+func (s *session) progress(m *protocol.MetadataState) {
+	if !m.HasField("progress") {
+		return
+	}
+	if m.Progress == nil {
+		media.ClearPosition()
+		return
+	}
+	at := time.Now()
+	if m.Timestamp > 0 {
+		at = at.Add(-time.Duration(s.clock.ServerMicrosNow()-m.Timestamp) * time.Microsecond)
+	}
+	media.SetPosition(media.Position{
+		Title: s.meta.title,
+		At:    at,
+		Pos:   time.Duration(m.Progress.TrackProgress) * time.Millisecond,
+		Dur:   time.Duration(m.Progress.TrackDuration) * time.Millisecond,
+		Rate:  float64(m.Progress.PlaybackSpeed) / 1000,
+	})
 }
 
 // took records what the controller role may ask the server for. The server decides whether to act on a

@@ -164,6 +164,11 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   Assistant's media players, a Sonos in the same room for example. While this device plays nothing of
   its own, Now Playing shows that player's song and cover, and its buttons control it. **Done** puts it
   away until the next song without stopping it. Needs the home_assistant action (address and token).
+- **Lyrics** (Show, also a switch in Home Assistant, off by default): the words of the song on Now
+  Playing, the line being sung and the next one, in time with the music. They come from
+  [LRCLIB](https://lrclib.net), a free lyrics database, so the song's title and artist are sent there.
+  Words are only kept in time for music whose position is known: Music Assistant, and a followed
+  player. Radio stations, AirPlay and Spotify show the song without words.
 - **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines and
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted

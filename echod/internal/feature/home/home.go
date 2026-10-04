@@ -105,6 +105,8 @@ type Feature struct {
 	players   []hass.Entity
 	playersAt time.Time
 
+	lyricsSw *esphome.Switch // the words on Now Playing (lyrics.go)
+
 	// haCameras is every camera Home Assistant has, fetched at haCamerasAt, for a device given no list
 	// of its own; haCamerasBusy is a fetch under way.
 	haCameras     []config.Camera
@@ -239,6 +241,7 @@ func Get() *Feature {
 		shared = &Feature{poke: make(chan struct{}, 1), metaPoke: make(chan struct{}, 1)}
 		shared.buildWeatherSelect()
 		shared.buildFollowSelect()
+		shared.buildLyricsSwitch()
 		shared.buildRadarSelect()
 		shared.buildAlertsSwitch()
 		shared.buildCameraSoundSwitch()
@@ -360,6 +363,7 @@ func (f *Feature) Restore(c config.Config) {
 	f.weatherSel.Set(chosenOption(c.Home))
 	f.followSel.Options = followOptions(c.Home)
 	f.followSel.Set(followOption(c.Home))
+	f.lyricsSw.Set(c.Home.Lyrics)
 	if hasScreen {
 		f.restartFollow()
 	}

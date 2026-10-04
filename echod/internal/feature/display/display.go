@@ -1872,6 +1872,9 @@ func (d *Display) frame() time.Duration {
 		s.nowPlaying, s.strip = false, true
 	}
 	s.faved = d.favedKey != "" && d.favedKey == s.radio.Title+"\x00"+s.radio.Now
+	if s.nowPlaying {
+		s.lyric, s.hasLyric = home.Get().LyricNow(s.radio, now)
+	}
 	d.showingPlaying, d.showingStrip, d.showingWord = s.nowPlaying, s.strip, playingWord(s) != ""
 	d.mu.Unlock()
 	s.weather = home.Get().Weather()
@@ -2003,7 +2006,11 @@ func (d *Display) frame() time.Duration {
 		return eqFrame // the bars are moving
 	}
 	if s.showWeather || s.nowPlaying {
-		return time.Until(now.Truncate(idleFrame).Add(idleFrame))
+		wait := time.Until(now.Truncate(idleFrame).Add(idleFrame))
+		if s.hasLyric && s.lyric.In > 0 && s.lyric.In < wait {
+			wait = s.lyric.In + 20*time.Millisecond // the next line, as it is sung
+		}
+		return wait
 	}
 	if (s.phase == "idle" || s.phase == "lingering") && !s.showVolume {
 		// On the next whole second, so the clock changes when the second does.

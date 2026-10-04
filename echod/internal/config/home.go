@@ -20,6 +20,9 @@ type Home struct {
 	FollowPlayer  string   `json:"follow_player,omitempty"`
 	PlayerSources []string `json:"player_sources,omitempty"`
 
+	// Lyrics shows the words of the song on Now Playing, looked up at LRCLIB by title and artist.
+	Lyrics bool `json:"lyrics,omitempty"`
+
 	// Location is a zone.* entity the rain map and weather alerts are centered on, for a device that
 	// is somewhere other than home (a family device in another house). Empty is Home Assistant's home.
 	Location string `json:"location,omitempty"`
@@ -258,6 +261,10 @@ func (w HomeWriter) DropIn(v bool) error {
 
 func (w HomeWriter) DoNotDisturb(v bool) error {
 	return w.st.Update(func(c *Config) { c.Home.DoNotDisturb = v })
+}
+
+func (w HomeWriter) Lyrics(on bool) error {
+	return w.st.Update(func(c *Config) { c.Home.Lyrics = on })
 }
 
 func (w HomeWriter) FollowPlayer(entity string) error {

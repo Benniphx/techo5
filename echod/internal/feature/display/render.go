@@ -180,6 +180,10 @@ type scene struct {
 	strip bool
 	faved bool
 
+	// lyric is the words of the song on the full now-playing page, when hasLyric (home/lyrics.go).
+	lyric    home.Lyric
+	hasLyric bool
+
 	// announceReady is whether this house has a word set, without which announcements go nowhere;
 	// announceRecording whether this device has its microphone open for one now; announcePeers how
 	// many other devices are listening for them.

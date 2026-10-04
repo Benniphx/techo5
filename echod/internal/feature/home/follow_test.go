@@ -86,7 +86,8 @@ func TestFollowOptions(t *testing.T) {
 			t.Fatalf("options = %v, want %v", got, want)
 		}
 	}
-	for v, want := range map[string]string{followNone: "", "light.lamp": "", " media_player.den ": "media_player.den"} {
+	for v, want := range map[string]string{followNone: "", "light.lamp": "", " media_player.den ": "media_player.den",
+		"media_player.x') }}{{ y": ""} {
 		if got := followEntity(v); got != want {
 			t.Errorf("followEntity(%q) = %q, want %q", v, got, want)
 		}
