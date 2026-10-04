@@ -88,3 +88,21 @@ Release payloads contain no OpenAI key, HA token, owner SSH key, private configu
 drivers. Configure secrets through the write-only setup field in owner-only persistent device state;
 protect the local HTTP connection. Report version/source and sanitized symptoms, never credentials,
 private state/entity catalogs or conversation logs.
+
+
+## First complete publication check — 2026-10-04
+
+[Release v1.0.4](https://github.com/Benniphx/techo5/releases/tag/v1.0.4), based on upstream
+v0.9.30, was built and published successfully by
+[run37212583632](https://github.com/Benniphx/techo5/actions/runs/37212583632). Downloaded
+manifest signatures, every payload hash, metadata, both installer boot selections and rootfs
+contents passed verification. Its rootfs stamp reports daemon v1.0.4/source5ce9067. The complete
+build job took122 seconds and publication19 seconds on the hosted runner. The rootfs is
+36,683,887 bytes; temporary Actions staging is75,719,621 bytes with3-day retention. A second
+[unchanged run](https://github.com/Benniphx/techo5/actions/runs/37212805609) skipped build/promotion/publication.
+No physical image installation or spoken regression was performed.
+
+Standard public runner compute does not use private minutes. Temporary staging artifacts still
+need a bounded storage budget; repository footprint is not the account's remaining shared allowance.
+At the measured size, three daily full builds would retain about217 MiB in staging before expiry.
+Release assets provide the durable download path.
