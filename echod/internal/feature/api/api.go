@@ -184,6 +184,7 @@ func (a *API) Start(ctx context.Context) error {
 		return err
 	}
 	psk = a.resumeAdoption(psk)
+	psk = a.firstStart(psk)
 	a.mu.Lock()
 	a.useKey(psk)
 	a.mu.Unlock()

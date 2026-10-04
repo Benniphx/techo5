@@ -65,6 +65,11 @@ func TestAQuietRingUnderLoudMusic(t *testing.T) {
 	if quiet[0] >= loud[0] {
 		t.Errorf("a ring at step 5 came out at %d, no quieter than one at step 30 (%d)", quiet[0], loud[0])
 	}
+	// On a panel the media step is the tablet's own volume, so a ring is scaled against it in software
+	// and the same ring under different music is the same loudness in the room, not on the wire.
+	if ringsRideTheDeviceVolume {
+		return
+	}
 	if want := rang(t, 5, 5, 0, 100, true); !near(quiet[0], want[0]) {
 		t.Errorf("a ring at step 5 under music at 30 came out at %d, want %d as it would alone", quiet[0], want[0])
 	}

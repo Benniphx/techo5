@@ -1136,6 +1136,7 @@ func tone(n Note, level float64) []int16 {
 func (p *Player) SetVolume(step int) {
 	step = max(0, min(step, VolumeSteps))
 	p.step.Store(int32(step))
+	volumeChanged(step)
 	if p.sink.Load() != nil {
 		p.volume.Store(math.Float32bits(sinkGain(step)))
 		return
