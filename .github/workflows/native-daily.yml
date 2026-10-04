@@ -1,0 +1,173 @@
+name: Native daily stable build
+
+on:
+  schedule:
+    - cron: '37 3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: native-daily
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      changed: ${{ steps.prepare.outputs.changed }}
+      base: ${{ steps.prepare.outputs.base }}
+      commit: ${{ steps.prepare.outputs.commit }}
+      version: ${{ steps.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test synchronization safety
+        run: python3 -m unittest discover -s tools -p test_native_daily.py -v
+      - name: Prepare stable upstream candidate
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          python3 tools/native_daily.py --run-number "$RUN_NUMBER"
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        if: steps.prepare.outputs.changed == 'true'
+        with:
+          go-version: '1.26'
+          cache-dependency-path: echod/go.sum
+      - name: Test candidate
+        if: steps.prepare.outputs.changed == 'true'
+        working-directory: echod
+        run: |
+          go test ./...
+          go test -tags dot ./...
+          go test -tags spot ./...
+      - name: Build experimental Show daemon
+        if: steps.prepare.outputs.changed == 'true'
+        working-directory: echod
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.prepare.outputs.commit }}
+          GOOS: linux
+          GOARCH: arm
+          GOARM: '7'
+          CGO_ENABLED: '0'
+        run: |
+          pkg=github.com/HuskerMinion/techo5/echod/internal/layout
+          build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          go build -trimpath -ldflags "-s -w -X $pkg.Version=$VERSION -X $pkg.GitCommit=$SOURCE_COMMIT -X $pkg.BuildDate=$build_date" -o ../bin/echod-arm ./cmd/echod
+          cd ../bin
+          sha256sum echod-arm build-info.json > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.prepare.outputs.changed == 'true'
+        with:
+          name: native-show5-${{ steps.prepare.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bin/echod-arm
+            bin/SHA256SUMS
+            bin/build-info.json
+          retention-days: 7
+          if-no-files-found: error
+      - name: Bundle tested history
+        if: steps.prepare.outputs.changed == 'true'
+        env:
+          BASE: ${{ steps.prepare.outputs.base }}
+        run: git bundle create candidate.bundle HEAD "^$BASE"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: steps.prepare.outputs.changed == 'true'
+        with:
+          name: native-candidate-history-${{ github.run_attempt }}
+          path: candidate.bundle
+          retention-days: 1
+          if-no-files-found: error
+      - name: Build summary
+        env:
+          CHANGED: ${{ steps.prepare.outputs.changed }}
+          VERSION: ${{ steps.prepare.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.prepare.outputs.commit }}
+        run: |
+          # shellcheck disable=SC2129
+          if [ "$CHANGED" = true ]; then
+            echo "Built $VERSION from $SOURCE_COMMIT; promotion follows in a separate job." >> "$GITHUB_STEP_SUMMARY"
+            echo 'Daemon candidate only: no signed rootfs, OTA publication or device installation.' >> "$GITHUB_STEP_SUMMARY"
+            echo "ARM daemon size: $(wc -c < bin/echod-arm) bytes." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Latest stable release and native source unchanged: build skipped.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo 'Public repository, standard Linux runner: no private Actions minutes. Artifacts expire after 7 days (history: 1 day).' >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    needs: build
+    if: needs.build.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download tested history
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: gh run download "$RUN_ID" --repo "$REPO" --name native-candidate-history-${{ github.run_attempt }}
+      - name: Promote exactly the tested commit
+        env:
+          BASE: ${{ needs.build.outputs.base }}
+          CANDIDATE: ${{ needs.build.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "$BASE"
+          git bundle verify candidate.bundle
+          git fetch candidate.bundle HEAD
+          test "$(git rev-parse FETCH_HEAD)" = "$CANDIDATE"
+          git merge-base --is-ancestor "$BASE" "$CANDIDATE"
+          # No candidate programs run in the job that can write main.
+          # The helper expands the token only when Git invokes it, never in this shell.
+          # shellcheck disable=SC2016
+          git -c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' push "https://github.com/$REPO.git" "$CANDIDATE:refs/heads/main"
+
+  report:
+    needs: [build, promote]
+    if: always() && github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Update failure notification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+        run: |
+          title='Native daily build needs attention'
+          issue=$(gh api "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp --jq '[.[][] | select(.title == "Native daily build needs attention" and .user.login == "github-actions[bot]" and (.pull_request == null)) | .number] | .[0] // empty')
+          if [ "$BUILD_RESULT" = success ] && { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; }; then
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --repo "$REPO" --comment "Daily stable build recovered: $RUN_URL"
+            fi
+          else
+            printf '@Benniphx The daily native stable build stopped. Main was not force-updated and no device was installed.\n\nBuild: %s; promotion: %s. Inspect logs: %s\n' "$BUILD_RESULT" "$PROMOTE_RESULT" "$RUN_URL" > "$RUNNER_TEMP/failure.md"
+            if [ -n "$issue" ]; then
+              gh issue comment "$issue" --repo "$REPO" --body-file "$RUNNER_TEMP/failure.md"
+            else
+              gh issue create --repo "$REPO" --title "$title" --body-file "$RUNNER_TEMP/failure.md"
+            fi
+          fi

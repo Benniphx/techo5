@@ -1,3 +1,43 @@
+# TECHO5 Native Realtime — experimental fork
+
+This is **[Benniphx/techo5](https://github.com/Benniphx/techo5)**, an experimental fork of
+**[HuskerMinion's TECHO5](https://github.com/HuskerMinion/techo5)**. It adds optional native
+OpenAI Realtime voice input and spoken replies to the existing device daemon, using the device's
+microphones, speaker, wake word and voice screen. **No Pipecat runner or separate voice service is
+required.** Home Assistant remains the default answering mode.
+
+The original project and its contributors provide the firmware, hardware support and most of this
+code. Native Realtime is maintained here separately; it is not an upstream-supported feature.
+A basic spoken session has worked on one **Echo Show 5, 1st gen (`checkers`)**. Full hardware
+acceptance and regression testing remain open, including echo cancellation and unintended extra
+responses. Other models have no native Realtime hardware acceptance claim.
+
+> **Cloud and cost:** enabling Realtime sends microphone audio to OpenAI and requires a paid OpenAI
+> API account. Store the API key through the device's write-only setup field; its local state file is
+> owner-only. Never commit a key or attach the state file to an issue. The setup page uses local HTTP,
+> so protect that connection when entering the key.
+>
+> **Downloads and updates:** the daily build publishes experimental **daemon binaries**, not signed
+> firmware images. The existing **Stable** update channel and upstream installer still install
+> original TECHO5 firmware, which does not contain this feature. A fork-specific A/B update channel
+> is separate work; do not use the stock update card to preserve a native Realtime installation.
+
+**[Native Realtime setup and limits](docs/native-realtime.md)** ·
+**[Daily builds, downloads and maintenance](docs/fork-maintenance.md)** ·
+**[Fork build runs](https://github.com/Benniphx/techo5/actions/workflows/native-daily.yml)**
+
+The public fork contains the native Realtime integration and its bounded, optional read tools.
+It does not include the separate private Home Assistant tool extension or personal home commands.
+
+---
+
+## Upstream TECHO5 documentation
+
+The documentation below describes the original project, its hardware support and installation
+process. Its release links and installer commands point to **HuskerMinion/techo5**; they do not
+install this fork's experimental Realtime binaries. Upstream feature and hardware status statements
+are not acceptance results for this fork.
+
 <p align="center">
   <img src="logo/TECHO5_logo.png" alt="TECHO5" width="220">
 </p>
@@ -5,7 +45,7 @@
 <h3 align="center">Your Echo Show 5, rebuilt. Linux inside, Home Assistant in charge, no Amazon cloud.</h3>
 
 <p align="center">
-  <a href="https://github.com/HuskerMinion/techo5/releases/latest"><img src="https://img.shields.io/github/v/release/HuskerMinion/techo5?label=release&color=e9a23b" alt="Latest release"></a>
+  <a href="https://github.com/HuskerMinion/techo5/releases/latest"><img src="https://img.shields.io/github/v/release/HuskerMinion/techo5?label=upstream%20stable&color=e9a23b" alt="Latest upstream stable release"></a>
   <img src="https://img.shields.io/badge/Linux-Alpine-0D597F?logo=alpinelinux&logoColor=white" alt="Alpine Linux">
   <img src="https://img.shields.io/badge/Android-none-3a2c22" alt="No Android">
   <img src="https://img.shields.io/badge/Alexa-none-3a2c22" alt="No Alexa">
@@ -158,7 +198,7 @@ slot system, phone calls, and a minimal Alpine root filesystem in place of Andro
 |  |  |
 |---|---|
 | 🐧 **Real Linux, no Android** | The Show boots straight into a minimal Alpine Linux root filesystem. No Android framework, no Google services, no app store: one daemon drives the microphones, speaker, screen, camera and radios directly. |
-| 🚫 **No Alexa, no Amazon account, no Amazon cloud** | By default, your voice goes to *your* Home Assistant over its encrypted ESPHome API. Optional direct modes use the configured speech/chat services or [OpenAI Realtime](docs/native-realtime.md); enabling Realtime sends audio to OpenAI and requires a paid API account. The Show reaches the internet just for what you use: update checks against this repo, network time, radio streams with their song and cover lookups, the rain radar map, and in the U.S. the National Weather Service's weather alerts. In the default Home Assistant mode, voice and control keep working with the internet down as long as your pipeline is local. |
+| 🚫 **No Alexa, no Amazon account, no Amazon cloud** | By default, your voice goes to *your* Home Assistant over its encrypted ESPHome API. Optional direct modes use the configured speech/chat services or [OpenAI Realtime](docs/native-realtime.md); enabling Realtime sends audio to OpenAI and requires a paid API account. The Show reaches the internet just for what you use: update checks against the upstream release feed, network time, radio streams with their song and cover lookups, the rain radar map, and in the U.S. the National Weather Service's weather alerts. In the default Home Assistant mode, voice and control keep working with the internet down as long as your pipeline is local. |
 | 🎙️ **Wake word on the device** | microWakeWord runs locally: twelve wake words, "Alexa", "Okay Nabu", "Hey Jarvis", "Hey Mycroft", "Computer" and more, chosen on the screen or in Home Assistant. Echo cancellation keeps it listening over music. |
 | 🔐 **Secure by default** | SSH is keys-only and off until you turn it on; keys arrive only through Home Assistant. The camera and screen web pages start closed, and a firewall lets in nothing on Wi-Fi but what the device serves. No password logins, not even in rescue. |
 | 🔄 **Updates that can't brick it** | Releases install over the air from Home Assistant's update card into the spare of two root filesystem slots, boot on trial, and fall back on their own if the new one doesn't settle. |
@@ -214,13 +254,16 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 | Camera | Video calls, Drop In | A Home Assistant camera entity, off unless watched |
 | Bluetooth | Speaker and phone audio | Audio to earbuds and speakers; Home Assistant Bluetooth proxy |
 | Smart home | Alexa routines | Everything Home Assistant does |
-| Updates | Amazon, automatic, whenever | From this repo's releases, when you press Install; A/B slots with automatic fallback |
+| Updates | Amazon, automatic, whenever | From upstream TECHO5 releases, when you press Install; A/B slots with automatic fallback |
 | Remote access | None | SSH with keys, off by default |
 | Listening on your network | Amazon's services | Home Assistant's encrypted API and the Sendspin player; SSH, web pages, AirPlay and Spotify Connect only when switched on, behind a Wi-Fi firewall. A signed-in phone keeps its own connection out to the provider |
 | Calling | Alexa calling and Drop In | Phone calls through your own SIP provider (TLS and SRTP), placed from Home Assistant or by voice, answered on the screen; device to device calls in the house |
 | Shopping, skills | Yes | **No.** Those are Alexa cloud services |
 
 ## Install
+
+> **Upstream installation:** these instructions install original TECHO5 firmware. For this fork's
+> experimental binaries and current deployment limits, read [Fork maintenance](docs/fork-maintenance.md).
 
 **New to this? Start with [Getting started](docs/getting-started.md)**: every step from a stock Echo
 Show 5, Dot or Spot, with the unlock guides linked, what to check after each step, and notes for
