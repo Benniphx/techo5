@@ -1,13 +1,14 @@
-# Native Realtime voice assistant (draft)
+# Native Realtime voice assistant (experimental)
 
 This optional mode connects TECHO5 directly to OpenAI's Realtime API. It uses the existing microphone,
 speaker, local wake detection and voice screen; no additional server, Wyoming speech services or
 Pipecat runner is required. Home Assistant remains the default answering mode. The ordinary direct
 speech-and-chat pipeline remains available separately.
 
-This integration is a draft. Offline tests can check protocol and lifecycle behavior; they do not
-establish working audio, echo cancellation or interaction on real hardware. Hardware acceptance is
-still pending. Do not describe this as a validated replacement for an existing installation yet.
+A basic spoken session worked on one first-generation Echo Show 5 using an earlier native daemon.
+Offline tests cover protocol and lifecycle behavior; full firmware installation, restart, rollback,
+echo cancellation and unintended additional answers still need hardware acceptance. See the
+[native firmware guide](native-firmware.md) for signed downloads and migration.
 
 ## Configure
 

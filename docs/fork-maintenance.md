@@ -1,89 +1,90 @@
 # Experimental fork maintenance and downloads
 
-[Benniphx/techo5](https://github.com/Benniphx/techo5) maintains the optional native OpenAI Realtime
-integration separately from [HuskerMinion/techo5](https://github.com/HuskerMinion/techo5).
-The upstream project supplies the firmware and hardware support. Its authors do not support this
-fork's experimental cloud voice mode.
+[Benniphx/techo5](https://github.com/Benniphx/techo5) maintains optional native OpenAI Realtime
+separately from [HuskerMinion/techo5](https://github.com/HuskerMinion/techo5). Upstream supplies
+hardware support and most firmware code; its authors do not support this experimental cloud mode.
 
-## Daily upstream check
+## Download complete firmware
+
+Use **[fork Releases](https://github.com/Benniphx/techo5/releases/latest)**. Published releases are
+public downloads without an Actions-artifact login and do not expire after a few days. Each release
+contains a complete Show 5 root filesystem, both board boot images, the native ARM daemon, build
+metadata, checksums and a signed manifest. The first- and second-generation boot images reuse
+verified, pinned, keyless upstream v0.7.16 rescue/kernel bytes. The root filesystem includes the
+WebRTC AEC helper. The optional Spotify Connect helper is not included.
+
+Read **[installation and migration](native-firmware.md)** before using a payload. This checkout's
+Show installer verifies the fork signing key and downloads from the fork. An existing stock updater
+cannot trust this new publisher automatically. After explicit migration, the native Show firmware
+follows **native-stable**, its own signed release feed; daily publication does not enable device
+automatic installation. Complete-image physical boot, restart and rollback acceptance remain open.
+
+Versions are independent **`v1.0.<workflow run number>`**; release notes/build metadata identify the
+upstream base and exact tested source. The numeric sequence gives Home Assistant meaningful upgrade
+ordering, unlike earlier `_native.<run>` daemon-only labels. GitHub releases are deliberately marked
+as regular releases for the `/latest/download` feed, with **EXPERIMENTAL** in the title and notes.
+They are not a claim of upstream support or stable hardware acceptance.
+
+## Daily stable check and publication
 
 The **[native daily workflow](https://github.com/Benniphx/techo5/actions/workflows/native-daily.yml)**
-checks the latest non-prerelease upstream release once a day, at **03:37 UTC**. GitHub may delay
-scheduled runs. Maintainers can also run it manually with **Run workflow** on the Actions page.
+checks the latest non-prerelease upstream Show release once daily at **03:37 UTC**. GitHub may delay
+schedules. Maintainers can run it manually; **force_build** is off by default and publishes a new
+numbered release only when explicitly selected.
 
-When the upstream stable release or the `echod` source fingerprint changes, the workflow merges that
-release into a candidate containing this fork's native changes. It runs the default, Dot and Spot
-test suites and cross-compiles the Show's ARM daemon. It promotes the tested candidate to the fork's
-`main` only after success, and refuses promotion if `main` changed during the run. An unchanged,
-already-built release and source fingerprint are skipped. Upstream workflow files are kept at the fork versions; changes to CI require deliberate local maintenance. It does not track unreleased upstream `main` commits,
-force-reset the fork, or install anything on a device.
+The workflow builds when the upstream stable release, firmware source fingerprint, or published
+release availability changes. The fingerprint covers the daemon, rootfs/build tools and controlled
+workflow code; documentation-only edits do not trigger a full rebuild. Missing/incomplete publication
+is recovered by a new release on a later run. With unchanged inputs and a complete published release,
+the daily check skips compilation and publication.
 
-Merge conflicts and failing checks stop promotion. Maintainers need to resolve the conflict or fix
-the failure, then run the workflow again. A successful compile does not establish that changed audio,
-wake-word or device behavior works on hardware.
+A read-only build job merges the stable tag into a candidate, keeps fork workflow definitions,
+runs synchronization/release-safety tests and default/Dot/Spot Go suites, and assembles the ARM
+rootfs/AEC under QEMU on a disposable GitHub runner. It verifies rootfs contents and the original
+signed boot-image provenance before uploading temporary staging artifacts.
 
-An unchanged daily run still skips the build. If the last downloadable artifact has expired,
-select **Run workflow → force_build** for an explicit rebuild of the same stable source.
-This option is off by default and is never enabled by the daily schedule.
+A separate promotion job advances `main` to exactly the tested candidate, only if `main` still
+matches the starting commit. A separate publisher checks out the **original workflow commit**,
+validates staged asset inventory/hashes/source/version, and signs the manifest using the dedicated
+**native-release** environment key (main branch only). Candidate programs never run in a job with
+write access or signing credentials. It creates a draft, uploads every asset, then publishes it as
+latest. Existing tags/releases/assets are not overwritten. TLS, manifest signatures and A/B rollback
+remain enforced in the device updater.
 
-## Download a candidate
-
-1. Open the [workflow runs](https://github.com/Benniphx/techo5/actions/workflows/native-daily.yml).
-2. Choose a successful run that built a candidate, rather than a run that skipped unchanged source.
-3. Read its summary and logs for the upstream release, candidate version and source commit.
-4. Download the **Artifacts** entry named `native-show5-<version>-<run_id>-<attempt>`. GitHub requires a
-   signed-in account for artifact downloads. Artifacts expire after **7 days**.
-5. Unpack it and verify `SHA256SUMS` before using the `echod-arm` binary. `build-info.json` records
-   the source information. An additional internal candidate bundle is for workflow promotion,
-   not device installation.
-
-Candidate versions look like `v0.9.30_native.<run_number>`; the base identifies the upstream release.
-This label does not establish a supported OTA upgrade ordering scheme. The archive contains the
-Show daemon binary and build metadata. These are **not complete boot/rootfs images**,
-not signed OTA releases, and not a replacement for the device's A/B slot installer. Keep the source
-commit with any hardware test result so a report identifies exactly what ran.
-
-## Device installation and recovery
-
-There is currently no supported fork-specific OTA installation path. The built-in **Stable** channel
-still follows upstream TECHO5 and verifies upstream-signed releases. Installing one replaces the
-fork's changes. The **Stable** label alone does not identify the daemon currently running.
-
-The original [getting-started guide](getting-started.md), [installer](install.md) and README clone
-command install **upstream firmware**. Downloading a daily artifact does not change those commands
-into a fork installer. A complete fork deployment needs tested full images, its own signing and
-update feed, and hardware acceptance of install, restart and rollback behavior.
-
-Use an existing, verified local deployment/recovery procedure for experiments. A temporary daemon
-overlay does not survive restart or stock firmware replacement. Retain a known-good firmware backup
-and USB recovery access before testing. Do not enable automatic stock updates expecting this fork's
-native additions to survive.
+Conflicts, retags/downgrades, failed tests or a changed remote branch stop the run. Maintainers must
+resolve the cause deliberately; there is no force reset or automatic AI repair. A publication failure
+can follow successful source promotion, but leaves the previous complete release available. The next
+run checks publication separately. Staging artifacts expire after **3 days**, history after **1 day**;
+use durable release downloads for installation.
 
 ## Failures and resource use
 
-The workflow records failure information in its logs and opens or updates a fork maintenance issue
-for actionable failures. An independent monitor checks for failed or missing daily runs, including
-cases where GitHub cannot start the workflow. Fixing a missing schedule may require re-enabling it:
-GitHub disables scheduled workflows in public repositories after 60 days without repository activity.
+Failures open/update a maintenance issue and an independent monitor watches failed/stale daily runs,
+including cases where Actions cannot start. GitHub may disable scheduled public workflows after
+60 days without repository activity; maintainers must re-enable them when needed.
 
-This is a **public fork** using standard GitHub-hosted Linux runners. Those runs are free and do not
-consume a private repository's included Actions minutes. Short artifact retention bounds accumulated
-build storage. OpenAI audio usage is a separate cost on the device owner's API account. See
-[GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
-for current terms and the run summaries for measured build time and artifact size.
+Standard GitHub-hosted Linux Actions in this public repository are free and do not consume private
+included Actions minutes. Public release storage and short-lived staging replace an expiring-only
+binary download path. The separate private Home Assistant daemon build still consumes private job
+minutes and bounded artifact storage, monitored against chosen workload budgets; those budgets do
+not assert the remaining account-wide allowance. OpenAI usage is separate on the owner's API account.
+See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+for current terms and successful workflow logs for actual build duration/size.
 
 ## Experimental acceptance and privacy
 
-A basic spoken Realtime session has worked on one Echo Show 5, 1st gen. Full regression acceptance,
-echo cancellation, unintended additional answers and model-specific hardware checks remain open.
-The [native Realtime guide](native-realtime.md) lists the checks and configuration limits.
+Basic spoken Realtime worked on one Show 5 first generation with an earlier native daemon. Echo
+cancellation, unsolicited additional answers, full-image installation/restart/rollback and updated
+firmware spoken regression are not established by the offline build. Other models have no native
+hardware acceptance claim. See [native voice setup](native-realtime.md).
 
-Realtime is opt-in. It sends audio and any enabled tool definitions/results to OpenAI, needs a paid
-API account, and has no silent fallback to Home Assistant if that provider fails. Tools are disabled
-by default; the public implementation provides optional bounded read access to existing device data.
-It provides no arbitrary Home Assistant entity control or web search. The separate private Home
-Assistant extension and personal command examples are not part of this public fork.
+Realtime is opt-in and sends audio to OpenAI, needs a paid API account, and has no silent Home
+Assistant fallback on provider errors. Tools default off; the public implementation offers bounded
+existing-device read tools, no arbitrary HA entity control or web search. Normal Home Assistant
+Assist remains available. The private Home Assistant extension and personal command examples are
+not included in the public images.
 
-Keep credentials in the device's owner-only state file, using the write-only setup field. Protect
-its local HTTP setup connection. Report version, source commit and sanitized symptoms; never upload
-API keys, state files, private entity catalogs or personal conversation logs.
+Release payloads contain no OpenAI key, HA token, owner SSH key, private configuration or vendor
+drivers. Configure secrets through the write-only setup field in owner-only persistent device state;
+protect the local HTTP connection. Report version/source and sanitized symptoms, never credentials,
+private state/entity catalogs or conversation logs.

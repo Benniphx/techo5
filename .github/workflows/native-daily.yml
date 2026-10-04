@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       force_build:
-        description: 'Rebuild unchanged source (for expired artifacts)'
+        description: 'Publish a new firmware release even when source is unchanged'
         type: boolean
         default: false
 
@@ -21,7 +21,7 @@ jobs:
   build:
     if: github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
     outputs:
       changed: ${{ steps.prepare.outputs.changed }}
       base: ${{ steps.prepare.outputs.base }}
@@ -32,8 +32,9 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Test synchronization safety
-        run: python3 -m unittest discover -s tools -p test_native_daily.py -v
+      - name: Test synchronization and release safety
+        run: |
+          python3 -m unittest discover -s tools -p 'test_native*.py' -v
       - name: Prepare stable upstream candidate
         id: prepare
         env:
@@ -60,31 +61,44 @@ jobs:
           go test ./...
           go test -tags dot ./...
           go test -tags spot ./...
-      - name: Build experimental Show daemon
+      - name: Prepare ephemeral ARM rootfs build host
         if: steps.prepare.outputs.changed == 'true'
-        working-directory: echod
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user-static binfmt-support uidmap
+          sudo update-binfmts --enable qemu-arm
+          # Ubuntu's AppArmor namespace restriction applies to this disposable
+          # GitHub runner only. No developer or device host is changed.
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          runner_user=$(id -un)
+          if ! awk -F: -v user="$runner_user" '$1 == user {found=1} END {exit !found}' /etc/subuid; then
+            sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$runner_user"
+          fi
+          test -e /proc/sys/fs/binfmt_misc/qemu-arm
+      - name: Build complete experimental Show firmware
+        if: steps.prepare.outputs.changed == 'true'
         env:
           VERSION: ${{ steps.prepare.outputs.version }}
           SOURCE_COMMIT: ${{ steps.prepare.outputs.commit }}
-          GOOS: linux
-          GOARCH: arm
-          GOARM: '7'
-          CGO_ENABLED: '0'
         run: |
-          pkg=github.com/HuskerMinion/techo5/echod/internal/layout
-          build_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          go build -trimpath -ldflags "-s -w -X $pkg.Version=$VERSION -X $pkg.GitCommit=$SOURCE_COMMIT -X $pkg.BuildDate=$build_date" -o ../bin/echod-arm ./cmd/echod
-          cd ../bin
-          sha256sum echod-arm build-info.json > SHA256SUMS
+          python3 tools/fetch-inputs.py --device show
+          mkdir -p "$HOME/apk" bin/release
+          cp inputs/apk.static "$HOME/apk/apk.static"
+          chmod +x "$HOME/apk/apk.static"
+          bash tools/linux/build-aec.sh
+          test -s bin/techo5-aec-arm
+          # No PREBUILT_DAEMON override: build directly from the tested candidate.
+          bash tools/linux/deploy-rootfs.sh --out "bin/release/techo5-rootfs-$VERSION.tar.gz" --version "$VERSION"
+          cp bin/echod-arm bin/build-info.json bin/release/
+          python3 tools/native_firmware.py stage --directory bin/release --version "$VERSION" --commit "$SOURCE_COMMIT"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.prepare.outputs.changed == 'true'
         with:
           name: native-show5-${{ steps.prepare.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            bin/echod-arm
-            bin/SHA256SUMS
-            bin/build-info.json
-          retention-days: 7
+          path: bin/release/
+          retention-days: 3
           if-no-files-found: error
       - name: Bundle tested history
         if: steps.prepare.outputs.changed == 'true'
@@ -107,12 +121,12 @@ jobs:
           # shellcheck disable=SC2129
           if [ "$CHANGED" = true ]; then
             echo "Built $VERSION from $SOURCE_COMMIT; promotion follows in a separate job." >> "$GITHUB_STEP_SUMMARY"
-            echo 'Daemon candidate only: no signed rootfs, OTA publication or device installation.' >> "$GITHUB_STEP_SUMMARY"
-            echo "ARM daemon size: $(wc -c < bin/echod-arm) bytes." >> "$GITHUB_STEP_SUMMARY"
+            echo 'Built rootfs and pinned keyless bootstrap images for Show 5 checkers/cronos; signed publication follows after promotion.' >> "$GITHUB_STEP_SUMMARY"
+            echo "Staged firmware disk footprint: $(du -sh bin/release | cut -f1)." >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'Latest stable release and native source unchanged: build skipped.' >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo 'Public repository, standard Linux runner: no private Actions minutes. Artifacts expire after 7 days (history: 1 day).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Public repository, standard Linux runner: no private Actions minutes. Staged artifacts expire after 3 days (history: 1 day); published release assets remain available.' >> "$GITHUB_STEP_SUMMARY"
 
   promote:
     needs: build
@@ -151,8 +165,78 @@ jobs:
           # shellcheck disable=SC2016
           git -c credential.helper= -c 'credential.helper=!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f' push "https://github.com/$REPO.git" "$CANDIDATE:refs/heads/main"
 
-  report:
+  publish:
     needs: [build, promote]
+    if: needs.build.outputs.changed == 'true' && needs.promote.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: native-release
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      # Never check out the candidate in a job holding write access or a key.
+      # This immutable SHA is the source of the workflow that started the run.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Download tested firmware assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          VERSION: ${{ needs.build.outputs.version }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: gh run download "$RUN_ID" --repo "$REPO" --name "native-show5-$VERSION-$RUN_ID-$RUN_ATTEMPT" --dir release
+      - name: Validate assets and prepare signed manifest
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          git fetch origin main
+          test "$(git rev-parse FETCH_HEAD)" = "$SOURCE_COMMIT"
+          python3 tools/native_firmware.py prepare --directory release --version "$VERSION" --commit "$SOURCE_COMMIT"
+      - name: Sign manifest with isolated native release key
+        env:
+          TECHO5_NATIVE_SIGN_KEY: ${{ secrets.TECHO5_NATIVE_SIGN_KEY }}
+        run: python3 tools/native_firmware.py sign --directory release
+      - name: Publish own experimental firmware release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          # Fail a collision; do not overwrite any existing tag, asset or release.
+          python3 - "$VERSION" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          info = json.loads(Path('release/build-info.json').read_text())
+          notes = f"""Experimental native OpenAI Realtime firmware {sys.argv[1]}, based on upstream {info['release_tag']}.
+
+          Includes the full ARM root filesystem and keyless bootstrap images for Echo Show 5 first generation (checkers) and second generation (cronos). Bootstrap kernels/initramfs are the reviewed upstream v0.7.16 bytes, recorded in build-info.json and signed by this fork's independent release key.
+
+          Optional paid cloud voice; not upstream supported. New full-image boot and OTA acceptance are pending. The earlier first-generation spoken pilot is not a complete hardware regression claim. The WebRTC AEC helper is included; physical echo/interrupt acceptance remains pending. The optional Spotify helper is not included. No device is flashed automatically.
+
+          Native Realtime does not include the separate private Home Assistant tools extension. Default Home Assistant Assist remains available. See the README and docs/fork-maintenance.md for installation, costs and boundaries.
+
+          Source: {info['commit']}; upstream source: {info['upstream_commit']}.
+          """
+          Path('release-notes.md').write_text(notes)
+          PY
+          # Atomic ref creation fails if ANY tag already exists. --target alone
+          # would silently use an existing tag pointing at unrelated history.
+          gh api "repos/$REPO/git/refs" --method POST -f ref="refs/tags/$VERSION" -f sha="$SOURCE_COMMIT" > /dev/null
+          gh release create "$VERSION" --repo "$REPO" --target "$SOURCE_COMMIT" --draft --title "EXPERIMENTAL native Realtime $VERSION" --notes-file release-notes.md
+          gh release upload "$VERSION" release/* --repo "$REPO"
+          # Draft publication is last: latest never points at incomplete assets.
+          gh release edit "$VERSION" --repo "$REPO" --draft=false --latest
+          echo "Published https://github.com/$REPO/releases/tag/$VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+  report:
+    needs: [build, promote, publish]
     if: always() && github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -166,16 +250,17 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BUILD_RESULT: ${{ needs.build.result }}
           PROMOTE_RESULT: ${{ needs.promote.result }}
+          PUBLISH_RESULT: ${{ needs.publish.result }}
         run: |
           title='Native daily build needs attention'
           pages=$(gh api "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp)
           issue=$(jq -r '[.[][] | select(.title == "Native daily build needs attention" and .user.login == "github-actions[bot]" and (.pull_request == null)) | .number] | .[0] // empty' <<<"$pages")
-          if [ "$BUILD_RESULT" = success ] && { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; }; then
+          if [ "$BUILD_RESULT" = success ] && { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; } && { [ "$PUBLISH_RESULT" = success ] || [ "$PUBLISH_RESULT" = skipped ]; }; then
             if [ -n "$issue" ]; then
               gh issue close "$issue" --repo "$REPO" --comment "Daily stable build recovered: $RUN_URL"
             fi
           else
-            printf '@Benniphx The daily native stable build stopped. Main was not force-updated and no device was installed.\n\nBuild: %s; promotion: %s. Inspect logs: %s\n' "$BUILD_RESULT" "$PROMOTE_RESULT" "$RUN_URL" > "$RUNNER_TEMP/failure.md"
+            printf '@Benniphx The daily native stable build stopped. Main was not force-updated and no device was installed.\n\nBuild: %s; promotion: %s; publication: %s. Inspect logs: %s\n' "$BUILD_RESULT" "$PROMOTE_RESULT" "$PUBLISH_RESULT" "$RUN_URL" > "$RUNNER_TEMP/failure.md"
             if [ -n "$issue" ]; then
               gh issue comment "$issue" --repo "$REPO" --body-file "$RUNNER_TEMP/failure.md"
             else

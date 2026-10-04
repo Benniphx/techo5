@@ -1,0 +1,28 @@
+{
+  "version": "v0.9.30",
+  "url": "https://github.com/HuskerMinion/techo5/releases/download/v0.9.30/echod-arm",
+  "sha256": "e447ee54103239d08f01760928eec214ebe9e221714cd44c8964508d14215d1b",
+  "size": 30146722,
+  "binaries": {
+    "arm": {
+      "url": "https://github.com/HuskerMinion/techo5/releases/download/v0.9.30/echod-arm",
+      "sha256": "e447ee54103239d08f01760928eec214ebe9e221714cd44c8964508d14215d1b",
+      "size": 30146722
+    },
+    "arm-dot": {
+      "url": "https://github.com/HuskerMinion/techo5/releases/download/v0.9.30/echod-arm-dot",
+      "sha256": "ba28b35315c364c754628038d26449c16d3dbabd40f4d5de518641e7a362440b",
+      "size": 25493666
+    }
+  },
+  "rootfs": {
+    "arm": {
+      "url": "https://github.com/HuskerMinion/techo5/releases/download/v0.9.30/rootfs-v0.9.30.tar.gz",
+      "sha256": "b3b78ea37e325db878170e441c1c7a01a661862ef47278048b80f2f6988bb764",
+      "size": 41412027
+    }
+  },
+  "title": "TECHO5 v0.9.30",
+  "notes": "- **Sounds of your own.** The wake sound, the error and canceled sounds, a finished timer and the mute sounds can each be a recording of your own: put a WAVE file named for the sound in the device's sounds folder over SSH. 16-bit, 48 kHz, up to 10 seconds; delete it to get the stock sound back. See \"Sounds of your own\" in docs/setup.md for the file names and an ffmpeg line that converts anything else. Thanks, GraemeF. (#75)\n- **AirPlay shows the cover.** Songs played from an iPhone or Mac over AirPlay now show their album art on the screen, as Spotify does. (#80)\n\nVerify this release was built by CI from its own tag:\n\n    gh attestation verify echod-arm --repo HuskerMinion/techo5 --source-ref refs/tags/v0.9.30\n",
+  "release_url": "https://github.com/HuskerMinion/techo5/releases/tag/v0.9.30"
+}

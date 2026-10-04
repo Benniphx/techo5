@@ -16,6 +16,9 @@ const (
 
 // Label is what the setting is called in Home Assistant, and what is stored.
 func (c Channel) Label() string {
+	if nativeChannel {
+		return "native-stable"
+	}
 	switch c {
 	case Dev:
 		return "dev"
@@ -29,6 +32,9 @@ func (c Channel) Label() string {
 // requests an hour per address, which several devices behind one router would share with everything else
 // on the network. Asset paths do not count against it.
 func (c Channel) URL() string {
+	if nativeChannel {
+		return releases + "/latest/download/manifest.json"
+	}
 	switch c {
 	case Dev:
 		return releases + "/download/dev/manifest.json"
@@ -37,4 +43,9 @@ func (c Channel) URL() string {
 }
 
 // Channels is every channel, in the order Home Assistant should offer them.
-func Channels() []Channel { return []Channel{Stable, Dev} }
+func Channels() []Channel {
+	if nativeChannel {
+		return []Channel{Stable}
+	}
+	return []Channel{Stable, Dev}
+}

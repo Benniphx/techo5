@@ -1,7 +1,7 @@
 """Shared by the TECHO5 installers and tools: output, adb and fastboot, checked downloads, and the
 units' USB serial console, on Windows, Linux and macOS with nothing but Python 3's standard library.
 
-The same file is in techo5, techo5-dot and techo5-spot (tools/techo5lib.py); keep the copies identical.
+This fork's Show installer trusts its own signed releases; Dot and Spot installers live upstream.
 """
 import base64
 import hashlib
@@ -27,7 +27,9 @@ ALPINE_SHA256 = '50942d567e6ee422c16cb46d5c282ed9d8adc9007c2a483faf4148a18c64ce3
 # (echod/internal/update/trust.go, releaseKey). An installer writes a root filesystem to a unit, so a
 # manifest is believed only when this key signed it: HTTPS alone would let anything that can present a
 # certificate this computer accepts hand the installer a root filesystem of its own.
-RELEASE_KEY = 'KVUuQUbhyKwPBbIneqFEvXYSI+3Hkfu/heCTy5YNVMk='
+RELEASE_KEY = '2aEMRicgezD1lPv8EP/fKj0MC7pV/7j+Cs5r2t1fEZs='
+# Only the firmware build's upstream bootstrap verification uses this key. The installer never does.
+UPSTREAM_RELEASE_KEY = 'KVUuQUbhyKwPBbIneqFEvXYSI+3Hkfu/heCTy5YNVMk='
 
 # The USB serial consoles: TECHO5 Linux on the Show 5 and the Spot (Linux Foundation ids, told apart by
 # the serial number on the kernel command line), and on the Dot (Google ids, with the unit's serial
@@ -145,7 +147,7 @@ def download_checked(url, out, sha256):
 # Ed25519 verification, written out here because these tools run on whatever Python 3 the machine
 # already has, with no pip install step, and the standard library has no ed25519. It is the check from
 # RFC 8032 section 5.1.7 and nothing else: decompress the key and R, then compare [S]B against
-# R + [h]A. Signing stays in Go (tools/release.ps1); only the maintainer's machine ever needs that.
+# R + [h]A. Installers need only the public key; signing is kept in the release tooling.
 _P = 2 ** 255 - 19                                            # the field the curve lives in
 _L = 2 ** 252 + 27742317777372353535851937790883648493        # the order of the base point
 _D = -121665 * pow(121666, _P - 2, _P) % _P                   # the curve constant d

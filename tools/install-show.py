@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Install TECHO5 on an Echo Show running LineageOS 18.1, or straight from TWRP, in one command.
 
-Three boards install the same way and run the same daemon, which tells them apart at run time from the
-panel the bootloader names in the kernel command line: the Echo Show 5 2nd gen (cronos), the Show 5
-1st gen (checkers) and the Show 8 1st gen (crown). All three run the same kernel commit, and the
+This experimental fork publishes images for the Echo Show 5 2nd gen (cronos) and Show 5 1st gen
+(checkers). The daemon tells them apart at run time from the panel the bootloader names in the
+kernel command line. Both run the same kernel commit, and the
 partitions this script writes are numbered the same on each. Each board takes its own boot image from
 the release, since the kernel configuration and the device trees differ.
 
@@ -23,7 +23,7 @@ Windows, Linux and macOS alike; needs Python 3, adb and fastboot. Nothing is bui
 image (LineageOS's kernel rebuilt with Bluetooth, and TECHO5's rescue environment, with no SSH key) and
 root filesystem are downloaded and checked. Each step is checked before the next:
 
-  1. checks    adb sees the unit as one of the three boards, on the LineageOS kernel TECHO5's is built from
+  1. checks    adb sees the unit as one of the two Show 5 boards, on the matching LineageOS kernel
   2. backup    with Rooted debugging on, LineageOS's boot image into backups/<serial>/ (the way back)
   3. release   the boot image and root filesystem, checked against the release's signed manifest
   4. push      the root filesystem onto the unit's storage, checked by md5
@@ -36,8 +36,8 @@ root filesystem are downloaded and checked. Each step is checked before the next
 
 From TWRP the steps before the flash differ: the unit's small partitions are saved into
 backups/<serial>/partitions/ first, and after the one question userdata is formatted, LineageOS's zip is
-installed and its Wi-Fi driver checked against the kernel TECHO5's is built from. On a Show 5 2nd gen or
-a Show 8 the TECHO5 logo then replaces Amazon's at boot (--amazon-logo keeps Amazon's); see put_logo.
+installed and its Wi-Fi driver checked against the kernel TECHO5's is built from. On a Show 5 2nd gen
+the TECHO5 logo then replaces Amazon's at boot (--amazon-logo keeps Amazon's); see put_logo.
 
 The Home Assistant key is kept in backups/<serial>/home-assistant.key (api.psk on a unit installed
 before that name) and reused on a later run, so Home Assistant keeps the device. Undo: TWRP stays in
@@ -56,9 +56,9 @@ from techo5lib import (CONSOLE_TECHO5, Adb, Console, Fastboot, Release, ask_name
                        new_api_key, note, pick_unit, run_main, step, valid_api_key, wait_for, wifi_conf,
                        write_private)
 
-REPO = 'HuskerMinion/techo5'
+REPO = 'Benniphx/techo5'
 # The LineageOS kernel commit TECHO5's kernel is rebuilt from: the vendor modules only load on it.
-# All three boards run this same commit, which is why one daemon and one installer serve them.
+# Both supported Show 5 boards run this same commit.
 KERNEL_RELEASE = '4.9.337-g8d928c5176cc'
 WIFI_MODULE = 'vendor/lib/modules/mt76x8_wlan.ko'
 
@@ -69,7 +69,6 @@ WIFI_MODULE = 'vendor/lib/modules/mt76x8_wlan.ko'
 BOARDS = {
     'cronos': 'Echo Show 5 2nd gen',
     'checkers': 'Echo Show 5 1st gen',
-    'crown': 'Echo Show 8 1st gen',
 }
 
 
@@ -331,7 +330,7 @@ def main():
     ap.add_argument('--wifi', help="a Wi-Fi network to join (its passphrase is asked for); otherwise LineageOS's saved one, or the Show's screen")
     ap.add_argument('--wifi-passphrase-file', help='a file holding the --wifi passphrase, for running from a script')
     ap.add_argument('--amazon-logo', action='store_true',
-                    help="from TWRP on a Show 5 2nd gen or a Show 8: keep Amazon's logo at boot rather than put TECHO5's in")
+                    help="from TWRP on a Show 5 2nd gen: keep Amazon's logo at boot rather than put TECHO5's in")
     ap.add_argument('--dry-run', action='store_true', help='download and check the release; write nothing')
     ap.add_argument('--force', action='store_true', help='do not ask before erasing LineageOS')
     ap.add_argument('--backups', default=default_dir('TECHO5_BACKUPS', 'backups'))
@@ -373,7 +372,7 @@ def main():
              "or install from TWRP with --lineage-zip%s" % (a.serial, state, console_hint((CONSOLE_TECHO5,))))
     dev = adb.sh('getprop ro.product.device')
     if dev not in BOARDS:
-        fail("%s reports '%s', which is none of: %s"
+        fail("%s reports '%s'; the experimental native fork only publishes firmware for: %s"
              % (a.serial, dev, ', '.join('%s (%s)' % (b, n) for b, n in BOARDS.items())))
     if twrp:
         zdev = lineage_board(a.lineage_zip)
@@ -613,7 +612,7 @@ def main():
     print('Home Assistant finds it as an ESPHome device. When it asks for the encryption key, paste:\n\n    %s\n\n(kept in %s)' % (psk, key_file))
     if twrp and not wifi:
         print('It has no Wi-Fi yet: on the Show, swipe down for Settings, then Connections, then Wi-Fi.')
-    print("Later versions arrive through Home Assistant's update card.")
+    print("Later fork versions arrive through Home Assistant's update card on the native-stable channel.")
 
 
 if __name__ == '__main__':

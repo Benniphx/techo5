@@ -4,6 +4,7 @@ import importlib.util
 import subprocess
 import tempfile
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -43,11 +44,42 @@ class StableMergeTests(unittest.TestCase):
         self.run_git(repo, "add", path)
         self.run_git(repo, "commit", "-m", title)
 
-    def prepare(self, tag="v1.0.0", force=False):
+    def prepare(self, tag="v1.0.0", force=False, published=True, run_number="1"):
         def repo_git(*args):
             return self.run_git(self.fork, *args)
         with patch.object(daily, "git", repo_git), patch.object(daily, "MARKER", self.fork / ".github/native-build.json"):
-            return daily.prepare(tag, str(self.upstream), "1", force=force)
+            return daily.prepare(tag, str(self.upstream), run_number, force=force, published=published)
+
+    def test_failed_release_publication_rebuilds_with_new_ranked_version(self):
+        first = self.prepare()
+        second = self.prepare(published=False, run_number="2")
+        self.assertTrue(second["changed"])
+        self.assertEqual(first["version"], "v1.0.1")
+        self.assertEqual(second["version"], "v1.0.2")
+        self.assertNotEqual(first["commit"], second["commit"])
+        self.assertFalse(self.prepare(run_number="3")["changed"])
+        self.assertEqual(self.prepare(run_number="4")["version"], "v1.0.2")
+
+    def test_rootfs_or_installer_changes_rebuild_but_readme_does_not(self):
+        self.prepare()
+        self.commit_file(self.fork, "README.md", "documentation", "docs")
+        self.assertFalse(self.prepare()["changed"])
+        (self.fork / "tools/linux").mkdir(parents=True)
+        self.commit_file(self.fork, "tools/linux/package.txt", "new package", "rootfs input")
+        self.assertTrue(self.prepare()["changed"])
+        self.assertFalse(self.prepare()["changed"])
+
+    def test_release_probe_recovers_missing_release_without_hiding_api_failure(self):
+        self.assertFalse(daily.release_published("v0.9.30_native.1"))
+        for status in (404, 403, 500):
+            error = urllib.error.HTTPError("https://api.github.com", status, "test", {}, None)
+            with patch.object(daily.urllib.request, "urlopen", side_effect=error):
+                if status == 404:
+                    self.assertFalse(daily.release_published("v1.0.1"))
+                else:
+                    with self.assertRaises(urllib.error.HTTPError):
+                        daily.release_published("v1.0.1")
+            error.close()
 
     def test_explicit_rebuild_creates_bundleable_history_without_changing_source(self):
         first = self.prepare()

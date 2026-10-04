@@ -17,13 +17,17 @@ responses. Other models have no native Realtime hardware acceptance claim.
 > owner-only. Never commit a key or attach the state file to an issue. The setup page uses local HTTP,
 > so protect that connection when entering the key.
 >
-> **Downloads and updates:** the daily build publishes experimental **daemon binaries**, not signed
-> firmware images. The existing **Stable** update channel and upstream installer still install
-> original TECHO5 firmware, which does not contain this feature. A fork-specific A/B update channel
-> is separate work; do not use the stock update card to preserve a native Realtime installation.
+> **Downloads and updates:** [fork releases](https://github.com/Benniphx/techo5/releases/latest)
+> provide a complete native root filesystem, both Show 5 boot images and an Ed25519-signed manifest.
+> The Show firmware follows this fork's **native-stable** update channel and signing key. Releases
+> are experimental: the newly packaged firmware still needs install/restart/rollback hardware
+> acceptance. Existing upstream installations need an explicit migration; their stock update
+> channel cannot install this fork.
 
 **[Native Realtime setup and limits](docs/native-realtime.md)** ·
 **[Daily builds, downloads and maintenance](docs/fork-maintenance.md)** ·
+**[Install or migrate the fork](docs/native-firmware.md)** ·
+**[Latest experimental firmware](https://github.com/Benniphx/techo5/releases/latest)** ·
 **[Fork build runs](https://github.com/Benniphx/techo5/actions/workflows/native-daily.yml)**
 
 The public fork contains the native Realtime integration and its bounded, optional read tools.
@@ -34,8 +38,9 @@ It does not include the separate private Home Assistant tool extension or person
 ## Upstream TECHO5 documentation
 
 The documentation below describes the original project, its hardware support and installation
-process. Its release links and installer commands point to **HuskerMinion/techo5**; they do not
-install this fork's experimental Realtime binaries. Upstream feature and hardware status statements
+process. Its upstream clone commands and release links point to **HuskerMinion/techo5**.
+For this fork use the [native firmware guide](docs/native-firmware.md); this checkout's Show installer
+verifies and installs the fork releases. Upstream feature and hardware status statements
 are not acceptance results for this fork.
 
 <p align="center">
