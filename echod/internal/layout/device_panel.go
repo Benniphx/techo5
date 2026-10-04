@@ -3,8 +3,10 @@
 package layout
 
 import (
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // TECHO5 Panel: an Android tablet or a Meta Portal, with echod running inside an ordinary app rather
@@ -51,6 +53,20 @@ var (
 	Board = getprop("ro.product.device", "android")
 	Model = "TECHO5 Panel (" + getprop("ro.product.model", "Android") + ")"
 )
+
+// The zone Home Assistant gave, which feature/timezone keeps at StateDir/localtime. On a Linux image
+// /etc/localtime links to that file and the restart after a change picks it up; on Android, Go never
+// reads a local zone at all (time.Local is always UTC there), so it is loaded here, in the package
+// everything else imports first, before anything has read the clock.
+func init() {
+	b, err := os.ReadFile(StateDir + "/localtime")
+	if err != nil {
+		return
+	}
+	if loc, err := time.LoadLocationFromTZData("Local", b); err == nil {
+		time.Local = loc
+	}
+}
 
 // Checkers and Crown are Echo Show boards; a panel is neither.
 func Checkers() bool { return false }
