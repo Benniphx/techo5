@@ -166,6 +166,7 @@ func (m *mmio) unmap() {
 }
 
 type device struct {
+	hold           aeHold // exposure held still through a sudden change, for gestures
 	isp, sens, ion int
 	cam, sen, mipi *mmio
 	buf            []byte
@@ -499,6 +500,9 @@ func (d *device) autoExpose(raw []byte) {
 		return
 	}
 	mean := meter(raw)
+	if d.hold.held(float64(mean)) {
+		return
+	}
 	if mean >= aeTarget-aeDeadband && mean <= aeTarget+aeDeadband {
 		return
 	}

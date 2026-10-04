@@ -49,7 +49,11 @@ type Feature struct {
 	sw      *esphome.Switch
 	offNum  *esphome.Number
 	sensNum *esphome.Number
+	gestSw  *esphome.Switch
 	sensor  *esphome.BinarySensor
+
+	// Gesture fires with a gesture's name ("cover") when one is seen. Listeners must not block.
+	Gesture hook.Hook[string]
 
 	// Changed fires when somebody comes near or the room has been empty long enough to say so, and
 	// when the switch changes. Listeners must not block.
@@ -63,6 +67,8 @@ type Feature struct {
 	lastSeen  time.Time
 	watchFrom time.Time // when the current watch began: an empty room is only an empty room after hold
 	det       detector
+	cover     coverDetector
+	lastRoom  time.Time // when the room detector last took a frame: it wants about two a second
 	skip      int       // frames still to pass over: the camera's first ones, after a start
 	hushUntil time.Time // the device's own light changing (Hush): frames until then are not compared
 }
@@ -93,6 +99,10 @@ func Get() *Feature {
 			Mode: esphome.NumberSlider,
 		}
 		f.sensNum.OnCommand = func(v float32) { f.SetSensitivity(int(v)) }
+		f.gestSw = &esphome.Switch{
+			Base:      esphome.Base{ObjectID: "gestures", Name: "Gestures", Icon: "mdi:hand-back-right", Category: esphome.CategoryConfig},
+			OnCommand: f.SetGestures,
+		}
 		f.sensor = &esphome.BinarySensor{
 			Base:        esphome.Base{ObjectID: "presence", Name: "Presence", Icon: "mdi:account-eye"},
 			DeviceClass: "occupancy",
@@ -105,18 +115,39 @@ func Get() *Feature {
 func (f *Feature) Name() string { return "presence" }
 
 func (f *Feature) Entities() []esphome.Entity {
-	return []esphome.Entity{f.sw, f.offNum, f.sensNum, f.sensor}
+	return []esphome.Entity{f.sw, f.offNum, f.sensNum, f.gestSw, f.sensor}
 }
 
 func (f *Feature) Restore(c config.Config) {
 	f.sw.Set(c.Presence.On)
 	f.offNum.Set(float32(c.Presence.PresenceScreenOff()))
 	f.sensNum.Set(float32(c.Presence.PresenceSensitivity()))
+	f.gestSw.Set(c.Presence.Gestures)
 	f.sensor.Set(false)
 }
 
-// On is whether the camera watches for somebody near.
-func On() bool { return config.Get().Presence.On && camera.Available() }
+// On is whether the camera watches the room at all: for somebody near, or for gestures.
+func On() bool {
+	p := config.Get().Presence
+	return (p.On || p.Gestures) && camera.Available()
+}
+
+// GestureEvent is the event a gesture puts on Home Assistant's bus, with the gesture's name and the
+// device's.
+const GestureEvent = "esphome.techo5_gesture"
+
+// SetGestures is the Gestures switch.
+func (f *Feature) SetGestures(on bool) {
+	if err := config.Set().Presence().Gestures(on); err != nil {
+		slog.Error("saving a setting failed", "setting", "gestures", "err", err)
+		f.gestSw.Set(!on)
+		return
+	}
+	f.gestSw.Set(on)
+	slog.Info("setting changed", "setting", "gestures", "using", on)
+	f.poke()
+	f.Changed.Emit(struct{}{})
+}
 
 // SetOn is the switch, from Home Assistant or the screen.
 func (f *Feature) SetOn(on bool) {
@@ -171,7 +202,7 @@ func Hush() {
 // ScreenOffAfter is how long the room must be empty before the screen goes dark: 0 when it never does
 // (the setting is 0, presence is off, or the camera is not watching now).
 func ScreenOffAfter() time.Duration {
-	if !On() {
+	if !On() || !config.Get().Presence.On {
 		return 0
 	}
 	f := Get()
@@ -274,6 +305,7 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 	f.mu.Lock()
 	f.watching, f.watchFrom = true, now
 	f.det = detector{patchMin: patchFor(config.Get().Presence.PresenceSensitivity())}
+	f.cover, f.lastRoom = coverDetector{}, time.Time{}
 	f.skip = startFrames
 	f.mu.Unlock()
 	slog.Info("presence: watching")
@@ -286,6 +318,8 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 		slog.Info("presence: not watching")
 	}()
 
+	f.camRate()
+	defer camera.SetGestureExposure(false)
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	quiet := time.Now()
@@ -297,6 +331,7 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 			if !On() {
 				return
 			}
+			f.camRate()
 		case fr := <-frames:
 			g := fr.Luma(gridW, gridH)
 			if g == nil {
@@ -329,6 +364,18 @@ func (f *Feature) take(g []uint8, at time.Time) {
 		f.mu.Unlock()
 		return
 	}
+	if config.Get().Presence.Gestures && f.cover.step(g, float64(at.UnixNano())/1e9) {
+		f.mu.Unlock()
+		f.gestured("cover")
+		f.mu.Lock()
+	}
+	if !config.Get().Presence.On || at.Sub(f.lastRoom) < 450*time.Millisecond {
+		f.mu.Unlock()
+		// Presence detection off (only gestures on), or too soon: the room is compared at about two
+		// frames a second, whatever the camera's rate.
+		return
+	}
+	f.lastRoom = at
 	moved := f.det.step(g)
 	was := f.present
 	if moved {
@@ -366,4 +413,26 @@ func (f *Feature) pause(ctx context.Context, d time.Duration) bool {
 	case <-time.After(d):
 		return true
 	}
+}
+
+// camRate sets the camera's pace for what is on: eight frames a second for gestures, which come and go
+// in a second, two for the room, with the exposure held through sudden changes for gestures only.
+func (f *Feature) camRate() {
+	gestures := config.Get().Presence.Gestures
+	camera.SetGestureExposure(gestures)
+	if gestures {
+		camera.Get().SetSlowEvery(125 * time.Millisecond)
+	} else {
+		camera.Get().SetSlowEvery(0)
+	}
+}
+
+// gestured tells the device and Home Assistant about a gesture.
+func (f *Feature) gestured(name string) {
+	slog.Info("presence: gesture", "gesture", name)
+	f.Gesture.Emit(name)
+	component.Fire.Emit(component.Event{Name: GestureEvent, Data: map[string]string{
+		"gesture": name,
+		"device":  config.Get().Device.Name,
+	}})
 }

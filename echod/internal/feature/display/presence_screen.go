@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 )
 
 // The screen and the room (feature/presence): with presence detection on and a wait set, the screen
@@ -52,4 +53,10 @@ func (d *Display) awayTick(now time.Time, on, busy, night bool) bool {
 // watchRoom wakes the frame loop when somebody comes or goes, so a dark screen lights at once.
 func (d *Display) watchRoom() {
 	presence.Get().Changed.Listen(func(struct{}) { d.wake() })
+	// A hand held over the camera stops whatever is ringing, as the stop word or a tap would.
+	presence.Get().Gesture.Listen(func(name string) {
+		if name == "cover" && ring.End() {
+			d.wake()
+		}
+	})
 }

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -523,6 +524,48 @@ func (c *Camera) Wedged() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.wedged
+}
+
+// The exposure held through a sudden change, for gestures (feature/presence). A hand over the lens is
+// a sudden change of the whole picture, and the exposure would brighten it away within a third of a
+// second, leaving nothing to tell it from a light switched off; held still, the hand stays a hand
+// (dark, or bright with the screen's own light on it, and smooth) for as long as it is there.
+
+// gestureExposure is whether the exposure is held through sudden changes (SetGestureExposure).
+var gestureExposure atomic.Bool
+
+// SetGestureExposure holds the exposure still for a moment whenever the picture's brightness jumps
+// by half or more at once, while on.
+func SetGestureExposure(on bool) { gestureExposure.Store(on) }
+
+const aeHoldFor = 2500 * time.Millisecond
+
+// aeHold is one device's exposure hold: the brightness it has been seeing, and until when it holds.
+type aeHold struct {
+	avg   float64
+	until time.Time
+}
+
+// held reports whether the exposure is to be left as it is for this frame of brightness mean.
+func (h *aeHold) held(mean float64) bool {
+	if !gestureExposure.Load() {
+		h.avg, h.until = 0, time.Time{}
+		return false
+	}
+	now := time.Now()
+	if now.Before(h.until) {
+		return true
+	}
+	if h.avg > 4 && (mean < h.avg/2 || mean > h.avg*2) {
+		h.until = now.Add(aeHoldFor)
+		return true
+	}
+	if h.avg == 0 {
+		h.avg = mean
+	} else {
+		h.avg += (mean - h.avg) * 0.2
+	}
+	return false
 }
 
 // Unwedged fires when the camera may be opened again after being held off (Unwedge). Listeners must

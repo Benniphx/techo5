@@ -224,6 +224,7 @@ func (m *mmio) unmap() {
 
 // device is the open camera: file descriptors, register windows, the frame buffers.
 type device struct {
+	hold           aeHold // exposure held still through a sudden change, for gestures
 	isp, sens, ion int
 	cam, sen, mipi *mmio
 	buf            []byte
@@ -355,6 +356,9 @@ func (d *device) autoExpose(bayer []byte) {
 		return
 	}
 	mean := int(meter(bayer))
+	if d.hold.held(float64(mean)) {
+		return
+	}
 	if mean >= aeTarget-aeDeadband && mean <= aeTarget+aeDeadband {
 		return
 	}

@@ -13,6 +13,9 @@ type Presence struct {
 
 	// Sensitivity is 1 to 100; 0 is the default, 50.
 	Sensitivity int `json:"sensitivity,omitempty"`
+
+	// Gestures: a hand held over the camera stops a ring and is an event for Home Assistant.
+	Gestures bool `json:"gestures,omitempty"`
 }
 
 // PresenceSensitivity is the sensitivity in force.
@@ -38,6 +41,10 @@ type PresenceWriter struct{ st *Store }
 
 func (w PresenceWriter) On(v bool) error {
 	return w.st.Update(func(c *Config) { c.Presence.On = v })
+}
+
+func (w PresenceWriter) Gestures(v bool) error {
+	return w.st.Update(func(c *Config) { c.Presence.Gestures = v })
 }
 
 func (w PresenceWriter) Sensitivity(v int) error {
