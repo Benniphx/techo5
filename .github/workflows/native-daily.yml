@@ -27,6 +27,8 @@ jobs:
       base: ${{ steps.prepare.outputs.base }}
       commit: ${{ steps.prepare.outputs.commit }}
       version: ${{ steps.prepare.outputs.version }}
+      firmware_artifact: ${{ steps.artifacts.outputs.firmware }}
+      history_artifact: ${{ steps.artifacts.outputs.history }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -49,6 +51,14 @@ jobs:
           else
             python3 tools/native_daily.py --run-number "$RUN_NUMBER"
           fi
+      - name: Record build artifact names for failed-job retries
+        id: artifacts
+        if: steps.prepare.outputs.changed == 'true'
+        env:
+          VERSION: ${{ steps.prepare.outputs.version }}
+        run: |
+          echo "firmware=native-show5-$VERSION-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+          echo "history=native-candidate-history-$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.prepare.outputs.changed == 'true'
         with:
@@ -96,7 +106,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.prepare.outputs.changed == 'true'
         with:
-          name: native-show5-${{ steps.prepare.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ steps.artifacts.outputs.firmware }}
           path: bin/release/
           retention-days: 3
           if-no-files-found: error
@@ -108,7 +118,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: steps.prepare.outputs.changed == 'true'
         with:
-          name: native-candidate-history-${{ github.run_attempt }}
+          name: ${{ steps.artifacts.outputs.history }}
           path: candidate.bundle
           retention-days: 1
           if-no-files-found: error
@@ -146,7 +156,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
-        run: gh run download "$RUN_ID" --repo "$REPO" --name native-candidate-history-${{ github.run_attempt }}
+        run: gh run download "$RUN_ID" --repo "$REPO" --name "${{ needs.build.outputs.history_artifact }}"
       - name: Promote exactly the tested commit
         env:
           BASE: ${{ needs.build.outputs.base }}
@@ -167,7 +177,7 @@ jobs:
 
   publish:
     needs: [build, promote]
-    if: needs.build.outputs.changed == 'true' && needs.promote.result == 'success'
+    if: needs.build.outputs.changed == 'true' && needs.promote.result == 'success' && github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: native-release
@@ -187,8 +197,8 @@ jobs:
           REPO: ${{ github.repository }}
           RUN_ID: ${{ github.run_id }}
           VERSION: ${{ needs.build.outputs.version }}
-          RUN_ATTEMPT: ${{ github.run_attempt }}
-        run: gh run download "$RUN_ID" --repo "$REPO" --name "native-show5-$VERSION-$RUN_ID-$RUN_ATTEMPT" --dir release
+          ARTIFACT: ${{ needs.build.outputs.firmware_artifact }}
+        run: gh run download "$RUN_ID" --repo "$REPO" --name "$ARTIFACT" --dir release
       - name: Validate assets and prepare signed manifest
         env:
           VERSION: ${{ needs.build.outputs.version }}

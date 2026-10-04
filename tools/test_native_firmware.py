@@ -27,7 +27,8 @@ class FirmwareTests(unittest.TestCase):
         self.version = 'v1.0.10'
         self.commit = 'a' * 40
         self.daemon = self.root / 'echod-arm'
-        self.daemon.write_bytes(b'arm daemon fixture')
+        self.daemon.write_bytes(b'arm daemon fixture ' + firmware.NATIVE_KEY.encode() +
+                                f'https://github.com/{firmware.REPO}/releases'.encode())
 
     def rootfs(self, version=None, daemon=None, extra=None):
         path = self.root / f'techo5-rootfs-{self.version}.tar.gz'
@@ -106,7 +107,7 @@ class FirmwareTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Unexpected'):
                 firmware.prepare(self.root, self.version, self.commit)
             (self.root / 'unexpected').unlink()
-            self.daemon.write_bytes(b'tampered')
+            self.daemon.write_bytes(self.daemon.read_bytes() + b'tampered')
             with self.assertRaisesRegex(ValueError, 'checksums'):
                 firmware.prepare(self.root, self.version, self.commit)
 

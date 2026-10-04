@@ -168,6 +168,9 @@ def prepare(directory, version, commit):
         raise ValueError('Staged assets must be ordinary files')
     if not re.fullmatch('[a-f0-9]{40}', commit):
         raise ValueError('Invalid tested candidate commit')
+    binary = (directory / 'echod-arm').read_bytes()
+    if NATIVE_KEY.encode() not in binary or f'https://github.com/{REPO}/releases'.encode() not in binary:
+        raise ValueError('ARM daemon does not contain the native update key/feed')
     info_path = directory / 'build-info.json'
     if info_path.stat().st_size > 65536:
         raise ValueError('Oversized build metadata')
