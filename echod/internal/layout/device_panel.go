@@ -54,11 +54,35 @@ var (
 	Model = "TECHO5 Panel (" + getprop("ro.product.model", "Android") + ")"
 )
 
+// ZoneDB is Android's packed zone database ("tzdata"): the APEX copy that system updates keep
+// current on Android 10 and later, an update dropped in data on older ones, or the one the system
+// image shipped with. Empty when there is none.
+var ZoneDB = firstFile(
+	"/apex/com.android.tzdata/etc/tz/tzdata",
+	"/data/misc/zoneinfo/current/tzdata",
+	"/system/usr/share/zoneinfo/tzdata",
+)
+
+func firstFile(paths ...string) string {
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // The zone Home Assistant gave, which feature/timezone keeps at StateDir/localtime. On a Linux image
 // /etc/localtime links to that file and the restart after a change picks it up; on Android, Go never
 // reads a local zone at all (time.Local is always UTC there), so it is loaded here, in the package
 // everything else imports first, before anything has read the clock.
+//
+// ZONEINFO is pointed at Android's zone database first, for the zones named elsewhere (a calendar's
+// TZID): Go only knows the places older Androids kept it, and Android 10 and later keep it in an APEX.
 func init() {
+	if ZoneDB != "" && os.Getenv("ZONEINFO") == "" {
+		os.Setenv("ZONEINFO", ZoneDB)
+	}
 	b, err := os.ReadFile(StateDir + "/localtime")
 	if err != nil {
 		return
