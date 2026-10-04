@@ -159,7 +159,7 @@ func MAC(raw string) string {
 
 // FactoryMAC reads and normalizes the immutable address recorded for the Wi-Fi device.
 func FactoryMAC() (string, error) {
-	raw, err := os.ReadFile(MACPath)
+	raw, err := readMAC()
 	if err != nil {
 		v, ok := idmeFallback("mac_addr")
 		if !ok {
