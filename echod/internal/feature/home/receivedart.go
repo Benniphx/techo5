@@ -57,10 +57,11 @@ func ReceivedPicture(from string, b []byte) {
 		key = "sha256:" + hex.EncodeToString(sum[:])
 	}
 	received.mu.Lock()
-	shown := key != "" && received.from == from && received.key == key && received.art != nil
+	// Already in place: shown, or already found unreadable and the stand-in showing for it.
+	same := key != "" && received.from == from && received.key == key && (received.art != nil || received.bad == key)
 	bad := key != "" && received.bad == key
 	received.mu.Unlock()
-	if shown {
+	if same {
 		return
 	}
 	var art, thumb *image.RGBA
@@ -69,7 +70,7 @@ func ReceivedPicture(from string, b []byte) {
 	case bad:
 		err = errors.New("could not be read when it was sent before")
 	case key != "":
-		art, thumb, err = layoutArt(b, false, "cover art from "+from)
+		art, thumb, err = layoutPicture(b, false, "cover art from "+from)
 		if err != nil {
 			received.mu.Lock()
 			received.bad = key
@@ -78,6 +79,9 @@ func ReceivedPicture(from string, b []byte) {
 	}
 	receive(from, key, func(context.Context) (*image.RGBA, *image.RGBA, error) { return art, thumb, err })
 }
+
+// layoutPicture lays a picture sent out; tests count the calls.
+var layoutPicture = layoutArt
 
 // receive puts the cover named by key ("" for none) in place of the last song's, loading it aside with
 // load. A receiver saying it has none clears only its own cover: one ending its session does not

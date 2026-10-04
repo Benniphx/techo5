@@ -1,6 +1,7 @@
 package home
 
 import (
+	"image"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -95,7 +96,19 @@ func TestReceivedPictureThatCannotBeRead(t *testing.T) {
 	if !hasScreen {
 		t.Skip("no screen")
 	}
-	t.Cleanup(func() { ReceivedPicture("", nil) })
+	var decodes atomic.Int32
+	was := layoutPicture
+	layoutPicture = func(b []byte, logo bool, what string) (*image.RGBA, *image.RGBA, error) {
+		decodes.Add(1)
+		return was(b, logo, what)
+	}
+	t.Cleanup(func() {
+		layoutPicture = was
+		ReceivedPicture("", nil)
+		received.mu.Lock()
+		received.bad = ""
+		received.mu.Unlock()
+	})
 	ReceivedPicture(AirPlayName, testJPEG(t, 300, 300))
 	if !waitFor(func() bool { a, _ := receivedArt(AirPlayName); return a != nil }) {
 		t.Fatal("the cover never came")
@@ -121,6 +134,9 @@ func TestReceivedPictureThatCannotBeRead(t *testing.T) {
 	ReceivedPicture(AirPlayName, junk)
 	if a, _ := receivedArt(AirPlayName); a != nil {
 		t.Error("sent again, it left a cover")
+	}
+	if n := decodes.Load(); n != 2 {
+		t.Errorf("decoded %d times, want 2: the cover, and the unreadable picture once", n)
 	}
 }
 

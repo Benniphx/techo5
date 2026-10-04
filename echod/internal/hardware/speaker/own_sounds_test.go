@@ -146,9 +146,9 @@ func TestAPipeIsNotRead(t *testing.T) {
 	}
 }
 
-// A recording overwritten by another of the same size, with the old one's time put back as a copy that
-// keeps times does, is still noticed.
-func TestARecordingReplacedInPlaceIsNoticed(t *testing.T) {
+// A recording replaced by another of the same size, with the old one's time put back as a copy that
+// keeps times does (scp -p, cp -p), is still noticed.
+func TestARecordingReplacedIsNoticed(t *testing.T) {
 	dir := ownSounds(t)
 	c := &Clip{file: "timer_finished"}
 	own := filepath.Join(dir, "timer_finished.wav")
@@ -167,10 +167,14 @@ func TestARecordingReplacedInPlaceIsNoticed(t *testing.T) {
 	for i := 44; i+1 < len(b); i += 2 {
 		binary.LittleEndian.PutUint16(b[i:], uint16(0xffff-8000+1)) // -8000
 	}
-	if err := os.WriteFile(own, b, 0o644); err != nil {
+	tmp := own + ".new"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chtimes(own, info.ModTime(), info.ModTime()); err != nil {
+	if err := os.Chtimes(tmp, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, own); err != nil {
 		t.Fatal(err)
 	}
 	if got := c.render(toneLevel); len(got) == 0 || got[0] >= 0 {
@@ -226,5 +230,31 @@ func TestFailureNoteHasItsOwnLength(t *testing.T) {
 	notes := FailureSound()
 	if len(notes) != 1 || notes[0].Clip != ClipFailure || notes[0].Ms != 300 {
 		t.Errorf("failure sound %+v", notes)
+	}
+}
+
+// An extensible WAVE header is taken for what its sub-format says: PCM plays, anything else does not.
+func TestExtensibleWAVE(t *testing.T) {
+	wav := func(sub uint16) []byte {
+		var b bytes.Buffer
+		b.WriteString("RIFF")
+		_ = binary.Write(&b, binary.LittleEndian, uint32(4+8+40+8+4))
+		b.WriteString("WAVEfmt ")
+		_ = binary.Write(&b, binary.LittleEndian, uint32(40))
+		for _, v := range []any{uint16(0xFFFE), uint16(1), uint32(Rate), uint32(Rate * 2), uint16(2), uint16(16),
+			uint16(22), uint16(16), uint32(4), sub} {
+			_ = binary.Write(&b, binary.LittleEndian, v)
+		}
+		b.Write(make([]byte, 14)) // the rest of the sub-format GUID
+		b.WriteString("data")
+		_ = binary.Write(&b, binary.LittleEndian, uint32(4))
+		_ = binary.Write(&b, binary.LittleEndian, []int16{100, 200})
+		return b.Bytes()
+	}
+	if s, f, err := MonoWAV(wav(1)); err != nil || len(s) != 2 || f.Format != 1 {
+		t.Errorf("extensible PCM: %v samples, format %d, %v", s, f.Format, err)
+	}
+	if _, _, err := MonoWAV(wav(3)); err == nil {
+		t.Error("extensible float taken")
 	}
 }

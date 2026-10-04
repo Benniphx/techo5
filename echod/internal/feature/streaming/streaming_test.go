@@ -69,7 +69,8 @@ func TestAirPlayMetadataPassesOverAnItemTooBig(t *testing.T) {
 }
 
 // A new song's cover may come before its title or after it, and stays either way; a song with no
-// cover of its own takes the last one down once coverGrace has gone by without one.
+// cover of its own takes the last one down once coverGrace has gone by without one, even when it
+// follows the last song's cover closely; a title that cannot be read is not a new song.
 func TestAirPlayCoverForEachSong(t *testing.T) {
 	was := coverGrace
 	coverGrace = 100 * time.Millisecond
@@ -91,19 +92,75 @@ func TestAirPlayCoverForEachSong(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// pictured waits until the covers told so far are want, for up to two seconds.
+	pictured := func(want ...string) {
+		t.Helper()
+		for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+			mu.Lock()
+			got := slices.Clone(pictures)
+			mu.Unlock()
+			if slices.Equal(got, want) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("pictured %q, want %q", got, want)
+			}
+		}
+	}
+	unreadable := "<item><type>636f7265</type><code>6d696e6d</code><length>3</length>\n<data encoding=\"base64\">\n!!!</data></item>\n"
 	send(item("ssnc", "PICT", "one") + item("core", "minm", "One")) // cover first
+	send(unreadable + item("core", "minm", "One"))                  // the same song, read badly once
 	time.Sleep(250 * time.Millisecond)
+	pictured("one")
 	send(item("core", "minm", "Two") + item("ssnc", "PICT", "two")) // cover after
 	time.Sleep(250 * time.Millisecond)
+	pictured("one", "two")
 	send(item("core", "minm", "Three")) // no cover
-	time.Sleep(250 * time.Millisecond)
+	pictured("one", "two", "")
+	send(item("core", "minm", "Four") + item("ssnc", "PICT", "four"))
+	send(item("core", "minm", "Five")) // skipped to at once, and no cover of its own
+	pictured("one", "two", "", "four", "")
 	pw.Close()
 	<-done
-	mu.Lock()
-	defer mu.Unlock()
-	if !slices.Equal(pictures, []string{"one", "two", ""}) {
-		t.Errorf("pictured %q", pictures)
+}
+
+// latest does each thing in order, dropping one still waiting when a newer one comes, and starts
+// again for what is put after it has gone quiet.
+func TestLatestKeepsTheNewest(t *testing.T) {
+	var mu sync.Mutex
+	var got []string
+	started, hold := make(chan struct{}), make(chan struct{})
+	l := &latest{do: func(b []byte) {
+		if string(b) == "first" {
+			close(started)
+			<-hold
+		}
+		mu.Lock()
+		got = append(got, string(b))
+		mu.Unlock()
+	}}
+	l.put([]byte("first"))
+	<-started
+	l.put([]byte("dropped"))
+	l.put([]byte("newest"))
+	close(hold)
+	wait := func(want ...string) {
+		t.Helper()
+		for deadline := time.Now().Add(2 * time.Second); ; time.Sleep(5 * time.Millisecond) {
+			mu.Lock()
+			g := slices.Clone(got)
+			mu.Unlock()
+			if slices.Equal(g, want) {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("did %q, want %q", g, want)
+			}
+		}
 	}
+	wait("first", "newest")
+	l.put(nil)
+	wait("first", "newest", "")
 }
 
 // librespot's event lines name a new song and its cover, and a stop clears it; anything else is let

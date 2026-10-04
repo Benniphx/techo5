@@ -138,11 +138,51 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 	stop := context.AfterFunc(ctx, func() { f.Close() })
 	defer stop()
 	defer f.Close()
+	// Covers are laid out apart from the reading, so a slow one never holds the pipe up: shairport-sync
+	// drops what it cannot write.
+	covers := &latest{do: func(b []byte) { home.ReceivedPicture(home.AirPlayName, b) }}
 	followAirPlayMetadata(f, func(title, artist, album string) {
 		media.Get().SetReceivedTrack(home.AirPlayName, title, artist, album)
-	}, func(picture []byte) {
-		home.ReceivedPicture(home.AirPlayName, picture)
-	})
+	}, covers.put)
+}
+
+// latest hands what it is given to do one at a time and in order, on a goroutine of its own; one still
+// waiting when a newer one comes is dropped for it.
+type latest struct {
+	do      func([]byte)
+	mu      sync.Mutex
+	next    []byte
+	waiting bool
+	running bool
+}
+
+func (l *latest) put(b []byte) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.next, l.waiting = b, true
+	if !l.running {
+		l.running = true
+		safe.Go("airplay cover", l.run)
+	}
+}
+
+func (l *latest) run() {
+	defer func() {
+		l.mu.Lock()
+		l.running = false
+		l.mu.Unlock()
+	}()
+	for {
+		l.mu.Lock()
+		if !l.waiting {
+			l.mu.Unlock()
+			return
+		}
+		b := l.next
+		l.next, l.waiting = nil, false
+		l.mu.Unlock()
+		l.do(b)
+	}
 }
 
 // largestPicture is the most a cover sent over the metadata pipe may hold, as for one fetched
@@ -156,7 +196,8 @@ var largestItem int64 = largestPicture * 3 / 2
 
 // coverGrace is how near a new song's title its cover has to come. Phones send the cover apart from
 // the song's fields, before or after them, and send none for a song without one: a new title with no
-// picture within coverGrace of it, either side, takes the last song's cover down.
+// picture of its own within coverGrace of it, either side, takes the last song's cover down. A picture
+// that came after the last title, while it waited for one, is that song's, not the next one's.
 var coverGrace = 3 * time.Second
 
 // errItemTooBig is what the decoder is given once an item has had all it may read.
@@ -214,10 +255,13 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 
 	// The cover is told under mu, from here and from the timer that takes a song's cover down, so the
 	// two never cross: gen moves on with every cover told, and a timer from an older one does nothing.
+	// A title waits for its cover while waiting; the last picture is claimed once a title has taken it.
 	var (
 		mu       sync.Mutex
 		gen      int
 		lastPict time.Time
+		claimed  = true
+		waiting  bool
 		pending  *time.Timer
 	)
 	cover := func(b []byte) {
@@ -226,22 +270,28 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 		gen++
 		if b != nil {
 			lastPict = time.Now()
+			claimed, waiting = waiting, false
+		} else {
+			claimed, waiting = true, false
 		}
 		pictured(b)
 	}
 	newTitle := func() {
 		mu.Lock()
 		defer mu.Unlock()
-		if time.Since(lastPict) < coverGrace {
-			return // its cover came first
+		if !claimed && time.Since(lastPict) < coverGrace {
+			claimed = true // its cover came first
+			return
 		}
 		gen++
 		g := gen
+		waiting = true
 		pending = time.AfterFunc(coverGrace, func() {
 			mu.Lock()
 			defer mu.Unlock()
 			if gen == g {
 				gen++
+				waiting = false
 				pictured(nil)
 			}
 		})
@@ -284,11 +334,15 @@ func followAirPlayMetadata(r io.Reader, told func(title, artist, album string), 
 			}
 			continue
 		}
-		data := ""
+		data, ok := "", false
 		if d, err := base64.StdEncoding.DecodeString(strings.TrimSpace(it.Data)); err == nil && len(d) <= 1024 {
-			data = string(d)
+			data, ok = string(d), true
 		}
 		switch {
+		case typ == "core" && !ok:
+			// A field that cannot be read leaves the song as it was, rather than looking like a new one
+			// when it is read right next time.
+			continue
 		case typ == "core" && code == "minm":
 			if data != title && data != "" {
 				newTitle()

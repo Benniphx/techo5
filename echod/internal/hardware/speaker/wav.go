@@ -5,14 +5,13 @@ import (
 	"fmt"
 )
 
-// WAVFormat is what a WAVE file's fmt chunk said about its audio. Format is the format tag: 1 for
-// plain PCM, 0xFFFE for WAVE_FORMAT_EXTENSIBLE.
+// WAVFormat is what a WAVE file's fmt chunk said about its audio. Format is the format tag, 1 for plain
+// PCM; for WAVE_FORMAT_EXTENSIBLE, the one its sub-format names, which converters write for PCM with
+// more than two channels or more than 16 bits.
 type WAVFormat struct {
 	Format, Channels, Rate, Bits int
 }
 
-// The format tags MonoWAV takes: PCM, and the extensible header that converters write for PCM with
-// more than two channels or more than 16 bits.
 const (
 	wavPCM        = 1
 	wavExtensible = 0xFFFE
@@ -48,9 +47,15 @@ func MonoWAV(body []byte) ([]int16, WAVFormat, error) {
 				f.Channels = int(binary.LittleEndian.Uint16(body[off+2:]))
 				f.Rate = int(binary.LittleEndian.Uint32(body[off+4:]))
 				f.Bits = int(binary.LittleEndian.Uint16(body[off+14:]))
+				if f.Format == wavExtensible {
+					f.Format = 0 // unknown, unless the sub-format says
+					if end-off >= 26 {
+						f.Format = int(binary.LittleEndian.Uint16(body[off+24:]))
+					}
+				}
 			}
 		case "data":
-			if f.Format != wavPCM && f.Format != wavExtensible {
+			if f.Format != wavPCM {
 				return nil, f, fmt.Errorf("unsupported WAVE: format %#x, not PCM", f.Format)
 			}
 			if f.Bits != 16 || f.Channels < 1 {
