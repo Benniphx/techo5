@@ -158,7 +158,8 @@ jobs:
           PROMOTE_RESULT: ${{ needs.promote.result }}
         run: |
           title='Native daily build needs attention'
-          issue=$(gh api "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp --jq '[.[][] | select(.title == "Native daily build needs attention" and .user.login == "github-actions[bot]" and (.pull_request == null)) | .number] | .[0] // empty')
+          pages=$(gh api "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp)
+          issue=$(jq -r '[.[][] | select(.title == "Native daily build needs attention" and .user.login == "github-actions[bot]" and (.pull_request == null)) | .number] | .[0] // empty' <<<"$pages")
           if [ "$BUILD_RESULT" = success ] && { [ "$PROMOTE_RESULT" = success ] || [ "$PROMOTE_RESULT" = skipped ]; }; then
             if [ -n "$issue" ]; then
               gh issue close "$issue" --repo "$REPO" --comment "Daily stable build recovered: $RUN_URL"
