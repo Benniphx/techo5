@@ -57,25 +57,3 @@ func setClockTap(s *esphome.Select, i int) {
 		s.Set(clockTaps[i].label)
 	}
 }
-
-// clockTapSelect is the Home Assistant setting.
-func clockTapSelect() *esphome.Select {
-	s := &esphome.Select{
-		Base: esphome.Base{
-			ObjectID: "screen_clock_tap",
-			Name:     "Tap on the clock",
-			Icon:     "mdi:gesture-tap",
-			Category: esphome.CategoryConfig,
-		},
-		Options: clockTapOptions(),
-	}
-	s.OnCommand = func(v string) {
-		for i, c := range clockTaps {
-			if c.label == v {
-				setClockTap(s, i)
-				return
-			}
-		}
-	}
-	return s
-}
