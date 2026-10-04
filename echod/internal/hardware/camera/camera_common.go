@@ -412,8 +412,8 @@ func (c *Camera) run(stop, stopped chan struct{}) {
 		d, err := open()
 		if err != nil {
 			if c.startFailed(err, stopped) {
-				slog.Error("camera will not open again until this device is rebooted",
-					"err", err, "why", "the microphone latch cut the sensor's power behind its driver")
+				slog.Error("camera held off by the privacy latch: hold the mute button for a second, or restart",
+					"err", err)
 				return
 			}
 			slog.Error("camera start", "err", err)
