@@ -9,9 +9,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
 )
+
+// dump records what is played while files/dump-echo exists: echo-played.raw holds the 48 kHz stereo
+// S16LE stream, and echo-played.txt the loopback index its first frame became (every three frames
+// are one loopback sample).
+var dump = loopback.Dump{FlagPath: layout.StateDir + "/dump-echo"}
 
 // speakerSocket is the abstract socket the app plays from: 48 kHz stereo S16LE, written to an
 // AudioTrack as it arrives. The app's blocking writes are what pace the write loop here.
@@ -57,14 +63,38 @@ type socketPlayback struct {
 	acc     int32
 	n       int
 	out     []int16
+
+	dumpFile *os.File
 }
 
 func (p *socketPlayback) Write(b []byte) (int, error) {
 	n, err := p.conn.Write(b)
 	if n > 0 {
+		p.record(b[:n])
 		p.keep(b[:n])
 	}
 	return n, err
+}
+
+func (p *socketPlayback) record(b []byte) {
+	if !dump.On() {
+		if p.dumpFile != nil {
+			_ = p.dumpFile.Close()
+			p.dumpFile = nil
+		}
+		return
+	}
+	if p.dumpFile == nil {
+		f, err := os.Create(layout.StateDir + "/echo-played.raw")
+		if err != nil {
+			return
+		}
+		p.dumpFile = f
+		// The index the next loopback sample will get, and how far into a sample the downmix is.
+		_ = os.WriteFile(layout.StateDir+"/echo-played.txt",
+			[]byte(fmt.Sprintf("%d %d %d\n", loopback.Played.Written(), p.n, len(p.partial))), 0o600)
+	}
+	_, _ = p.dumpFile.Write(b)
 }
 
 // keep averages each frame's two channels and every three frames, 48 kHz to 16 kHz. A box filter is

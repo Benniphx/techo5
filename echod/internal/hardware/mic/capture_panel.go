@@ -9,10 +9,19 @@ import (
 	"log/slog"
 	"math"
 	"net"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
 )
+
+// dump records what is heard while files/dump-echo exists: echo-mic.raw holds 16 kHz S16LE pairs,
+// the microphone then the reference as the canceller got it, and echo-mic.txt the loopback index of
+// the first pair's reference and the measured lag.
+var dump = loopback.Dump{FlagPath: layout.StateDir + "/dump-echo"}
 
 // micSocket is the abstract socket the app serves the microphone on. The app reads it from Android
 // as 16 kHz mono S16LE and writes it here as it comes; nothing else is said on it.
@@ -62,6 +71,8 @@ type socketCapture struct {
 	block float64
 	fill  int
 	from  int64 // the microphone sample env starts at
+
+	dumpFile *os.File
 }
 
 // openDevice dials the app's microphone socket: on a panel the capture is the app's stream, not ALSA.
@@ -70,7 +81,11 @@ func openDevice() (capture, error) {
 	for {
 		conn, err := net.Dial("unix", micSocket)
 		if err == nil {
-			return &socketCapture{conn: conn}, nil
+			c := &socketCapture{conn: conn, lag: savedLag()}
+			if c.lag > 0 {
+				slog.Info("echo reference delay remembered", "delay_ms", c.lag*1000/Rate)
+			}
+			return c, nil
 		}
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("connecting to the app's microphone: %w", err)
@@ -117,6 +132,7 @@ func (c *socketCapture) Read(p []byte) (int, error) {
 			c.block, c.fill = 0, 0
 		}
 	}
+	c.record(in, ref)
 	c.read += int64(frames)
 
 	if len(c.env) >= envWindow {
@@ -195,6 +211,7 @@ func (c *socketCapture) measure() {
 	c.offset -= move
 	c.want -= float64(move)
 	slog.Info("echo reference delay measured", "delay_ms", c.lag*1000/Rate, "score", math.Round(score*100)/100)
+	saveLag(c.lag)
 }
 
 // restart forgets the microphone's loudness: after the reference moves, what was gathered against the
@@ -229,6 +246,31 @@ func correlate(a, b []float64) float64 {
 	return ab / math.Sqrt(aa*bb)
 }
 
+// lagPath keeps the measured delay across restarts. The path from the speaker to the microphone
+// belongs to the tablet and its Android build, not to this run, and without it the first reply after
+// a start plays with the reference half a second off: the canceller learns nothing until the delay
+// has been measured, and a wake word said over that reply is missed.
+var lagPath = layout.StateDir + "/echo-delay"
+
+func savedLag() int64 {
+	b, err := os.ReadFile(lagPath)
+	if err != nil {
+		return 0
+	}
+	v, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	if err != nil || v < 0 || v > maxLag*envBlock {
+		return 0
+	}
+	return v
+}
+
+func saveLag(v int64) {
+	tmp := lagPath + ".new"
+	if err := os.WriteFile(tmp, []byte(strconv.FormatInt(v, 10)+"\n"), 0o600); err == nil {
+		_ = os.Rename(tmp, lagPath)
+	}
+}
+
 // level is the mean loudness of a run of block levels, in dBFS.
 func level(env []float64) float64 {
 	var e float64
@@ -247,6 +289,30 @@ func abs64(v int64) int64 {
 		return -v
 	}
 	return v
+}
+
+func (c *socketCapture) record(in []byte, ref []int16) {
+	if !dump.On() {
+		if c.dumpFile != nil {
+			_ = c.dumpFile.Close()
+			c.dumpFile = nil
+		}
+		return
+	}
+	if c.dumpFile == nil {
+		f, err := os.Create(layout.StateDir + "/echo-mic.raw")
+		if err != nil {
+			return
+		}
+		c.dumpFile = f
+		_ = os.WriteFile(layout.StateDir+"/echo-mic.txt",
+			[]byte(fmt.Sprintf("%d %d\n", c.read+c.offset, c.lag)), 0o600)
+	}
+	buf := make([]byte, 0, len(ref)*4)
+	for i, r := range ref {
+		buf = append(buf, in[2*i], in[2*i+1], byte(uint16(r)), byte(uint16(r)>>8))
+	}
+	_, _ = c.dumpFile.Write(buf)
 }
 
 func (c *socketCapture) Close() error { return c.conn.Close() }
