@@ -8,7 +8,6 @@ import (
 	"image"
 	"log/slog"
 	"os"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -107,6 +106,13 @@ type Camera struct {
 }
 
 // ErrNeedsReboot is the sensor refusing to open in a way that only a reboot clears.
+//
+// Measured on a Show 8 (2026-10-04, kernel log): once the mute button has been pressed, the kernel's
+// camera driver keeps its own "gating mode" on until the next boot, whatever the latch's state file
+// says and however long after the unmute the camera is opened (tried at 0.15 s, 1.6 s and 72 s, with
+// the camera open and with it closed through the mute). An open in that state logs "Failed to enable
+// CAM, GATING Mode is ON" and its way out runs the power-down that fails on the sensor's regulator.
+// The latch's enable file takes only 1, so nothing here can clear it.
 //
 // The mute latch cuts the camera's power without telling the sensor driver, which goes on believing
 // the sensor is powered; the power-down it runs before the next power-on then fails on VCAMD and
@@ -392,11 +398,6 @@ func (c *Camera) run(stop, stopped chan struct{}) {
 				}
 			}
 		}
-		// The latch lets go of the camera's power a moment after the mute comes off, and an open in
-		// that moment is what wedges the sensor for the rest of the boot (#17; see latchReleased).
-		if !latchReleased(stop) {
-			return
-		}
 		d, err := open()
 		if err != nil {
 			if c.startFailed(err, stopped) {
@@ -480,52 +481,6 @@ func (c *Camera) startFailed(err error, stopped chan struct{}) (wedged bool) {
 
 // mutePoll is how often a running camera checks the mute.
 const mutePoll = 300 * time.Millisecond
-
-// gatingState is the privacy latch's own state, 1 while it holds the camera and microphones off.
-// A variable so a test can point it at a file of its own.
-var gatingState = "/sys/devices/platform/amazon-gating/state"
-
-// latchSettle is how long the latch must read released before the camera is opened.
-var latchSettle = 1500 * time.Millisecond
-
-// latchReleased waits until the latch has read released for latchSettle, and reports false if stop
-// closes first. Seen on a Show 8 (2026-10-04): the mute came off, the camera was opened 0.15 s
-// later, the kernel answered "Failed to enable CAM, GATING Mode is ON", and the driver's way out of
-// that ran a power-down that unbalanced the sensor's regulator. From then on every open starts with
-// that power-down and fails: the camera is gone until a reboot (ErrNeedsReboot). The daemon's own idea
-// of the mute (the button event) comes before the latch has let go, so it is the latch that is asked.
-// A device without the latch's file is not waited on.
-func latchReleased(stop chan struct{}) bool {
-	read := func() (string, bool) {
-		b, err := os.ReadFile(gatingState)
-		if err != nil {
-			return "", false
-		}
-		return strings.TrimSpace(string(b)), true
-	}
-	if _, ok := read(); !ok {
-		return true
-	}
-	var since time.Time
-	for {
-		v, ok := read()
-		switch {
-		case !ok:
-			return true
-		case v != "0":
-			since = time.Time{}
-		case since.IsZero():
-			since = time.Now()
-		case time.Since(since) >= latchSettle:
-			return true
-		}
-		select {
-		case <-stop:
-			return false
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-}
 
 func isMuted() bool {
 	m, err := privacy.Microphone()
