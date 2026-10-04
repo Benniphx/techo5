@@ -36,5 +36,9 @@ func (c Channel) URL() string {
 	return releases + "/latest/download/manifest.json"
 }
 
+// Published is whether this build has releases to check at all: a panel's daemon comes inside its
+// app, which updates itself.
+func Published() bool { return releases != "" }
+
 // Channels is every channel, in the order Home Assistant should offer them.
 func Channels() []Channel { return []Channel{Stable, Dev} }

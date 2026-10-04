@@ -267,6 +267,9 @@ func (u *Firmware) Channel() update.Channel {
 // A fetch that fails leaves the last answer in place, so a device that briefly cannot reach the channel
 // keeps reporting what it knew rather than blanking the card.
 func (u *Firmware) Check(ctx context.Context) {
+	if !update.Published() {
+		return
+	}
 	channel := u.Channel()
 
 	found, err := update.Fetch(ctx, channel)
