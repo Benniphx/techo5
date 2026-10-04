@@ -236,7 +236,13 @@ func (f *Feature) watch(ctx context.Context) {
 		release, err := camera.Get().AcquireSlow()
 		if err != nil {
 			if errors.Is(err, camera.ErrNeedsReboot) {
+				// Nothing to ask again until the device restarts; said once.
 				slog.Warn("presence: the camera needs a reboot; not watching until then")
+				select {
+				case <-ctx.Done():
+				case <-f.wake:
+				}
+				return
 			} else {
 				slog.Debug("presence: the camera is not available", "err", err)
 			}
