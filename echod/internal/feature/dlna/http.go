@@ -226,8 +226,6 @@ var (
 	errInvalidArgs   = soapError{402, "Invalid Args"}
 	errNotSupported  = soapError{710, "Seek mode not supported"}
 	errNoContents    = soapError{701, "Transition not available"}
-	errIllegalMIME   = soapError{714, "Illegal MIME-type"}
-	errReadFailed    = soapError{716, "Resource not found"}
 )
 
 // control runs one action on a service.

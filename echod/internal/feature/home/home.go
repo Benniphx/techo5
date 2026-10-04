@@ -751,6 +751,11 @@ func askFor(label string) string {
 // take only a pause gets a pause, because that is the strongest thing it offers, which is what the row
 // did before anything was carried and what it should go on doing.
 func (f *Feature) Stop() {
+	if Following() {
+		// The page is another room's player: a stop here puts it away, and leaves that music alone.
+		f.DismissFollowed()
+		return
+	}
 	// The same request a transport button makes, so that what a stop reaches is media's to decide: a
 	// stream this device did not start is asked to stop, a track it is holding for somebody else is let
 	// go, and its own stream is ended. Working any of it out here as well is how the hold came to be

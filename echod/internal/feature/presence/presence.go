@@ -16,6 +16,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -66,6 +67,7 @@ type Feature struct {
 	present   bool
 	lastSeen  time.Time
 	watchFrom time.Time // when the current watch began: an empty room is only an empty room after hold
+	stoppedAt time.Time // when the last watch ended: a short break (the camera restarted) changes nothing
 	det       detector
 	cover     coverDetector
 	lastRoom  time.Time // when the room detector last took a frame: it wants about two a second
@@ -201,13 +203,18 @@ func Hush() {
 
 // ScreenOffAfter is how long the room must be empty before the screen goes dark: 0 when it never does
 // (the setting is 0, presence is off, or the camera is not watching now).
+// watchBreak is how long the watching can stop for before the screen stops going by the room.
+const watchBreak = 30 * time.Second
+
 func ScreenOffAfter() time.Duration {
 	if !On() || !config.Get().Presence.On {
 		return 0
 	}
 	f := Get()
 	f.mu.Lock()
-	watching := f.watching
+	// A watch that stopped a moment ago (the camera restarted, a picture was taken) still counts:
+	// a screen put out for the empty room is not lit for every break in the watching.
+	watching := f.watching || (!f.stoppedAt.IsZero() && time.Since(f.stoppedAt) < watchBreak)
 	f.mu.Unlock()
 	if !watching {
 		return 0
@@ -264,26 +271,35 @@ func (f *Feature) Run(ctx context.Context) error {
 // shutter), and asks again after a while in the second case.
 func (f *Feature) watch(ctx context.Context) {
 	for On() && ctx.Err() == nil {
+		// Listening from before the ask: a mute button held between a refusal and the listening
+		// would otherwise go unheard, and the room unwatched until the next restart.
+		var unwedged atomic.Bool
+		stop := camera.Unwedged.Listen(func(struct{}) {
+			unwedged.Store(true)
+			f.poke()
+		})
 		release, err := camera.Get().AcquireSlow()
 		if err != nil {
 			if errors.Is(err, camera.ErrNeedsReboot) {
 				// Nothing to ask again until the mute button is held or the device restarts; said once.
 				slog.Warn("presence: the camera is held off since the mute button was tapped; hold it for a second to bring it back")
-				stop := camera.Unwedged.Listen(func(struct{}) { f.poke() })
-				select {
-				case <-ctx.Done():
-				case <-f.wake:
+				if !unwedged.Load() {
+					select {
+					case <-ctx.Done():
+					case <-f.wake:
+					}
 				}
 				stop()
 				continue
-			} else {
-				slog.Debug("presence: the camera is not available", "err", err)
 			}
+			stop()
+			slog.Debug("presence: the camera is not available", "err", err)
 			if !f.pause(ctx, retry) {
 				return
 			}
 			continue
 		}
+		stop()
 		f.watchFor(ctx, release)
 	}
 }
@@ -311,7 +327,7 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 	slog.Info("presence: watching")
 	defer func() {
 		f.mu.Lock()
-		f.watching, f.present = false, false
+		f.watching, f.present, f.stoppedAt = false, false, time.Now()
 		f.mu.Unlock()
 		f.sensor.Set(false)
 		f.Changed.Emit(struct{}{})

@@ -50,7 +50,6 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
@@ -555,7 +554,7 @@ func (d *Display) gesture(g touch.Gesture) {
 	if setup.Get().Waiting() {
 		if g.Kind == touch.Tap {
 			if allow, answered := askTapSpot(g.Y); answered {
-				setup.Get().Answer(allow)
+				answerSetup(allow)
 			}
 		}
 		d.wake()
@@ -1161,7 +1160,8 @@ func (d *Display) frame() time.Duration {
 	}
 	d.mu.Unlock()
 
-	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen()
+	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen() ||
+		sunriseProgress(now) > 0 || setup.Get().Waiting()
 	if d.awayTick(now, on, busy, inNight(now)) {
 		d.mu.Lock()
 		on = d.on
@@ -1191,9 +1191,7 @@ func (d *Display) frame() time.Duration {
 	s.playing, s.paused = musicState()
 	s.maxVolume = config.VolumeSteps
 	s.pin = pinNow(now)
-	if !s.sheetOpen {
-		security.Relock() // the settings closed, however they closed: the lock is back on
-	}
+	relockOnClose(s.sheetOpen)
 	if s.sheetOpen {
 		s.sheet = d.sheetView(now)
 	}

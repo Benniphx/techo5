@@ -150,7 +150,9 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
   and WAV; most apps and servers convert anything else when asked. The song's name, artist and cover
   show as now playing, the app's volume slider sets the device's volume, and play, pause and stop go
   both ways. Skipping within a song is not supported yet. It is off until turned on: anyone on the
-  same network can play to it while it is on, as with any DLNA speaker.
+  same network can play to it while it is on, as with any DLNA speaker, and can also ask what it is
+  playing, including the song's address (some servers put a login token in it, as with any DLNA
+  speaker).
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's

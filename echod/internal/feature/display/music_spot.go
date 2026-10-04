@@ -94,8 +94,17 @@ func togglePlay() {
 	transport(media.TransportToggle)
 }
 
-// stepStation plays the station after (or before) the one playing, round the current list.
+// stepStation plays the station after (or before) the one playing, round the current list. On another
+// room's player it is that player's next or previous track: it has no stations of this device's.
 func stepStation(by int) {
+	if home.Following() {
+		if by > 0 {
+			transport(media.TransportNext)
+		} else {
+			transport(media.TransportPrevious)
+		}
+		return
+	}
 	rd := home.Get().Radio()
 	if len(rd.Stations) == 0 {
 		return

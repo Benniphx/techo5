@@ -757,10 +757,6 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		return
 	}
-	// The PIN pad of the settings lock takes every tap while it is up, unless a call has the screen.
-	if phone.Get().State().Phase == phone.Idle && d.pinGesture(g) {
-		return
-	}
 	// A call: its page takes every tap.
 	if st := phone.Get().State(); st.Phase != phone.Idle {
 		if g.Kind == touch.Tap {
@@ -787,12 +783,17 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
+	// The PIN pad of the settings lock takes every tap while it is up, under a call and a ring.
+	if d.pinGesture(g) {
+		return
+	}
+
 	// A browser asking to be let in: its page takes every tap, and only the answers decide.
 	if setup.Get().Waiting() {
 		if g.Kind == touch.Tap {
 			if d.r != nil {
 				if allow, answered := d.r.askTap(g.X, g.Y); answered {
-					setup.Get().Answer(allow)
+					answerSetup(allow)
 				}
 			}
 		}
@@ -1253,13 +1254,15 @@ const radioCueFor = 20 * time.Second
 func (d *Display) showSheet(on bool) {
 	if on && security.Locked() {
 		// The settings lock: the PIN pad first, and the sheet once the PIN is right.
-		openPIN(func() { d.showSheet(true) })
+		openPIN(func() { d.setSheet(true) })
 		d.wake()
 		return
 	}
-	if !on {
-		security.Relock()
-	}
+	d.setSheet(on)
+}
+
+// setSheet puts the sheet up or takes it down, past the lock: showSheet asks for the PIN first.
+func (d *Display) setSheet(on bool) {
 	d.mu.Lock()
 	d.sheet = on
 	d.restartArm, d.picker, d.cardScroll, d.pickScroll, d.colors = time.Time{}, "", 0, 0, false
@@ -1626,12 +1629,21 @@ func (d *Display) OpenSheet(name string) bool {
 	if !ok {
 		return false
 	}
-	d.closeDrawer()
-	d.mu.Lock()
-	d.sheet, d.cat, d.picker, d.restartArm = true, cat, "", time.Time{}
-	d.draft, d.cardScroll, d.pickScroll = nil, 0, 0
-	d.mu.Unlock()
-	d.wake()
+	open := func() {
+		d.closeDrawer()
+		d.mu.Lock()
+		d.sheet, d.cat, d.picker, d.restartArm = true, cat, "", time.Time{}
+		d.draft, d.cardScroll, d.pickScroll = nil, 0, 0
+		d.mu.Unlock()
+		d.wake()
+	}
+	if security.Locked() {
+		// Asked for from Home Assistant or by voice, the settings are behind the lock all the same.
+		openPIN(open)
+		d.wake()
+		return true
+	}
+	open()
 	return true
 }
 
@@ -1730,9 +1742,10 @@ func (d *Display) frame() time.Duration {
 		on = lit // the night may have just turned the panel back on: this frame is its first
 	}
 	d.mu.Lock()
-	sheetUp := d.sheet
+	sheetUp, wifiUp := d.sheet, d.wifiOpen
 	d.mu.Unlock()
-	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen()
+	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen() ||
+		sunriseProgress(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp
 	if d.awayTick(now, on, busy, night) {
 		d.mu.Lock()
 		on = d.on
@@ -1828,9 +1841,7 @@ func (d *Display) frame() time.Duration {
 	d.mu.Lock()
 	s.showSheet = d.sheet
 	s.pin = pinNow(now)
-	if !s.showSheet {
-		security.Relock() // the sheet closed, however it closed: the lock is back on
-	}
+	relockOnClose(s.showSheet)
 	s.showWifi, s.wifi = d.wifiOpen, d.wifi
 	restartArm := d.restartArm
 	wifiAt := d.wifiAt

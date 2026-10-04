@@ -17,8 +17,10 @@ import (
 // the settings open), and never while the camera cannot see, since then an empty room is not known.
 
 var awayDark struct {
-	mu   sync.Mutex
-	dark bool // the screen is out because the room is empty, and nobody else has lit it since
+	mu    sync.Mutex
+	dark  bool      // the screen is out because the room is empty, and nobody else has lit it since
+	wasOn bool      // the screen was lit at the last tick
+	litAt time.Time // when it was last lit, by anything: it stays lit at least the wait from then
 }
 
 // awayTick puts the screen out or lights it for the room, and reports whether it changed it.
@@ -26,6 +28,11 @@ func (d *Display) awayTick(now time.Time, on, busy, night bool) bool {
 	after := presence.ScreenOffAfter()
 	awayDark.mu.Lock()
 	dark := awayDark.dark
+	if on && !awayDark.wasOn {
+		awayDark.litAt = now
+	}
+	awayDark.wasOn = on
+	litFor := now.Sub(awayDark.litAt)
 	awayDark.mu.Unlock()
 	set := func(v bool) {
 		awayDark.mu.Lock()
@@ -43,6 +50,10 @@ func (d *Display) awayTick(now time.Time, on, busy, night bool) bool {
 		return true
 	case !dark && on && !night && !busy && after > 0 && presence.EmptyFor(now) >= after:
 		slog.Info("screen: nobody near, off", "after", after)
+		if litFor < after {
+			// Lit a moment ago (a touch, a ring) with nobody seen since: it gets its full wait.
+			return false
+		}
 		set(true)
 		d.apply(false, d.ceilingOrDefault(), false)
 		return true

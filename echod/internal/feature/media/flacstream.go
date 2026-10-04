@@ -29,7 +29,14 @@ type flacSamples struct {
 	err error
 }
 
-func newFLACSamples(r io.Reader) (*flacSamples, error) {
+func newFLACSamples(r io.Reader) (_ *flacSamples, err error) {
+	// The decoder panics on some lying streams (feature/sendspin's FLAC says the same); a stream from
+	// the network is just a stream that cannot be played.
+	defer func() {
+		if p := recover(); p != nil {
+			err = fmt.Errorf("flac: %v", p)
+		}
+	}()
 	s, err := flac.New(r)
 	if err != nil {
 		return nil, fmt.Errorf("flac: %w", err)
@@ -42,7 +49,13 @@ func newFLACSamples(r io.Reader) (*flacSamples, error) {
 	return &flacSamples{s: s, rs: resampler{from: int(info.SampleRate), to: speaker.Rate}}, nil
 }
 
-func (f *flacSamples) Read(p []byte) (int, error) {
+func (f *flacSamples) Read(p []byte) (n int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			f.err = fmt.Errorf("flac: %v", r)
+			n, err = 0, f.err
+		}
+	}()
 	for len(f.out) == 0 {
 		if f.err != nil {
 			return 0, f.err
@@ -72,7 +85,7 @@ func (f *flacSamples) Read(p []byte) (int, error) {
 			binary.LittleEndian.PutUint16(f.out[i*2:], uint16(s))
 		}
 	}
-	n := copy(p, f.out)
+	n = copy(p, f.out)
 	f.out = f.out[n:]
 	return n, nil
 }

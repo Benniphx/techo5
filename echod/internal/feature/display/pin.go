@@ -5,9 +5,11 @@ package display
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 )
 
 // The PIN pad: what the settings screen shows first while the settings lock is on (security/lock.go). A
@@ -75,6 +77,28 @@ func pinNow(now time.Time) pinView {
 
 func pinIsOpen() bool { return pinNow(time.Now()).open }
 
+// sheetWasOpen is whether the settings were open at the last frame.
+var sheetWasOpen atomic.Bool
+
+// relockOnClose puts the lock back on as the settings close, however they closed. Only as they close:
+// relocking on every frame they are shut would take back the PIN just typed before the settings it
+// was typed for could open.
+func relockOnClose(open bool) {
+	if sheetWasOpen.Swap(open) && !open {
+		security.Relock()
+	}
+}
+
+// answerSetup answers a browser asking to be let in to the setup page. Allow is behind the settings
+// lock too: the setup page is every setting and more.
+func answerSetup(allow bool) {
+	if allow && security.Locked() {
+		openPIN(func() { setup.Get().Answer(true) })
+		return
+	}
+	setup.Get().Answer(allow)
+}
+
 // pinPress is a key on the pad: a digit, back, ok, or cancel.
 func pinPress(key string) {
 	pinPad.mu.Lock()
@@ -95,6 +119,12 @@ func pinPress(key string) {
 		pinPad.mu.Unlock()
 		return
 	case "ok":
+		if len(pinPad.entry) < 4 {
+			// Too short to be any PIN: not a wrong try, so it does not count toward the wait.
+			pinPad.msg = "At least 4 digits"
+			pinPad.mu.Unlock()
+			return
+		}
 	default:
 		if len(key) == 1 && key[0] >= '0' && key[0] <= '9' && len(pinPad.entry) < 8 {
 			pinPad.entry += key
@@ -141,7 +171,6 @@ func waitWords(d time.Duration) string {
 // match, and then it is the PIN.
 func pinSetting(entry string) {
 	pinPad.mu.Lock()
-	defer pinPad.mu.Unlock()
 	switch {
 	case len(entry) < 4:
 		pinPad.msg = "At least 4 digits"
@@ -150,12 +179,19 @@ func pinSetting(entry string) {
 	case entry != pinPad.first:
 		pinPad.first, pinPad.msg = "", "They did not match"
 	default:
-		if err := security.Get().SetPIN(entry); err != nil {
-			pinPad.msg = "Could not save it"
-			return
+		// Saving writes the config and tells its listeners: not with the pad's lock held.
+		pinPad.mu.Unlock()
+		err := security.Get().SetPIN(entry)
+		if err == nil {
+			// Set from inside the settings: they stay open until they close.
+			security.TryPIN(entry)
 		}
-		// Set from inside the settings: they stay open until they close.
-		security.TryPIN(entry)
-		pinPad.open, pinPad.setting, pinPad.first, pinPad.msg = false, false, "", ""
+		pinPad.mu.Lock()
+		if err != nil {
+			pinPad.msg = "Could not save it"
+		} else {
+			pinPad.open, pinPad.setting, pinPad.first, pinPad.msg = false, false, "", ""
+		}
 	}
+	pinPad.mu.Unlock()
 }

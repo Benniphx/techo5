@@ -74,12 +74,17 @@ func (d *Display) openSettings() {
 		d.closeMenu()
 		openPIN(func() {
 			d.mu.Lock()
-			d.openSettings()
+			d.openSettingsNow()
 			d.mu.Unlock()
 			d.wake()
 		})
 		return
 	}
+	d.openSettingsNow()
+}
+
+// openSettingsNow is openSettings past the lock. Called with d.mu held.
+func (d *Display) openSettingsNow() {
 	d.closeMenu()
 	d.sheetOpen, d.sheetGrid, d.sheetAt = true, true, time.Now()
 	d.picker, d.cardScroll, d.pickScroll, d.draft, d.dragging = "", 0, 0, nil, false

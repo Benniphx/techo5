@@ -35,8 +35,6 @@ const (
 var lock struct {
 	mu            sync.Mutex
 	unlockedUntil time.Time
-	fails         int
-	blockedUntil  time.Time
 }
 
 // ErrPIN is a PIN that is not 4 to 8 digits.
@@ -56,31 +54,44 @@ func Locked() bool {
 }
 
 // TryPIN checks a PIN typed on the screen. A right one opens the settings for a while; a wrong one counts
-// toward the wait, and while the device is making people wait, wait is how much longer.
+// toward the wait, and while the device is making people wait, wait is how much longer. The count and
+// the wait are saved, so a restart does not start them over.
 func TryPIN(pin string) (ok bool, wait time.Duration) {
-	stored := config.Get().Security.LockPIN
-	if stored == "" {
+	c := config.Get().Security
+	if c.LockPIN == "" {
 		return true, 0
 	}
 	lock.mu.Lock()
 	defer lock.mu.Unlock()
 	now := time.Now()
-	if now.Before(lock.blockedUntil) {
-		return false, lock.blockedUntil.Sub(now)
+	blocked := time.Unix(c.LockBlockedUntil, 0)
+	if c.LockBlockedUntil > 0 && now.Before(blocked) {
+		return false, blocked.Sub(now)
 	}
-	if pinMatches(stored, pin) {
-		lock.fails, lock.unlockedUntil = 0, now.Add(unlockFor)
+	if pinMatches(c.LockPIN, pin) {
+		lock.unlockedUntil = now.Add(unlockFor)
+		if c.LockFails != 0 || c.LockBlockedUntil != 0 {
+			saveTries(0, 0)
+		}
 		slog.Info("settings lock: opened with the PIN")
 		return true, 0
 	}
-	lock.fails++
-	slog.Warn("settings lock: a wrong PIN", "in_a_row", lock.fails)
-	if lock.fails >= freeTries {
-		d := firstWait << min(lock.fails-freeTries, 10)
-		lock.blockedUntil = now.Add(min(d, longestWait))
-		return false, lock.blockedUntil.Sub(now)
+	fails := c.LockFails + 1
+	slog.Warn("settings lock: a wrong PIN", "in_a_row", fails)
+	if fails >= freeTries {
+		d := min(firstWait<<min(fails-freeTries, 10), longestWait)
+		until := now.Add(d)
+		saveTries(fails, until.Unix())
+		return false, d
 	}
+	saveTries(fails, 0)
 	return false, 0
+}
+
+func saveTries(fails int, until int64) {
+	if err := config.Set().Security().LockTries(fails, until); err != nil {
+		slog.Error("settings lock: saving the tries failed", "err", err)
+	}
 }
 
 // Relock locks again now, as the settings screen closes.
@@ -104,8 +115,9 @@ func (f *Feature) SetPIN(pin string) error {
 		return err
 	}
 	lock.mu.Lock()
-	lock.fails, lock.blockedUntil, lock.unlockedUntil = 0, time.Time{}, time.Time{}
+	lock.unlockedUntil = time.Time{}
 	lock.mu.Unlock()
+	saveTries(0, 0)
 	f.lockSw.Set(saved != "")
 	slog.Info("settings lock", "on", saved != "")
 	f.Changed.Emit(struct{}{})
@@ -156,6 +168,13 @@ func (f *Feature) buildLock() {
 				if !LockSet() {
 					slog.Warn("settings lock: set a PIN with the settings_lock_pin action first")
 				}
+				return
+			}
+			if !encrypted() {
+				// As the action: a PIN is not cleared over a link anybody on the network could speak.
+				// The setup page clears it too.
+				slog.Warn("settings lock: not cleared while Home Assistant's link has no device key")
+				f.lockSw.Set(LockSet())
 				return
 			}
 			if err := f.SetPIN(""); err != nil {

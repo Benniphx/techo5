@@ -265,6 +265,7 @@ func (c *Camera) acquire(fast bool) (release func(), err error) {
 	c.users++
 	if fast {
 		c.fast++
+		liveUsers.Add(1)
 	}
 	if c.idle != nil {
 		c.idle.Stop()
@@ -292,6 +293,7 @@ func (c *Camera) acquire(fast bool) (release func(), err error) {
 			c.users--
 			if fast {
 				c.fast--
+				liveUsers.Add(-1)
 			}
 			if c.users == 0 {
 				c.idle = time.AfterFunc(linger, c.idleStop)
@@ -534,37 +536,60 @@ func (c *Camera) Wedged() error {
 // gestureExposure is whether the exposure is held through sudden changes (SetGestureExposure).
 var gestureExposure atomic.Bool
 
+// liveUsers counts the users that want every frame (a picture being looked at): for them the exposure
+// follows the room at once, gestures or not.
+var liveUsers atomic.Int32
+
 // SetGestureExposure holds the exposure still for a moment whenever the picture's brightness jumps
 // by half or more at once, while on.
 func SetGestureExposure(on bool) { gestureExposure.Store(on) }
 
-const aeHoldFor = 2500 * time.Millisecond
+const (
+	aeHoldFor = 2500 * time.Millisecond
+	// aeWarm is the frames averaged before a jump is believed: a sensor just started is still finding
+	// its exposure, and its first frames' swings are its own.
+	aeWarm = 10
+	// aeGap is a pause in the frames long enough that the sensor was stopped and started again.
+	aeGap = 2 * time.Second
+)
 
 // aeHold is one device's exposure hold: the brightness it has been seeing, and until when it holds.
 type aeHold struct {
 	avg   float64
+	n     int       // frames averaged since the sensor started
+	last  time.Time // the last frame
 	until time.Time
 }
 
 // held reports whether the exposure is to be left as it is for this frame of brightness mean.
 func (h *aeHold) held(mean float64) bool {
-	if !gestureExposure.Load() {
-		h.avg, h.until = 0, time.Time{}
+	return h.heldAt(mean, time.Now())
+}
+
+func (h *aeHold) heldAt(mean float64, now time.Time) bool {
+	if !gestureExposure.Load() || liveUsers.Load() > 0 || now.Sub(h.last) > aeGap {
+		*h = aeHold{last: now}
+		if gestureExposure.Load() && liveUsers.Load() == 0 {
+			h.avg, h.n = mean, 1
+		}
 		return false
 	}
-	now := time.Now()
-	if now.Before(h.until) {
-		return true
+	h.last = now
+	if !h.until.IsZero() {
+		if now.Before(h.until) {
+			return true
+		}
+		// The hold is over: whatever the picture is now is what the room looks like, and the
+		// exposure follows it from here rather than holding again against the old brightness.
+		h.until, h.avg, h.n = time.Time{}, mean, aeWarm
+		return false
 	}
-	if h.avg > 4 && (mean < h.avg/2 || mean > h.avg*2) {
+	if h.n >= aeWarm && h.avg > 4 && (mean < h.avg/2 || mean > h.avg*2) {
 		h.until = now.Add(aeHoldFor)
 		return true
 	}
-	if h.avg == 0 {
-		h.avg = mean
-	} else {
-		h.avg += (mean - h.avg) * 0.2
-	}
+	h.n++
+	h.avg += (mean - h.avg) * 0.2
 	return false
 }
 

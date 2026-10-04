@@ -53,10 +53,20 @@ func (f *Feature) announce(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	listen, err := net.ListenMulticastUDP("udp4", nil, group)
-	if err != nil {
-		slog.Warn("dlna: listening for searches failed", "err", err)
-		return
+	// Tried again until it works: at boot the network may not be up yet, and a renderer that gave up
+	// then would stay unfound until the switch was turned off and on.
+	var listen *net.UDPConn
+	for wait := 2 * time.Second; ; wait = min(wait*2, time.Minute) {
+		listen, err = net.ListenMulticastUDP("udp4", nil, group)
+		if err == nil {
+			break
+		}
+		slog.Warn("dlna: listening for searches failed", "err", err, "again in", wait)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
 	}
 	stop := context.AfterFunc(ctx, func() { listen.Close() })
 	defer stop()
@@ -93,11 +103,27 @@ func (f *Feature) announce(ctx context.Context) {
 				answer = append(answer, t)
 			}
 		}
-		if len(answer) == 0 {
+		if len(answer) == 0 || !local(from.IP) {
 			continue
 		}
-		go reply(ctx, from, answer, mx)
+		select {
+		case replying <- struct{}{}:
+			go func() {
+				defer func() { <-replying }()
+				reply(ctx, from, answer, mx)
+			}()
+		default: // more searches than any home sends at once: the rest go unanswered
+		}
 	}
+}
+
+// replying bounds the answers waiting to go out: each waits up to MX seconds, and a flood of searches
+// must not become a flood of goroutines, or of answers sent at whoever the searches claim to be from.
+var replying = make(chan struct{}, 8)
+
+// local is an address a search may come from: the home network's own ranges, never the internet.
+func local(ip net.IP) bool {
+	return ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLoopback()
 }
 
 // parseSearch reads an M-SEARCH: what is being looked for (ST) and how long answers may be spread over (MX).

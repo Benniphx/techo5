@@ -710,6 +710,7 @@ func (s *session) finish() {
 	s.releaseNow()
 	s.asked.Store("")
 	s.ended()
+	media.ClearPosition() // the lyrics do not run on for a track the server is no longer playing
 	s.client.Close()
 	// And what the room is left with is its own: the remote is not there to be asked, and the listener
 	// that would have carried a command to it has gone with the connection, so a play or a pause belongs

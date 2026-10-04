@@ -42,8 +42,12 @@ var followed struct {
 	album   string
 	picture string // entity_picture, as Home Assistant gives it
 	artFor  string // the picture art and thumb were made from
-	art     *image.RGBA
-	thumb   *image.RGBA
+
+	fetching  bool          // a cover is being fetched now
+	coverAt   time.Time     // not before this is the cover tried again, after a failure
+	coverWait time.Duration // the wait after the last failure, doubling to five minutes
+	art       *image.RGBA
+	thumb     *image.RGBA
 
 	// pos is where the song is, from media_position and the time Home Assistant took it, when the
 	// player says (posSet); for the lyrics.
@@ -167,6 +171,9 @@ func playerName(entity string, known []hass.Entity) string {
 // refreshPlayers asks Home Assistant which media players it has, and offers them, on the weather list's
 // schedule.
 func (f *Feature) refreshPlayers() {
+	if !hasScreen {
+		return // following is for a page to show it on
+	}
 	f.mu.Lock()
 	due := time.Since(f.playersAt) > sourcesEvery
 	f.mu.Unlock()
@@ -199,8 +206,6 @@ func (f *Feature) refreshPlayers() {
 	f.followSel.Options = opts
 	// New options reach Home Assistant at the next connection.
 	f.rewire()
-	// The follow started before the token may have given up; this is a good moment to try again.
-	f.restartFollow()
 }
 
 // restartFollow ends the follow in progress and starts one for the player chosen now, if any.
@@ -213,7 +218,7 @@ func (f *Feature) restartFollow() {
 	}
 	followed.entity, followed.state, followed.title, followed.artist, followed.album = entity, "", "", "", ""
 	followed.name, followed.picture, followed.artFor, followed.art, followed.thumb = "", "", "", nil, nil
-	followed.dismissed = ""
+	followed.dismissed, followed.coverAt, followed.coverWait = "", time.Time{}, 0
 	followed.pos, followed.posSet = media.Position{}, false
 	if entity == "" {
 		followed.mu.Unlock()
@@ -285,10 +290,17 @@ func (f *Feature) heard(entity string, e hass.LiveEntity) {
 	followed.title, followed.artist, followed.album = str("media_title"), str("media_artist"), str("media_album_name")
 	followed.pos, followed.posSet = followedPosition(followed.title, e)
 	pic := str("entity_picture")
-	fetch := pic != "" && pic != followed.picture
+	if pic != followed.picture {
+		followed.coverWait, followed.coverAt = 0, time.Time{} // a new cover is tried at once
+	}
+	// A cover not made yet is tried again on a later state, waiting longer each time it fails.
+	fetch := pic != "" && pic != followed.artFor && !followed.fetching && time.Now().After(followed.coverAt)
 	followed.picture = pic
 	if pic == "" {
 		followed.artFor, followed.art, followed.thumb = "", nil, nil
+	}
+	if fetch {
+		followed.fetching = true
 	}
 	followed.mu.Unlock()
 	if fetch {
@@ -327,17 +339,20 @@ func followedPosition(title string, e hass.LiveEntity) (media.Position, bool) {
 // fetchFollowedArt makes the page's picture from the cover Home Assistant named, unless another has
 // been named since.
 func fetchFollowedArt(entity, pic string) {
+	var art, thumb *image.RGBA
 	b, err := hass.Get().FetchURL(pic)
-	if err != nil {
-		slog.Debug("home: the followed player's cover", "err", err)
-		return
-	}
-	art, thumb, err := layoutArt(b, false, "the followed player's cover")
-	if err != nil {
-		slog.Debug("home: the followed player's cover", "err", err)
-		return
+	if err == nil {
+		art, thumb, err = layoutArt(b, false, "the followed player's cover")
 	}
 	followed.mu.Lock()
+	followed.fetching = false
+	if err != nil {
+		slog.Debug("home: the followed player's cover", "err", err)
+		followed.coverWait = min(max(followed.coverWait*2, 10*time.Second), 5*time.Minute)
+		followed.coverAt = time.Now().Add(followed.coverWait)
+		followed.mu.Unlock()
+		return
+	}
 	if followed.entity != entity || followed.picture != pic {
 		followed.mu.Unlock()
 		return

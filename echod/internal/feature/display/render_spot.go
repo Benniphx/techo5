@@ -66,7 +66,7 @@ func (r *roundRenderer) timeLine(now time.Time, baseline int) {
 }
 
 type roundScene struct {
-	pin pinView // the settings lock's PIN pad (pin.go), over everything but a call, a ring or a browser asking
+	pin pinView // the settings lock's PIN pad (pin.go), over everything but a call or a ring
 	// The dashboard face: whether it is up, how it is shown, and what it shows.
 	showDash   bool
 	dashMode   config.DashboardMode
@@ -295,12 +295,12 @@ func (r *roundRenderer) draw(s roundScene) {
 	}
 	// A browser waiting to be let in: the answer is a tap here, since this device has no button for
 	// it. Under a call and under a ringing alarm, both of which are somebody already being answered.
-	if s.setupAsking {
-		r.setupAskFace(s)
-		return
-	}
 	if s.pin.open {
 		r.pinFace(s.pin)
+		return
+	}
+	if s.setupAsking {
+		r.setupAskFace(s)
 		return
 	}
 	// This device taking an announcement, then one that arrived: both take the face, since a circle

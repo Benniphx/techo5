@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -51,22 +52,50 @@ type renderer struct {
 	next  song
 	state string
 
-	gen       int       // which start is the current one; a start overtaken is left alone
-	started   time.Time // when the song began, for the position
-	pausedAt  time.Time // when it was paused, zero while it plays
+	gen       int                // which start is the current one; a start overtaken is left alone
+	fetching  context.CancelFunc // ends the current start's fetch, when another takes its place
+	started   time.Time          // when the song began, for the position
+	pausedAt  time.Time          // when it was paused, zero while it plays
 	pausedFor time.Duration
 	ended     bool // the song played to its end (not stopped, not replaced)
+	endedGen  int  // the start whose stream ran out on its own (the source saw the end of it)
 }
 
+// firstBytes is how long a server has to start sending the song once it has answered.
+const firstBytes = 15 * time.Second
+
 // fetchClient fetches songs and covers from the home network: quick to connect and answer, then no
-// limit, since a song plays for minutes.
+// limit, since a song plays for minutes. A controller names the address, and any host on the network
+// can be a controller, so the device never connects to itself (loopback), to link-local or multicast
+// addresses, or to nowhere, whatever name, redirect or DNS answer leads there: refused when the
+// connection is made, so redirects and rebinding are covered too.
 var fetchClient = &http.Client{
 	Transport: &http.Transport{
-		DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+		DialContext:           (&net.Dialer{Timeout: 5 * time.Second, Control: refuseOwn}).DialContext,
 		ResponseHeaderTimeout: 10 * time.Second,
 		MaxIdleConns:          4,
 		IdleConnTimeout:       30 * time.Second,
 	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return errors.New("too many redirects")
+		}
+		return nil
+	},
+}
+
+// refuseOwn refuses a connection to an address that is the device itself, link-local or multicast.
+func refuseOwn(network, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() || ip.IsMulticast() {
+		return fmt.Errorf("dlna: not fetching from %s", host)
+	}
+	return nil
 }
 
 // coverMost bounds a cover's size.
@@ -141,12 +170,14 @@ func (r *renderer) set(uri, meta, from string) error {
 	s := parseSong(uri, meta)
 	r.mu.Lock()
 	playing := r.state == stPlaying || r.state == stLoading
-	r.cur, r.next = s, song{}
-	if !playing {
-		r.state = stStopped
-	}
+	paused := r.state == stPaused
+	r.cur, r.next, r.ended = s, song{}, false
+	r.state = stStopped // a song set while another plays or waits paused is started afresh below
 	r.mu.Unlock()
 	slog.Info("dlna: song set", "from", from, "title", s.title)
+	if paused && media.Get().Receiving() == home.DLNAName {
+		media.Get().Stop() // the old song is not left holding the speaker, paused, behind the new one
+	}
 	if playing {
 		return r.play()
 	}
@@ -166,6 +197,9 @@ func (r *renderer) setNext(uri, meta string) error {
 	}
 	r.mu.Lock()
 	r.next = parseSong(uri, meta)
+	if r.state != stStopped {
+		r.ended = false
+	}
 	r.mu.Unlock()
 	r.f.e.changed()
 	return nil
@@ -192,6 +226,7 @@ func (r *renderer) play() error {
 		r.pausedFor += time.Since(r.pausedAt)
 		r.pausedAt = time.Time{}
 		r.state = stPlaying
+		r.publishPositionLocked(1)
 		r.mu.Unlock()
 		media.Get().Resume()
 		r.f.e.changed()
@@ -204,15 +239,29 @@ func (r *renderer) play() error {
 	r.gen++
 	gen, s := r.gen, r.cur
 	r.state, r.ended = stLoading, false
+	if r.fetching != nil {
+		r.fetching() // a start still connecting, overtaken: it goes, rather than run to its timeout
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	r.fetching = cancel
 	r.mu.Unlock()
 	r.f.e.changed()
-	safe.Go("dlna song", func() { r.start(gen, s) })
+	safe.Go("dlna song", func() { r.start(ctx, gen, s) })
 	return nil
 }
 
 // start fetches the song and hands it to the speaker.
-func (r *renderer) start(gen int, s song) {
-	resp, err := fetchClient.Get(s.uri)
+func (r *renderer) start(ctx context.Context, gen int, s song) {
+	// A server that answers and then sends nothing is given up on, rather than left TRANSITIONING.
+	ctx, giveUp := context.WithCancel(ctx)
+	slow := time.AfterFunc(firstBytes, giveUp)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.uri, nil)
+	if err != nil {
+		slow.Stop()
+		giveUp()
+		return
+	}
+	resp, err := fetchClient.Do(req)
 	if err == nil && resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
 		err = fmt.Errorf("the server answered %s", resp.Status)
@@ -224,6 +273,7 @@ func (r *renderer) start(gen int, s song) {
 			resp.Body.Close()
 		}
 	}
+	slow.Stop() // the song is coming (or has failed): no more waiting on its first bytes
 	r.mu.Lock()
 	if r.gen != gen {
 		r.mu.Unlock()
@@ -239,23 +289,49 @@ func (r *renderer) start(gen int, s song) {
 		r.f.e.changed()
 		return
 	}
-	r.state, r.started, r.pausedAt, r.pausedFor = stPlaying, time.Now(), time.Time{}, 0
 	r.mu.Unlock()
 
-	media.Get().PlayReceived(home.DLNAName, newSource(pcm, resp.Body), speaker.Rate, 2)
+	// The song's picture is cleared until the new one arrives, so the last song's is not left on it.
+	home.ReceivedPicture(home.DLNAName, nil)
+	src := newSource(pcm, resp.Body, func() {
+		r.mu.Lock()
+		if r.gen == gen {
+			r.endedGen = gen
+		}
+		r.mu.Unlock()
+	})
+	media.Get().PlayReceived(home.DLNAName, src, speaker.Rate, 2)
 	media.Get().SetReceivedTrack(home.DLNAName, s.title, s.artist, s.album)
-	if s.dur > 0 {
-		media.SetPosition(media.Position{Title: s.title, At: time.Now(), Dur: s.dur, Rate: 1})
+
+	r.mu.Lock()
+	if r.gen != gen {
+		// Stopped or replaced while it was being started: it does not get to keep the speaker.
+		r.mu.Unlock()
+		if media.Get().Receiving() == home.DLNAName {
+			media.Get().Stop()
+		}
+		return
 	}
-	safe.Go("dlna cover", func() { cover(s.art) })
+	r.state, r.started, r.pausedAt, r.pausedFor = stPlaying, time.Now(), time.Time{}, 0
+	r.publishPositionLocked(1)
+	r.mu.Unlock()
+	safe.Go("dlna cover", func() { r.cover(gen, s.art) })
 	r.f.e.changed()
 }
 
-// cover fetches the song's picture for Now Playing.
-func cover(u string) {
-	if checkURI(u) != nil {
-		home.ReceivedPicture(home.DLNAName, nil)
+// publishPositionLocked tells what is shown with the music (the lyrics) where the song is, moving at
+// rate (1 playing, 0 paused). Wants r.mu.
+func (r *renderer) publishPositionLocked(rate float64) {
+	if r.cur.dur <= 0 {
 		return
+	}
+	media.SetPosition(media.Position{Title: r.cur.title, At: time.Now(), Pos: r.positionLocked(), Dur: r.cur.dur, Rate: rate})
+}
+
+// cover fetches the song's picture for Now Playing, unless another song has started since.
+func (r *renderer) cover(gen int, u string) {
+	if checkURI(u) != nil {
+		return // cleared as the song started
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -275,7 +351,12 @@ func cover(u string) {
 	if err != nil || len(b) > coverMost {
 		return
 	}
-	home.ReceivedPicture(home.DLNAName, b)
+	r.mu.Lock()
+	current := r.gen == gen
+	r.mu.Unlock()
+	if current {
+		home.ReceivedPicture(home.DLNAName, b)
+	}
 }
 
 func (r *renderer) pause() error {
@@ -284,6 +365,7 @@ func (r *renderer) pause() error {
 	}
 	r.mu.Lock()
 	r.state, r.pausedAt = stPaused, time.Now()
+	r.publishPositionLocked(0)
 	r.mu.Unlock()
 	media.Get().Pause()
 	r.f.e.changed()
@@ -293,6 +375,11 @@ func (r *renderer) pause() error {
 func (r *renderer) stop() {
 	r.mu.Lock()
 	r.gen++
+	r.ended = false
+	if r.fetching != nil {
+		r.fetching()
+		r.fetching = nil
+	}
 	was := r.state
 	if r.cur.uri != "" {
 		r.state = stStopped
@@ -300,8 +387,11 @@ func (r *renderer) stop() {
 		r.state = stNoMedia
 	}
 	r.mu.Unlock()
-	if (was == stPlaying || was == stPaused) && media.Get().Receiving() == home.DLNAName {
-		media.Get().Stop()
+	if was == stPlaying || was == stPaused {
+		media.ClearPosition()
+		if media.Get().Receiving() == home.DLNAName {
+			media.Get().Stop()
+		}
 	}
 	r.f.e.changed()
 }
@@ -327,14 +417,18 @@ func (r *renderer) sync() string {
 	}
 	switch {
 	case (r.state == stPlaying || r.state == stPaused) && !ours:
-		// Nothing else took the speaker: the song came to its end.
-		r.ended = media.Get().Receiving() == ""
+		// Over: it ran out on its own only if its stream said so (the source saw the end). Stopped
+		// on the screen, by voice or Home Assistant, or replaced by a station, it is not an end to
+		// go on to the next song from.
+		r.ended = r.endedGen == r.gen
 		r.state = stStopped
 	case r.state == stPlaying && ours && paused:
 		r.state, r.pausedAt = stPaused, time.Now()
+		r.publishPositionLocked(0)
 	case r.state == stPaused && ours && !paused:
 		r.pausedFor += time.Since(r.pausedAt)
 		r.state, r.pausedAt = stPlaying, time.Time{}
+		r.publishPositionLocked(1)
 	}
 	return r.state
 }
@@ -489,16 +583,35 @@ func remoteHost(r *http.Request) string {
 }
 
 // source is the decoded song as the speaker reads a received track: a deadline on a read closes the
-// connection when it passes, which is how a server that stops sending ends the song.
+// connection when it passes, which is how a server that stops sending ends the song. The deadline is for
+// that read only: the speaker stops reading while it is paused or a reply is spoken, and a pause of any
+// length must not end the song. The stream running out on its own is told to ended.
 type source struct {
 	io.Reader
-	body io.Closer
+	body  io.Closer
+	ended func()
 
 	mu    sync.Mutex
 	timer *time.Timer
 }
 
-func newSource(pcm io.Reader, body io.Closer) *source { return &source{Reader: pcm, body: body} }
+func newSource(pcm io.Reader, body io.Closer, ended func()) *source {
+	return &source{Reader: pcm, body: body, ended: ended}
+}
+
+func (s *source) Read(p []byte) (int, error) {
+	n, err := s.Reader.Read(p)
+	s.mu.Lock()
+	if s.timer != nil {
+		s.timer.Stop()
+		s.timer = nil
+	}
+	s.mu.Unlock()
+	if err == io.EOF && s.ended != nil {
+		s.ended()
+	}
+	return n, err
+}
 
 func (s *source) Close() error {
 	s.mu.Lock()

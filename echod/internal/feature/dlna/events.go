@@ -25,6 +25,7 @@ import (
 const (
 	subscribeFor  = 30 * time.Minute
 	mostSubs      = 16
+	mostSubsEach  = 4 // one controller subscribes to three services; one host may not take every place
 	notifyTimeout = 5 * time.Second
 )
 
@@ -85,7 +86,13 @@ func (e *events) subscribe(w http.ResponseWriter, r *http.Request, service strin
 		w.WriteHeader(http.StatusPreconditionFailed)
 		return
 	}
-	if len(e.subs) >= mostSubs {
+	mine := 0
+	for _, s := range e.subs {
+		if u, err := url.Parse(s.callback); err == nil && u.Hostname() == remoteHost(r) {
+			mine++
+		}
+	}
+	if len(e.subs) >= mostSubs || mine >= mostSubsEach {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}

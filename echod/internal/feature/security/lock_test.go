@@ -14,7 +14,7 @@ func TestTheSettingsLock(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	f := Get()
 	lock.mu.Lock()
-	lock.fails, lock.blockedUntil, lock.unlockedUntil = 0, time.Time{}, time.Time{}
+	lock.unlockedUntil = time.Time{}
 	lock.mu.Unlock()
 
 	if Locked() {
@@ -57,6 +57,10 @@ func TestTheSettingsLock(t *testing.T) {
 	}
 	if ok, wait := TryPIN("2468"); ok || wait <= 0 {
 		t.Fatal("the right PIN was taken while the device was making people wait")
+	}
+	// Kept in the saved settings, so a restart does not start the count over.
+	if c := config.Get().Security; c.LockFails != freeTries || c.LockBlockedUntil <= time.Now().Unix() {
+		t.Errorf("saved tries = %d, blocked until %d", c.LockFails, c.LockBlockedUntil)
 	}
 	if err := f.SetPIN(""); err != nil || Locked() || LockSet() {
 		t.Fatalf("clearing the PIN: %v locked=%v", err, Locked())

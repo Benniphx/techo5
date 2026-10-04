@@ -14,7 +14,7 @@ package dlna
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/rand"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -114,18 +114,29 @@ func (f *Feature) Run(ctx context.Context) error {
 	}
 }
 
-// udn is the device's own UPnP id: the same every start, so a controller keeps it as one speaker, made
-// from the factory MAC (or the name, where there is no MAC to read).
+// udn is the device's own UPnP id: random, made once and kept, so a controller keeps it as one speaker
+// across restarts and nothing about the device (its MAC) can be worked out from it.
 func udn() string {
-	seed := config.Get().Device.Name
-	if mac, err := layout.FactoryMAC(); err == nil {
-		seed = mac
+	if id := config.Get().Streaming.DLNAID; id != "" {
+		return id
 	}
-	h := sha1.Sum([]byte("techo5-dlna:" + seed))
-	h[6] = h[6]&0x0f | 0x50 // a name-based UUID
-	h[8] = h[8]&0x3f | 0x80
-	return fmt.Sprintf("uuid:%x-%x-%x-%x-%x", h[0:4], h[4:6], h[6:8], h[8:10], h[10:16])
+	udnMu.Lock()
+	defer udnMu.Unlock()
+	if id := config.Get().Streaming.DLNAID; id != "" {
+		return id
+	}
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = b[6]&0x0f | 0x40 // a random UUID
+	b[8] = b[8]&0x3f | 0x80
+	id := fmt.Sprintf("uuid:%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
+	if err := config.Set().Streaming().DLNAID(id); err != nil {
+		slog.Warn("dlna: saving the renderer's id failed", "err", err)
+	}
+	return id
 }
+
+var udnMu sync.Mutex
 
 // friendlyName is what controllers list the device as.
 func friendlyName() string {

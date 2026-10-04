@@ -180,7 +180,7 @@ type scene struct {
 	strip bool
 	faved bool
 
-	// pin is the settings lock's PIN pad (pin.go), drawn over everything but a call while it is open.
+	// pin is the settings lock's PIN pad (pin.go), drawn over everything but a call or a ring while open.
 	pin pinView
 
 	// lyric is the words of the song on the full now-playing page, when hasLyric (home/lyrics.go).
@@ -409,12 +409,12 @@ func (r *renderer) draw(s scene) {
 		r.callPage(s)
 		return
 	}
-	if s.pin.open {
-		r.pinPage(s.pin)
-		return
-	}
 	if s.ring.any() {
 		r.ringingPage(s)
+		return
+	}
+	if s.pin.open {
+		r.pinPage(s.pin)
 		return
 	}
 	// A browser waiting to be let in: the answer is a tap here, since this device has no button for
