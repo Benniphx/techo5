@@ -116,7 +116,9 @@ func (f *Feature) ChooseFollow(entity string) {
 		return
 	}
 	slog.Info("home: now playing follows", "entity", entity)
+	f.mu.Lock()
 	f.followSel.Options = followOptions(config.Get().Home)
+	f.mu.Unlock()
 	f.followSel.Set(followOption(config.Get().Home))
 	f.restartFollow()
 	f.Changed.Emit(struct{}{})

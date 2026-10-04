@@ -150,7 +150,7 @@ func TestTimes(t *testing.T) {
 func TestOnlyTheAddressIsServed(t *testing.T) {
 	f := &Feature{}
 	f.r.f = f
-	for host, want := range map[string]int{"evil.example:8181": http.StatusForbidden, "192.0.2.20:8181": http.StatusOK, "192.0.2.20": http.StatusOK, "[2001:db8::1]:8181": http.StatusOK} {
+	for host, want := range map[string]int{"evil.example:8181": http.StatusForbidden, "192.0.2.20:8181": http.StatusOK, "192.0.2.20": http.StatusOK, "[2001:db8::1]:8181": http.StatusOK, "[fe80::1%25wlan0]:8181": http.StatusOK, "": http.StatusOK} {
 		req := httptest.NewRequest(http.MethodGet, pathPrefix+"device.xml", nil)
 		req.Host = host
 		w := httptest.NewRecorder()

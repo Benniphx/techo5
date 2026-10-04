@@ -361,7 +361,9 @@ func (f *Feature) Name() string { return "home" }
 func (f *Feature) Restore(c config.Config) {
 	f.weatherSel.Options = weatherOptions(c.Home)
 	f.weatherSel.Set(chosenOption(c.Home))
+	f.mu.Lock()
 	f.followSel.Options = followOptions(c.Home)
+	f.mu.Unlock()
 	f.followSel.Set(followOption(c.Home))
 	f.lyricsSw.Set(c.Home.Lyrics)
 	if hasScreen {

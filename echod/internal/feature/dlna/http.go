@@ -45,10 +45,14 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 
 // hostIsAddress is whether a request's Host is an IP address, with or without a port.
 func hostIsAddress(host string) bool {
+	if host == "" {
+		return true // an old client that sends none; a browser, which rebinding needs, always does
+	}
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	return net.ParseIP(strings.Trim(host, "[]")) != nil
+	host, _, _ = strings.Cut(strings.Trim(host, "[]"), "%") // fe80::1%wlan0: the zone is not the address
+	return net.ParseIP(host) != nil
 }
 
 func writeXML(w http.ResponseWriter, body string) {

@@ -42,9 +42,15 @@ var pinPad struct {
 	first   string
 }
 
-// openPIN puts the pad up, with after to run once the right PIN is in.
+// openPIN puts the pad up, with after to run once the right PIN is in. A pad already up for something
+// else keeps it: the PIN being typed is for what the person at the device asked for, not for a request
+// that arrived meanwhile.
 func openPIN(after func()) {
 	pinPad.mu.Lock()
+	if pinPad.open && time.Since(pinPad.at) <= pinIdle {
+		pinPad.mu.Unlock()
+		return
+	}
 	pinPad.open, pinPad.entry, pinPad.msg, pinPad.at, pinPad.after = true, "", "", time.Now(), after
 	pinPad.setting, pinPad.first = false, ""
 	pinPad.mu.Unlock()

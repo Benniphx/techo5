@@ -62,17 +62,25 @@ func TryPIN(pin string) (ok bool, wait time.Duration) {
 	if c.LockPIN == "" {
 		return true, 0
 	}
-	lock.mu.Lock()
-	defer lock.mu.Unlock()
 	now := time.Now()
 	blocked := time.Unix(c.LockBlockedUntil, 0)
 	if c.LockBlockedUntil > 0 && now.Before(blocked) {
 		return false, blocked.Sub(now)
 	}
-	if pinMatches(c.LockPIN, pin) {
+	// The hashing is the slow part, and is done before the lock is taken: Locked, asked on every
+	// frame and tap, does not wait behind it.
+	matched := pinMatches(c.LockPIN, pin)
+	upgraded := ""
+	if matched && !strings.HasPrefix(c.LockPIN, "pbkdf2:") {
+		upgraded = hashPIN(pin)
+	}
+	lock.mu.Lock()
+	defer lock.mu.Unlock()
+	c = config.Get().Security // the count as it is now: tries are one at a time from the pad, but not only
+	if matched {
 		lock.unlockedUntil = now.Add(unlockFor)
-		if !strings.HasPrefix(c.LockPIN, "pbkdf2:") {
-			if err := config.Set().Security().LockPIN(hashPIN(pin)); err != nil {
+		if upgraded != "" {
+			if err := config.Set().Security().LockPIN(upgraded); err != nil {
 				slog.Warn("settings lock: keeping the PIN the slow way failed", "err", err)
 			}
 		}
@@ -145,7 +153,7 @@ func validPIN(pin string) bool {
 // pinRounds is PBKDF2's rounds for a PIN: a few tenths of a second on the device, once per try, so a
 // copy of the config is slow to guess a PIN from. A PIN is only digits, so this slows a guesser down
 // rather than stops one; the config itself is only readable as root.
-const pinRounds = 100_000
+const pinRounds = 20_000
 
 // hashPIN is the PIN as it is kept: "pbkdf2:" then a random salt and PBKDF2-SHA-256 of the PIN, in hex.
 func hashPIN(pin string) string {
