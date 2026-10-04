@@ -197,6 +197,9 @@ var registered = []string{
 	"wifi_received",
 	"wifi_sent",
 	"wifi_signal",
+	"screen_clock_tap",
+	"screen_dashboard_return",
+	"screen_dashboard_tiles",
 }
 
 func TestEveryComponentStillRegisters(t *testing.T) {

@@ -110,6 +110,7 @@ type Display struct {
 	dateCol    *esphome.Select
 	answerTime *esphome.Select
 	turnStyle  *esphome.Select
+	clockTap   *esphome.Select // what a tap on the clock does (clock_tap.go)
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -135,7 +136,7 @@ type Display struct {
 	// The dashboard page: asked for, when last touched, whether the last frame drew it, whether the
 	// touchscreen was put in follow mode for it, and a finger that started at its left edge.
 	dash          bool
-	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not dashForget
+	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not dashForgotten
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool
@@ -330,6 +331,7 @@ func build() *Display {
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
 	d.turnStyle = turnStyleSelect(d.wake)
+	d.clockTap = clockTapSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
@@ -405,9 +407,12 @@ func turnShown(s scene) bool {
 // turnStyleSel is the Turn screen setting in Home Assistant.
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
+// clockTapSel is the Tap on the clock setting in Home Assistant.
+func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
+
 func (d *Display) Entities() []esphome.Entity {
 	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
-		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay}
+		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap}
 }
 
 // Restore lights the panel the way it was left. Before the framebuffer is opened: the backlight is
@@ -420,6 +425,7 @@ func (d *Display) Restore(c config.Config) {
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)
 	d.dateCol.Set(dateColors[dateColorIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
+	d.clockTap.Set(clockTaps[clockTapIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
@@ -1107,6 +1113,20 @@ func (d *Display) gesture(g touch.Gesture) {
 			}
 			transport(media.TransportToggle)
 			return
+		}
+		// The clock itself: a voice turn, unless the Tap on the clock setting says the dashboard, or
+		// nothing. A turn under way still takes the tap either way, as the way to stop or answer it,
+		// and with no dashboard set up a tap meant for one starts a turn rather than doing nothing.
+		if idle {
+			switch config.Get().Screen.ClockTap {
+			case "nothing":
+				return
+			case "dashboard":
+				if d.openDashboard() {
+					slog.Info("screen: dashboard by a tap on the clock")
+					return
+				}
+			}
 		}
 		voice.Get().Action()
 	case touch.SwipeLeft:

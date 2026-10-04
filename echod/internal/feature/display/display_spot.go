@@ -138,7 +138,7 @@ type Display struct {
 	// dashboard, a finger moving on it, a level being slid, the idle one put away until, and a finger
 	// held still on it.
 	dash          bool
-	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not spotDashForget
+	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not spotDashForgotten
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool

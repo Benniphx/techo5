@@ -25,6 +25,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // The round panel: everything is laid out from its center, and nothing may sit where the circle
@@ -434,7 +435,7 @@ func (r *roundRenderer) classicClockFace(s roundScene) {
 	now := s.now
 	r.alertPill(s.alerts.Here, clockPillY)
 	r.timeLine(now, 240)
-	r.centered(r.small, now.Format("Monday, January 2"), 290, colDim)
+	r.centered(r.small, locale.LongDate(now, screenLang()), 290, colDim)
 
 	line := 332
 	if weatherLine(s.weather) != "" {

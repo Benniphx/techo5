@@ -106,6 +106,11 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			settingRow{id: "follow", label: "Now playing follows", sub: "Another speaker's music, while this one is quiet", kind: ctlChoice, value: followText(st.demo)},
 			settingRow{id: "lyrics", label: "Lyrics", sub: "The words in time, looked up at LRCLIB", kind: ctlToggle, on: home.LyricsOn()},
 			settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()},
+		)
+		if hasClockTap {
+			rows = append(rows, settingRow{id: "clocktap", label: "Tap on the clock", sub: "Start Assist, open the dashboard, or nothing", kind: ctlChoice, value: clockTaps[clockTapIndex()].label})
+		}
+		rows = append(rows,
 			settingRow{label: "Weather", kind: ctlHeading},
 			settingRow{id: "weatherfx", label: "Weather animation", sub: "Rain, snow and storms move on the forecast", kind: ctlToggle, on: weatherAnimation.Load()},
 			settingRow{id: "alerts", label: "Weather alerts", sub: "The NWS's alerts for home, in the U.S.", kind: ctlToggle, on: home.AlertsOn()},
@@ -514,6 +519,8 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return pickerView{title: "Answer time", opts: answerTimeOptions(), cur: answerTimeIndex()}, true
 	case "turnstyle":
 		return pickerView{title: "Turn screen", opts: turnStyleOptions(), cur: turnStyleIndex()}, true
+	case "clocktap":
+		return pickerView{title: "Tap on the clock", opts: clockTapOptions(), cur: clockTapIndex()}, true
 	case "radarsrc":
 		return pickerView{title: "Radar source", opts: home.RadarSourceOptions(), cur: home.RadarSourceIndex()}, true
 	case "calendars":
@@ -649,6 +656,8 @@ func (d *Display) choose(id string, i int) {
 		setAnswerTime(d.answerTime, i)
 	case "turnstyle":
 		setTurnStyle(d.turnStyleSel(), i)
+	case "clocktap":
+		setClockTap(d.clockTapSel(), i)
 	case "radarsrc":
 		go home.Get().SetRadarSource(i)
 	case "calendars":
@@ -980,7 +989,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 	case "wholephoto":
 		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
-		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output":
+		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap":
 		d.openPicker(id)
 	}
 }

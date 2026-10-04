@@ -30,6 +30,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // The palette (walnut ground, amber accent, cream text, dim text, ember rules) is in sheet_widgets.go,
@@ -65,6 +66,7 @@ type scene struct {
 	drawn      dashboard.Drawn
 	dashScroll int
 	dashAdjust dashAdjusting // a level a finger is sliding
+	dashTiles  string        // the Dashboard tiles setting: "", "large" or "fill"
 
 	// bt is the Bluetooth audio state: the pairing page replaces everything while it is on, and a
 	// connected device is named in the footer.
@@ -621,7 +623,7 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 	r.text(clock, hour, x, base, cream)
 	r.text(ampmFace, ampm, x+hw+gap, base, dateColor(amber)) // a chosen date color takes the AM/PM with it
 
-	date := now.Format("Monday, January 2") + dateSuffix
+	date := locale.LongDate(now, screenLang()) + dateSuffix
 	x = across(r.width(r.small, date))
 	r.text(r.small, date, x, base+dateGap, dateColor(dim))
 	return image.Rect(x, base+dateGap-r.s(30), x+r.width(r.small, date), base+dateGap+r.s(10))
@@ -668,11 +670,7 @@ func (r *renderer) bigClock(s scene) {
 
 	suffix := ""
 	if next := s.alarms.Next; next != nil && next.At.Sub(s.now) < 24*time.Hour {
-		what := "Alarm"
-		if next.Snoozed {
-			what = "Snoozed until"
-		}
-		suffix = "  ·  " + what + " " + clockText(next.At)
+		suffix = "  ·  " + locale.Alarm(screenLang(), next.Snoozed) + " " + clockText(next.At)
 	}
 	// A tap on the date opens the calendar, with a finger's room around it.
 	// Bottom left keeps clear of the Call button, when it is on the clock.
@@ -780,8 +778,8 @@ func (r *renderer) cameraSoundTapped(p image.Point) bool {
 // part of it rather than as a picture somebody put there.
 const weatherMark = 46
 
-// conditionWords is home.ConditionWords, by its old name here.
-func conditionWords(c string) string { return home.ConditionWords(c) }
+// conditionWords is the weather condition in words, in the screen's language (lib/locale).
+func conditionWords(c string) string { return locale.Sky(c, screenLang()) }
 
 // cornerClock keeps the time in view while words have the screen.
 func (r *renderer) cornerClock(s scene) {
@@ -793,7 +791,7 @@ func (r *renderer) cornerClock(s scene) {
 // minutes rather than glances at: while music plays the big clock is gone, and the date went with it.
 func (r *renderer) cornerClockDated(s scene) {
 	r.cornerClock(s)
-	d := s.now.Format("Mon, Jan 2")
+	d := locale.ShortDate(s.now, screenLang())
 	r.text(r.tiny, d, r.w-r.margin-r.width(r.tiny, d), r.margin+r.s(54), dim)
 }
 
