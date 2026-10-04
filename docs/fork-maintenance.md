@@ -22,6 +22,10 @@ Merge conflicts and failing checks stop promotion. Maintainers need to resolve t
 the failure, then run the workflow again. A successful compile does not establish that changed audio,
 wake-word or device behavior works on hardware.
 
+An unchanged daily run still skips the build. If the last downloadable artifact has expired,
+select **Run workflow → force_build** for an explicit rebuild of the same stable source.
+This option is off by default and is never enabled by the daily schedule.
+
 ## Download a candidate
 
 1. Open the [workflow runs](https://github.com/Benniphx/techo5/actions/workflows/native-daily.yml).

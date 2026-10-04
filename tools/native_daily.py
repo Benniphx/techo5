@@ -22,7 +22,7 @@ def source_digest() -> str:
     return hashlib.sha256(git("ls-tree", "-r", "HEAD", "--", "echod").encode()).hexdigest()
 
 
-def prepare(tag: str, fetch_url: str, run_number: str) -> dict:
+def prepare(tag: str, fetch_url: str, run_number: str, force: bool = False) -> dict:
     if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", tag):
         raise ValueError("Latest release must be a stable Show vX.Y.Z tag")
     if not re.fullmatch(r"[0-9]+", run_number):
@@ -47,12 +47,12 @@ def prepare(tag: str, fetch_url: str, run_number: str) -> dict:
     if (Path(git("rev-parse", "--absolute-git-dir")) / "MERGE_HEAD").exists():
         git("commit", "-m", f"chore: merge stable {tag}")
     marker = {"release_tag": tag, "upstream_commit": upstream_commit, "source_digest": source_digest()}
-    changed = old != marker
+    changed = force or old != marker
     if changed:
         MARKER.parent.mkdir(exist_ok=True)
         MARKER.write_text(json.dumps(marker, indent=2) + "\n")
         git("add", str(MARKER))
-        git("commit", "-m", f"chore: track native build for {tag}")
+        git("commit", "--allow-empty", "-m", f"chore: track native build for {tag}")
     elif git("rev-parse", "HEAD") != base:
         # An unexpected merge without a changed marker must not be silently published.
         raise ValueError("Unexpected upstream history change requires manual review")
@@ -76,8 +76,9 @@ def latest_release() -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-number", required=True)
+    parser.add_argument("--force", action="store_true", help="Explicit manual rebuild when artifacts expired")
     args = parser.parse_args()
-    result = prepare(latest_release(), f"https://github.com/{UPSTREAM}.git", args.run_number)
+    result = prepare(latest_release(), f"https://github.com/{UPSTREAM}.git", args.run_number, force=args.force)
     output = os.environ.get("GITHUB_OUTPUT")
     if output:
         with open(output, "a", encoding="utf-8") as stream:

@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: '37 3 * * *'
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Rebuild unchanged source (for expired artifacts)'
+        type: boolean
+        default: false
 
 concurrency:
   group: native-daily
@@ -34,10 +39,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_NUMBER: ${{ github.run_number }}
+          FORCE_BUILD: ${{ github.event_name == 'workflow_dispatch' && inputs.force_build && 'true' || 'false' }}
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          python3 tools/native_daily.py --run-number "$RUN_NUMBER"
+          if [ "$FORCE_BUILD" = true ]; then
+            python3 tools/native_daily.py --run-number "$RUN_NUMBER" --force
+          else
+            python3 tools/native_daily.py --run-number "$RUN_NUMBER"
+          fi
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         if: steps.prepare.outputs.changed == 'true'
         with:

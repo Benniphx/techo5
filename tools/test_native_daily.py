@@ -43,11 +43,20 @@ class StableMergeTests(unittest.TestCase):
         self.run_git(repo, "add", path)
         self.run_git(repo, "commit", "-m", title)
 
-    def prepare(self, tag="v1.0.0"):
+    def prepare(self, tag="v1.0.0", force=False):
         def repo_git(*args):
             return self.run_git(self.fork, *args)
         with patch.object(daily, "git", repo_git), patch.object(daily, "MARKER", self.fork / ".github/native-build.json"):
-            return daily.prepare(tag, str(self.upstream), "1")
+            return daily.prepare(tag, str(self.upstream), "1", force=force)
+
+    def test_explicit_rebuild_creates_bundleable_history_without_changing_source(self):
+        first = self.prepare()
+        rebuilt = self.prepare(force=True)
+        self.assertTrue(rebuilt["changed"])
+        self.assertNotEqual(first["commit"], rebuilt["commit"])
+        self.assertEqual(first["source_digest"], rebuilt["source_digest"])
+        self.run_git(self.fork, "bundle", "create", str(self.root / "candidate.bundle"), "HEAD", "^" + rebuilt["base"])
+        self.assertFalse(self.prepare()["changed"])
 
     def test_first_build_then_skip_without_new_release(self):
         first = self.prepare()
