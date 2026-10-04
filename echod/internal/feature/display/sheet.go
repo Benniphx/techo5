@@ -16,6 +16,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/bluetooth"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/dlna"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/firmware"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
@@ -162,15 +163,16 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 }
 
 // withStreaming adds AirPlay and Spotify Connect to the Sound card's rows, where the device has them
-// (feature/streaming).
+// (feature/streaming), and DLNA, which every device has (feature/dlna).
 func withStreaming(rows []settingRow) []settingRow {
-	if !streaming.Here {
-		return rows
-	}
 	c := config.Get().Streaming
+	if streaming.Here {
+		rows = append(rows,
+			settingRow{id: "airplay", label: "AirPlay", sub: "Play to it from an iPhone, iPad or Mac", kind: ctlToggle, on: c.AirPlay},
+			settingRow{id: "spotify", label: "Spotify Connect", sub: "Play to it from the Spotify app (Premium)", kind: ctlToggle, on: c.Spotify})
+	}
 	return append(rows,
-		settingRow{id: "airplay", label: "AirPlay", sub: "Play to it from an iPhone, iPad or Mac", kind: ctlToggle, on: c.AirPlay},
-		settingRow{id: "spotify", label: "Spotify Connect", sub: "Play to it from the Spotify app (Premium)", kind: ctlToggle, on: c.Spotify})
+		settingRow{id: "dlna", label: "DLNA", sub: "Play to it from music apps and servers", kind: ctlToggle, on: c.DLNA})
 }
 
 // securityRows are the Privacy & Security card's: how the device can be reached, and how it reaches
@@ -887,6 +889,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		streaming.Get().SetAirPlay(!config.Get().Streaming.AirPlay)
 	case "spotify":
 		streaming.Get().SetSpotify(!config.Get().Streaming.Spotify)
+	case "dlna":
+		dlna.Get().Set(!config.Get().Streaming.DLNA)
 	case "sunface":
 		if err := config.Set().Alarms().SunriseFace(!config.Get().Alarms.SunriseFace); err != nil {
 			slog.Warn("saving the sun's face failed", "err", err)

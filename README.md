@@ -98,6 +98,14 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
 </tr>
 </table>
 
+- 🎶 **Now playing follows another speaker, and lyrics** (v1.0.0). Now playing can follow another of
+  Home Assistant's players, a Sonos in the same room say: its song and cover show while the device
+  plays nothing of its own, and the buttons control it. A Lyrics switch (off by default) shows the
+  words in time with the music, from the free LRCLIB database, for Music Assistant and followed
+  players. [docs/setup.md](docs/setup.md#6-night-and-the-screen)
+- 📡 **DLNA, and FLAC** (v1.0.0). Every device can be a DLNA speaker that music apps and servers play
+  to (BubbleUPnP, Jellyfin, Plex, a NAS), off until you turn it on. Streams in FLAC now play on the
+  device too, alongside MP3 and WAV. [docs/setup.md](docs/setup.md#5-music)
 - 📲 **AirPlay and Spotify Connect** (v0.9.25, new and untested). The Show and the Dot can be a
   speaker other apps play to, under the device's own name: AirPlay from an iPhone, iPad or Mac, and
   Spotify Connect from the Spotify app (Premium). Both are off until you turn them on, on the screen,

@@ -36,7 +36,9 @@ for T in iptables-legacy ip6tables-legacy; do
 		# feature/streaming pins these (airplay.go, spotify.go).
 		$T -A $CHAIN -p tcp --dport 5000 -j ACCEPT &&
 		$T -A $CHAIN -p udp --dport 6001:6010 -j ACCEPT &&
-		$T -A $CHAIN -p tcp --dport 4070 -j ACCEPT
+		$T -A $CHAIN -p tcp --dport 4070 -j ACCEPT &&
+		# feature/dlna: SSDP searches (its HTTP side is on 8181).
+		$T -A $CHAIN -p udp --dport 1900 -j ACCEPT
 	}; then
 		$T -F $CHAIN
 		ok=

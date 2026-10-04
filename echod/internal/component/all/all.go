@@ -23,6 +23,7 @@ import (
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/detect"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/diag"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/display"
+	_ "github.com/HuskerMinion/techo5/echod/internal/feature/dlna"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/feedback"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/firmware"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/hastate"

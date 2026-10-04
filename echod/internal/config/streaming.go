@@ -6,12 +6,20 @@ package config
 type Streaming struct {
 	AirPlay bool `json:"airplay,omitempty"`
 	Spotify bool `json:"spotify,omitempty"`
+
+	// DLNA makes the device a DLNA renderer (feature/dlna): apps and music servers on the network send
+	// it songs. Off on a new device, as the others are.
+	DLNA bool `json:"dlna,omitempty"`
 }
 
 type StreamingWriter struct{ st *Store }
 
 func (w StreamingWriter) AirPlay(v bool) error {
 	return w.st.Update(func(c *Config) { c.Streaming.AirPlay = v })
+}
+
+func (w StreamingWriter) DLNA(v bool) error {
+	return w.st.Update(func(c *Config) { c.Streaming.DLNA = v })
 }
 
 func (w StreamingWriter) Spotify(v bool) error {

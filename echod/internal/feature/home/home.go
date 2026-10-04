@@ -771,7 +771,10 @@ func (f *Feature) Stop() {
 const (
 	AirPlayName = "AirPlay"
 	SpotifyName = "Spotify"
+	DLNAName    = "DLNA"
 )
 
 // Receiver is whether a received track's name is one of the receivers'.
-func Receiver(from string) bool { return from == AirPlayName || from == SpotifyName }
+func Receiver(from string) bool {
+	return from == AirPlayName || from == SpotifyName || from == DLNAName
+}
