@@ -1,4 +1,4 @@
-//go:build !dot
+//go:build !dot && !panel
 
 // Package screen owns the panel of a device with a screen (the Echo Show 5, the Echo Spot): the kernel framebuffer it is painted through and the
 // backlight that lights it.
