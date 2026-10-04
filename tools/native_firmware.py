@@ -83,8 +83,8 @@ def check_boot(path):
 
 
 def required_assets(version):
-    if not re.fullmatch(r'v1\.0\.[0-9]+', version):
-        raise ValueError('Expected independent native v1.0.N version')
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-realtime\.[1-9][0-9]*', version):
+        raise ValueError('Expected upstream-based vX.Y.Z-realtime.N version')
     return {'echod-arm', 'build-info.json', f'techo5-rootfs-{version}.tar.gz',
             f'techo5-boot-{version}.img', f'techo5-boot-checkers-{version}.img'}
 
@@ -179,6 +179,8 @@ def prepare(directory, version, commit):
         raise ValueError('Candidate metadata/key does not match trusted release inputs')
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', info.get('release_tag', '')):
         raise ValueError('Invalid upstream stable version')
+    if version.split('-realtime.', 1)[0] != info['release_tag']:
+        raise ValueError('Realtime Voice version does not match its upstream base')
     if not re.fullmatch('[a-f0-9]{40}', info.get('upstream_commit', '')):
         raise ValueError('Invalid upstream source commit')
     wanted = expected - {'SHA256SUMS', 'build-info.json'}
@@ -205,7 +207,7 @@ def prepare(directory, version, commit):
     manifest = {'version': version, 'binaries': {'arm': entries['echod-arm']},
                 'rootfs': {'arm': entries[f'techo5-rootfs-{version}.tar.gz']},
                 'assets': {name: entry for name, entry in entries.items() if name.endswith('.img') or name == 'build-info.json'},
-                'title': f'EXPERIMENTAL native Realtime {version} (upstream {info["release_tag"]})',
+                'title': f'EXPERIMENTAL Realtime Voice {version} (upstream {info["release_tag"]})',
                 'notes': 'Optional paid cloud voice fork. New image boot/OTA acceptance pending. Not upstream supported.',
                 'release_url': f'https://github.com/{REPO}/releases/tag/{version}'}
     (directory / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

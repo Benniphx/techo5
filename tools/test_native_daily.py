@@ -1,6 +1,7 @@
 """Exercise actual Git histories: idempotence, preservation and safe failures."""
 
 import importlib.util
+import json
 import subprocess
 import tempfile
 import unittest
@@ -54,11 +55,11 @@ class StableMergeTests(unittest.TestCase):
         first = self.prepare()
         second = self.prepare(published=False, run_number="2")
         self.assertTrue(second["changed"])
-        self.assertEqual(first["version"], "v1.0.1")
-        self.assertEqual(second["version"], "v1.0.2")
+        self.assertEqual(first["version"], "v1.0.0-realtime.1")
+        self.assertEqual(second["version"], "v1.0.0-realtime.2")
         self.assertNotEqual(first["commit"], second["commit"])
         self.assertFalse(self.prepare(run_number="3")["changed"])
-        self.assertEqual(self.prepare(run_number="4")["version"], "v1.0.2")
+        self.assertEqual(self.prepare(run_number="4")["version"], "v1.0.0-realtime.2")
 
     def test_rootfs_or_installer_changes_rebuild_but_readme_does_not(self):
         self.prepare()
@@ -75,10 +76,10 @@ class StableMergeTests(unittest.TestCase):
             error = urllib.error.HTTPError("https://api.github.com", status, "test", {}, None)
             with patch.object(daily.urllib.request, "urlopen", side_effect=error):
                 if status == 404:
-                    self.assertFalse(daily.release_published("v1.0.1"))
+                    self.assertFalse(daily.release_published("v1.0.0-realtime.1"))
                 else:
                     with self.assertRaises(urllib.error.HTTPError):
-                        daily.release_published("v1.0.1")
+                        daily.release_published("v1.0.0-realtime.1")
             error.close()
 
     def test_explicit_rebuild_creates_bundleable_history_without_changing_source(self):
@@ -87,6 +88,7 @@ class StableMergeTests(unittest.TestCase):
         self.assertTrue(rebuilt["changed"])
         self.assertNotEqual(first["commit"], rebuilt["commit"])
         self.assertEqual(first["source_digest"], rebuilt["source_digest"])
+        self.assertEqual("v1.0.0-realtime.2", rebuilt["version"])
         self.run_git(self.fork, "bundle", "create", str(self.root / "candidate.bundle"), "HEAD", "^" + rebuilt["base"])
         self.assertFalse(self.prepare()["changed"])
 
@@ -105,6 +107,7 @@ class StableMergeTests(unittest.TestCase):
         self.run_git(self.upstream, "tag", "v1.0.1")
         result = self.prepare("v1.0.1")
         self.assertTrue(result["changed"])
+        self.assertEqual("v1.0.1-realtime.1", result["version"])
         self.assertEqual("stable two", (self.fork / "echod/base").read_text())
         self.assertEqual("native extension", (self.fork / "echod/native").read_text())
         self.assertFalse(self.prepare("v1.0.1")["changed"])
@@ -127,6 +130,30 @@ class StableMergeTests(unittest.TestCase):
         self.assertTrue(self.prepare("v1.0.1")["changed"])
         self.assertEqual("trusted workflow", (self.fork / ".github/workflows/build.yml").read_text())
         self.assertFalse((self.fork / ".github/workflows/new.yml").exists())
+
+    def test_revisions_do_not_depend_on_workflow_run_number(self):
+        self.assertEqual("v1.0.0-realtime.1", self.prepare(run_number="100")["version"])
+        self.assertEqual("v1.0.0-realtime.2", self.prepare(force=True, run_number="100")["version"])
+        for revision in range(3, 11):
+            self.assertEqual(f"v1.0.0-realtime.{revision}", self.prepare(force=True)["version"])
+
+    def test_legacy_numbering_migrates_once_then_skips(self):
+        self.prepare()
+        marker = self.fork / ".github/native-build.json"
+        previous = json.loads(marker.read_text())
+        previous.update(firmware_schema=1, version="v1.0.4")
+        self.commit_file(self.fork, str(marker.relative_to(self.fork)), json.dumps(previous), "legacy version")
+        self.assertEqual("v1.0.0-realtime.1", self.prepare()["version"])
+        self.assertFalse(self.prepare()["changed"])
+
+    def test_realtime_marker_with_wrong_base_is_rejected(self):
+        self.prepare()
+        marker = self.fork / ".github/native-build.json"
+        previous = json.loads(marker.read_text())
+        previous["version"] = "v1.0.1-realtime.1"
+        self.commit_file(self.fork, str(marker.relative_to(self.fork)), json.dumps(previous), "bad version")
+        with self.assertRaisesRegex(ValueError, "version.*upstream"):
+            self.prepare(force=True)
 
     def test_dirty_checkout_is_rejected(self):
         (self.fork / "echod/native").write_text("user edit")

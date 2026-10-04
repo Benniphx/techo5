@@ -1,4 +1,4 @@
-# Experimental native Realtime firmware
+# Experimental TECHO5 Realtime Voice firmware
 
 Download the [latest fork release](https://github.com/Benniphx/techo5/releases/latest).
 It contains the complete Alpine root filesystem with the native OpenAI Realtime daemon,
@@ -24,10 +24,18 @@ The optional Spotify Connect helper is not included. Boot images contain no SSH
 key. The root filesystem contains no OpenAI key, Home Assistant token, personal configuration or
 vendor drivers; installation retains the target device's own driver tree.
 
-Fork versions are **`v1.0.<daily workflow run number>`**. This is an independent, increasing
-firmware sequence, not TECHO5's upstream version or a claim of stable hardware support.
-Release notes and `build-info.json` record the upstream stable version and exact source commit.
-A manual rebuild gets a new version. Underscore suffixes alone cannot order OTA upgrades.
+Fork versions match their upstream stable base: **`v0.9.30-realtime.1`** means TECHO5 v0.9.30
+with **Realtime Voice**, revision 1. A fork fix or explicit rebuild increments the revision
+(`v0.9.30-realtime.2`); a new upstream stable release starts at revision 1
+(`v0.9.31-realtime.1`). The exact upstream and fork source commits remain in `build-info.json`.
+The hyphen suffix gives the updater and Home Assistant meaningful upgrade ordering; an underscore
+suffix alone would not. Realtime Voice remains experimental, regardless of the upstream base.
+
+The earlier **v1.0.4** release used independent numbering. It remains available as history.
+Devices running it need a **one-time explicit rootfs migration** to the upstream-based series using
+the procedure below: the updater correctly regards v0.9.30-realtime.1 as older than v1.0.4.
+Downgrade protection is not bypassed. Once migrated, later Realtime Voice revisions and upstream
+bases sort normally on this fork's feed.
 
 ## Fresh installation on an unlocked Show 5
 

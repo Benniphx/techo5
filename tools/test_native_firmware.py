@@ -24,7 +24,7 @@ class FirmwareTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.version = 'v1.0.10'
+        self.version = 'v0.9.30-realtime.10'
         self.commit = 'a' * 40
         self.daemon = self.root / 'echod-arm'
         self.daemon.write_bytes(b'arm daemon fixture ' + firmware.NATIVE_KEY.encode() +
@@ -95,9 +95,9 @@ class FirmwareTests(unittest.TestCase):
         manifest = json.loads((self.root / 'manifest.json').read_text())
         self.assertEqual(manifest['version'], self.version)
         self.assertIn('arm', manifest['rootfs'])
-        self.assertEqual(set(manifest['assets']), {'build-info.json', 'techo5-boot-v1.0.10.img', 'techo5-boot-checkers-v1.0.10.img'})
+        self.assertEqual(set(manifest['assets']), {'build-info.json', 'techo5-boot-v0.9.30-realtime.10.img', 'techo5-boot-checkers-v0.9.30-realtime.10.img'})
         for entry in [*manifest['assets'].values(), manifest['rootfs']['arm'], manifest['binaries']['arm']]:
-            self.assertTrue(entry['url'].startswith('https://github.com/Benniphx/techo5/releases/download/v1.0.10/'))
+            self.assertTrue(entry['url'].startswith('https://github.com/Benniphx/techo5/releases/download/v0.9.30-realtime.10/'))
 
     def test_publisher_rejects_extra_file_mismatched_commit_and_tampering(self):
         with self.stage(), patch.object(firmware, 'check_boot'):
@@ -109,6 +109,16 @@ class FirmwareTests(unittest.TestCase):
             (self.root / 'unexpected').unlink()
             self.daemon.write_bytes(self.daemon.read_bytes() + b'tampered')
             with self.assertRaisesRegex(ValueError, 'checksums'):
+                firmware.prepare(self.root, self.version, self.commit)
+
+    def test_publisher_rejects_version_with_wrong_upstream_base(self):
+        with self.stage(), patch.object(firmware, 'check_boot'):
+            path = self.root / 'build-info.json'
+            info = json.loads(path.read_text())
+            info['release_tag'] = 'v0.9.29'
+            path.write_text(json.dumps(info))
+            firmware.checksums(self.root)
+            with self.assertRaisesRegex(ValueError, 'version.*upstream'):
                 firmware.prepare(self.root, self.version, self.commit)
 
     def test_publisher_rejects_asset_symlink(self):
@@ -132,7 +142,7 @@ class FirmwareTests(unittest.TestCase):
         public = subprocess.check_output(['openssl', 'pkey', '-inform', 'DER', '-in', str(private),
                                           '-pubout', '-outform', 'DER'])[-32:]
         private.unlink()
-        payload = b'{"version":"v1.0.10"}\n'
+        payload = b'{"version":"v0.9.30-realtime.10"}\n'
         (self.root / 'manifest.json').write_bytes(payload)
         with patch.object(firmware, 'NATIVE_KEY', base64.b64encode(public).decode()), \
                 patch.dict(os.environ, {'TECHO5_NATIVE_SIGN_KEY': base64.b64encode(seed).decode()}):
@@ -154,10 +164,10 @@ class FirmwareTests(unittest.TestCase):
         self.assertFalse((self.root / 'manifest.json.sig').exists())
 
     def test_versions_must_rank_without_ignored_build_suffix(self):
-        for version in ('v0.9.30_native.1', 'v1.0.2-rc.1', 'v1.0.2;evil', 'v1.0.2.3'):
+        for version in ('v0.9.30_native.1', 'v1.0.2-rc.1', 'v1.0.2;evil', 'v1.0.2.3', 'v1.0.4', 'v0.9.30-realtime.0', 'v0.9.30-realtime.01'):
             with self.assertRaises(ValueError):
                 firmware.required_assets(version)
-        self.assertEqual(len(firmware.required_assets('v1.0.11')), 5)
+        self.assertEqual(len(firmware.required_assets('v0.9.30-realtime.11')), 5)
 
 
 if __name__ == '__main__':

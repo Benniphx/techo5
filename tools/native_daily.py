@@ -39,6 +39,9 @@ def prepare(tag: str, fetch_url: str, run_number: str, force: bool = False,
     git("fetch", "--no-tags", fetch_url, f"refs/tags/{tag}:{ref}")
     upstream_commit = git("rev-parse", f"{ref}^{{commit}}")
     old = json.loads(MARKER.read_text()) if MARKER.exists() else {}
+    old_version = re.fullmatch(r"(v[0-9]+\.[0-9]+\.[0-9]+)-realtime\.([1-9][0-9]*)", old.get("version", ""))
+    if old.get("firmware_schema") == 2 and (not old_version or old_version[1] != old.get("release_tag")):
+        raise ValueError("Previous Realtime Voice version does not match its upstream base")
     # Never follow an older release or silently accept a retagged release.
     previous = old.get("upstream_commit")
     if previous:
@@ -52,9 +55,10 @@ def prepare(tag: str, fetch_url: str, run_number: str, force: bool = False,
     if (Path(git("rev-parse", "--absolute-git-dir")) / "MERGE_HEAD").exists():
         git("commit", "-m", f"chore: merge stable {tag}")
     marker = {"release_tag": tag, "upstream_commit": upstream_commit, "source_digest": source_digest(),
-              "firmware_schema": 1}
+              "firmware_schema": 2}
     changed = force or not published or any(old.get(key) != value for key, value in marker.items())
-    version = f"v1.0.{run_number}" if changed else old["version"]
+    revision = int(old_version[2]) + 1 if old_version and old_version[1] == tag else 1
+    version = f"{tag}-realtime.{revision}" if changed else old["version"]
     marker["version"] = version
     if changed:
         MARKER.parent.mkdir(exist_ok=True)
@@ -70,7 +74,7 @@ def prepare(tag: str, fetch_url: str, run_number: str, force: bool = False,
 
 def release_published(version: str) -> bool:
     """A failed publisher after promotion must be retried on the next daily run."""
-    if not re.fullmatch(r"v1\.0\.[0-9]+", version):
+    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+-realtime\.[1-9][0-9]*", version):
         return False
     request = urllib.request.Request(
         f"https://api.github.com/repos/Benniphx/techo5/releases/tags/{version}",

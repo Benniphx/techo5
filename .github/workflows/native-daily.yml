@@ -224,7 +224,7 @@ jobs:
           import sys
           from pathlib import Path
           info = json.loads(Path('release/build-info.json').read_text())
-          notes = f"""Experimental native OpenAI Realtime firmware {sys.argv[1]}, based on upstream {info['release_tag']}.
+          notes = f"""Experimental TECHO5 Realtime Voice firmware {sys.argv[1]}, based on upstream {info['release_tag']}.
 
           Includes the full ARM root filesystem and keyless bootstrap images for Echo Show 5 first generation (checkers) and second generation (cronos). Bootstrap kernels/initramfs are the reviewed upstream v0.7.16 bytes, recorded in build-info.json and signed by this fork's independent release key.
 
@@ -239,7 +239,7 @@ jobs:
           # Atomic ref creation fails if ANY tag already exists. --target alone
           # would silently use an existing tag pointing at unrelated history.
           gh api "repos/$REPO/git/refs" --method POST -f ref="refs/tags/$VERSION" -f sha="$SOURCE_COMMIT" > /dev/null
-          gh release create "$VERSION" --repo "$REPO" --target "$SOURCE_COMMIT" --draft --title "EXPERIMENTAL native Realtime $VERSION" --notes-file release-notes.md
+          gh release create "$VERSION" --repo "$REPO" --target "$SOURCE_COMMIT" --draft --prerelease=false --title "EXPERIMENTAL Realtime Voice $VERSION" --notes-file release-notes.md
           gh release upload "$VERSION" release/* --repo "$REPO"
           # Draft publication is last: latest never points at incomplete assets.
           gh release edit "$VERSION" --repo "$REPO" --draft=false --latest

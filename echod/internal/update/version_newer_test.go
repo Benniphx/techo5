@@ -20,6 +20,14 @@ func TestNewer(t *testing.T) {
 		{"v1.0.10", "v1.0.9", true},
 		{"v1.0.1", "v1.0.2", false},
 		{"v0.9.30", "v1.0.1", false},
+		{"v0.9.30-realtime.1", "v0.9.25_nativeha.2", true},
+		{"v0.9.30-realtime.2", "v0.9.30-realtime.1", true},
+		{"v0.9.30-realtime.10", "v0.9.30-realtime.9", true},
+		{"v0.9.31-realtime.1", "v0.9.30-realtime.10", true},
+		{"v0.9.30-realtime.1", "v0.9.31-realtime.1", false},
+		{"v0.9.30-realtime.1", "v0.9.30-realtime.2", false},
+		{"v0.9.30-realtime.1", "v0.9.30-realtime.1", false},
+		{"v0.9.30-realtime.1", "v1.0.4", false},
 	} {
 		if got := Newer(c.offered, c.running); got != c.want {
 			t.Errorf("Newer(%s, %s) = %v", c.offered, c.running, got)

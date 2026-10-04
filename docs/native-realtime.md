@@ -1,4 +1,4 @@
-# Native Realtime voice assistant (experimental)
+# TECHO5 Realtime Voice assistant (experimental)
 
 This optional mode connects TECHO5 directly to OpenAI's Realtime API. It uses the existing microphone,
 speaker, local wake detection and voice screen; no additional server, Wyoming speech services or

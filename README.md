@@ -1,4 +1,4 @@
-# TECHO5 Native Realtime — experimental fork
+# TECHO5 Realtime Voice — experimental fork
 
 This is **[Benniphx/techo5](https://github.com/Benniphx/techo5)**, an experimental fork of
 **[HuskerMinion's TECHO5](https://github.com/HuskerMinion/techo5)**. It adds optional native
@@ -20,11 +20,12 @@ responses. Other models have no native Realtime hardware acceptance claim.
 > **Downloads and updates:** [fork releases](https://github.com/Benniphx/techo5/releases/latest)
 > provide a complete native root filesystem, both Show 5 boot images and an Ed25519-signed manifest.
 > The Show firmware follows this fork's **native-stable** update channel and signing key. Releases
+> use the upstream base plus a Realtime Voice revision, such as **`v0.9.30-realtime.1`**, and
 > are experimental: the newly packaged firmware still needs install/restart/rollback hardware
 > acceptance. Existing upstream installations need an explicit migration; their stock update
 > channel cannot install this fork.
 
-**[Native Realtime setup and limits](docs/native-realtime.md)** ·
+**[Realtime Voice setup and limits](docs/native-realtime.md)** ·
 **[Daily builds, downloads and maintenance](docs/fork-maintenance.md)** ·
 **[Install or migrate the fork](docs/native-firmware.md)** ·
 **[Latest experimental firmware](https://github.com/Benniphx/techo5/releases/latest)** ·

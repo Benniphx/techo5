@@ -19,11 +19,18 @@ cannot trust this new publisher automatically. After explicit migration, the nat
 follows **native-stable**, its own signed release feed; daily publication does not enable device
 automatic installation. Complete-image physical boot, restart and rollback acceptance remain open.
 
-Versions are independent **`v1.0.<workflow run number>`**; release notes/build metadata identify the
-upstream base and exact tested source. The numeric sequence gives Home Assistant meaningful upgrade
-ordering, unlike earlier `_native.<run>` daemon-only labels. GitHub releases are deliberately marked
-as regular releases for the `/latest/download` feed, with **EXPERIMENTAL** in the title and notes.
+Versions follow **`v<upstream stable version>-realtime.<fork revision>`**, for example
+**`v0.9.30-realtime.1`**. Realtime Voice fixes/rebuilds increment the revision; a new upstream stable
+base resets it to 1. Both firmware and Home Assistant compare the revisions numerically, including
+9 → 10. Release notes/build metadata retain the exact upstream and fork source commits.
+GitHub releases are deliberately marked as regular releases and explicitly selected as latest for
+the `/latest/download` feed, with **EXPERIMENTAL Realtime Voice** in the title and notes.
 They are not a claim of upstream support or stable hardware acceptance.
+
+The initial v1.0.4 publication is retained. A device already running that higher version needs
+[explicit rootfs migration](native-firmware.md#migrating-a-show-already-running-techo5-linux) once;
+OTA downgrade protection remains intact. The daily build migrates the old marker to the aligned
+scheme once, then skips unchanged sources as before.
 
 ## Daily stable check and publication
 

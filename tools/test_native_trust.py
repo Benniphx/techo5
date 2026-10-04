@@ -4,7 +4,7 @@ import importlib.util
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import techo5lib
 
@@ -25,6 +25,21 @@ class NativeInstallerTrustTests(unittest.TestCase):
         signature = (FIXTURES / "upstream-v0.9.30-manifest.json.sig").read_bytes()
         with self.assertRaises(techo5lib.Fail):
             techo5lib.verify_manifest(message, signature)
+
+    def test_realtime_release_selects_each_signed_board_image(self):
+        spec = importlib.util.spec_from_file_location("install_show", Path(__file__).with_name("install-show.py"))
+        installer = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(installer)
+        for board, prefix in (("checkers", "techo5-boot-checkers"), ("cronos", "techo5-boot")):
+            with self.subTest(board=board), patch.object(installer, "fetch_json") as fetch:
+                release = Mock(version="v0.9.30-realtime.1")
+                release.signed.return_value = True
+                expected = f"{prefix}-v0.9.30-realtime.1.img"
+                release.asset.return_value = expected
+                self.assertEqual(expected, installer.boot_image(release, "downloads", board))
+                release.signed.assert_called_once_with(expected)
+                release.asset.assert_called_once_with(expected)
+                fetch.assert_not_called()
 
     def test_unsupported_show8_stops_before_download_or_flash(self):
         spec = importlib.util.spec_from_file_location("install_show", Path(__file__).with_name("install-show.py"))
