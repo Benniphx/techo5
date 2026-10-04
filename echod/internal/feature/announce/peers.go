@@ -105,7 +105,7 @@ func (f *Feature) advertise(ctx context.Context) {
 		// is what a peer is known by (nameOf).
 		label := layout.CutName(name, layout.LabelMax)
 		srv, err := zeroconf.RegisterProxy(label, service, domain, web.Port, label, addrs,
-			[]string{"name=" + name}, nil)
+			[]string{"name=" + name}, metrics.MulticastInterfaces())
 		if err != nil {
 			slog.Debug("announce: advertising failed", "err", err)
 			if !pause(ctx, advertiseRetry) {
@@ -160,7 +160,11 @@ func (f *Feature) browse(ctx context.Context) {
 	// ever assigned — so every device decided it was the only one in the house and played its own
 	// announcements to itself. The supervisor caught it and restarted the feature every few seconds,
 	// which is why nothing looked broken from outside.
-	if err := zeroconf.Browse(look, service, domain, found); err != nil {
+	var opts []zeroconf.ClientOption
+	if ifaces := metrics.MulticastInterfaces(); len(ifaces) > 0 {
+		opts = append(opts, zeroconf.SelectIfaces(ifaces))
+	}
+	if err := zeroconf.Browse(look, service, domain, found, opts...); err != nil {
 		slog.Warn("announce: looking for the other devices failed", "err", err)
 		closeQuietly(found)
 		<-done

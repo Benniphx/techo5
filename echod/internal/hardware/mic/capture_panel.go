@@ -33,7 +33,7 @@ const (
 	envWindow   = Rate / envBlock // blocks compared at once, one second
 	maxLag      = Rate / envBlock // a second of lag, in blocks
 	lead        = 2 * envBlock    // 8 ms
-	minScore    = 0.5             // correlation a measurement needs to be believed
+	minScore    = 0.8             // correlation a measurement needs to be believed
 	moveAtLeast = envBlock * 2    // a smaller correction is jitter, not a different delay
 	driftLimit  = Rate / 8        // 125 ms: further than this from the writer, line up again
 	wantSettle  = 0.02            // how much of each read's view of the writer the average takes
@@ -169,6 +169,12 @@ func (c *socketCapture) measure() {
 		}
 	}
 	c.restart()
+	if lvl := level(spk[maxLag:]); lvl > -60 {
+		// How loud the speaker's own voice comes back, against how loud it was played: lower is more
+		// taken out before the daemon sees it, which is what a platform echo canceller does.
+		slog.Info("echo level", "played_db", math.Round(lvl), "heard_db", math.Round(level(mic)),
+			"score", math.Round(score*100)/100)
+	}
 	if score < minScore {
 		return
 	}
@@ -177,6 +183,12 @@ func (c *socketCapture) measure() {
 	// later, less the lead.
 	move := int64(best*envBlock) - lead
 	if abs64(move) < moveAtLeast {
+		return
+	}
+	// The delay is the whole path, measured from where the writer is, so it is never negative and
+	// never past what is searched. A faint echo that a platform canceller has already worked on can
+	// still correlate now and then at some other lag; moving there would walk the reference away.
+	if next := c.lag + move; next < 0 || next > maxLag*envBlock {
 		return
 	}
 	c.lag += move
@@ -215,6 +227,19 @@ func correlate(a, b []float64) float64 {
 		return 0
 	}
 	return ab / math.Sqrt(aa*bb)
+}
+
+// level is the mean loudness of a run of block levels, in dBFS.
+func level(env []float64) float64 {
+	var e float64
+	for _, v := range env {
+		e += v * v
+	}
+	e /= float64(len(env))
+	if e == 0 {
+		return -120
+	}
+	return 10 * math.Log10(e/(32768*32768))
 }
 
 func abs64(v int64) int64 {
