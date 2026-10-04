@@ -103,6 +103,10 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
   plays nothing of its own, and the buttons control it. A Lyrics switch (off by default) shows the
   words in time with the music, from the free LRCLIB database, for Music Assistant and followed
   players. [docs/setup.md](docs/setup.md#6-night-and-the-screen)
+- 👀 **Presence detection** (v1.0.0). The Show's and the Spot's camera can notice somebody near: a
+  Presence sensor for Home Assistant, and the screen goes out when the room has been empty a while and
+  comes back as you walk up. On the device only, nothing kept; off by default.
+  [docs/setup.md](docs/setup.md#6-night-and-the-screen)
 - 🔒 **A settings lock** (v1.0.0). Set a PIN and the Show and the Spot ask for it before their
   settings open; everything else keeps working for guests and kids. Off by default.
   [docs/setup.md](docs/setup.md#6-night-and-the-screen)

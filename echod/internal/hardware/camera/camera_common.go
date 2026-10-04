@@ -47,6 +47,16 @@ func (f *Frame) Image() *image.RGBA {
 	return f.rgba
 }
 
+// Luma is the frame as a w x h grid of brightness (0 to 255), read straight off the sensor's own
+// frame without developing the picture: enough to see something move, at a tiny fraction of the
+// work. Nil for a frame with nothing in it (one sent while the camera was held off).
+func (f *Frame) Luma(w, h int) []uint8 {
+	if f.raw == nil || w <= 0 || h <= 0 {
+		return nil
+	}
+	return lumaGrid(f.raw, w, h)
+}
+
 // level is the tone the frame was measured at, with f.mu held.
 func (f *Frame) level() tone {
 	if !f.toned {
@@ -62,6 +72,8 @@ type Camera struct {
 
 	mu      sync.Mutex
 	users   int
+	fast    int       // users that want every frame; the rest (AcquireSlow) take one every slowEvery
+	sent    time.Time // when the last frame went out, for the slow users
 	running bool
 	powered bool // the sensor is on (running, and not held off by the mute)
 	stop    chan struct{}
@@ -149,7 +161,28 @@ func Available() bool {
 // A muted device refuses: the mute button is the camera's off switch too. So does one whose shutter
 // is closed, on the devices that have one — there is nothing behind it to photograph, and saying so
 // is more use than powering the sensor up to stream a picture of a piece of plastic.
-func (c *Camera) Acquire() (release func(), err error) {
+func (c *Camera) Acquire() (release func(), err error) { return c.acquire(true) }
+
+// AcquireSlow is Acquire for a user that wants a frame now and then rather than every one: what
+// watches the room for somebody coming near. While only slow users hold the sensor, a frame goes out
+// every slowEvery, and the rest are not even copied; the exposure still follows every one.
+func (c *Camera) AcquireSlow() (release func(), err error) { return c.acquire(false) }
+
+// slowEvery is how often the slow users get a frame.
+const slowEvery = 500 * time.Millisecond
+
+// wanted says whether the frame the sensor just made goes out, and marks it sent if so.
+func (c *Camera) wanted(now time.Time) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.fast == 0 && now.Sub(c.sent) < slowEvery {
+		return false
+	}
+	c.sent = now
+	return true
+}
+
+func (c *Camera) acquire(fast bool) (release func(), err error) {
 	if !Available() {
 		return nil, errors.New("no camera on this device")
 	}
@@ -211,6 +244,9 @@ func (c *Camera) Acquire() (release func(), err error) {
 		return nil, c.wedged
 	}
 	c.users++
+	if fast {
+		c.fast++
+	}
 	if c.idle != nil {
 		c.idle.Stop()
 		c.idle = nil
@@ -235,6 +271,9 @@ func (c *Camera) Acquire() (release func(), err error) {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			c.users--
+			if fast {
+				c.fast--
+			}
 			if c.users == 0 {
 				c.idle = time.AfterFunc(linger, c.idleStop)
 			}
@@ -383,7 +422,7 @@ func (c *Camera) run(stop, stopped chan struct{}) {
 		}()
 		d.stream(halt, func(bayer []byte) {
 			d.autoExpose(bayer)
-			if d.skip() {
+			if d.skip() || !c.wanted(time.Now()) {
 				return
 			}
 			f := &Frame{At: time.Now(), raw: make([]byte, len(bayer))}

@@ -384,6 +384,7 @@ func build() *Display {
 	timer.Get().Changed.Listen(func(struct{}) { d.wake() })
 	onMissed(d.wake)
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
+	d.watchRoom()
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Asked.Listen(d.dashboardAsked)
 	assistant.SetScreen(d.showPage)
@@ -1722,6 +1723,15 @@ func (d *Display) frame() time.Duration {
 			return time.Minute
 		}
 		on = lit // the night may have just turned the panel back on: this frame is its first
+	}
+	d.mu.Lock()
+	sheetUp := d.sheet
+	d.mu.Unlock()
+	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen()
+	if d.awayTick(now, on, busy, night) {
+		d.mu.Lock()
+		on = d.on
+		d.mu.Unlock()
 	}
 	if !config.Get().Screen.Welcomed {
 		d.r.welcome(scene{now: now})

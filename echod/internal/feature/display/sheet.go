@@ -22,6 +22,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/sendspin"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
@@ -116,7 +117,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		if hasEqualizer {
 			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or a wave or bars that move with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
 		}
-		return rows, ""
+		return withPresence(rows), ""
 	case catSound:
 		mic := "Listening"
 		if st.muted {
@@ -525,6 +526,8 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return popupCalendarsPicker(), true
 	case "musicstrip":
 		return pickerView{title: "Now playing", opts: stripChoices(), cur: stripIndexShared()}, true
+	case "awayoff":
+		return pickerView{title: "Screen off when nobody is near", opts: awayLabels(), cur: awayIndex()}, true
 	case "follow":
 		_, names, cur := home.Get().FollowChoices()
 		if sv.st.demo {
@@ -674,6 +677,11 @@ func (d *Display) choose(id string, i int) {
 	case "waketone":
 		if tones := config.Labels(speaker.WakeTones()); i < len(tones) {
 			wakeword.Get().SetTone(0, tones[i])
+		}
+	case "awayoff":
+		if i >= 0 && i < len(awayChoices) {
+			m := awayChoices[i]
+			safe.Go("presence wait from the screen", func() { presence.Get().SetScreenOff(m) })
 		}
 	case "follow":
 		if entities, _, _ := home.Get().FollowChoices(); i < len(entities) {
@@ -896,6 +904,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		streaming.Get().SetSpotify(!config.Get().Streaming.Spotify)
 	case "dlna":
 		dlna.Get().Set(!config.Get().Streaming.DLNA)
+	case "presence":
+		safe.Go("presence from the screen", func() { presence.Get().SetOn(!config.Get().Presence.On) })
 	case "settingslock":
 		if security.LockSet() {
 			if err := security.Get().SetPIN(""); err != nil {
@@ -969,7 +979,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "wholephoto":
 		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
-	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
+	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output":
 		d.openPicker(id)
 	}

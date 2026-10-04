@@ -181,6 +181,14 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
   is drawn thin and in a dimmer red, so it doesn't light up a dark room.
+- **Presence detection** (Show and Spot, off by default; Settings → Display → Presence, or the
+  **Presence detection** switch in Home Assistant): the camera notices somebody moving near the device.
+  Home Assistant gets a **Presence** sensor (occupancy) for automations, and **Screen off when nobody
+  is near** (5 minutes to start with, or Never) puts the screen out once the room has been empty that
+  long and lights it again when somebody comes near. Never at night, and never during a conversation,
+  a call, an alarm or with the settings open. Nothing the camera sees is kept or sent: a couple of
+  times a second the newest frame is compared with the last as a small grid of brightness, on the
+  device. The mute button and the lens shutter stop it, and then the screen is left as it is.
 - **Settings lock** (Show and Spot, off by default): a PIN the device asks for before its settings
   open, so guests and children can use everything else without changing anything. Set it under
   Settings → Privacy & Security, on the setup page (Privacy), or with the

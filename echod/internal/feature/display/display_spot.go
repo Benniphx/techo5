@@ -291,6 +291,7 @@ func build() *Display {
 	alarm.Get().Changed.Listen(func(struct{}) { d.ringLights() })
 	remind.Get().Changed.Listen(func(struct{}) { d.reminderLights() })
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
+	d.watchRoom()
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	onMissed(d.wake)
 	hastate.Get().Changed.Listen(func(u hastate.Update) {
@@ -1155,6 +1156,12 @@ func (d *Display) frame() time.Duration {
 	}
 	d.mu.Unlock()
 
+	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen()
+	if d.awayTick(now, on, busy, inNight(now)) {
+		d.mu.Lock()
+		on = d.on
+		d.mu.Unlock()
+	}
 	if !on {
 		return time.Hour
 	}
