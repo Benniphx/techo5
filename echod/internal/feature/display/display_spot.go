@@ -1236,6 +1236,9 @@ func (d *Display) frame() time.Duration {
 	s.nowPlaying = s.phase == "idle" && d.showsNowPlaying()
 	if s.nowPlaying || (s.menuOpen && s.menuMode == modeRadio) {
 		s.radio = home.Get().Radio()
+		if s.radio.Followed {
+			s.playing, s.paused = s.radio.Playing, s.radio.Paused
+		}
 		if rows := radioRows(s.radio, s.playing || s.paused); s.radioSel >= len(rows) || s.radioSel < 0 {
 			s.radioSel = min(max(s.radioSel, 0), max(len(rows)-1, 0))
 			d.mu.Lock()

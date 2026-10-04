@@ -160,6 +160,10 @@ All of these are on the Show, under Settings → **Display**, and are entities i
 - **Clock format**, **Clock position** (center, or a smaller clock in a bottom corner so a photo
   stays in view) and **Date color**.
 - **Theme**, **Answer time** and **Now playing** (the full page, or a strip over the clock).
+- **Now playing follows** (also the **Now Playing follows** select in Home Assistant): another of Home
+  Assistant's media players, a Sonos in the same room for example. While this device plays nothing of
+  its own, Now Playing shows that player's song and cover, and its buttons control it. **Done** puts it
+  away until the next song without stopping it. Needs the home_assistant action (address and token).
 - **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines and
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted

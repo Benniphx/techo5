@@ -1060,11 +1060,11 @@ func (d *Display) gesture(g touch.Gesture) {
 			case at.In(closeX):
 				go d.endMusic()
 			case at.In(back):
-				media.Get().Transport(media.TransportPrevious)
+				transport(media.TransportPrevious)
 			case at.In(play):
-				media.Get().Transport(media.TransportToggle)
+				transport(media.TransportToggle)
 			case at.In(next):
-				media.Get().Transport(media.TransportNext)
+				transport(media.TransportNext)
 			case at.In(d.r.stripSong()):
 				d.mu.Lock()
 				d.stripFullUntil = time.Now().Add(stripFull)
@@ -1086,15 +1086,15 @@ func (d *Display) gesture(g touch.Gesture) {
 				case at.In(d.r.favButton()):
 					go d.favorite()
 				case at.In(back):
-					media.Get().Transport(media.TransportPrevious)
+					transport(media.TransportPrevious)
 				case at.In(next):
-					media.Get().Transport(media.TransportNext)
+					transport(media.TransportNext)
 				default:
-					media.Get().Transport(media.TransportToggle)
+					transport(media.TransportToggle)
 				}
 				return
 			}
-			media.Get().Transport(media.TransportToggle)
+			transport(media.TransportToggle)
 			return
 		}
 		voice.Get().Action()
@@ -1165,7 +1165,10 @@ func (d *Display) endMusic() {
 	// speaker sent a stop to Music Assistant's queue when it was the last remote. What a stop means for
 	// whoever has the music is home's to decide: a stream this device did not start is asked to stop, and
 	// its own is ended rather than paused.
-	if playing, paused := media.Get().ScreenState(); playing || paused {
+	if home.Following() {
+		// Another room's player: Done puts it away until its next track, and leaves it playing.
+		home.Get().DismissFollowed()
+	} else if playing, paused := media.Get().ScreenState(); playing || paused {
 		home.Get().Stop()
 	}
 	// And the page goes, as a swipe puts it away: a track somebody else is holding paused is still a
@@ -1213,7 +1216,7 @@ func (d *Display) putAway(rd home.Radio, wanted, playing bool) bool {
 // reason the page exists at all, so it is asked first: its audio never passes through this player's own
 // stream, which is what Playing() reports on.
 func (d *Display) nowPlaying() bool {
-	if media.Get().ExternalPlaying() {
+	if media.Get().ExternalPlaying() || home.Following() {
 		return true
 	}
 	if _, _, _, ok := media.Get().Held(); ok {
@@ -1858,6 +1861,9 @@ func (d *Display) frame() time.Duration {
 	}
 	if (s.showDrawer && s.drawerTab == drawerRadio) || wants {
 		s.radio = home.Get().Radio()
+		if s.radio.Followed {
+			s.playing, s.paused = s.radio.Playing, s.radio.Paused
+		}
 	}
 	s.nowPlaying = wants && !d.putAway(s.radio, wants, s.playing)
 	d.mu.Lock()

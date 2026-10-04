@@ -69,7 +69,13 @@ func musicState() (playing, paused bool) { return media.Get().ScreenState() }
 // and its own is ended rather than paused — so this asks home rather than working it out again here. The
 // gate used to be this player's own stream, which a carried one never satisfies: the row did nothing at
 // all while Music Assistant was playing.
-func stopMusic() { home.Get().Stop() }
+func stopMusic() {
+	if home.Following() {
+		home.Get().DismissFollowed() // another room's player: put away, not stopped
+		return
+	}
+	home.Get().Stop()
+}
 
 // doneAt is the face's Done: left of play and pause, at the same height, where a thumb finds it.
 const doneX, doneY, doneR = center - 88.0, 420.0, 25.0
@@ -85,7 +91,7 @@ func onDone(x, y int) bool {
 // work for a carried stream: this player's own stream is not what is playing, so asking it to pause
 // would do nothing at all.
 func togglePlay() {
-	media.Get().Transport(media.TransportToggle)
+	transport(media.TransportToggle)
 }
 
 // stepStation plays the station after (or before) the one playing, round the current list.
@@ -118,6 +124,9 @@ func (d *Display) showsNowPlaying() bool {
 		return true
 	}
 	if _, _, _, ok := media.Get().Held(); ok {
+		return true
+	}
+	if home.Following() {
 		return true
 	}
 	d.mu.Lock()

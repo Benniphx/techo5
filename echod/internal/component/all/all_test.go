@@ -90,6 +90,7 @@ var registered = []string{
 	"night_volume",
 	"noise_layer_1",
 	"noise_layer_2",
+	"now_playing_follows",
 	"phone",
 	"phone_answer",
 	"phone_hangup",

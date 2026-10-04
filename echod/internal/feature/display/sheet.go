@@ -101,6 +101,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		}
 		rows = append(rows,
 			settingRow{id: "musicstrip", label: "Now playing", sub: "Full page, or a strip over the clock", kind: ctlChoice, value: stripOptionText()},
+			settingRow{id: "follow", label: "Now playing follows", sub: "Another speaker's music, while this one is quiet", kind: ctlChoice, value: followText(st.demo)},
 			settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()},
 			settingRow{label: "Weather", kind: ctlHeading},
 			settingRow{id: "weatherfx", label: "Weather animation", sub: "Rain, snow and storms move on the forecast", kind: ctlToggle, on: weatherAnimation.Load()},
@@ -516,6 +517,12 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return popupCalendarsPicker(), true
 	case "musicstrip":
 		return pickerView{title: "Now playing", opts: stripChoices(), cur: stripIndexShared()}, true
+	case "follow":
+		_, names, cur := home.Get().FollowChoices()
+		if sv.st.demo {
+			names = demoPlayers(names)
+		}
+		return pickerView{title: "Now playing follows", opts: names, cur: cur}, len(names) > 0
 	case "screenlang":
 		return pickerView{title: "Screen language", opts: langOptions, cur: langIndex()}, true
 	case "newtimer":
@@ -659,6 +666,11 @@ func (d *Display) choose(id string, i int) {
 	case "waketone":
 		if tones := config.Labels(speaker.WakeTones()); i < len(tones) {
 			wakeword.Get().SetTone(0, tones[i])
+		}
+	case "follow":
+		if entities, _, _ := home.Get().FollowChoices(); i < len(entities) {
+			e := entities[i]
+			safe.Go("followed player from the screen", func() { home.Get().ChooseFollow(e) })
 		}
 	case "weather":
 		if entities, _, _ := home.Get().WeatherChoices(); i < len(entities) {
@@ -937,7 +949,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "wholephoto":
 		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
-	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
+	case "night", "atnight", "nightstyle", "clock", "clockstyle", "clockpos", "datecolor", "camtime", "answertime", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output":
 		d.openPicker(id)
 	}

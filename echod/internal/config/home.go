@@ -15,6 +15,11 @@ type Home struct {
 	// WeatherSources are the weather entities Home Assistant listed last, offered as choices.
 	WeatherSources []string `json:"weather_sources,omitempty"`
 
+	// FollowPlayer is another media_player Now Playing shows while this device plays nothing of its
+	// own; empty follows none. PlayerSources are the media players Home Assistant listed last.
+	FollowPlayer  string   `json:"follow_player,omitempty"`
+	PlayerSources []string `json:"player_sources,omitempty"`
+
 	// Location is a zone.* entity the rain map and weather alerts are centered on, for a device that
 	// is somewhere other than home (a family device in another house). Empty is Home Assistant's home.
 	Location string `json:"location,omitempty"`
@@ -253,6 +258,14 @@ func (w HomeWriter) DropIn(v bool) error {
 
 func (w HomeWriter) DoNotDisturb(v bool) error {
 	return w.st.Update(func(c *Config) { c.Home.DoNotDisturb = v })
+}
+
+func (w HomeWriter) FollowPlayer(entity string) error {
+	return w.st.Update(func(c *Config) { c.Home.FollowPlayer = entity })
+}
+
+func (w HomeWriter) PlayerSources(ids []string) error {
+	return w.st.Update(func(c *Config) { c.Home.PlayerSources = ids })
 }
 
 func (w HomeWriter) WeatherSources(ids []string) error {
