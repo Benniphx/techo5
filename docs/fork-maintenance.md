@@ -113,3 +113,14 @@ Standard public runner compute does not use private minutes. Temporary staging a
 need a bounded storage budget; repository footprint is not the account's remaining shared allowance.
 At the measured size, three daily full builds would retain about217 MiB in staging before expiry.
 Release assets provide the durable download path.
+
+## Realtime Voice version alignment — 2026-10-04
+
+The current [v0.9.30-realtime.1 release](https://github.com/Benniphx/techo5/releases/tag/v0.9.30-realtime.1)
+uses the visible upstream-base scheme described above. Its
+[full build and publication](https://github.com/Benniphx/techo5/actions/runs/37219645371) passed.
+Anonymous latest-feed downloads verified the fork signature, all signed sizes/hashes and metadata,
+both board boot selections, and matching rootfs/compiled-daemon versions. The rootfs stamp identifies
+v0.9.30-realtime.1/source f986881, based on upstream v0.9.30/4d914752. This does not establish physical
+install, restart, rollback or spoken regression acceptance. The historical v1.0.4 release is retained;
+installed devices require the explicit one-time migration described in the firmware guide.
