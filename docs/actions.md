@@ -1269,6 +1269,33 @@ data:
     ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample you@your-pc
 ```
 
+## Set the settings lock's PIN
+
+In YAML, refer to this action as `esphome.<node>_settings_lock_pin`.
+
+Sets the PIN the device asks for before its settings screen opens (Show and Spot). Everything else on
+the device works without it: the clock, music, the voice assistant, calls. The **Settings lock**
+switch shows whether a PIN is set; turning it off removes the PIN, which is the way back in if it is
+forgotten. The PIN can also be set on the device (Settings → Privacy & Security → Settings lock) and
+on the setup page.
+
+> **Good to know**
+>
+> Like `ssh_keys`, this is refused unless Home Assistant's *ESPHome* link to the device already has a
+> real encryption key set, so the PIN never crosses the network in the clear.
+
+### pin (Required)
+
+*string*
+
+4 to 8 digits. Empty removes the PIN and the lock.
+
+```yaml
+action: esphome.office_settings_lock_pin
+data:
+  pin: "2468"
+```
+
 ## Sign a device in to a SIP account
 
 In YAML, refer to this action as `esphome.<node>_phone_account`.

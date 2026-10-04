@@ -751,6 +751,10 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		return
 	}
+	// The PIN pad of the settings lock takes every tap while it is up, unless a call has the screen.
+	if phone.Get().State().Phase == phone.Idle && d.pinGesture(g) {
+		return
+	}
 	// A call: its page takes every tap.
 	if st := phone.Get().State(); st.Phase != phone.Idle {
 		if g.Kind == touch.Tap {
@@ -1241,6 +1245,15 @@ func (d *Display) nowPlaying() bool {
 const radioCueFor = 20 * time.Second
 
 func (d *Display) showSheet(on bool) {
+	if on && security.Locked() {
+		// The settings lock: the PIN pad first, and the sheet once the PIN is right.
+		openPIN(func() { d.showSheet(true) })
+		d.wake()
+		return
+	}
+	if !on {
+		security.Relock()
+	}
 	d.mu.Lock()
 	d.sheet = on
 	d.restartArm, d.picker, d.cardScroll, d.pickScroll, d.colors = time.Time{}, "", 0, 0, false
@@ -1799,6 +1812,10 @@ func (d *Display) frame() time.Duration {
 	s.bt = btaudio.Get().State()
 	d.mu.Lock()
 	s.showSheet = d.sheet
+	s.pin = pinNow(now)
+	if !s.showSheet {
+		security.Relock() // the sheet closed, however it closed: the lock is back on
+	}
 	s.showWifi, s.wifi = d.wifiOpen, d.wifi
 	restartArm := d.restartArm
 	wifiAt := d.wifiAt

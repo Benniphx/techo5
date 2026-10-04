@@ -181,6 +181,12 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
   is drawn thin and in a dimmer red, so it doesn't light up a dark room.
+- **Settings lock** (Show and Spot, off by default): a PIN the device asks for before its settings
+  open, so guests and children can use everything else without changing anything. Set it under
+  Settings → Privacy & Security, on the setup page (Privacy), or with the
+  [settings_lock_pin action](actions.md#set-the-settings-locks-pin). Five wrong tries in a row make
+  the device wait before it takes another. The **Settings lock** switch in Home Assistant shows
+  whether it is on; turning it off removes the PIN.
 
 ## 7. Voice
 

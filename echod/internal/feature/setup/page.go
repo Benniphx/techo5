@@ -237,6 +237,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveReolink(r)
 	case "talkback":
 		problem = saveTalkBack(r)
+	case "lock":
+		problem = saveLock(r)
 	case "place":
 		problem = savePlace(r)
 	case "calendar":
@@ -351,6 +353,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		placeSection(w, token)
 		calendarLinksSection(w, token)
 	case "privacy":
+		lockSection(w, token)
 		privacySection(w)
 	case "general":
 		nameSection(w, token)

@@ -158,6 +158,7 @@ var registered = []string{
 	"segment_9",
 	"sendspin",
 	"sendspin_state",
+	"settings_lock",
 	"setup_page",
 	"sleep_timer",
 	"slideshow_folder",

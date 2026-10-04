@@ -145,6 +145,9 @@ func TestShowScenesDraw(t *testing.T) {
 		"nowplaying-lyrics-intro": {now: at, phase: "idle", nowPlaying: true, playing: true, weather: sky, hasLyric: true,
 			lyric: home.Lyric{Next: "First line of the song"},
 			radio: home.Radio{Followed: true, Now: "Kitchen", Title: "Winding Road", Artist: "The Made-Up Band", Music: true}},
+		// The settings lock's PIN pad, two digits in; and after a wrong one.
+		"pin-pad":       {now: at, phase: "idle", weather: sky, pin: pinView{open: true, digits: 2, title: "Enter the PIN"}},
+		"pin-pad-wrong": {now: at, phase: "idle", weather: sky, pin: pinView{open: true, title: "Enter the PIN", msg: "Wrong PIN"}},
 		"nowplaying-faved": {now: at, phase: "idle", nowPlaying: true, playing: true, faved: true, weather: sky,
 			radio: home.Radio{Now: "Music Assistant", Title: "Some Jazz", Artist: "The Quartet", Music: true}},
 		"clock-missed": {now: at, phase: "idle", missed: "Missed: timer \"Pasta\" at 2:03 PM yesterday · and 1 more"},

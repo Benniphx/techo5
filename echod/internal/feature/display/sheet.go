@@ -202,6 +202,11 @@ func securityRows(sv sheetView) []settingRow {
 			settingRow{id: "ssh", label: "SSH", sub: sub, kind: ctlToggle, on: sec.SSH},
 			settingRow{label: "SSH keys", sub: "Sent from Home Assistant", kind: ctlValue, value: keys})
 	}
+	lockSub := "A PIN before these settings open"
+	if security.LockSet() {
+		lockSub = "On: turn off to remove the PIN"
+	}
+	rows = append(rows, settingRow{id: "settingslock", label: "Settings lock", sub: lockSub, kind: ctlToggle, on: security.LockSet()})
 	rows = append(rows, settingRow{id: "dropin", label: "Allow Drop In", sub: "Intercom calls connect by themselves, after a chime",
 		kind: ctlToggle, on: config.Get().Home.DropIn})
 	link := settingRow{label: "Home Assistant link", sub: "Encrypted with this device's key", kind: ctlValue, value: "Encrypted"}
@@ -891,6 +896,14 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		streaming.Get().SetSpotify(!config.Get().Streaming.Spotify)
 	case "dlna":
 		dlna.Get().Set(!config.Get().Streaming.DLNA)
+	case "settingslock":
+		if security.LockSet() {
+			if err := security.Get().SetPIN(""); err != nil {
+				slog.Warn("clearing the settings lock failed", "err", err)
+			}
+		} else {
+			openPINSet() // a new PIN, typed twice on the pad
+		}
 	case "sunface":
 		if err := config.Set().Alarms().SunriseFace(!config.Get().Alarms.SunriseFace); err != nil {
 			slog.Warn("saving the sun's face failed", "err", err)

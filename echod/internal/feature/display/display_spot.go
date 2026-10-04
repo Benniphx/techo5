@@ -49,6 +49,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
@@ -541,7 +542,7 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 	}
 
-	if d.callGesture(g) || d.ringGesture(g) {
+	if d.callGesture(g) || d.ringGesture(g) || d.pinGesture(g) {
 		return
 	}
 	// A browser asking to be let in: its face takes every tap, and only the two answers decide.
@@ -1177,6 +1178,10 @@ func (d *Display) frame() time.Duration {
 	// underneath it, is not the room's at all (see media.Player.Carried).
 	s.playing, s.paused = musicState()
 	s.maxVolume = config.VolumeSteps
+	s.pin = pinNow(now)
+	if !s.sheetOpen {
+		security.Relock() // the settings closed, however they closed: the lock is back on
+	}
 	if s.sheetOpen {
 		s.sheet = d.sheetView(now)
 	}

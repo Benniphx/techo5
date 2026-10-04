@@ -69,6 +69,17 @@ func (r *paint) swatchStrip(settingRow, int, int, int) {}
 
 // openSettings puts the settings screen up on its six categories. Called with d.mu held.
 func (d *Display) openSettings() {
+	if security.Locked() {
+		// The settings lock: the PIN pad first, and the settings once the PIN is right.
+		d.closeMenu()
+		openPIN(func() {
+			d.mu.Lock()
+			d.openSettings()
+			d.mu.Unlock()
+			d.wake()
+		})
+		return
+	}
 	d.closeMenu()
 	d.sheetOpen, d.sheetGrid, d.sheetAt = true, true, time.Now()
 	d.picker, d.cardScroll, d.pickScroll, d.draft, d.dragging = "", 0, 0, nil, false
