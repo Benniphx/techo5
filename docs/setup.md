@@ -193,6 +193,12 @@ All of these are on the Show, under Settings → **Display**, and are entities i
   off inside Amazon's kernel: **hold the mute button for a second** (it chimes and stays unmuted) and
   the camera, presence and camera stills come back. A restart does the same. Holding the button to
   unmute in the first place avoids it. The 2nd gen Show 5 is not affected.
+- **Gestures** (Show and Spot, experimental, off by default; the **Gestures** switch in Home
+  Assistant): cover the camera with your palm, hand on or almost on the lens, for half a second to
+  three seconds. It stops a ringing alarm or timer, and Home Assistant gets an `esphome.techo5_gesture`
+  event (`gesture: cover`, `device`) for automations. A hand held a few inches away is not counted:
+  the camera cannot tell it from somebody leaning in. While Gestures is on the camera looks eight
+  times a second, which costs a little more than presence alone.
 - **Settings lock** (Show and Spot, off by default): a PIN the device asks for before its settings
   open, so guests and children can use everything else without changing anything. Set it under
   Settings → Privacy & Security, on the setup page (Privacy), or with the

@@ -107,6 +107,8 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
   Presence sensor for Home Assistant, and the screen goes out when the room has been empty a while and
   comes back as you walk up. On the device only, nothing kept; off by default.
   [docs/setup.md](docs/setup.md#6-night-and-the-screen)
+- ✋ **Cover the camera to stop an alarm** (v1.0.0, experimental). With Gestures on, a palm over the
+  camera stops a ringing alarm or timer and sends Home Assistant an event. Off by default.
 - 🔒 **A settings lock** (v1.0.0). Set a PIN and the Show and the Spot ask for it before their
   settings open; everything else keeps working for guests and kids. Off by default.
   [docs/setup.md](docs/setup.md#6-night-and-the-screen)

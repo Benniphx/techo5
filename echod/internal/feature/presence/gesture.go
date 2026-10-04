@@ -14,8 +14,11 @@ import "math"
 //
 // Measured on a Show 5 and a Show 8, 2026-10-04 (recordings of covers, waves, light switches and
 // people moving, kept off the repository): a hand's roughness, the mean difference between neighboring
-// cells over the mean brightness, is 0.12 to 0.17; a dark room's 0.26 to 0.32; an ordinary lit room's
-// about 0.21.
+// cells over the mean brightness, is 0.09 to 0.17 on or nearly on the lens; a dark room's 0.26 to 0.32;
+// an ordinary lit room's about 0.21. A hand a few inches away is another matter: it is in focus, takes
+// only part of the picture, and reads 0.22 to 0.28 with the room half there, much as somebody leaning
+// in does. It is not counted. On the last recording all three covers on the lens were seen, and none of
+// the light switches, the leaning in, the touching or the hands at a distance were.
 type coverDetector struct {
 	scene  []float64 // the room as it usually looks (an average of recent ordinary frames)
 	since  float64   // seconds, when the picture was first covered; 0 while it is not
