@@ -166,8 +166,9 @@ one-way: you are heard at the door, but the visitor is not heard on the device.
 - **Lyrics** (Show, also a switch in Home Assistant, off by default): the words of the song on Now
   Playing, the line being sung and the next one, in time with the music. They come from
   [LRCLIB](https://lrclib.net), a free lyrics database, so the song's title and artist are sent there.
-  Words are only kept in time for music whose position is known: Music Assistant, and a followed
-  player. Radio stations, AirPlay and Spotify show the song without words.
+  Words are only kept in time for music whose position is known: Music Assistant, DLNA when the app
+  says how long the song is, and a followed player. Radio stations, AirPlay and Spotify show the song
+  without words.
 
 ## 6. The screen
 

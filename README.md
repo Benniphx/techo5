@@ -114,7 +114,7 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
 - 🎶 **Now playing follows another speaker, and lyrics** (v1.0.0). Now playing can follow another of
   Home Assistant's players, a Sonos in the same room say: its song and cover show while the device
   plays nothing of its own, and the buttons control it. A Lyrics switch (off by default) shows the
-  words in time with the music, from the free LRCLIB database, for Music Assistant and followed
+  words in time with the music, from the free LRCLIB database, for Music Assistant, DLNA and followed
   players. [docs/setup.md](docs/setup.md#5-music)
 - 👀 **Presence detection** (v1.0.0). The Show's and the Spot's camera can notice somebody near: a
   Presence sensor for Home Assistant, and the screen goes out when the room has been empty a while and
