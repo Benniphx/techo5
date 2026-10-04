@@ -10,6 +10,17 @@ type Presence struct {
 	// setting starts at DefaultPresenceScreenOff (see PresenceScreenOff).
 	ScreenOff    int  `json:"screen_off,omitempty"`
 	ScreenOffSet bool `json:"screen_off_set,omitempty"`
+
+	// Sensitivity is 1 to 100; 0 is the default, 50.
+	Sensitivity int `json:"sensitivity,omitempty"`
+}
+
+// PresenceSensitivity is the sensitivity in force.
+func (p Presence) PresenceSensitivity() int {
+	if p.Sensitivity <= 0 {
+		return 50
+	}
+	return min(p.Sensitivity, 100)
 }
 
 // DefaultPresenceScreenOff is the screen's wait before anybody has chosen one.
@@ -27,6 +38,10 @@ type PresenceWriter struct{ st *Store }
 
 func (w PresenceWriter) On(v bool) error {
 	return w.st.Update(func(c *Config) { c.Presence.On = v })
+}
+
+func (w PresenceWriter) Sensitivity(v int) error {
+	return w.st.Update(func(c *Config) { c.Presence.Sensitivity = min(max(v, 1), 100) })
 }
 
 func (w PresenceWriter) ScreenOff(minutes int) error {

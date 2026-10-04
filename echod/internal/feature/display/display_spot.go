@@ -48,6 +48,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
@@ -356,6 +357,7 @@ func (d *Display) command(s esphome.LightState) {
 }
 
 func (d *Display) apply(on bool, pct int, save bool) {
+	presence.Hush() // the screen's own light is about to change; the camera is not to take it for somebody
 	pct = min(max(pct, 0), 100)
 	d.mu.Lock()
 	d.on, d.ceiling = on, pct
@@ -390,6 +392,9 @@ func (d *Display) setAuto(on bool, save bool) {
 }
 
 func (d *Display) relight(jump bool) {
+	if jump {
+		presence.Hush() // a sudden change of the screen's light, not somebody
+	}
 	// One at a time from working out the level to writing it: the settle ticker, a reading and a
 	// setting changed on the screen all relight, and a level worked out first must not land last.
 	d.lightMu.Lock()

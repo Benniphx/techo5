@@ -38,14 +38,18 @@ const (
 	// hold is how long after the last movement somebody still counts as near: people stand still.
 	hold = 90 * time.Second
 
+	// startFrames are passed over after the camera starts, while its exposure finds the room.
+	startFrames = 6
+
 	// retry is how soon a camera that could not be had (muted, the shutter closed) is asked again.
 	retry = 10 * time.Second
 )
 
 type Feature struct {
-	sw     *esphome.Switch
-	offNum *esphome.Number
-	sensor *esphome.BinarySensor
+	sw      *esphome.Switch
+	offNum  *esphome.Number
+	sensNum *esphome.Number
+	sensor  *esphome.BinarySensor
 
 	// Changed fires when somebody comes near or the room has been empty long enough to say so, and
 	// when the switch changes. Listeners must not block.
@@ -59,6 +63,8 @@ type Feature struct {
 	lastSeen  time.Time
 	watchFrom time.Time // when the current watch began: an empty room is only an empty room after hold
 	det       detector
+	skip      int       // frames still to pass over: the camera's first ones, after a start
+	hushUntil time.Time // the device's own light changing (Hush): frames until then are not compared
 }
 
 var (
@@ -80,6 +86,13 @@ func Get() *Feature {
 			Mode: esphome.NumberBox,
 		}
 		f.offNum.OnCommand = func(v float32) { f.SetScreenOff(int(v)) }
+		f.sensNum = &esphome.Number{
+			Base: esphome.Base{ObjectID: "presence_sensitivity", Name: "Presence sensitivity",
+				Icon: "mdi:tune-vertical", Category: esphome.CategoryConfig},
+			Min: 1, Max: 100, Step: 1,
+			Mode: esphome.NumberSlider,
+		}
+		f.sensNum.OnCommand = func(v float32) { f.SetSensitivity(int(v)) }
 		f.sensor = &esphome.BinarySensor{
 			Base:        esphome.Base{ObjectID: "presence", Name: "Presence", Icon: "mdi:account-eye"},
 			DeviceClass: "occupancy",
@@ -92,12 +105,13 @@ func Get() *Feature {
 func (f *Feature) Name() string { return "presence" }
 
 func (f *Feature) Entities() []esphome.Entity {
-	return []esphome.Entity{f.sw, f.offNum, f.sensor}
+	return []esphome.Entity{f.sw, f.offNum, f.sensNum, f.sensor}
 }
 
 func (f *Feature) Restore(c config.Config) {
 	f.sw.Set(c.Presence.On)
 	f.offNum.Set(float32(c.Presence.PresenceScreenOff()))
+	f.sensNum.Set(float32(c.Presence.PresenceSensitivity()))
 	f.sensor.Set(false)
 }
 
@@ -126,6 +140,32 @@ func (f *Feature) SetScreenOff(minutes int) {
 	}
 	f.offNum.Set(float32(minutes))
 	f.Changed.Emit(struct{}{})
+}
+
+// SetSensitivity is 1 to 100: higher sees smaller movements, lower needs more of the picture to move.
+func (f *Feature) SetSensitivity(v int) {
+	v = min(max(v, 1), 100)
+	if err := config.Set().Presence().Sensitivity(v); err != nil {
+		slog.Error("saving a setting failed", "setting", "presence sensitivity", "err", err)
+		return
+	}
+	f.sensNum.Set(float32(v))
+	f.mu.Lock()
+	f.det.patchMin = patchFor(v)
+	f.mu.Unlock()
+}
+
+// hushFor is how long the device's own change of light is given to pass.
+const hushFor = 2 * time.Second
+
+// Hush says the device itself is about to change the light in the room (the screen coming on, going
+// out, changing its brightness), which the camera would otherwise take for somebody: frames are not
+// compared for a moment, and the comparison starts over after it.
+func Hush() {
+	f := Get()
+	f.mu.Lock()
+	f.hushUntil = time.Now().Add(hushFor)
+	f.mu.Unlock()
 }
 
 // ScreenOffAfter is how long the room must be empty before the screen goes dark: 0 when it never does
@@ -224,7 +264,9 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 
 	now := time.Now()
 	f.mu.Lock()
-	f.watching, f.watchFrom, f.det = true, now, detector{}
+	f.watching, f.watchFrom = true, now
+	f.det = detector{patchMin: patchFor(config.Get().Presence.PresenceSensitivity())}
+	f.skip = startFrames
 	f.mu.Unlock()
 	slog.Info("presence: watching")
 	defer func() {
@@ -269,6 +311,16 @@ func (f *Feature) watchFor(ctx context.Context, release func()) {
 // take runs one frame through the detector.
 func (f *Feature) take(g []uint8, at time.Time) {
 	f.mu.Lock()
+	if f.skip > 0 || at.Before(f.hushUntil) {
+		// The camera's first frames, with the exposure still finding the room, or the device's own
+		// light changing: not compared, and the next comparison starts from the next frame.
+		if f.skip > 0 {
+			f.skip--
+		}
+		f.det.prev = nil
+		f.mu.Unlock()
+		return
+	}
 	moved := f.det.step(g)
 	was := f.present
 	if moved {
