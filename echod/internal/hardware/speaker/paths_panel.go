@@ -112,3 +112,7 @@ var (
 	HasJack = false
 	HasBoth = false
 )
+
+// firstCurves is empty on a panel: Android plays the sound, with no Amazon tuning to put the volume
+// in front of (paths_cronos.go).
+var firstCurves = map[string][VolumeSteps + 1]float64{}
