@@ -33,7 +33,7 @@ func TestReadScripts(t *testing.T) {
 func TestOnlyListedScriptsRun(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "scripts.txt")
 	os.WriteFile(p, []byte("Touch = touch "+filepath.Join(t.TempDir(), "x")+"\n"), 0o600)
-	a := &agent{name: "pc", scriptsPath: p}
+	a := &agent{name: "pc", scriptsPath: p, keys: make(chan struct{}, 1)}
 	a.refresh()
 	if r := a.do(deckwire.Request{Op: deckwire.OpRun, Arg: "rm -rf /"}); r.OK {
 		t.Fatal("a command not on the list ran")
@@ -106,7 +106,7 @@ func TestWebAddresses(t *testing.T) {
 func TestOnlyPrivateScriptLists(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "scripts.txt")
 	os.WriteFile(p, []byte("Ok = true\n"), 0o600)
-	a := &agent{name: "pc", scriptsPath: p}
+	a := &agent{name: "pc", scriptsPath: p, keys: make(chan struct{}, 1)}
 	a.loadScripts(true)
 	if len(a.hello().Scripts) != 1 {
 		t.Fatal("a private list wasn't read")
@@ -117,5 +117,24 @@ func TestOnlyPrivateScriptLists(t *testing.T) {
 	os.Chtimes(p, future, future)
 	if r := a.do(deckwire.Request{Op: deckwire.OpHello}); len(r.Hello.Scripts) != 2 {
 		t.Fatalf("an edited list wasn't read again: %v", r.Hello.Scripts)
+	}
+}
+
+// A key press waits a moment for typing to finish, then gives up rather than landing minutes later.
+func TestKeysWaitOnlyAMoment(t *testing.T) {
+	a := &agent{keys: make(chan struct{}, 1)}
+	if !a.takeKeys(time.Second) {
+		t.Fatal("free keys weren't taken")
+	}
+	start := time.Now()
+	if a.takeKeys(100 * time.Millisecond) {
+		t.Fatal("held keys were taken twice")
+	}
+	if time.Since(start) > time.Second {
+		t.Error("waited far too long")
+	}
+	a.giveKeys()
+	if !a.takeKeys(time.Second) {
+		t.Error("given-back keys weren't taken")
 	}
 }

@@ -45,7 +45,7 @@ func main() {
 		var keep []string
 		flag.Visit(func(f *flag.Flag) {
 			v := f.Value.String()
-			if f.Name == "dir" {
+			if f.Name == "dir" && v != "" {
 				// Started at sign-in, it runs from another folder.
 				if abs, err := filepath.Abs(v); err == nil {
 					v = abs
@@ -78,7 +78,7 @@ func main() {
 		*name, _ = os.Hostname()
 	}
 
-	a := &agent{name: *name, scriptsPath: scripts}
+	a := &agent{name: *name, scriptsPath: scripts, keys: make(chan struct{}, 1)}
 	a.refresh()
 
 	l, err := net.Listen("tcp", fmt.Sprintf(":%d", *port))
@@ -204,11 +204,31 @@ type agent struct {
 	apps      map[string]string // name -> what opens it
 	appList   []string
 
-	// keys is held while keys are pressed or text typed, so two presses don't interleave (shift held
-	// for a capital turning a ctrl+c into ctrl+shift+c); queued counts the typing waiting for it.
-	keys   sync.Mutex
-	queued atomic.Int32
+	// keys is held (a token in it) while keys are pressed or text typed, so two presses don't
+	// interleave (shift held for a capital turning a ctrl+c into ctrl+shift+c); queued counts the
+	// typing waiting for it, refreshing whether the app list is being read.
+	keys       chan struct{}
+	queued     atomic.Int32
+	refreshing atomic.Bool
 }
+
+// takeKeys waits up to wait for the keys (forever when wait is 0), and says whether it got them.
+func (a *agent) takeKeys(wait time.Duration) bool {
+	if wait == 0 {
+		a.keys <- struct{}{}
+		return true
+	}
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case a.keys <- struct{}{}:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+func (a *agent) giveKeys() { <-a.keys }
 
 // loadScripts reads the script list again when it changed since it was last read, so a line added
 // and saved is there for the next press without restarting the agent.
@@ -227,10 +247,13 @@ func (a *agent) loadScripts(force bool) {
 	if same {
 		return
 	}
-	err = checkPrivate(st)
-	if dir, derr := os.Stat(filepath.Dir(a.scriptsPath)); err == nil && derr == nil {
+	err = checkPrivate(st, "chmod 600 the file")
+	dir := filepath.Dir(a.scriptsPath)
+	if dst, derr := os.Stat(dir); err == nil && derr == nil {
 		// The folder too: whoever can write to it can put another list in its place.
-		err = checkPrivate(dir)
+		if err = checkPrivate(dst, "chmod go-w the folder"); err != nil {
+			err = fmt.Errorf("its folder %s: %w", dir, err)
+		}
 	}
 	if err != nil {
 		log.Printf("not using %s: %v", a.scriptsPath, err)
@@ -340,7 +363,12 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		// The script list now; the app list after answering, since asking Windows for it can take
 		// longer than the Show waits.
 		a.loadScripts(true)
-		go a.refresh()
+		if a.refreshing.CompareAndSwap(false, true) {
+			go func() {
+				defer a.refreshing.Store(false)
+				a.refresh()
+			}()
+		}
 		h := a.hello()
 		return deckwire.Reply{OK: true, Hello: &h}
 	case deckwire.OpKeys:
@@ -348,8 +376,12 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		if err != nil {
 			return fail(err)
 		}
-		a.keys.Lock()
-		defer a.keys.Unlock()
+		// A press waits a moment for typing to finish, not minutes: by then the Show has given up,
+		// and the keys would land in whatever window is in front.
+		if !a.takeKeys(3 * time.Second) {
+			return fail(errors.New("still typing: try again in a moment"))
+		}
+		defer a.giveKeys()
 		return fail(pressCombo(combo))
 	case deckwire.OpType:
 		// Checked now and typed after answering: a long text takes longer to type than the Show waits,
@@ -366,8 +398,8 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		}
 		go func() {
 			defer a.queued.Add(-1)
-			a.keys.Lock()
-			defer a.keys.Unlock()
+			a.takeKeys(0)
+			defer a.giveKeys()
 			if err := typeText(req.Arg); err != nil {
 				log.Printf("typing failed: %v", err)
 			}

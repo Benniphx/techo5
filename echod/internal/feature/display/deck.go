@@ -5,6 +5,7 @@ package display
 import (
 	"fmt"
 	"image"
+	"image/color"
 	"log/slog"
 	"time"
 
@@ -87,8 +88,9 @@ func deckFrameKey(s scene, ringing, calling bool) string {
 		s.showReminder || s.popup != nil || s.bt.Pairing || s.pin.open || s.redClock || s.announceRecording {
 		return ""
 	}
-	// The theme too: the deck is drawn in its colors, and a change from the setup page should show.
-	return fmt.Sprintf("%+v|%v|%s", s.deck, s.muted, config.Get().Screen.Theme)
+	// The colors too: the deck is drawn in the theme's, and a change from the setup page (a custom
+	// palette's included) should show.
+	return fmt.Sprintf("%+v|%v|%v", s.deck, s.muted, [5]color.RGBA{walnut, amber, cream, dim, ember})
 }
 
 // deckScene fills in what the deck page shows, when it is up.

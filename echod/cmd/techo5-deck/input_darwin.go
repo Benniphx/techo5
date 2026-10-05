@@ -39,7 +39,10 @@ func osascript(lang, script string, secret bool) error {
 
 // canPressKeys asks System Events whether this program may control the computer.
 func canPressKeys() bool {
-	cmd := exec.Command("osascript", "-")
+	// Bounded: the first time, macOS holds the answer until somebody answers its permission prompt.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "osascript", "-")
 	cmd.Stdin = strings.NewReader(`tell application "System Events" to get UI elements enabled`)
 	out, err := cmd.Output()
 	return err == nil && strings.TrimSpace(string(out)) == "true"
