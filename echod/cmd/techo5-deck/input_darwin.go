@@ -11,26 +11,32 @@ import (
 	"strings"
 )
 
-// osascript runs a script and says what macOS said when it refused: most often the missing
-// Accessibility permission, which macOS asks for the first time.
-func osascript(lang, script string) error {
-	out, err := exec.Command("osascript", "-l", lang, "-e", script).CombinedOutput()
+// osascript runs a script, given on standard input so nothing of it (typed text least of all) is on
+// a command line other programs can read, and says what macOS said when it refused: most often the
+// missing Accessibility permission.
+func osascript(lang, script string, secret bool) error {
+	cmd := exec.Command("osascript", "-l", lang, "-")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return nil
 	}
 	msg := strings.TrimSpace(string(out))
-	if strings.Contains(msg, "-1743") || strings.Contains(msg, "-25211") || strings.Contains(msg, "not allowed") {
+	if strings.Contains(msg, "-1743") || strings.Contains(msg, "-25211") || strings.Contains(msg, "-1719") || strings.Contains(msg, "not allowed") {
 		return errors.New("macOS hasn't allowed it to press keys: System Settings > Privacy & Security > Accessibility, turn on the agent (or the Terminal it runs in)")
 	}
-	if msg == "" {
-		msg = err.Error()
+	if secret || msg == "" {
+		// What osascript says can quote the script, and with it the text.
+		return fmt.Errorf("osascript failed (%v)", err)
 	}
 	return fmt.Errorf("osascript: %s", msg)
 }
 
 // canPressKeys asks System Events whether this program may control the computer.
 func canPressKeys() bool {
-	out, err := exec.Command("osascript", "-e", `tell application "System Events" to get UI elements enabled`).Output()
+	cmd := exec.Command("osascript", "-")
+	cmd.Stdin = strings.NewReader(`tell application "System Events" to get UI elements enabled`)
+	out, err := cmd.Output()
 	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
@@ -39,14 +45,18 @@ func pressCombo(c combo) error {
 	if err != nil {
 		return err
 	}
-	return osascript(lang, script)
+	return osascript(lang, script, false)
 }
 
+// checkType: System Events types any text.
+func checkType(string) error { return nil }
+
 func typeText(s string) error {
-	if s == "" {
-		return errors.New("nothing to type")
+	script, err := macTypeScript(s)
+	if err != nil {
+		return err
 	}
-	return osascript("AppleScript", macTypeScript(s))
+	return osascript("JavaScript", script, true)
 }
 
 // listApps is the apps in the Applications folders, by name.
@@ -66,15 +76,15 @@ func listApps() map[string]string {
 	return apps
 }
 
-func openApp(path string) error { return exec.Command("open", "-a", path).Start() }
-func openURL(u string) error    { return exec.Command("open", u).Start() }
+func openApp(path string) error { return start(exec.Command("open", "-a", path)) }
+func openURL(u string) error    { return start(exec.Command("open", u)) }
 
-func runScript(command string) error { return exec.Command("/bin/sh", "-c", command).Start() }
+func runScript(command string) error { return start(exec.Command("/bin/sh", "-c", command)) }
 
 const launchLabel = "org.techo5.deck"
 
-// setStartup writes a LaunchAgent that starts the agent at sign-in, or removes it.
-func setStartup(on bool) error {
+// setStartup writes a LaunchAgent that starts the agent, with args, at sign-in, or removes it.
+func setStartup(on bool, args []string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
@@ -90,15 +100,19 @@ func setStartup(on bool) error {
 	if err != nil {
 		return err
 	}
+	argv := "<string>" + xmlEscape(exe) + "</string>"
+	for _, a := range args {
+		argv += "<string>" + xmlEscape(a) + "</string>"
+	}
 	plist := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
  <key>Label</key><string>%s</string>
- <key>ProgramArguments</key><array><string>%s</string></array>
+ <key>ProgramArguments</key><array>%s</array>
  <key>RunAtLoad</key><true/>
  <key>KeepAlive</key><true/>
 </dict></plist>
-`, launchLabel, xmlEscape(exe))
+`, launchLabel, argv)
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
@@ -106,5 +120,5 @@ func setStartup(on bool) error {
 }
 
 func xmlEscape(s string) string {
-	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;").Replace(s)
+	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }

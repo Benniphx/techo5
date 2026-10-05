@@ -30,8 +30,10 @@ func listApps() map[string]string {
 func startApps() map[string]string {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
+	// UTF-8 out, or Windows PowerShell writes the console's code page and names with accents arrive
+	// garbled.
 	cmd := exec.CommandContext(ctx, "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-		"Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress")
+		"[Console]::OutputEncoding = [Text.Encoding]::UTF8; Get-StartApps | Select-Object Name, AppID | ConvertTo-Json -Compress")
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
 	out, err := cmd.Output()
 	if err != nil {
@@ -98,13 +100,13 @@ func openApp(path string) error { return shellOpen(path) }
 func runScript(command string) error {
 	cmd := exec.Command("cmd.exe")
 	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: `/d /s /c "` + command + `"`, HideWindow: true}
-	return cmd.Start()
+	return start(cmd)
 }
 
 const runKey = `Software\Microsoft\Windows\CurrentVersion\Run`
 
-// setStartup starts the agent when this user signs in, or stops doing so.
-func setStartup(on bool) error {
+// setStartup starts the agent, with args, when this user signs in, or stops doing so.
+func setStartup(on bool, args []string) error {
 	k, err := registry.OpenKey(registry.CURRENT_USER, runKey, registry.SET_VALUE)
 	if err != nil {
 		return err
@@ -120,5 +122,9 @@ func setStartup(on bool) error {
 	if err != nil {
 		return err
 	}
-	return k.SetStringValue("TECHO5 Deck", `"`+exe+`"`)
+	cmd := syscall.EscapeArg(exe)
+	for _, a := range args {
+		cmd += " " + syscall.EscapeArg(a)
+	}
+	return k.SetStringValue("TECHO5 Deck", cmd)
 }

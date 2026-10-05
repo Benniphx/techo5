@@ -1,11 +1,12 @@
 package main
 
 // macOS presses keys through osascript, without anything compiled against Apple's libraries:
-// AppleScript's System Events for keys and text, and a short JavaScript for Automation script for
+// AppleScript's System Events for keys, and short JavaScript for Automation scripts for text and for
 // the media keys, which System Events can't press. Kept free of build tags so what they send is
 // tested everywhere; input_darwin.go runs them.
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -28,7 +29,7 @@ var macKeyCodes = map[string]int{
 // macMediaKeys are the system's own media key numbers (NX_KEYTYPE_*).
 var macMediaKeys = map[string]int{
 	"volume_up": 0, "volume_down": 1, "volume_mute": 7, "media_play_pause": 16, "media_next": 17,
-	"media_previous": 18, "media_stop": 16,
+	"media_previous": 18,
 }
 
 var macModifiers = map[string]string{"ctrl": "control down", "shift": "shift down", "alt": "option down", "win": "command down"}
@@ -36,6 +37,9 @@ var macModifiers = map[string]string{"ctrl": "control down", "shift": "shift dow
 // macKeyScript is the osascript arguments that press c: the language ("AppleScript" or
 // "JavaScript") and the script.
 func macKeyScript(c combo) (lang, script string, err error) {
+	if c.key == "media_stop" {
+		return "", "", fmt.Errorf("macOS has no media stop key; use media_play_pause")
+	}
 	if n, ok := macMediaKeys[c.key]; ok {
 		if len(c.mods) > 0 {
 			return "", "", fmt.Errorf("%s can't be held with a media key", strings.Join(c.mods, "+"))
@@ -75,26 +79,18 @@ function post(down) {
 post(true); post(false);`, key)
 }
 
-// macTypeScript types s: each line as keystrokes, with a Return between lines.
-func macTypeScript(s string) string {
-	lines := strings.Split(strings.ReplaceAll(s, "\r", ""), "\n")
-	var b strings.Builder
-	b.WriteString(`tell application "System Events"` + "\n")
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteString("  key code 36\n")
-		}
-		if line != "" {
-			b.WriteString("  keystroke " + appleScriptString(line) + "\n")
-		}
+// macTypeScript types s through JavaScript for Automation: the text is a JSON string in the script,
+// which nothing in it can end early, so no text can turn into a command. Each line is typed as
+// keystrokes, with Return between lines.
+func macTypeScript(s string) (string, error) {
+	lines, err := json.Marshal(strings.Split(strings.ReplaceAll(s, "\r", ""), "\n"))
+	if err != nil {
+		return "", err
 	}
-	b.WriteString("end tell")
-	return b.String()
-}
-
-// appleScriptString quotes s for AppleScript: backslashes and double quotes escaped, a tab as its
-// escape.
-func appleScriptString(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\t", `\t`)
-	return `"` + r.Replace(s) + `"`
+	return `var se = Application("System Events");
+var lines = ` + string(lines) + `;
+for (var i = 0; i < lines.length; i++) {
+  if (i > 0) se.keyCode(36);
+  if (lines[i] !== "") se.keystroke(lines[i]);
+}`, nil
 }

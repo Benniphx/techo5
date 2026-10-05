@@ -105,6 +105,9 @@ func send(ins []input) error {
 
 func canPressKeys() bool { return sendInput.Find() == nil }
 
+// checkType: every character goes as itself, so any text can be typed.
+func checkType(string) error { return nil }
+
 // pressCombo holds the modifiers, presses and lets go of the key, then lets go of the modifiers in
 // reverse order.
 func pressCombo(c combo) error {

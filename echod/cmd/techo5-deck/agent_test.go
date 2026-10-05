@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/deckwire"
 )
@@ -79,5 +80,42 @@ func TestKeyKeptAndRemade(t *testing.T) {
 	}
 	if k3, _ := loadKey(p, true); k3 == k1 {
 		t.Error("-new-key kept the old key")
+	}
+}
+
+func TestWebAddresses(t *testing.T) {
+	for s, want := range map[string]bool{
+		"https://example.com":               true,
+		"http://192.168.1.20:8123/lovelace": true,
+		"HTTPS://Example.com/path?q=1":      true,
+		"file:///etc/passwd":                false,
+		"https://":                          false,
+		"https://user:pw@example.com":       false,
+		"https://exa mple.com":              false,
+		"https://example.com/\x7f":          false,
+		"https://example.com/\u202e":        false,
+		"javascript:alert(1)":               false,
+		"https://example.com\"&calc":        false,
+	} {
+		if got := isWebAddress(s); got != want {
+			t.Errorf("isWebAddress(%q) = %v, want %v", s, got, want)
+		}
+	}
+}
+
+func TestOnlyPrivateScriptLists(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "scripts.txt")
+	os.WriteFile(p, []byte("Ok = true\n"), 0o600)
+	a := &agent{name: "pc", scriptsPath: p}
+	a.loadScripts(true)
+	if len(a.hello().Scripts) != 1 {
+		t.Fatal("a private list wasn't read")
+	}
+	// A line added later is there for the next press, without restarting.
+	os.WriteFile(p, []byte("Ok = true\nMore = true\n"), 0o600)
+	future := time.Now().Add(time.Minute)
+	os.Chtimes(p, future, future)
+	if r := a.do(deckwire.Request{Op: deckwire.OpHello}); len(r.Hello.Scripts) != 2 {
+		t.Fatalf("an edited list wasn't read again: %v", r.Hello.Scripts)
 	}
 }

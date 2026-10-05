@@ -31,8 +31,10 @@ const (
 
 	prologue  = "techo5-deck/1"
 	recordMax = 64 << 10
-	// Timeout bounds a handshake, and a request with its answer.
-	Timeout = 5 * time.Second
+	// Timeout bounds a request with its answer, and HandshakeTimeout the handshake: a connection that
+	// says nothing is dropped quickly, so a few of them can't hold the agent's few slots for long.
+	Timeout          = 5 * time.Second
+	HandshakeTimeout = 3 * time.Second
 )
 
 // The things a Show can ask of an agent.
@@ -140,7 +142,7 @@ func handshake(c net.Conn, key string, initiator bool) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = c.SetDeadline(time.Now().Add(Timeout))
+	_ = c.SetDeadline(time.Now().Add(HandshakeTimeout))
 	defer c.SetDeadline(time.Time{})
 	if initiator {
 		first, _, _, err := hs.WriteMessage(nil, nil)

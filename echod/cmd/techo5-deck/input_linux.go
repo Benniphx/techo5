@@ -16,18 +16,17 @@ import (
 
 // Keys on Linux go through a virtual keyboard made with uinput, the kernel's own way for a program
 // to be an input device: it works the same under X11 and Wayland, and the desktop sees an ordinary
-// keyboard. Opening /dev/uinput needs the user in the input group, or a udev rule (docs/deck.md).
+// keyboard. Opening /dev/uinput needs the user in a group the udev rule gives it to (docs/deck.md).
 
 const (
 	evSyn = 0x00
 	evKey = 0x01
 
-	uiDevCreate  = 0x5501
-	uiDevDestroy = 0x5502
-	uiDevSetup   = 0x405c5503 // _IOW('U', 3, struct uinput_setup)
-	uiSetEvBit   = 0x40045564 // _IOW('U', 100, int)
-	uiSetKeyBit  = 0x40045565 // _IOW('U', 101, int)
-	busVirtual   = 0x06
+	uiDevCreate = 0x5501
+	uiDevSetup  = 0x405c5503 // _IOW('U', 3, struct uinput_setup)
+	uiSetEvBit  = 0x40045564 // _IOW('U', 100, int)
+	uiSetKeyBit = 0x40045565 // _IOW('U', 101, int)
+	busVirtual  = 0x06
 
 	// keyGap is the pause between a key's press and its release, and between keys: desktops drop
 	// presses that come faster than they poll.
@@ -49,8 +48,7 @@ type inputEvent struct {
 
 var keyboard struct {
 	sync.Mutex
-	f   *os.File
-	err error
+	f *os.File
 }
 
 // openKeyboard makes the virtual keyboard the first time it is needed and keeps it.
@@ -63,7 +61,7 @@ func openKeyboard() (*os.File, error) {
 	f, err := os.OpenFile("/dev/uinput", os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return nil, errors.New("not allowed to make a keyboard: add yourself to the input group (docs/deck.md)")
+			return nil, errors.New("not allowed to make a keyboard: see the Linux part of the Deck guide (the uinput group)")
 		}
 		return nil, fmt.Errorf("no virtual keyboard: %w", err)
 	}
@@ -98,6 +96,16 @@ func openKeyboard() (*os.File, error) {
 	return f, nil
 }
 
+// dropKeyboard forgets a keyboard that failed a write, so the next press makes a new one.
+func dropKeyboard(f *os.File) {
+	keyboard.Lock()
+	if keyboard.f == f {
+		keyboard.f = nil
+		f.Close()
+	}
+	keyboard.Unlock()
+}
+
 func emit(f *os.File, typ, code uint16, value int32) error {
 	ev := inputEvent{typ: typ, code: code, value: value}
 	b := unsafe.Slice((*byte)(unsafe.Pointer(&ev)), unsafe.Sizeof(ev))
@@ -120,6 +128,39 @@ func key(f *os.File, code uint16, down bool) error {
 	return nil
 }
 
+// strokes presses each group of keys together and lets them go in reverse: every key that went down
+// is let go, whatever fails, so nothing is left held.
+func strokes(groups [][]uint16) error {
+	f, err := openKeyboard()
+	if err != nil {
+		return err
+	}
+	var first error
+	for _, g := range groups {
+		var down []uint16
+		for _, code := range g {
+			if err := key(f, code, true); err != nil {
+				first = err
+				break
+			}
+			down = append(down, code)
+		}
+		for i := len(down) - 1; i >= 0; i-- {
+			if err := key(f, down[i], false); err != nil && first == nil {
+				first = err
+			}
+		}
+		if first != nil {
+			break
+		}
+	}
+	if first != nil {
+		dropKeyboard(f)
+		return fmt.Errorf("the virtual keyboard failed: %w", first)
+	}
+	return nil
+}
+
 func canPressKeys() bool {
 	f, err := os.OpenFile("/dev/uinput", os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -130,77 +171,59 @@ func canPressKeys() bool {
 }
 
 func pressCombo(c combo) error {
-	f, err := openKeyboard()
-	if err != nil {
-		return err
-	}
-	var codes []uint16
+	var g []uint16
 	for _, m := range c.mods {
 		code, err := linuxKey(m)
 		if err != nil {
 			return err
 		}
-		codes = append(codes, code)
+		g = append(g, code)
 	}
-	var main uint16
 	if c.key != "" {
-		if main, err = linuxKey(c.key); err != nil {
+		code, err := linuxKey(c.key)
+		if err != nil {
 			return err
 		}
+		g = append(g, code)
 	}
-	for _, code := range codes {
-		if err := key(f, code, true); err != nil {
-			return err
-		}
-	}
-	if main != 0 {
-		_ = key(f, main, true)
-		_ = key(f, main, false)
-	}
-	for i := len(codes) - 1; i >= 0; i-- {
-		_ = key(f, codes[i], false)
-	}
-	return nil
+	return strokes([][]uint16{g})
 }
 
-func typeText(s string) error {
-	if s == "" {
-		return errors.New("nothing to type")
-	}
-	// Check it all first, so a character that can't be typed doesn't leave half the text typed.
-	type stroke struct {
-		code  uint16
-		shift bool
-	}
-	var strokes []stroke
+// typeGroups is how s is typed: each character as its key, with shift held where it needs it.
+func typeGroups(s string) ([][]uint16, error) {
+	shift, _ := linuxKey("shift")
+	var groups [][]uint16
 	for _, r := range s {
 		if r == '\r' {
 			continue
 		}
-		k, shift, err := usKeystroke(r)
+		k, shifted, err := usKeystroke(r)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		code, err := linuxKey(k)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		strokes = append(strokes, stroke{code, shift})
+		if shifted {
+			groups = append(groups, []uint16{shift, code})
+		} else {
+			groups = append(groups, []uint16{code})
+		}
 	}
-	f, err := openKeyboard()
+	return groups, nil
+}
+
+// checkType says whether all of s can be typed, before any of it is.
+func checkType(s string) error {
+	_, err := typeGroups(s)
+	return err
+}
+
+func typeText(s string) error {
+	groups, err := typeGroups(s)
 	if err != nil {
 		return err
 	}
-	shiftCode, _ := linuxKey("shift")
-	for _, st := range strokes {
-		if st.shift {
-			_ = key(f, shiftCode, true)
-		}
-		_ = key(f, st.code, true)
-		_ = key(f, st.code, false)
-		if st.shift {
-			_ = key(f, shiftCode, false)
-		}
-	}
-	return nil
+	return strokes(groups)
 }

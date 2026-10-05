@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 )
@@ -66,4 +67,14 @@ func sortFold(s []string) {
 func skipApp(name string) bool {
 	low := strings.ToLower(name)
 	return strings.Contains(low, "uninstall") || strings.Contains(low, "readme") || strings.Contains(low, "help")
+}
+
+// start starts cmd and waits for it in the background, so a finished program doesn't stay behind as
+// a zombie (or an open handle on Windows) for as long as the agent runs.
+func start(cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
 }

@@ -4,7 +4,10 @@ package main
 // text is typed on a US keyboard layout: the key, and whether shift is held. Kept free of build tags
 // so the tables are tested everywhere; input_linux.go sends them.
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 var linuxKeys = map[string]uint16{
 	"esc": 1, "minus": 12, "equal": 13, "backspace": 14, "tab": 15, "bracketleft": 26, "bracketright": 27,
@@ -85,5 +88,5 @@ func usKeystroke(r rune) (key string, shift bool, err error) {
 	if k, ok := shifted[r]; ok {
 		return k, true, nil
 	}
-	return "", false, fmt.Errorf("%q can't be typed on Linux yet: plain letters, digits and punctuation only", r)
+	return "", false, errors.New("the text has a character that can't be typed on Linux yet: plain letters, digits and punctuation only")
 }

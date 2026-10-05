@@ -12,12 +12,13 @@ import (
 
 var errNotHere = errors.New("pressing keys isn't on " + runtime.GOOS)
 
-func canPressKeys() bool          { return false }
-func pressCombo(combo) error      { return errNotHere }
-func typeText(string) error       { return errNotHere }
-func listApps() map[string]string { return map[string]string{} }
-func openApp(string) error        { return errNotHere }
-func setStartup(bool) error       { return errNotHere }
-func openURL(u string) error      { return exec.Command("xdg-open", u).Start() }
+func canPressKeys() bool              { return false }
+func checkType(string) error          { return errNotHere }
+func pressCombo(combo) error          { return errNotHere }
+func typeText(string) error           { return errNotHere }
+func listApps() map[string]string     { return map[string]string{} }
+func openApp(string) error            { return errNotHere }
+func setStartup(bool, []string) error { return errNotHere }
+func openURL(u string) error          { return start(exec.Command("xdg-open", u)) }
 
-func runScript(command string) error { return exec.Command("/bin/sh", "-c", command).Start() }
+func runScript(command string) error { return start(exec.Command("/bin/sh", "-c", command)) }

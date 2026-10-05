@@ -2,22 +2,26 @@
 // press shortcuts and media keys, type text, open apps and websites, and run the scripts the
 // computer's owner lists, over the local network (docs/deck.md).
 //
-// It does only what a request names, and runs only scripts from its own list, which only somebody at
-// this computer can edit: a paired Show cannot run a command nobody here put there.
+// Pairing a Show gives it the run of this computer's signed-in session: a deck that can press keys and
+// type can open a terminal and type into it. The script list and the app list are what buttons pick
+// from, not a fence. Pair only Shows you trust, and keep their setup page behind the settings lock.
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/libp2p/zeroconf/v2"
 
@@ -36,7 +40,14 @@ func main() {
 	flag.Parse()
 
 	if *startup != "" {
-		if err := setStartup(*startup == "on"); err != nil {
+		// The other options given with -startup are the ones it starts with.
+		var keep []string
+		flag.Visit(func(f *flag.Flag) {
+			if f.Name != "startup" && f.Name != "new-key" {
+				keep = append(keep, "-"+f.Name+"="+f.Value.String())
+			}
+		})
+		if err := setStartup(*startup == "on", keep); err != nil {
 			log.Fatalf("start at sign-in: %v", err)
 		}
 		fmt.Printf("Start at sign-in: %s.\n", *startup)
@@ -85,7 +96,11 @@ Leave this window open while you use the deck.
 
 `, version, *name, key, *port, scripts, len(a.hello().Scripts), keysNote())
 
-	var sem = make(chan struct{}, 8)
+	// Eight connections at once, two from any one address: a host on the network that opens and holds
+	// connections can't keep the paired Shows out.
+	sem := make(chan struct{}, 8)
+	var perMu sync.Mutex
+	per := map[string]int{}
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -96,14 +111,32 @@ Leave this window open while you use the deck.
 			c.Close()
 			continue
 		}
-		select {
-		case sem <- struct{}{}:
-		default:
+		from := hostOf(c.RemoteAddr())
+		perMu.Lock()
+		busy := per[from] >= 2
+		if !busy {
+			select {
+			case sem <- struct{}{}:
+				per[from]++
+			default:
+				busy = true
+			}
+		}
+		perMu.Unlock()
+		if busy {
+			log.Printf("refused %s: too many connections at once", from)
 			c.Close()
 			continue
 		}
 		go func() {
-			defer func() { <-sem }()
+			defer func() {
+				perMu.Lock()
+				if per[from]--; per[from] <= 0 {
+					delete(per, from)
+				}
+				perMu.Unlock()
+				<-sem
+			}()
 			a.serve(c, key)
 		}()
 	}
@@ -126,6 +159,7 @@ func loadKey(path string, fresh bool) (string, error) {
 	if !fresh {
 		if b, err := os.ReadFile(path); err == nil {
 			if k := strings.TrimSpace(string(b)); len(deckwire.NormalizeKey(k)) >= 16 {
+				_ = os.Chmod(path, 0o600) // a key copied in from elsewhere may have come readable to all
 				return k, nil
 			}
 		}
@@ -156,17 +190,47 @@ type agent struct {
 	name        string
 	scriptsPath string
 
-	mu      sync.Mutex
-	scripts []script
-	apps    map[string]string // name -> what opens it
-	appList []string
+	mu        sync.Mutex
+	scripts   []script
+	scriptsAt time.Time         // the list's modified time when it was read
+	apps      map[string]string // name -> what opens it
+	appList   []string
+
+	// typing is held while text is typed, so two presses don't interleave their letters.
+	typing sync.Mutex
 }
 
-func (a *agent) refresh() {
+// loadScripts reads the script list again when it changed since it was last read, so a line added
+// and saved is there for the next press without restarting the agent.
+func (a *agent) loadScripts(force bool) {
+	st, err := os.Stat(a.scriptsPath)
+	if err != nil {
+		return
+	}
+	a.mu.Lock()
+	same := !force && st.ModTime().Equal(a.scriptsAt)
+	a.mu.Unlock()
+	if same {
+		return
+	}
+	if err := checkPrivate(st); err != nil {
+		log.Printf("not using %s: %v", a.scriptsPath, err)
+		a.mu.Lock()
+		a.scripts, a.scriptsAt = nil, st.ModTime()
+		a.mu.Unlock()
+		return
+	}
 	scripts, err := readScripts(a.scriptsPath)
 	if err != nil {
 		log.Printf("reading %s: %v", a.scriptsPath, err)
 	}
+	a.mu.Lock()
+	a.scripts, a.scriptsAt = scripts, st.ModTime()
+	a.mu.Unlock()
+}
+
+func (a *agent) refresh() {
+	a.loadScripts(true)
 	apps := listApps()
 	names := make([]string, 0, len(apps))
 	for n := range apps {
@@ -177,7 +241,7 @@ func (a *agent) refresh() {
 		names = names[:deckwire.MaxNames]
 	}
 	a.mu.Lock()
-	a.scripts, a.apps, a.appList = scripts, apps, names
+	a.apps, a.appList = apps, names
 	a.mu.Unlock()
 }
 
@@ -250,6 +314,7 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 	}
 	switch req.Op {
 	case deckwire.OpHello:
+		a.loadScripts(false)
 		h := a.hello()
 		return deckwire.Reply{OK: true, Hello: &h}
 	case deckwire.OpRefresh:
@@ -263,7 +328,22 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		}
 		return fail(pressCombo(combo))
 	case deckwire.OpType:
-		return fail(typeText(req.Arg))
+		// Checked now and typed after answering: a long text takes longer to type than the Show waits,
+		// and a press that seems to fail gets pressed again.
+		if req.Arg == "" {
+			return fail(errors.New("nothing to type"))
+		}
+		if err := checkType(req.Arg); err != nil {
+			return fail(err)
+		}
+		go func() {
+			a.typing.Lock()
+			defer a.typing.Unlock()
+			if err := typeText(req.Arg); err != nil {
+				log.Printf("typing failed: %v", err)
+			}
+		}()
+		return deckwire.Reply{OK: true}
 	case deckwire.OpOpen:
 		if isWebAddress(req.Arg) {
 			return fail(openURL(req.Arg))
@@ -276,6 +356,7 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		}
 		return fail(openApp(target))
 	case deckwire.OpRun:
+		a.loadScripts(false)
 		a.mu.Lock()
 		var cmd string
 		for _, s := range a.scripts {
@@ -292,10 +373,16 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 	return deckwire.Reply{Error: "not something this agent does"}
 }
 
-// isWebAddress is whether s is an http or https address, the only kind the agent opens as one.
+// isWebAddress is whether s is an http or https address with a host, the only kind the agent opens as
+// one: no control characters, no spaces, nothing invisible.
 func isWebAddress(s string) bool {
-	l := strings.ToLower(s)
-	return (strings.HasPrefix(l, "http://") || strings.HasPrefix(l, "https://")) && !strings.ContainsAny(s, " \t\r\n\"")
+	for _, r := range s {
+		if r <= ' ' || r == 0x7f || r == '"' || !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil
 }
 
 func keysNote() string {
@@ -306,7 +393,7 @@ func keysNote() string {
 	case "darwin":
 		return "not allowed yet: System Settings > Privacy & Security > Accessibility, turn on this agent (or the Terminal it runs in), then start it again"
 	case "linux":
-		return "not allowed to make a keyboard yet: see the Linux part of the Deck guide (the input group)"
+		return "not allowed to make a keyboard yet: see the Linux part of the Deck guide (the uinput group)"
 	}
 	return "can't press keys on this system"
 }

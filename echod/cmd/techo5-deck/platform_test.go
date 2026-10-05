@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -54,8 +55,27 @@ func TestMacScripts(t *testing.T) {
 			t.Errorf("%s pressed on macOS", bad)
 		}
 	}
-	got := macTypeScript(`Say "hi" back\slash` + "\n" + "line 2")
-	if !strings.Contains(got, `keystroke "Say \"hi\" back\\slash"`) || !strings.Contains(got, "key code 36") || !strings.Contains(got, `keystroke "line 2"`) {
-		t.Errorf("type script:\n%s", got)
+	// Quotes of every kind, backslashes, and the characters JavaScript would end a line at all stay
+	// inside the JSON string.
+	text := `Say "hi" “curly” «guillemets» back\slash ` + "\u2028\u2029" + `"); se.doShellScript("x` + "\nline 2"
+	got, err := macTypeScript(text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(got, "var lines = ") + len("var lines = ")
+	end := strings.Index(got[start:], ";\n") + start
+	var lines []string
+	if err := json.Unmarshal([]byte(got[start:end]), &lines); err != nil {
+		t.Fatalf("the lines aren't one JSON value: %v\n%s", err, got)
+	}
+	if strings.Join(lines, "\n") != text {
+		t.Errorf("text came back as %q", strings.Join(lines, "\n"))
+	}
+	if strings.ContainsAny(got[start:end], "\u2028\u2029") {
+		t.Error("line separators left raw in the script")
+	}
+	c, _ = parseCombo("media_stop")
+	if _, _, err := macKeyScript(c); err == nil {
+		t.Error("media_stop pressed play/pause on macOS")
 	}
 }

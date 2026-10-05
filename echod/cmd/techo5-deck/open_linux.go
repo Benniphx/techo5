@@ -82,20 +82,20 @@ func desktopEntryName(path string) (string, bool) {
 func openApp(path string) error {
 	id := strings.TrimSuffix(filepath.Base(path), ".desktop")
 	if gtk, err := exec.LookPath("gtk-launch"); err == nil {
-		return exec.Command(gtk, id).Start()
+		return start(exec.Command(gtk, id))
 	}
 	if gio, err := exec.LookPath("gio"); err == nil {
-		return exec.Command(gio, "launch", path).Start()
+		return start(exec.Command(gio, "launch", path))
 	}
 	return errors.New("can't start apps here: install gtk-launch or gio")
 }
 
-func openURL(u string) error { return exec.Command("xdg-open", u).Start() }
+func openURL(u string) error { return start(exec.Command("xdg-open", u)) }
 
-func runScript(command string) error { return exec.Command("/bin/sh", "-c", command).Start() }
+func runScript(command string) error { return start(exec.Command("/bin/sh", "-c", command)) }
 
-// setStartup puts the agent in the desktop's autostart folder, or takes it out.
-func setStartup(on bool) error {
+// setStartup puts the agent in the desktop's autostart folder, with args, or takes it out.
+func setStartup(on bool, args []string) error {
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return err
@@ -114,6 +114,17 @@ func setStartup(on bool) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
-	entry := fmt.Sprintf("[Desktop Entry]\nType=Application\nName=TECHO5 Deck agent\nExec=%q\nTerminal=true\nX-GNOME-Autostart-enabled=true\n", exe)
+	cmd := desktopQuote(exe)
+	for _, a := range args {
+		cmd += " " + desktopQuote(a)
+	}
+	entry := fmt.Sprintf("[Desktop Entry]\nType=Application\nName=TECHO5 Deck agent\nExec=%s\nTerminal=true\nX-GNOME-Autostart-enabled=true\n", cmd)
 	return os.WriteFile(p, []byte(entry), 0o644)
+}
+
+// desktopQuote quotes one argument of a desktop entry's Exec line as the Desktop Entry spec has it:
+// in double quotes, a backslash before " ` $ and \, and % doubled.
+func desktopQuote(a string) string {
+	a = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "`", "\\`", `$`, `\$`, `%`, `%%`).Replace(a)
+	return `"` + a + `"`
 }
