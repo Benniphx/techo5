@@ -79,3 +79,22 @@ func testStore(t *testing.T) *Store {
 	}
 	return st
 }
+
+func TestDeckComputers(t *testing.T) {
+	st := testStore(t)
+	w := st.Set().Deck()
+	_ = w.PairComputer(DeckComputer{Name: "Office PC", Addr: "192.168.1.30", Key: "K1"})
+	_ = w.PairComputer(DeckComputer{Name: "Office PC", Addr: "192.168.1.31", Key: "K2"})
+	_ = w.PairComputer(DeckComputer{Name: "Laptop", Addr: "192.168.1.40", Key: "K3"})
+	d := st.Get().Deck
+	if c, ok := d.Computer("Office PC"); !ok || c.Addr != "192.168.1.31" || len(d.Computers) != 2 {
+		t.Errorf("computers %+v", d.Computers)
+	}
+	_ = w.ForgetComputer("Office PC")
+	if _, ok := st.Get().Deck.Computer("Office PC"); ok {
+		t.Error("forgotten computer still paired")
+	}
+	if !DeckPCRun.OnComputer() || DeckOBSScene.OnComputer() {
+		t.Error("OnComputer")
+	}
+}

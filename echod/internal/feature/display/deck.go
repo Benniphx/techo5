@@ -86,11 +86,12 @@ func (d *Display) deckScene(s *scene, now time.Time) {
 	}
 	cols, rows := cfg.Grid()
 	st := deck.Get().OBS()
+	pcs := deck.Get().Computers()
 	v := deckView{cols: cols, rows: rows, page: page, pages: max(len(cfg.Pages), 1),
 		connected: st.Connected, problem: st.Problem, obsSet: cfg.OBS.Addr != ""}
 	for i := range cols * rows {
 		b := cfg.Button(page, i)
-		lit, known := deck.Lit(b, st)
+		lit, known := deck.Lit(b, st, pcs)
 		bv := deckButtonView{empty: b.Action == config.DeckNone, label: deck.Label(b), icon: deck.Icon(b, lit),
 			color: b.Color, lit: lit, known: known}
 		if press.page == page && press.button == i && now.Before(press.until) {

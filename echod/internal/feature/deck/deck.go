@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -37,11 +38,13 @@ type Feature struct {
 	Changed hook.Hook[struct{}]
 
 	obs *obsws.Client
+	pcs computers
 
 	mu      sync.Mutex
 	conf    obsws.Config
 	tracked []obsws.Item
 	reload  chan struct{}
+	check   chan struct{}
 }
 
 var (
@@ -52,7 +55,7 @@ var (
 // Get is the deck.
 func Get() *Feature {
 	once.Do(func() {
-		f := &Feature{reload: make(chan struct{}, 1)}
+		f := &Feature{reload: make(chan struct{}, 1), check: make(chan struct{}, 1)}
 		f.obs = obsws.New(func() { f.Changed.Emit(struct{}{}) })
 		shared = f
 	})
@@ -65,6 +68,7 @@ func (f *Feature) Name() string { return "deck" }
 func (f *Feature) Run(ctx context.Context) error {
 	f.follow()
 	go f.obs.Run(ctx, f.obsConfig)
+	go f.watchComputers(ctx)
 	t := time.NewTicker(lookEvery)
 	defer t.Stop()
 	for {
@@ -73,8 +77,34 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-t.C:
 		case <-f.reload:
+			f.recheck()
 		}
 		f.follow()
+	}
+}
+
+// watchComputers asks the paired computers who they are now and then, and whenever asked to.
+func (f *Feature) watchComputers(ctx context.Context) {
+	t := time.NewTicker(checkEvery)
+	defer t.Stop()
+	for {
+		if len(config.Get().Deck.Computers) > 0 || len(f.Computers()) > 0 {
+			f.checkComputers()
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		case <-f.check:
+		}
+	}
+}
+
+// recheck asks the paired computers again soon.
+func (f *Feature) recheck() {
+	select {
+	case f.check <- struct{}{}:
+	default:
 	}
 }
 
@@ -166,15 +196,23 @@ func (f *Feature) do(ctx context.Context, b config.DeckButton) error {
 	case config.DeckOBSSource:
 		return f.obs.ToggleShown(ctx, obsws.Item{Scene: b.Scene, Source: b.Source})
 	}
+	if b.Action.OnComputer() {
+		return f.pcDo(b)
+	}
 	return ErrEmpty
 }
 
 // Lit is whether a button shows as on: its scene is live, OBS is streaming or recording, its input
-// is muted, its source is shown. Known is false while OBS's state for it isn't known (OBS away, or
-// an input or source OBS doesn't have), and the button is then drawn dimmed.
-func Lit(b config.DeckButton, st obsws.State) (lit, known bool) {
+// is muted, its source is shown. Known is false while its state isn't known (OBS away, an input or
+// source OBS doesn't have, a computer that isn't answering), and the button is then drawn dimmed.
+// A computer button is never lit: pressing keys has no state to show.
+func Lit(b config.DeckButton, st obsws.State, pcs map[string]ComputerState) (lit, known bool) {
 	if b.Action == config.DeckNone {
 		return false, false
+	}
+	if b.Action.OnComputer() {
+		s, ok := pcs[b.Computer]
+		return false, ok && s.Hello != nil
 	}
 	if !st.Connected {
 		return false, false
@@ -225,6 +263,14 @@ func Icon(b config.DeckButton, lit bool) string {
 			return "eye"
 		}
 		return "eye-off"
+	case config.DeckPCKeys:
+		return "keyboard"
+	case config.DeckPCType:
+		return "form-textbox"
+	case config.DeckPCOpen:
+		return "open-in-app"
+	case config.DeckPCRun:
+		return "script-text-play"
 	}
 	return ""
 }
@@ -245,6 +291,10 @@ func Label(b config.DeckButton) string {
 		return b.Input
 	case config.DeckOBSSource:
 		return b.Source
+	case config.DeckPCKeys:
+		return strings.ToUpper(b.Value)
+	case config.DeckPCType, config.DeckPCOpen, config.DeckPCRun:
+		return b.Value
 	}
 	return ""
 }

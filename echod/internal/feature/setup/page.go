@@ -259,6 +259,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveDeckGrid(r)
 	case "deckpage":
 		problem = saveDeckPage(r)
+	case "deckpc":
+		problem = saveDeckPC(r)
 	case "timezone":
 		zone := strings.TrimSpace(r.PostFormValue("zone"))
 		switch {

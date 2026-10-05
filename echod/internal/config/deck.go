@@ -15,6 +15,27 @@ type Deck struct {
 	// Pages are the deck's pages, the first one opening first. A page's Buttons are its squares
 	// row by row; a square past the end of the list, or with no action, is empty.
 	Pages []DeckPage `json:"pages,omitempty"`
+
+	// Computers are the computers running the TECHO5 Deck agent that this Show is paired with.
+	Computers []DeckComputer `json:"computers,omitempty"`
+}
+
+// DeckComputer is a computer the deck's computer buttons act on: the name its agent gave, where it
+// is (host or host:port), and the pairing key its agent showed. The key stays on the device.
+type DeckComputer struct {
+	Name string `json:"name"`
+	Addr string `json:"addr"`
+	Key  string `json:"key"`
+}
+
+// Computer is the paired computer called name, if there is one.
+func (d Deck) Computer(name string) (DeckComputer, bool) {
+	for _, c := range d.Computers {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return DeckComputer{}, false
 }
 
 // DeckOBS is where OBS's WebSocket server is (host or host:port; the port is 4455 unless given) and
@@ -44,6 +65,11 @@ type DeckButton struct {
 	Scene  string `json:"scene,omitempty"`
 	Source string `json:"source,omitempty"`
 	Input  string `json:"input,omitempty"`
+
+	// Computer is the paired computer a computer button acts on, and Value what it does there: the
+	// keys to press ("ctrl+shift+m"), the text to type, the app or website to open, the script to run.
+	Computer string `json:"computer,omitempty"`
+	Value    string `json:"value,omitempty"`
 }
 
 // DeckAction is what a deck button does.
@@ -56,11 +82,22 @@ const (
 	DeckOBSRecord DeckAction = "obs_record" // start or stop recording
 	DeckOBSMute   DeckAction = "obs_mute"   // mute or unmute Input
 	DeckOBSSource DeckAction = "obs_source" // show or hide Source in Scene
+
+	DeckPCKeys DeckAction = "pc_keys" // press Value on Computer
+	DeckPCType DeckAction = "pc_type" // type Value on Computer
+	DeckPCOpen DeckAction = "pc_open" // open the app or website Value on Computer
+	DeckPCRun  DeckAction = "pc_run"  // run the script Value on Computer
 )
+
+// OnComputer is whether the action is done by a computer's agent.
+func (a DeckAction) OnComputer() bool {
+	return a == DeckPCKeys || a == DeckPCType || a == DeckPCOpen || a == DeckPCRun
+}
 
 // DeckActions is every action, in the order a list shows them.
 func DeckActions() []DeckAction {
-	return []DeckAction{DeckNone, DeckOBSScene, DeckOBSStream, DeckOBSRecord, DeckOBSMute, DeckOBSSource}
+	return []DeckAction{DeckNone, DeckOBSScene, DeckOBSStream, DeckOBSRecord, DeckOBSMute, DeckOBSSource,
+		DeckPCKeys, DeckPCType, DeckPCOpen, DeckPCRun}
 }
 
 // Label is how a list names an action.
@@ -76,6 +113,14 @@ func (a DeckAction) Label() string {
 		return "Mute/unmute"
 	case DeckOBSSource:
 		return "Show/hide a source"
+	case DeckPCKeys:
+		return "Press keys"
+	case DeckPCType:
+		return "Type text"
+	case DeckPCOpen:
+		return "Open app or website"
+	case DeckPCRun:
+		return "Run script"
 	}
 	return "Empty"
 }
@@ -128,6 +173,7 @@ func (d Deck) Button(p, i int) DeckButton {
 
 // clone copies the pages, so a snapshot does not share the store's slices.
 func (d Deck) clone() Deck {
+	d.Computers = slices.Clone(d.Computers)
 	d.Pages = slices.Clone(d.Pages)
 	for i := range d.Pages {
 		d.Pages[i].Buttons = slices.Clone(d.Pages[i].Buttons)
@@ -144,6 +190,10 @@ func (b DeckButton) tidy() DeckButton {
 		return s
 	}
 	b.Label, b.Icon, b.Scene, b.Source, b.Input = clip(b.Label), clip(b.Icon), clip(b.Scene), clip(b.Source), clip(b.Input)
+	b.Computer = clip(b.Computer)
+	if len(b.Value) > 4096 {
+		b.Value = b.Value[:4096]
+	}
 	if !slices.Contains(DeckActions(), b.Action) {
 		b.Action = DeckNone
 	}
@@ -211,6 +261,32 @@ func (w DeckWriter) Page(p int, buttons []DeckButton) error {
 			c.Deck.Pages = append(c.Deck.Pages, DeckPage{})
 		}
 		c.Deck.Pages[p].Buttons = tidy
+	})
+}
+
+// DeckComputersMax is how many computers a Show can be paired with.
+const DeckComputersMax = 10
+
+// PairComputer adds a computer, or replaces the one of the same name.
+func (w DeckWriter) PairComputer(c DeckComputer) error {
+	return w.st.Update(func(cf *Config) {
+		for i, old := range cf.Deck.Computers {
+			if old.Name == c.Name {
+				cf.Deck.Computers[i] = c
+				return
+			}
+		}
+		if len(cf.Deck.Computers) < DeckComputersMax {
+			cf.Deck.Computers = append(cf.Deck.Computers, c)
+		}
+	})
+}
+
+// ForgetComputer unpairs the computer called name. Its buttons stay, doing nothing until a computer
+// of that name is paired again.
+func (w DeckWriter) ForgetComputer(name string) error {
+	return w.st.Update(func(cf *Config) {
+		cf.Deck.Computers = slices.DeleteFunc(cf.Deck.Computers, func(c DeckComputer) bool { return c.Name == name })
 	})
 }
 

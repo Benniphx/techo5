@@ -27,14 +27,14 @@ func TestLitFollowsOBS(t *testing.T) {
 		{config.DeckButton{Action: config.DeckOBSSource, Scene: "Main", Source: "Webcam"}, false, true},
 		{config.DeckButton{}, false, false},
 	} {
-		lit, known := Lit(c.b, st)
+		lit, known := Lit(c.b, st, nil)
 		if lit != c.lit || known != c.known {
 			t.Errorf("%+v: lit %v known %v, want %v %v", c.b, lit, known, c.lit, c.known)
 		}
 	}
 	// OBS away: nothing is known, whatever was last seen.
 	st.Connected = false
-	if _, known := Lit(config.DeckButton{Action: config.DeckOBSStream}, st); known {
+	if _, known := Lit(config.DeckButton{Action: config.DeckOBSStream}, st, nil); known {
 		t.Error("known while OBS is away")
 	}
 }
