@@ -94,7 +94,8 @@ type Screen struct {
 	Language string `json:"language,omitempty"`
 
 	// ClockTap is what a tap on the clock does: empty starts a voice turn, as it always has,
-	// "dashboard" puts the dashboard up, and "nothing" leaves it, for a panel that is talked to.
+	// "dashboard" puts the dashboard up, "deck" the deck (Show), and "nothing" leaves it, for a panel
+	// that is talked to.
 	ClockTap string `json:"clock_tap,omitempty"`
 }
 

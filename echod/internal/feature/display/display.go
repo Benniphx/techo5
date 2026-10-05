@@ -36,6 +36,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/assistant"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/deck"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
@@ -233,6 +234,11 @@ type Display struct {
 	calDetail *hass.Event
 	calScroll int // the day's list, scrolled this many rows
 
+	// The deck page (deck.go): up while deckUp, on deckPage, with deckPress the press being shown.
+	deckUp    bool
+	deckPage  int
+	deckPress deckPress
+
 	// popup is an event popped up on the screen (calendar_popup.go), until popupUntil or a tap;
 	// popupNext is when the calendar is next looked at (what was shown is kept in the config).
 	popup      *hass.Event
@@ -391,6 +397,7 @@ func build() *Display {
 	d.watchRoom()
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Asked.Listen(d.dashboardAsked)
+	deck.Get().Changed.Listen(d.deckChanged)
 	assistant.SetScreen(d.showPage)
 	return d
 }
@@ -402,7 +409,7 @@ func (d *Display) Name() string { return "screen" }
 func turnShown(s scene) bool {
 	return s.eq != nil && s.call.Phase == phone.Idle && !s.ring.any() && !s.setupAsking && !s.bt.Pairing &&
 		!s.showWifi && !s.showSheet && !s.showCamera && !s.showAlert && !s.showCalendar && !s.showRadar &&
-		!s.showWeather && !s.showDash
+		!s.showWeather && !s.showDash && !s.showDeck
 }
 
 // turnStyleSel is the Turn screen setting in Home Assistant.
@@ -886,6 +893,13 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
+	// The deck: every finger is its while it is up.
+	if d.deckShowing() {
+		d.deckGesture(g)
+		d.wake()
+		return
+	}
+
 	// The dashboard: every finger is its, including the one that takes it away.
 	d.mu.Lock()
 	dashUp := d.dashShowing
@@ -1127,6 +1141,10 @@ func (d *Display) gesture(g touch.Gesture) {
 					slog.Info("screen: dashboard by a tap on the clock")
 					return
 				}
+			case "deck":
+				if d.openDeck() {
+					return
+				}
 			}
 		}
 		voice.Get().Action()
@@ -1139,6 +1157,10 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.openDrawer(tab)
 		}
 	case touch.SwipeUp:
+		// From the bottom edge it is the deck, once there is one; anywhere else it is the volume.
+		if d.fromBottomEdge(g.Y) && d.openDeck() {
+			return
+		}
 		media.Get().Adjust(+1)
 	case touch.SwipeDown:
 		// From the top edge it is the sheet; anywhere else it is the volume.
@@ -1965,10 +1987,11 @@ func (d *Display) frame() time.Duration {
 	// boring is the plain idle page — the same set of pages draw() checks before falling through to
 	// bigClock/nowPlaying. Background mode rides along with it; Screensaver only takes over once it
 	// has held for the configured wait, tracked by how long it has run continuously.
+	d.deckScene(&s, now)
 	d.dashScene(&s, s.showSheet || s.showDrawer || ring.any() || call.Phase != phone.Idle)
 	boring := s.phase == "idle" && call.Phase == phone.Idle && !ring.any() && !s.bt.Pairing &&
 		!s.showWifi && !s.showSheet && !s.showCamera && !s.showRadar && !s.showWeather && !s.showCalendar && !s.showAlert && !s.nowPlaying &&
-		!s.showDash
+		!s.showDash && !s.showDeck
 	// A browser waiting to be let in is a page of its own, over whatever is on the screen: asking for
 	// the setup page is done from the settings screen, so the answer has to reach somebody who is
 	// still standing in it. It was set only on the idle page once, and the press could not be given
@@ -2024,7 +2047,7 @@ func (d *Display) frame() time.Duration {
 
 	// The Call button is on the clock itself and only there: on any other page a tap where it would be
 	// still does what that page does.
-	s.callButton = callButton.Load() && s.phase == "idle" && !s.nowPlaying && !s.strip && !s.showWeather && !s.showCalendar &&
+	s.callButton = callButton.Load() && s.phase == "idle" && !s.nowPlaying && !s.strip && !s.showWeather && !s.showCalendar && !s.showDeck &&
 		s.sunrise == 0 && s.slideshowScreensaver == nil && !s.showDrawer && !s.showSheet
 	d.mu.Lock()
 	d.callShown = s.callButton

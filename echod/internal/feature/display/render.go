@@ -123,6 +123,10 @@ type scene struct {
 	// showCalendar is the calendar page, cal what it shows (render_calendar.go).
 	showCalendar bool
 
+	// showDeck is the deck page, deck what it shows (render_deck.go).
+	showDeck bool
+	deck     deckView
+
 	// alerts are the weather alerts at home and nearby (the clock's badge, the rain map's pills and
 	// outlines); showAlert is the alert page, on alertIdx of them, scrolled alertScroll lines (alerts.go).
 	alerts      home.AlertView
@@ -483,6 +487,13 @@ func (r *renderer) draw(s scene) {
 	}
 	if s.showCalendar {
 		r.calendarPage(s)
+		if s.showVolume {
+			r.volumeBar(s)
+		}
+		return
+	}
+	if s.showDeck {
+		r.deckPage(s)
 		if s.showVolume {
 			r.volumeBar(s)
 		}
