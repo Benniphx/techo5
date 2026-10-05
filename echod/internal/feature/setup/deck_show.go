@@ -88,7 +88,7 @@ func deckSection(w http.ResponseWriter, token string) {
 		if p == 0 {
 			open = " open"
 		}
-		fmt.Fprintf(w, `<details%s><summary>Page %d</summary><form method="post" action="/setup/save">`, open, p+1)
+		fmt.Fprintf(w, `<details%s><summary>Page %d</summary><form method="post" action="/setup/save?big=deck">`, open, p+1)
 		hidden(w, token, "deckpage", "photos")
 		fmt.Fprintf(w, `<input type="hidden" name="page" value="%d">`, p)
 		for i := range cols * rows {
@@ -127,7 +127,7 @@ func deckButtonRow(w http.ResponseWriter, i, cols int, b config.DeckButton, pcs 
 	}
 	n := strconv.Itoa(i)
 	fmt.Fprintf(w, `<div class="deckrow"><p class="note" style="margin:.6em 0 .2em"><strong>Row %d, button %d</strong></p>`, i/cols+1, i%cols+1)
-	fmt.Fprintf(w, `<input name="label%s" value="%s" placeholder="Label" aria-label="Label" autocomplete="off">`, n, html.EscapeString(b.Label))
+	fmt.Fprintf(w, `<input name="label%s" value="%s" maxlength="60" placeholder="Label" aria-label="Label" autocomplete="off">`, n, html.EscapeString(b.Label))
 	fmt.Fprintf(w, `<select name="action%s" aria-label="Action">`, n)
 	for _, a := range config.DeckActions() {
 		switch a {
@@ -139,9 +139,9 @@ func deckButtonRow(w http.ResponseWriter, i, cols int, b config.DeckButton, pcs 
 		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, a, selected(a == b.Action), html.EscapeString(a.Label()))
 	}
 	fmt.Fprint(w, `</optgroup></select>`)
-	fmt.Fprintf(w, `<input name="target%s" value="%s" placeholder="Scene or input" aria-label="Scene or input" list="%s" autocomplete="off">`,
+	fmt.Fprintf(w, `<input name="target%s" value="%s" maxlength="200" placeholder="Scene or input" aria-label="Scene or input" list="%s" autocomplete="off">`,
 		n, html.EscapeString(target), list)
-	fmt.Fprintf(w, `<input name="source%s" value="%s" placeholder="Source (show/hide only)" aria-label="Source" autocomplete="off">`,
+	fmt.Fprintf(w, `<input name="source%s" value="%s" maxlength="200" placeholder="Source (show/hide only)" aria-label="Source" autocomplete="off">`,
 		n, html.EscapeString(b.Source))
 	if len(pcs) > 0 || b.Computer != "" {
 		fmt.Fprintf(w, `<select name="computer%s" aria-label="Computer"><option value="">Computer…</option>`, n)
@@ -152,7 +152,7 @@ func deckButtonRow(w http.ResponseWriter, i, cols int, b config.DeckButton, pcs 
 			fmt.Fprintf(w, `<option value="%s" selected>%s (not paired)</option>`, html.EscapeString(b.Computer), html.EscapeString(b.Computer))
 		}
 		fmt.Fprint(w, `</select>`)
-		fmt.Fprintf(w, `<input name="value%s" value="%s" placeholder="Keys, text, app, website or script" aria-label="Keys, text, app, website or script" list="deck-pc" autocomplete="off">`,
+		fmt.Fprintf(w, `<input name="value%s" value="%s" maxlength="1000" placeholder="Keys, text, app, website or script" aria-label="Keys, text, app, website or script" list="deck-pc" autocomplete="off">`,
 			n, html.EscapeString(b.Value))
 	}
 	fmt.Fprintf(w, `<select name="color%s" aria-label="Color">`, n)
@@ -164,7 +164,7 @@ func deckButtonRow(w http.ResponseWriter, i, cols int, b config.DeckButton, pcs 
 		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, c, selected(c == b.Color), html.EscapeString(label))
 	}
 	fmt.Fprint(w, `</select>`)
-	fmt.Fprintf(w, `<input name="icon%s" value="%s" placeholder="Icon (optional)" aria-label="Icon" autocomplete="off"></div>`,
+	fmt.Fprintf(w, `<input name="icon%s" value="%s" maxlength="60" placeholder="Icon (optional)" aria-label="Icon" autocomplete="off"></div>`,
 		n, html.EscapeString(b.Icon))
 }
 

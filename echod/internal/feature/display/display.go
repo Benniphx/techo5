@@ -238,6 +238,11 @@ type Display struct {
 	deckUp    bool
 	deckPage  int
 	deckPress deckPress
+	// deckOnScreen is whether the last frame drew the deck: a camera, the settings or a page asked
+	// for by voice can be over it while it stays up, and then the touches are theirs. deckDrawn is
+	// what that frame showed, so an unchanged deck isn't drawn again every second.
+	deckOnScreen bool
+	deckDrawn    string
 
 	// popup is an event popped up on the screen (calendar_popup.go), until popupUntil or a tap;
 	// popupNext is when the calendar is next looked at (what was shown is kept in the config).
@@ -686,7 +691,7 @@ func (d *Display) changed(s voice.State) {
 			d.calUntil, d.calDetail = time.Time{}, nil
 			d.closeAlert()
 			d.sheet, d.quiet = false, true
-			d.dash = false
+			d.dash, d.deckUp = false, false
 			go home.Get().HideCamera()
 			go d.endMusic()
 			slog.Info("screen: home by voice")
@@ -1157,8 +1162,9 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.openDrawer(tab)
 		}
 	case touch.SwipeUp:
-		// From the bottom edge it is the deck, once there is one; anywhere else it is the volume.
-		if d.fromBottomEdge(g.Y) && d.openDeck() {
+		// From the bottom edge of the clock it is the deck, once there is one; anywhere else, and on the
+		// pages the clock's swipes also reach (now playing, the weather), it is the volume.
+		if d.fromBottomEdge(g.Y) && d.onClock() && d.openDeck() {
 			return
 		}
 		media.Get().Adjust(+1)
@@ -2053,6 +2059,13 @@ func (d *Display) frame() time.Duration {
 	d.callShown = s.callButton
 	d.mu.Unlock()
 
+	if key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle); key != "" && key == d.deckDrawn {
+		// The deck as it was last drawn, and nothing over it: drawing it again would only cost.
+		d.answerShots()
+		return 2 * time.Second
+	} else {
+		d.deckDrawn = key
+	}
 	d.r.draw(s)
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)

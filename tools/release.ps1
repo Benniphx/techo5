@@ -53,9 +53,15 @@ param(
     # The folder of TECHO5 Deck agent binaries from the same workflow run (techo5-deck-windows-amd64.exe
     # and the rest). Each is checked against CI's attestation for this tag, named in the signed
     # manifest, and published under its own name, so a link to the latest release's file never changes.
-    [string]$Agents = ''
+    [string]$Agents = '',
+    # A Show release without the agents breaks every link to the latest release's agent files, so it
+    # takes this switch to make one on purpose.
+    [switch]$NoAgents
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Agents -and -not $NoAgents) {
+    throw "no -Agents folder: the docs link to the latest release's TECHO5 Deck agent files (pass -NoAgents to release without them)"
+}
 if (($PrebuiltArm -and -not $PrebuiltArmDot) -or ($PrebuiltArmDot -and -not $PrebuiltArm)) {
     throw "PrebuiltArm and PrebuiltArmDot must be given together"
 }

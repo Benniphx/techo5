@@ -3,6 +3,7 @@
 package display
 
 import (
+	"fmt"
 	"image"
 	"log/slog"
 	"time"
@@ -41,7 +42,9 @@ func (d *Display) openDeck() bool {
 		return false
 	}
 	d.mu.Lock()
-	d.deckUp, d.deckPress = true, deckPress{}
+	// On the screen from now, not from the next frame: the swipe that opened it is still sending its
+	// steps up, and they are the deck's to ignore, not the volume's.
+	d.deckUp, d.deckOnScreen, d.deckPress = true, true, deckPress{}
 	d.closeAlert()
 	d.calUntil, d.weatherUntil = time.Time{}, time.Time{}
 	d.sheet, d.dash, d.drawer = false, false, false
@@ -62,23 +65,53 @@ func (d *Display) closeDeck() {
 	d.wake()
 }
 
-// deckShowing is whether the deck page is on the screen now.
+// deckShowing is whether the deck page is on the screen now: up, and drawn in the last frame rather
+// than under something else.
 func (d *Display) deckShowing() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.deckUp && d.view.Phase == "idle"
+	return d.deckUp && d.deckOnScreen && d.view.Phase == "idle"
+}
+
+// onClock is whether the clock itself is the page: not now playing, not the weather.
+func (d *Display) onClock() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return !d.showingPlaying && !time.Now().Before(d.weatherUntil)
+}
+
+// deckFrameKey is what a frame of the deck shows, or "" when the frame isn't just the deck: two frames
+// with the same key look the same.
+func deckFrameKey(s scene, ringing, calling bool) string {
+	if !s.showDeck || s.showVolume || ringing || calling || s.setupAsking || s.showAnnouncement ||
+		s.showReminder || s.popup != nil || s.bt.Pairing {
+		return ""
+	}
+	return fmt.Sprintf("%+v", s.deck)
 }
 
 // deckScene fills in what the deck page shows, when it is up.
 func (d *Display) deckScene(s *scene, now time.Time) {
+	// The pages asked for while the deck is up are drawn over it, and have the touches.
+	over := s.showSheet || s.showDrawer || s.showCamera || s.showWifi || s.showAlert || s.showCalendar ||
+		s.showWeather || s.showRadar || s.bt.Pairing
 	d.mu.Lock()
-	up := d.deckUp && s.phase == "idle"
-	page, press := d.deckPage, d.deckPress
+	up := d.deckUp && s.phase == "idle" && !over
+	d.deckOnScreen = up
+	press := d.deckPress
 	d.mu.Unlock()
 	if !up {
 		return
 	}
 	cfg := config.Get().Deck
+	// Pages taken away on the setup page while the deck was up on one of them.
+	pages := max(len(cfg.Pages), 1)
+	d.mu.Lock()
+	if d.deckPage >= pages {
+		d.deckPage = pages - 1
+	}
+	page := d.deckPage
+	d.mu.Unlock()
 	if !cfg.Set() {
 		// Every button taken off it from the setup page while it was up.
 		d.closeDeck()
@@ -87,7 +120,7 @@ func (d *Display) deckScene(s *scene, now time.Time) {
 	cols, rows := cfg.Grid()
 	st := deck.Get().OBS()
 	pcs := deck.Get().Computers()
-	v := deckView{cols: cols, rows: rows, page: page, pages: max(len(cfg.Pages), 1),
+	v := deckView{cols: cols, rows: rows, page: page, pages: pages,
 		connected: st.Connected, problem: st.Problem, obsSet: cfg.OBS.Addr != ""}
 	for i := range cols * rows {
 		b := cfg.Button(page, i)

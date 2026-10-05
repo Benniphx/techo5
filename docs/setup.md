@@ -189,7 +189,8 @@ the Spot too, in its settings.
   stays in view) and **Date color**.
 - **Theme**, **Answer time** and **Now playing** (the full page, or a strip over the clock).
 - **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, *Deck*
-  to open TECHO5 Deck, or *Nothing*, for a panel you only talk to. A voice request under way still
+  to open TECHO5 Deck (until a deck has buttons, a tap still starts Assist), or *Nothing*, for a panel
+  you only talk to. A voice request under way still
   takes the tap. Also on the setup page's Screen & Photos tab. See [Dashboards](dashboards.md) for the
   rest of a panel setup.
 - **TECHO5 Deck** (Show): pages of buttons for OBS Studio, opened with a swipe up from the bottom

@@ -52,7 +52,10 @@ func (f *Feature) Computers() map[string]ComputerState {
 }
 
 // checkComputers asks every paired computer who it is, all at once.
-func (f *Feature) checkComputers() {
+func (f *Feature) checkComputers() { f.askComputers(deckwire.OpHello) }
+
+// askComputers asks every paired computer op (hello, or refresh to have it read its lists again).
+func (f *Feature) askComputers(op string) {
 	pcs := config.Get().Deck.Computers
 	var wg sync.WaitGroup
 	results := make([]ComputerState, len(pcs))
@@ -60,7 +63,7 @@ func (f *Feature) checkComputers() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = ask(c, deckwire.OpHello)
+			results[i] = ask(c, op)
 		}()
 	}
 	wg.Wait()
@@ -144,6 +147,10 @@ func (f *Feature) Pair(addr, key string) (string, error) {
 	if len(name) > 64 {
 		name = name[:64]
 	}
+	// Two computers with the same name would share buttons: the second would quietly take the first's.
+	if old, ok := config.Get().Deck.Computer(name); ok && old.Addr != addr {
+		return "", fmt.Errorf("a computer called %q is already paired at %s: forget it first, or start this one's agent with -name", name, old.Addr)
+	}
 	if err := config.Set().Deck().PairComputer(config.DeckComputer{Name: name, Addr: addr, Key: key}); err != nil {
 		return "", err
 	}
@@ -171,8 +178,9 @@ func (f *Feature) LastFound() []Found {
 	return slices.Clone(f.pcs.found)
 }
 
-// Recheck asks the paired computers again now, for the setup page's Refresh.
-func (f *Feature) Recheck() { f.recheck() }
+// Recheck has the paired computers read their app and script lists again and say them, for the setup
+// page's Refresh.
+func (f *Feature) Recheck() { f.askComputers(deckwire.OpRefresh) }
 
 // FindComputers looks on the network for agents for a moment.
 func FindComputers(ctx context.Context) []Found {
@@ -182,11 +190,18 @@ func FindComputers(ctx context.Context) []Found {
 	go func() {
 		defer close(done)
 		for e := range entries {
+			// IPv4 first; an IPv6 address only when it's a private one the agent takes connections
+			// from and can be dialed without a zone (not link-local).
 			var ip net.IP
 			if len(e.AddrIPv4) > 0 {
 				ip = e.AddrIPv4[0]
-			} else if len(e.AddrIPv6) > 0 {
-				ip = e.AddrIPv6[0]
+			} else {
+				for _, a := range e.AddrIPv6 {
+					if a.IsPrivate() {
+						ip = a
+						break
+					}
+				}
 			}
 			if ip == nil || len(out) >= 50 {
 				continue

@@ -103,6 +103,12 @@ type Client struct {
 
 	writeMu sync.Mutex
 	nextID  atomic.Uint64
+
+	// reload asks the session's one reloader to read OBS's lists again; restart wakes Run from a wait
+	// and stop ends the session that is up or still logging in, after the settings change.
+	reload  chan struct{}
+	restart chan struct{}
+	stop    context.CancelFunc
 }
 
 type reply struct {
@@ -115,7 +121,8 @@ type reply struct {
 // New makes a client. onChange, when set, is called (from the client's own goroutine) after anything
 // in State changes; it must not block.
 func New(onChange func()) *Client {
-	return &Client{onChange: onChange, pending: map[string]chan reply{}, itemIDs: map[Item]int{}}
+	return &Client{onChange: onChange, pending: map[string]chan reply{}, itemIDs: map[Item]int{},
+		reload: make(chan struct{}, 1), restart: make(chan struct{}, 1)}
 }
 
 // State is a copy of what is known now.
@@ -171,8 +178,17 @@ func (c *Client) Run(ctx context.Context, cfg func() Config) {
 		if time.Since(start) > time.Minute {
 			wait = retryFirst
 		}
-		if !sleep(ctx, wait) {
+		t := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
 			return
+		case <-c.restart:
+			// New settings: try them now, from the start of the backoff.
+			t.Stop()
+			wait = retryFirst
+			continue
+		case <-t.C:
 		}
 		if wait *= 2; wait > retryMost {
 			wait = retryMost
@@ -184,10 +200,14 @@ func (c *Client) Run(ctx context.Context, cfg func() Config) {
 // address or password changes.
 func (c *Client) Restart() {
 	c.mu.Lock()
-	conn := c.conn
+	stop := c.stop
 	c.mu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
+	if stop != nil {
+		stop()
+	}
+	select {
+	case c.restart <- struct{}{}:
+	default:
 	}
 }
 
@@ -246,6 +266,11 @@ func (c *Client) session(ctx context.Context, conf Config) error {
 	if err != nil {
 		return err
 	}
+	ctx, end := context.WithCancel(ctx)
+	defer end()
+	c.mu.Lock()
+	c.stop = end
+	c.mu.Unlock()
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	d := websocket.Dialer{Subprotocols: []string{"obswebsocket.json"}, HandshakeTimeout: dialTimeout}
@@ -259,6 +284,9 @@ func (c *Client) session(ctx context.Context, conf Config) error {
 	defer stop()
 
 	if err := identify(conn, conf.Password); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return err
 	}
 
@@ -276,7 +304,41 @@ func (c *Client) session(ctx context.Context, conf Config) error {
 		return err
 	}
 	slog.Info("obs: connected", "addr", conf.Addr)
+	go c.reloader(ctx)
 	return <-readErr
+}
+
+// reloader reads OBS's lists again when they change, once for a burst of changes: deleting several
+// sources, or switching scene collections, sends dozens of events, and each would otherwise start its
+// own full reload, the last to finish winning whatever it saw.
+func (c *Client) reloader(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.reload:
+		}
+		// Let the burst finish.
+		t := time.NewTimer(300 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return
+		case <-t.C:
+		}
+		select {
+		case <-c.reload:
+		default:
+		}
+		c.mu.Lock()
+		c.itemIDs = map[Item]int{}
+		c.mu.Unlock()
+		lctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		if err := c.load(lctx); err != nil && ctx.Err() == nil {
+			slog.Info("obs: reloading after a change", "err", err)
+		}
+		cancel()
+	}
 }
 
 // identify answers OBS's Hello, with the login when OBS asks for one.
@@ -641,15 +703,12 @@ func (c *Client) event(raw json.RawMessage) {
 	}
 	c.mu.Unlock()
 	if reload {
-		// Lists changed in OBS: read them again, off the read loop, which the requests need.
-		go func() {
-			c.mu.Lock()
-			c.itemIDs = map[Item]int{}
-			c.mu.Unlock()
-			if err := c.load(context.Background()); err != nil {
-				slog.Info("obs: reloading after a change", "err", err)
-			}
-		}()
+		// Lists changed in OBS: the reloader reads them again, off the read loop, which its requests
+		// need.
+		select {
+		case c.reload <- struct{}{}:
+		default:
+		}
 		return
 	}
 	c.changed()

@@ -293,7 +293,10 @@ func Label(b config.DeckButton) string {
 		return b.Source
 	case config.DeckPCKeys:
 		return strings.ToUpper(b.Value)
-	case config.DeckPCType, config.DeckPCOpen, config.DeckPCRun:
+	case config.DeckPCType:
+		// Never the text itself: it can be a password, and the screen can be seen from across a room.
+		return "Type text"
+	case config.DeckPCOpen, config.DeckPCRun:
 		return b.Value
 	}
 	return ""

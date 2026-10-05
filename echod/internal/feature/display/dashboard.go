@@ -74,6 +74,7 @@ func (d *Display) dashboardAsked(up bool) {
 	d.mu.Lock()
 	if up {
 		d.dash, d.dashHeld, d.dashTouched, d.dashAwayUntil = true, true, time.Now(), time.Time{}
+		d.deckUp = false
 		d.mu.Unlock()
 		d.wake()
 		return

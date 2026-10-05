@@ -28,6 +28,9 @@ import (
 // maxBody is the most a request may carry. Everything here is a few short fields.
 const maxBody = 16 << 10
 
+// maxDeckBody is a deck page's form: up to 24 buttons of several boxes each, some long.
+const maxDeckBody = 128 << 10
+
 // cookieName is the session a press hands out.
 const cookieName = "techo5_setup"
 
@@ -170,7 +173,11 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "post to save", http.StatusMethodNotAllowed)
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+	limit := int64(maxBody)
+	if r.URL.Query().Get("big") == "deck" {
+		limit = maxDeckBody
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, "that form was too big or malformed", http.StatusBadRequest)
 		return

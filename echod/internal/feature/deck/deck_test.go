@@ -44,6 +44,9 @@ func TestLabelsAndIconsFallBackToTheAction(t *testing.T) {
 	if Label(mic) != "Mic" || Icon(mic, true) != "microphone-off" || Icon(mic, false) != "microphone" {
 		t.Errorf("mic: %q %q %q", Label(mic), Icon(mic, true), Icon(mic, false))
 	}
+	if l := Label(config.DeckButton{Action: config.DeckPCType, Value: "hunter2"}); l != "Type text" {
+		t.Errorf("a Type text button without a label shows %q", l)
+	}
 	own := config.DeckButton{Action: config.DeckOBSStream, Label: "Go live", Icon: "rocket"}
 	if Label(own) != "Go live" || Icon(own, true) != "rocket" {
 		t.Error("a button's own label and icon were not used")

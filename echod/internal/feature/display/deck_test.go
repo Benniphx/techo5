@@ -98,3 +98,21 @@ func BenchmarkDeckFrame(b *testing.B) {
 		r.draw(s)
 	}
 }
+
+// A frame of the deck alone has a key, and the same deck the same key; anything over it or a press
+// changing has none or another.
+func TestDeckFrameKey(t *testing.T) {
+	s := scene{showDeck: true, deck: streamerDeck(true)}
+	k := deckFrameKey(s, false, false)
+	if k == "" || k != deckFrameKey(scene{showDeck: true, deck: streamerDeck(true)}, false, false) {
+		t.Fatal("the same deck has no key, or two")
+	}
+	pressed := streamerDeck(true)
+	pressed.buttons[0].pressed = true
+	if deckFrameKey(scene{showDeck: true, deck: pressed}, false, false) == k {
+		t.Error("a press didn't change the key")
+	}
+	if deckFrameKey(s, true, false) != "" || deckFrameKey(scene{showDeck: true, showVolume: true, deck: s.deck}, false, false) != "" {
+		t.Error("a ring or the volume bar over the deck still had a key")
+	}
+}

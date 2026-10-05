@@ -42,9 +42,11 @@ On the device's setup page, **Screen & Photos → Deck**:
 ## Use it
 
 - **Open it** with a swipe up from the bottom edge of the clock: start right at the bottom of the
-  screen. A swipe up anywhere else is still the volume. You can also set **Tap on the clock** to
+  screen. Once a deck has buttons, a swipe up that starts there opens it; anywhere else, and on the
+  now-playing and weather pages, a swipe up is still the volume. You can also set **Tap on the clock** to
   **Deck** (setup page, Screen & Photos, or Settings → Display on the device).
-- **Press** a button. It dims while the press goes out and turns red for a moment if it failed.
+- **Press** a button. It lights up and sinks while the press goes out, and turns red for a moment if
+  it failed.
 - **Swipe left and right** for the pages, and **down** to put the deck away. It stays up until you
   do.
 - When OBS isn't running, the buttons gray out and the foot of the deck says why.
@@ -90,7 +92,7 @@ for Windows, macOS and Linux.
    - **Run script**: a name from the agent's script list (below).
 
 Keep the agent's window open while you use the deck. To have it start when you sign in, run it
-once with `-startup on` (`-startup off` undoes it).
+once with `-startup on`, plus any other options you use, like `-name` (`-startup off` undoes it).
 
 ### macOS
 
@@ -126,8 +128,9 @@ The agent makes a virtual keyboard, which works the same under X11 and Wayland. 
 permission to use `/dev/uinput` once:
 
 ```
-sudo usermod -aG input $USER
-echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee /etc/udev/rules.d/60-techo5-deck.rules
+sudo groupadd --system uinput
+sudo usermod -aG uinput $USER
+echo 'KERNEL=="uinput", GROUP="uinput", MODE="0660"' | sudo tee /etc/udev/rules.d/60-techo5-deck.rules
 sudo udevadm control --reload && sudo udevadm trigger
 ```
 
@@ -151,9 +154,18 @@ Save it, then **Refresh** on the setup page (the Show also asks again every minu
 
 ### Good to know about the agent
 
+- **A paired Show has the run of your signed-in session.** A deck that can press keys and type can
+  open a terminal and type a command into it, so the script list is what Run script buttons pick
+  from, not a fence. Pair only Shows you trust, and set the Show's **settings lock** (Settings →
+  Privacy & Security) so nobody can change its buttons from its screen. Its setup page already
+  needs a press on the Show to let a browser in, and Home Assistant can press deck buttons too
+  (`deck_press`). The deck itself stays usable while the settings are locked: it's a control
+  surface, like the clock's other pages.
 - It takes connections from your local network only, and only from a Show that has its key: the
   connection is encrypted with that key, and a wrong key gets nothing.
-- `techo5-deck.exe -new-key` makes a new key; every paired Show then has to pair again.
+- Run it with `-new-key` to make a new key; every paired Show then has to pair again.
+- **Type text** buttons never show their text on the Show (they say "Type text" unless you give
+  them a label), and the agent's window logs only how many characters it typed.
 - Windows won't let it press keys into a window that's running as administrator, or while the
   screen is locked. The button turns red and the agent's window says why.
 - Scripts run with the shell of the computer: `cmd` on Windows, `sh` on macOS and Linux.

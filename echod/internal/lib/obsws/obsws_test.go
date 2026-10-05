@@ -311,3 +311,59 @@ func TestURL(t *testing.T) {
 		}
 	}
 }
+
+// A burst of list changes reloads OBS's lists once or twice, not once an event.
+func TestListChangesCoalesce(t *testing.T) {
+	f, addr := newFake(t, "")
+	c := run(t, addr, "")
+	waitFor(t, c, "connected", func(s State) bool { return s.Connected })
+	f.mu.Lock()
+	before := 0
+	for _, r := range f.requests {
+		if r == "GetSceneList" {
+			before++
+		}
+	}
+	f.mu.Unlock()
+	for range 40 {
+		f.push("SceneItemRemoved", map[string]any{"sceneName": "Main"})
+	}
+	time.Sleep(1500 * time.Millisecond)
+	f.mu.Lock()
+	after := 0
+	for _, r := range f.requests {
+		if r == "GetSceneList" {
+			after++
+		}
+	}
+	f.mu.Unlock()
+	if n := after - before; n < 1 || n > 2 {
+		t.Errorf("40 changes reloaded the lists %d times", n)
+	}
+}
+
+// New settings are tried at once, not after the backoff.
+func TestRestartWakesTheWait(t *testing.T) {
+	_, addr := newFake(t, "right")
+	var mu sync.Mutex
+	pw := "wrong"
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	c := New(nil)
+	go c.Run(ctx, func() Config {
+		mu.Lock()
+		defer mu.Unlock()
+		return Config{Addr: addr, Password: pw}
+	})
+	waitFor(t, c, "refused", func(s State) bool { return s.Problem != "" })
+	time.Sleep(3 * time.Second) // into a longer wait
+	mu.Lock()
+	pw = "right"
+	mu.Unlock()
+	c.Restart()
+	start := time.Now()
+	waitFor(t, c, "connected", func(s State) bool { return s.Connected })
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("took %v after the restart", time.Since(start))
+	}
+}

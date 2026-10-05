@@ -389,6 +389,12 @@ func newRenderer(dst *image.RGBA) *renderer {
 // draw composes a whole frame. Everything is repainted: the canvas is small and a full paint is
 // simpler than tracking what changed.
 func (r *renderer) draw(s scene) {
+	if !s.showDeck {
+		// Where the deck's buttons were is nothing to tap once something else is drawn there.
+		r.zmu.Lock()
+		r.deckZones = nil
+		r.zmu.Unlock()
+	}
 	if !s.showRadar {
 		r.shapes = alertOverlay{} // the alert shapes' picture is the page's size: kept only while the rain map is up
 	}

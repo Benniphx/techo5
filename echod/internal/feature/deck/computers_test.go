@@ -87,6 +87,18 @@ func TestPairAndPress(t *testing.T) {
 	if _, ok := config.Get().Deck.Computer("Office PC"); !ok {
 		t.Fatal("not saved")
 	}
+	// A second computer that calls itself the same is refused, not swapped in for the first.
+	other := startAgent(t, testKey)
+	if _, err := f.Pair(other.addr, testKey); err == nil || !strings.Contains(err.Error(), "already paired") {
+		t.Errorf("a second Office PC: %v", err)
+	}
+	if c, _ := config.Get().Deck.Computer("Office PC"); c.Addr != a.addr {
+		t.Error("the first Office PC was replaced")
+	}
+	// Pairing the same one again is fine (a new key, say).
+	if _, err := f.Pair(a.addr, testKey); err != nil {
+		t.Errorf("pairing the same computer again: %v", err)
+	}
 
 	_ = config.Set().Deck().Page(0, []config.DeckButton{
 		{Action: config.DeckPCKeys, Computer: "Office PC", Value: "ctrl+shift+m"},

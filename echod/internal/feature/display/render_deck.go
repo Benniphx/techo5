@@ -59,6 +59,7 @@ func deckColor(name string) color.RGBA {
 // deckPage draws the deck: the grid of buttons, the page dots under it, and a line about OBS when
 // it isn't connected.
 func (r *renderer) deckPage(s scene) {
+	// (The zones are cleared in draw on every frame that doesn't draw the deck.)
 	v := s.deck
 	r.glassBackdrop()
 	m, gap, foot := r.s(deckMargin), r.s(deckGap), r.s(deckFoot)

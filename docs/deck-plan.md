@@ -8,6 +8,14 @@ or the computer, not through Home Assistant, so they feel instant and work witho
 (`techo5-deck` for files and the program); it opens with a swipe up from the bottom edge; the agent
 lives in this repository; the Show only (no Spot for now, maybe later).
 
+**Where the build differs from this plan** (2026-10-05): `deck_press` takes page and button
+numbers, not a name; the agent lives in `echod/cmd/techo5-deck` (one protocol package for both
+ends) and is a console program for now, with no tray and no self-update yet; macOS ships two files
+(Intel, Apple silicon) and presses keys through osascript, Linux through uinput (X11 and Wayland
+alike), not CGEvent or XTest; the deck closes with a swipe down and has no time of its own to go back
+to the clock, but steps aside for the camera, the settings, alerts and pages asked for by voice, and
+closes on "go home" and a dashboard Home Assistant asks for.
+
 ## What is already there
 
 - **Drawn screens.** The daemon already draws dashboards itself, with tiles in Normal, Large or
