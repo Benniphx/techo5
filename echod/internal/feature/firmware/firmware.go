@@ -46,6 +46,9 @@ type Firmware struct {
 
 	mu    sync.Mutex
 	found update.Manifest
+	// appOffered is what a panel's app last said its release server offers, newer than this build, or
+	// "": a panel has no release stream of its own (see askApp).
+	appOffered string
 
 	announced  sync.Once
 	rolledBack string
@@ -242,6 +245,9 @@ func (u *Firmware) Settled(event, status string) {
 func (u *Firmware) Offered() string {
 	u.mu.Lock()
 	defer u.mu.Unlock()
+	if !update.Published() {
+		return u.appOffered
+	}
 	if u.found.Version == "" || u.found.Version == layout.Version || !u.found.Serves() ||
 		!update.Newer(u.found.Version, layout.Version) {
 		return ""
@@ -317,6 +323,10 @@ func (u *Firmware) command(cmd esphome.UpdateCommand) {
 // Nothing is installed that was not offered: the version comes from the manifest this device fetched,
 // not from Home Assistant, which has no way to name one.
 func (u *Firmware) Install(ctx context.Context) {
+	if !update.Published() {
+		askApp() // a panel's app installs whatever newer build its check finds
+		return
+	}
 	u.busy.Add(1)
 	defer u.busy.Add(-1)
 
