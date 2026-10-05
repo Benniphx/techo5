@@ -213,10 +213,15 @@ func (a *agent) serve(c net.Conn, key string) {
 		last = time.Now()
 		reply := a.do(req)
 		if req.Op != deckwire.OpHello {
+			// Typed text can be anything, a password included: the log says only how much.
+			what := req.Arg
+			if req.Op == deckwire.OpType {
+				what = fmt.Sprintf("(%d characters)", len([]rune(req.Arg)))
+			}
 			if reply.OK {
-				log.Printf("%s: %s %s", from, req.Op, req.Arg)
+				log.Printf("%s: %s %s", from, req.Op, what)
 			} else {
-				log.Printf("%s: %s %s: %s", from, req.Op, req.Arg, reply.Error)
+				log.Printf("%s: %s %s: %s", from, req.Op, what, reply.Error)
 			}
 		}
 		if conn.Send(reply) != nil {
@@ -297,5 +302,11 @@ func keysNote() string {
 	if canPressKeys() {
 		return "can press keys and type"
 	}
-	return "can't press keys on this system yet"
+	switch runtime.GOOS {
+	case "darwin":
+		return "not allowed yet: System Settings > Privacy & Security > Accessibility, turn on this agent (or the Terminal it runs in), then start it again"
+	case "linux":
+		return "not allowed to make a keyboard yet: see the Linux part of the Deck guide (the input group)"
+	}
+	return "can't press keys on this system"
 }
