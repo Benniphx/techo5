@@ -116,6 +116,9 @@ type Display struct {
 	clock *esphome.Select
 	// clockStyleSel is Clock style, how the clock looks all day (clock_style.go).
 	clockStyleSel *esphome.Select
+	// styleNamed is the clock style a swipe turned to, said on the clock until styleNamedUntil.
+	styleNamed      string
+	styleNamedUntil time.Time
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -694,6 +697,19 @@ func (d *Display) gesture(g touch.Gesture) {
 		media.Get().Adjust(+1)
 	case touch.SwipeDown:
 		media.Get().Adjust(-1)
+	case touch.SwipeLeft, touch.SwipeRight:
+		// Across the clock face, the next clock style or the one before; not while a turn is on.
+		d.mu.Lock()
+		idle := d.view.Phase == "idle"
+		d.mu.Unlock()
+		if !idle {
+			return
+		}
+		if g.Kind == touch.SwipeLeft {
+			d.stepClockStyle(+1)
+		} else {
+			d.stepClockStyle(-1)
+		}
 	case touch.Hold:
 		d.mu.Lock()
 		d.openMenu(modeMain, itemTalk)
@@ -1225,6 +1241,7 @@ func (d *Display) frame() time.Duration {
 	s.call = phone.Get().State()
 	s.weather = home.Get().Weather()
 	s.style = styleFactsFor(clockStyle(), now)
+	s.style.named = d.styleName(now)
 	s.camera, s.showCamera = home.Get().Camera()
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	if s.showCamera {

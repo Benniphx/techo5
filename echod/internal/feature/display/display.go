@@ -104,6 +104,9 @@ type Display struct {
 	clock *esphome.Select
 	// clockStyleSel is Clock style, how the clock looks all day (clock_style.go).
 	clockStyleSel *esphome.Select
+	// styleNamed is the clock style a swipe turned to, said on the clock until styleNamedUntil.
+	styleNamed      string
+	styleNamedUntil time.Time
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -1154,12 +1157,17 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		voice.Get().Action()
 	case touch.SwipeLeft:
-		// From the right edge it brings the drawer in, on the tab it was last on.
+		// From the right edge it brings the drawer in, on the tab it was last on; across the clock it is
+		// the next clock style.
 		if d.r != nil && g.X >= d.r.w-d.r.drawerEdge() {
 			d.mu.Lock()
 			tab := d.drawerTab
 			d.mu.Unlock()
 			d.openDrawer(tab)
+			return
+		}
+		if d.styleSwipe() {
+			d.stepClockStyle(+1)
 		}
 	case touch.SwipeUp:
 		// From the bottom edge of the clock it is the deck, once there is one; anywhere else, and on the
@@ -1183,6 +1191,11 @@ func (d *Display) gesture(g touch.Gesture) {
 		if d.r != nil && g.X < d.r.drawerEdge() && d.openDashboard() {
 			return
 		}
+		// Across the clock it is the clock style before.
+		if d.styleSwipe() {
+			d.stepClockStyle(-1)
+			return
+		}
 		// Right puts the now-playing page away until the track changes. It is the one gesture left on that
 		// page that cannot be taken for play or pause, which a tap there has to be. It is not the drawer's
 		// way out: the drawer has closed on this swipe since long before there was a page to put away,
@@ -1203,6 +1216,16 @@ func (d *Display) gesture(g touch.Gesture) {
 		d.mu.Unlock()
 		d.wake()
 	}
+}
+
+// styleSwipe is whether a swipe left or right lands on the clock itself, where it turns the clock
+// style: idle, nothing playing on the page, no weather page, sheet or camera view over it.
+func (d *Display) styleSwipe() bool {
+	d.mu.Lock()
+	sheet, idle := d.sheet, d.view.Phase == "idle"
+	d.mu.Unlock()
+	_, camera := home.Get().Camera()
+	return idle && !sheet && !camera && d.onClock()
 }
 
 // favorite saves what is playing to favorites, and marks the star once it is saved.
@@ -1971,6 +1994,7 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	s.weather = home.Get().Weather()
 	s.style = styleFactsFor(clockStyle(), now)
+	s.style.named = d.styleName(now)
 	d.calendarScene(&s, now)
 	d.alertScene(&s, now)
 	d.mu.Lock()

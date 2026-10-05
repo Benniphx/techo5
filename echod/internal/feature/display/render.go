@@ -654,6 +654,7 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 // timers. With timers the clock moves up to make room. The next alarm, when it is within a day, follows
 // the date.
 func (r *renderer) bigClock(s scene) {
+	defer r.styleNameTag(s)
 	// The Sun without sunrise and sunset yet is the classic face, drawn as the classic face is.
 	if style := s.style.style(); style != styleClassic && !(style == styleSun && !s.style.sunOK) {
 		r.styledClock(s, style)
