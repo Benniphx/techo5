@@ -58,11 +58,25 @@ Buttons can press a shortcut or a media key, type text, open an app or a website
 on a computer. That needs the **TECHO5 Deck agent** running there: one program, nothing to install,
 for Windows, macOS and Linux.
 
-1. Download the agent for your computer from the release and run it: `techo5-deck.exe` on Windows,
-   `techo5-deck` on macOS and Linux (from a terminal; see [macOS](#macos) and [Linux](#linux) for
-   the one-time permission each needs). It shows the computer's name and a **pairing key** of 32
-   letters and digits. The first time, Windows asks whether to let it on the network: allow it on
-   **private networks**.
+1. Download the agent for your computer from the
+   [latest release](https://github.com/HuskerMinion/techo5/releases/latest):
+
+   | Computer | File |
+   |---|---|
+   | Windows (most PCs) | `techo5-deck-windows-amd64.exe` |
+   | Windows on ARM | `techo5-deck-windows-arm64.exe` |
+   | Mac with Apple silicon (M1 and later) | `techo5-deck-macos-arm64` |
+   | Mac with Intel | `techo5-deck-macos-amd64` |
+   | Linux (most PCs) | `techo5-deck-linux-amd64` |
+   | Linux on ARM (a Raspberry Pi 4 or 5 with 64-bit Linux) | `techo5-deck-linux-arm64` |
+
+   On Windows, run it. On macOS and Linux, run it from a terminal (see [macOS](#macos) and
+   [Linux](#linux) for the one-time steps each needs). It shows the computer's name and a **pairing
+   key** of 32 letters and digits. The first time, Windows asks whether to let it on the network:
+   allow it on **private networks**.
+
+   Each file is built by GitHub from the release's own source; check one with
+   `gh attestation verify <file> --repo HuskerMinion/techo5`.
 2. On the Show's setup page, **Screen & Photos → Deck → Computers**: **Look for computers**, pick
    yours (or type its address), type the key, and **Pair**. It says **Connected** with how many
    apps and scripts it found.
@@ -80,6 +94,17 @@ once with `-startup on` (`-startup off` undoes it).
 
 ### macOS
 
+A downloaded file isn't marked as a program, and macOS holds back programs from the internet that
+aren't from the App Store or a known developer. In Terminal, in the folder you downloaded it to:
+
+```
+chmod +x techo5-deck-macos-arm64
+xattr -d com.apple.quarantine techo5-deck-macos-arm64
+./techo5-deck-macos-arm64
+```
+
+(`macos-amd64` on an Intel Mac.)
+
 The agent presses keys through macOS's own automation, which needs two permissions once:
 
 1. When the agent starts, macOS asks whether Terminal (or the agent) may control **System
@@ -93,6 +118,9 @@ network: allow it. All keys work except Print Screen and F21 to F24, which Mac k
 have; `cmd` is the Command key.
 
 ### Linux
+
+Mark the download as a program and run it: `chmod +x techo5-deck-linux-amd64`, then
+`./techo5-deck-linux-amd64`.
 
 The agent makes a virtual keyboard, which works the same under X11 and Wayland. That needs
 permission to use `/dev/uinput` once:
