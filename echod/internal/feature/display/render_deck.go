@@ -124,6 +124,18 @@ func (r *renderer) deckButton(b image.Rectangle, v deckButtonView) {
 	}
 	col := deckColor(v.color)
 	text, icon := color.RGBA{0xf6, 0xf2, 0xec, 0xff}, lerp(col, white, 0.25)
+
+	// It stands off the page: a soft shadow under it, which shrinks as a press pushes it down.
+	black := color.RGBA{0, 0, 0, 0xff}
+	lift := r.s(5)
+	if v.pressed {
+		lift = r.s(1)
+		b = b.Add(image.Pt(0, r.s(3)))
+	}
+	shadow := b.Add(image.Pt(0, lift))
+	r.glassGlow(shadow, rad, r.sf(12), black, 0.5)
+	r.glassFill(shadow, rad, black, 0.30, 0.45)
+
 	switch {
 	case v.failed:
 		r.glassGlow(b, rad, r.sf(14), danger, 0.35)
@@ -144,9 +156,13 @@ func (r *renderer) deckButton(b image.Rectangle, v deckButtonView) {
 	if v.pressed {
 		r.glassFill(b, rad, white, 0.22, 0.16)
 	}
-	// The light: a sheen over the top third, and the rim.
-	sheen := image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+b.Dy()*2/5)
-	r.glassFill(sheen, rad, white, 0.10, 0)
+	// The light on a rounded face: brighter over the top, shaded toward the foot, a bevel along the
+	// edge, and the rim.
+	sheen := image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+b.Dy()/2)
+	r.glassFill(sheen, rad, white, 0.13, 0)
+	foot := image.Rect(b.Min.X, b.Min.Y+b.Dy()/2, b.Max.X, b.Max.Y)
+	r.glassFill(foot, rad, black, 0, 0.22)
+	r.glassBevel(b, rad, r.sf(7), 0.45)
 	r.glassRim(b, rad, r.sf(1)*1.2, white, 0.30)
 
 	// The icon in the upper part, the words under it, both scaled to the button.

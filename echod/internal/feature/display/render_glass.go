@@ -156,3 +156,32 @@ func (r *paint) glassGlow(b image.Rectangle, rad, spread float64, c color.RGBA, 
 		}
 	}
 }
+
+// glassBevel is the raised edge of a button: a band w wide just inside its outline, lit along the
+// top and shaded along the foot, fading toward the middle, so the face reads as standing off the page.
+func (r *paint) glassBevel(b image.Rectangle, rad, w, a float64) {
+	x0, y0, x1, y1 := rectF(b)
+	light, shade := color.RGBA{0xff, 0xff, 0xff, 0xff}, color.RGBA{0, 0, 0, 0xff}
+	skipFrom, skipTo := int(math.Ceil(x0+w+1)), int(math.Floor(x1-w-1))
+	for y := b.Min.Y; y < b.Max.Y; y++ {
+		t := clamp01((float64(y) - y0) / (y1 - y0))
+		near := float64(y) < y0+rad+w+1 || float64(y) > y1-rad-w-1
+		for x := b.Min.X; x < b.Max.X; x++ {
+			if !near && x >= skipFrom && x < skipTo {
+				x = skipTo - 1
+				continue
+			}
+			d := -rrDist(float64(x)+0.5, float64(y)+0.5, x0, y0, x1, y1, rad)
+			if d <= 0 || d >= w {
+				continue
+			}
+			f := 1 - d/w
+			f *= f
+			if t < 0.5 {
+				r.blendAt(x, y, light, a*f*(1-2*t))
+			} else {
+				r.blendAt(x, y, shade, a*f*(2*t-1)*1.3)
+			}
+		}
+	}
+}
