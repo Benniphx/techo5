@@ -39,6 +39,18 @@ func Send(line string) {
 	}
 }
 
+// Tell sends a line now if the app is there, and keeps nothing: for a request worth making once, such
+// as "update check", rather than a state a restarted app should be brought up to date with.
+func Tell(line string) {
+	start.Do(run)
+	mu.Lock()
+	c := conn
+	mu.Unlock()
+	if c != nil {
+		_, _ = c.Write([]byte(line + "\n"))
+	}
+}
+
 // Handle calls f with the rest of the words of every line from the app that starts with kind.
 func Handle(kind string, f func(args []string)) {
 	start.Do(run)

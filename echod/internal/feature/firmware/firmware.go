@@ -268,6 +268,7 @@ func (u *Firmware) Channel() update.Channel {
 // keeps reporting what it knew rather than blanking the card.
 func (u *Firmware) Check(ctx context.Context) {
 	if !update.Published() {
+		askApp()
 		return
 	}
 	channel := u.Channel()
