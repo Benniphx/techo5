@@ -5,7 +5,6 @@ package display
 import (
 	"image"
 	"image/color"
-	"image/draw"
 )
 
 // deckView is what the deck page shows (deck.go fills it in).
@@ -61,7 +60,7 @@ func deckColor(name string) color.RGBA {
 // it isn't connected.
 func (r *renderer) deckPage(s scene) {
 	v := s.deck
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(walnut), image.Point{}, draw.Src)
+	r.glassBackdrop()
 	m, gap, foot := r.s(deckMargin), r.s(deckGap), r.s(deckFoot)
 	area := image.Rect(m, m, r.w-m, r.h-foot)
 	cols, rows := max(v.cols, 1), max(v.rows, 1)
@@ -112,31 +111,43 @@ func (r *renderer) deckPage(s scene) {
 	}
 }
 
-// deckButton draws one square: its color, brighter when lit; its icon and its words. An empty square
-// is a faint outline, so the grid still reads as a grid.
+// deckButton draws one square as frosted glass: a see-through panel tinted with the button's color,
+// bright along its top edge with a thin light rim, its icon in the color and its words in white. Lit,
+// the color fills it and glows around it. An empty square is a faint rim, so the grid still reads.
 func (r *renderer) deckButton(b image.Rectangle, v deckButtonView) {
 	rad := r.sf(deckRadius)
+	white := color.RGBA{0xff, 0xff, 0xff, 0xff}
 	if v.empty {
-		r.roundFill(b, rad, lerp(walnut, surface(3), 0.5), lerp(walnut, surface(3), 0.5))
+		r.glassFill(b, rad, white, 0.025, 0.015)
+		r.glassRim(b, rad, r.sf(1), white, 0.08)
 		return
 	}
 	col := deckColor(v.color)
-	base := surface(3)
-	fill := lerp(base, col, 0.22)
-	text, icon := cream, col
+	text, icon := color.RGBA{0xf6, 0xf2, 0xec, 0xff}, lerp(col, white, 0.25)
 	switch {
 	case v.failed:
-		fill, text, icon = lerp(base, danger, 0.75), cream, cream
+		r.glassGlow(b, rad, r.sf(14), danger, 0.35)
+		r.glassFill(b, rad, danger, 0.70, 0.55)
+		icon = white
 	case !v.known:
-		// OBS away, or something on the button that OBS doesn't have.
-		fill, text, icon = lerp(base, walnut, 0.4), dim, dim
+		// OBS away, or something on the button that OBS doesn't have: clouded glass, no color.
+		r.glassFill(b, rad, white, 0.05, 0.03)
+		text, icon = lerp(dim, white, 0.15), lerp(dim, white, 0.15)
 	case v.lit:
-		fill, text, icon = lerp(base, col, 0.85), walnut, walnut
+		r.glassGlow(b, rad, r.sf(18), col, 0.6)
+		r.glassFill(b, rad, col, 0.82, 0.62)
+		icon = white
+	default:
+		r.glassFill(b, rad, white, 0.09, 0.04)
+		r.glassFill(b, rad, col, 0.04, 0.08)
 	}
 	if v.pressed {
-		fill = lerp(fill, cream, 0.25)
+		r.glassFill(b, rad, white, 0.22, 0.16)
 	}
-	r.roundFill(b, rad, fill, fill)
+	// The light: a sheen over the top third, and the rim.
+	sheen := image.Rect(b.Min.X, b.Min.Y, b.Max.X, b.Min.Y+b.Dy()*2/5)
+	r.glassFill(sheen, rad, white, 0.10, 0)
+	r.glassRim(b, rad, r.sf(1)*1.2, white, 0.30)
 
 	// The icon in the upper part, the words under it, both scaled to the button.
 	unit := min(b.Dx(), b.Dy())

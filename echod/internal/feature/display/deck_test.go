@@ -85,3 +85,16 @@ func TestDeckPageDrawsTheGrid(t *testing.T) {
 		}
 	}
 }
+
+// BenchmarkDeckFrame is one deck frame on a Show 5, the backdrop already made: what a press costs to
+// redraw.
+func BenchmarkDeckFrame(b *testing.B) {
+	img := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+	r := newRenderer(img)
+	s := scene{now: time.Now(), phase: "idle", showDeck: true, deck: streamerDeck(true)}
+	r.draw(s)
+	b.ResetTimer()
+	for range b.N {
+		r.draw(s)
+	}
+}
