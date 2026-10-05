@@ -290,12 +290,12 @@ Then:
 A firmware update replaces the root filesystem and leaves the boot image (the kernel) alone. When a
 release has a new boot image for your model, put it on over SSH. v1.0.1 has one for the 1st gen
 Show 5 (`techo5-boot-checkers-v1.0.1.img`) and the Show 8 (`techo5-boot-crown-v1.0.1.img`), so a
-quick tap of the mute button no longer turns the camera off. The 2nd gen Show 5 doesn't need it.
+quick tap to unmute no longer leaves the camera off. The 2nd gen Show 5 doesn't need it.
 
 Turn **SSH** on, then from the folder you downloaded the image to:
 
 ```
-scp -O techo5-boot-crown-v1.0.1.img root@<address>:/tmp/boot.img
+scp -O techo5-boot-<board>-v1.0.1.img root@<address>:/tmp/boot.img
 ssh root@<address>
 ```
 
@@ -306,7 +306,7 @@ checksum matches the release's `SHA256SUMS`, then write it to the boot partition
 grep -o 'androidboot.product=[a-z]*' /proc/cmdline
 sha256sum /tmp/boot.img
 p=$(grep -l '^PARTNAME=boot$' /sys/class/block/mmcblk0p*/uevent); p=/dev/$(basename $(dirname $p))
-dd if=/tmp/boot.img of=$p bs=1M conv=fsync && sync && reboot
+[ -b "$p" ] && dd if=/tmp/boot.img of=$p bs=1M conv=fsync && sync && reboot
 ```
 
 Settings, slots and Home Assistant are kept; only the kernel and the rescue environment change.

@@ -292,7 +292,7 @@ speaker, four microphones, wake word, camera, lens cover and mute latch all work
 updates like the others. It is the newest of the three and has been through far less use than either
 Show 5, so treat it as such. Two things worth knowing first: a seller's model number does not tell the
 two Show 8 generations apart, so go by the year when buying second-hand. A unit installed before
-v1.0.1 needs the new boot image for a quick tap of the mute button to stop turning the camera off
+v1.0.1 needs the new boot image so a quick tap to unmute no longer leaves the camera off
 ([updating the boot image](docs/install.md#updating-the-boot-image)).
 
 ## Under the hood

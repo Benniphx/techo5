@@ -1,8 +1,8 @@
 diff --git a/drivers/misc/gating.c b/drivers/misc/gating.c
-index a1317ba5d825..10c04d774737 100644
+index 31d6c71f6c60..9cc2631a9abd 100644
 --- a/drivers/misc/gating.c
 +++ b/drivers/misc/gating.c
-@@ -183,8 +183,29 @@ static void handle_gating_button_event(struct gating_input_event *input,
+@@ -187,8 +187,28 @@ static void handle_gating_button_event(struct gating_input_event *input,
  
  	delay = input->last_event_time + LONG_PRESS_DURATION;
  	/* if it is long press, it is a gating event */
@@ -15,11 +15,10 @@ index a1317ba5d825..10c04d774737 100644
 +		 * pending update has finished, and only when the pin is read and reads released.
 +		 */
 +		flush_work(&priv->priv_update);
-+		if (gpiod_get_value_cansleep(priv->state_gpio) != UNGATED)
-+			goto out;
 +
 +		mutex_lock(&priv->mutex);
-+		if (priv->cur_state != GATED || priv->req_state != NONE) {
++		if (gpiod_get_value_cansleep(priv->state_gpio) != UNGATED ||
++				priv->cur_state != GATED || priv->req_state != NONE) {
 +			mutex_unlock(&priv->mutex);
 +			goto out;
 +		}
