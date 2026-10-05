@@ -212,18 +212,23 @@ t5_ipv6_private() {
 # t5_wifi_mac <iface>: the Echo Spot's bcmdhd comes up with Broadcom's placeholder address
 # (00:90:4c:...), the same on every Spot, so two Spots on one network share one DHCP lease and
 # knock each other off. Give it the factory address from IDME. The link has to be down, and the
-# driver refuses (EBUSY) until its firmware is in: returns 1 then, to be tried again. Other
+# driver refuses (EBUSY) until its firmware is in: returns 1 then, to be tried again; any other
+# refusal is logged and the placeholder kept. Other
 # addresses are left alone, so a Show or a Dot keeps the one its router reservation is for.
 t5_wifi_mac() {
-	case "$(cat /sys/class/net/$1/address 2>/dev/null)" in 00:90:4c:*) ;; *) return 0 ;; esac
-	mac=$(tr -dc '0-9A-Fa-f' < /proc/idme/mac_addr 2>/dev/null | tr 'A-F' 'a-f')
+	case "$(cat "/sys/class/net/$1/address" 2>/dev/null)" in 00:90:4c:*) ;; *) return 0 ;; esac
+	mac=$(tr -dc '0-9A-Fa-f' 2>/dev/null < /proc/idme/mac_addr | tr 'A-F' 'a-f')
 	# Twelve digits, not all zeros, and not a group address.
 	case "$mac" in 000000000000|?[13579bdf]*) mac= ;; esac
 	[ ${#mac} -eq 12 ] || { log "wifi: no factory address in IDME; keeping the placeholder"; return 0; }
 	# A running supplicant holds the link: changing it under one would drop the network.
 	pidof wpa_supplicant >/dev/null && return 0
 	ip link set "$1" down 2>/dev/null
-	ip link set "$1" address "$(echo "$mac" | sed 's/../&:/g; s/:$//')" 2>/tmp/ifmac.err || return 1
+	if ! ip link set "$1" address "$(echo "$mac" | sed 's/../&:/g; s/:$//')" 2>/tmp/ifmac.err; then
+		grep -qi busy /tmp/ifmac.err && return 1
+		log "wifi: factory address refused: $(cat /tmp/ifmac.err)"
+		return 0
+	fi
 	log "wifi: factory address set"
 }
 
@@ -242,15 +247,15 @@ t5_wifi_up() {
 	fi
 	[ -r "$conf" ] || { log "wifi: no configuration"; return 1; }
 	mkdir -p /run/wpa
-	# The Echo Spot's bcmdhd is a USB device that downloads its firmware at insmod, drops off the bus
-	# and comes back: wlan0 exists before it can be opened, and bringing it up then fails with EBUSY,
-	# which leaves wpa_supplicant unable to start. Wait for the open to succeed. The Show's mt76x8 is
-	# up on the first try.
 	t5_ipv6_private wlan0
 	n=0; until t5_wifi_mac wlan0; do
 		n=$((n+1)); [ $n -ge 15 ] && { log "wifi: factory address not set: $(cat /tmp/ifmac.err)"; break; }
 		sleep 1
 	done
+	# The Echo Spot's bcmdhd is a USB device that downloads its firmware at insmod, drops off the bus
+	# and comes back: wlan0 exists before it can be opened, and bringing it up then fails with EBUSY,
+	# which leaves wpa_supplicant unable to start. Wait for the open to succeed. The Show's mt76x8 is
+	# up on the first try.
 	n=0; until ip link set wlan0 up 2>/tmp/ifup.err; do
 		n=$((n+1)); [ $n -ge 30 ] && { log "wifi: wlan0 would not come up: $(cat /tmp/ifup.err)"; return 1; }
 		sleep 1
