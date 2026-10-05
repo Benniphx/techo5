@@ -48,6 +48,7 @@ func TestShowClockStylesDraw(t *testing.T) {
 	scenes := map[string]scene{
 		"":        {now: at, phase: "idle", weather: sky, style: facts},
 		"-named":  {now: at, phase: "idle", weather: sky, style: named},
+		"-24h":    {now: at, phase: "idle", weather: sky, style: facts},
 		"-timer":  {now: at, phase: "idle", weather: sky, style: facts, timers: running},
 		"-glance": {now: at, phase: "idle", weather: sky, style: facts, glance: chips},
 		"-strip": {now: at, phase: "idle", weather: sky, style: facts, strip: true, playing: true,
@@ -64,6 +65,7 @@ func TestShowClockStylesDraw(t *testing.T) {
 			t.Fatal(err)
 		}
 		for suffix, s := range scenes {
+			clock24.Store(suffix == "-24h")
 			for _, panel := range []struct {
 				name       string
 				wide, high int
@@ -85,6 +87,7 @@ func TestShowClockStylesDraw(t *testing.T) {
 			}
 		}
 	}
+	clock24.Store(false)
 }
 
 func TestClockWords(t *testing.T) {

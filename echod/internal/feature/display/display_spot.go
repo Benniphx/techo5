@@ -119,6 +119,10 @@ type Display struct {
 	// styleNamed is the clock style a swipe turned to, said on the clock until styleNamedUntil.
 	styleNamed      string
 	styleNamedUntil time.Time
+	// clockUp is the last frame having been the clock page itself, in whatever style: not the light
+	// before an alarm, the screensaver, the night clock or another page. A swipe turns the style only
+	// on it.
+	clockUp bool
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -278,7 +282,8 @@ func build() *Display {
 	d.auto.OnCommand = func(on bool) { d.setAuto(on, true) }
 	d.clock = clockSelect(d.wake)
 	d.clockStyleSel = clockStyleSelect(d)
-	setup.SetScreen(&setup.ScreenChoices{Styles: clockStyleOptions(), Current: clockStyleIndex, Choose: d.setClockStyle})
+	setup.SetScreen(&setup.ScreenChoices{Styles: clockStyleOptions(), Current: clockStyleIndex, Choose: d.setClockStyle,
+		Places: spotWorld})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.turnStyle = turnStyleSelect(d.wake)
@@ -698,11 +703,12 @@ func (d *Display) gesture(g touch.Gesture) {
 	case touch.SwipeDown:
 		media.Get().Adjust(-1)
 	case touch.SwipeLeft, touch.SwipeRight:
-		// Across the clock face, the next clock style or the one before; not while a turn is on.
+		// Across the clock face, the next clock style or the one before: only on the face itself, not
+		// while a turn is on or its words are up, nor over the screensaver or the light before an alarm.
 		d.mu.Lock()
-		idle := d.view.Phase == "idle"
+		idle, up := d.view.Phase == "idle", d.clockUp
 		d.mu.Unlock()
-		if !idle {
+		if !idle || !up || d.answerUp(time.Now()) {
 			return
 		}
 		if g.Kind == touch.SwipeLeft {
@@ -1320,6 +1326,7 @@ func (d *Display) frame() time.Duration {
 		}
 	}
 	d.mu.Lock()
+	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil
 	if !boring {
 		d.slideshowIdleSince = time.Time{}
 	} else if d.slideshowIdleSince.IsZero() {

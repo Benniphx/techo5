@@ -240,6 +240,9 @@ type roundRenderer struct {
 	// artDrawn is weather moving over the art in the frame last drawn, which wants the next one soon.
 	washed   washedArt
 	artDrawn bool
+
+	// glow is the Glow style's images, kept between frames (glow.go).
+	glow glowBuffers
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {

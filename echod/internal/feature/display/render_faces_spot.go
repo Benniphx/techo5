@@ -5,12 +5,9 @@ package display
 import (
 	"image"
 	"image/color"
-	"image/draw"
 	"math"
 	"sync"
 	"time"
-
-	xdraw "golang.org/x/image/draw"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
@@ -47,6 +44,9 @@ func (r *roundRenderer) binaryFace(s roundScene) {
 	r.footLine(s, 404, shortDay(s))
 }
 
+// spotWorld is how many of the World style's places the round face has room for.
+const spotWorld = 2
+
 // worldFace is the time here and in up to two other places, a row each.
 func (r *roundRenderer) worldFace(s roundScene) {
 	type row struct {
@@ -55,7 +55,7 @@ func (r *roundRenderer) worldFace(s roundScene) {
 		here      bool
 	}
 	rows := []row{{name: "Here", day: locale.DayAndNumber(s.now, screenLang()), at: s.now, here: true}}
-	for _, p := range s.style.places[:min(len(s.style.places), 2)] {
+	for _, p := range s.style.places[:min(len(s.style.places), spotWorld)] {
 		rows = append(rows, row{name: p.name, day: placeDay(s.now, p.loc), at: s.now.In(p.loc)})
 	}
 	tf := r.styleFace(true, 56)
@@ -139,12 +139,10 @@ func (r *roundRenderer) agendaFace(s roundScene) {
 // colors are left out: the photo is what is behind the clock then.
 func (r *roundRenderer) glowFace(s roundScene) {
 	if s.slideshow == nil {
-		field := glowField(side/glowCell+1, side/glowCell+1, s.now, colBackground,
+		field := r.glow.glowField(side/glowCell+1, side/glowCell+1, s.now, colBackground,
 			[3]color.RGBA{colAccent, colTimer, lerp(colDim, colAccent, 0.4)})
 		// Inside the status ring only: the ring still says what it says.
-		glow := image.NewRGBA(r.dst.Rect)
-		xdraw.BiLinear.Scale(glow, glow.Rect, field, field.Bounds(), xdraw.Src, nil)
-		draw.DrawMask(r.dst, r.dst.Rect, glow, image.Point{}, glowMask(), image.Point{}, draw.Over)
+		r.glow.stretch(r.dst, field, glowMask())
 	}
 	r.statusWord(s, 140)
 	r.timeLine(s.now, 262)
@@ -173,7 +171,12 @@ func (r *roundRenderer) styleNameTag(s roundScene) {
 	}
 	f := r.styleFace(true, 26)
 	w := r.width(f, name)
-	b := image.Rect(center-w/2-18, 62, center+w/2+18, 62+capHeightOf(f)+26)
+	// Near the top, where the faces keep clear of; the Agenda's time is there, so under its list.
+	top := 62
+	if s.style.style() == styleAgenda {
+		top = 396
+	}
+	b := image.Rect(center-w/2-18, top, center+w/2+18, top+capHeightOf(f)+26)
 	fill := color.RGBA{36, 42, 52, 255}
 	r.roundFill(b, float64(b.Dy())/2, fill, fill)
 	r.text(f, name, center-w/2, b.Max.Y-13, colText)

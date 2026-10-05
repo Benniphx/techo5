@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	xdraw "golang.org/x/image/draw"
-
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
@@ -67,10 +65,17 @@ func (r *renderer) worldStyle(s scene, box image.Rectangle) {
 		rows = append(rows, row{name: p.name, day: placeDay(s.now, p.loc), at: s.now.In(p.loc)})
 	}
 	h := box.Dy() / len(rows)
-	size := min(84, h*100/r.s(100)*62/100)
+	hd := h * 100 / r.s(100) // the row's height, in the units faces are sized in
+	size := min(84, hd*62/100)
 	tf := r.styleFace(true, size)
+	af := r.styleFace(true, max(16, size*2/3)) // AM and PM, in step with the time
 	nf := r.styleFace(true, min(40, size/2+6))
-	sf := r.styleFace(false, 28)
+	sf := r.styleFace(false, min(28, max(22, hd*30/100)))
+	// The place's name over how its day differs, where the row has room for two lines; on one line
+	// where it has not.
+	gap := r.s(10)
+	block := capHeight(nf) + gap + capHeight(sf)
+	twoLines := block <= h-r.s(12)
 	for i, w := range rows {
 		top := box.Min.Y + i*h
 		base := top + (h+capHeight(tf))/2
@@ -80,33 +85,39 @@ func (r *renderer) worldStyle(s scene, box image.Rectangle) {
 		t, suffix := clockHM(w.at), clockSuffix(w.at)
 		sw := 0
 		if suffix != "" {
-			sw = r.width(r.ampm, suffix) + r.s(12)
+			sw = r.width(af, suffix) + r.s(10)
 		}
 		tx := box.Max.X - r.width(tf, t) - sw
 		r.text(tf, t, tx, base, cream)
 		if suffix != "" {
-			r.text(r.ampm, suffix, box.Max.X-sw+r.s(12), base, dateColor(amber))
+			r.text(af, suffix, box.Max.X-sw+r.s(10), base, dateColor(amber))
 		}
 		nc := cream
 		if w.here {
 			nc = amber
 		}
 		room := tx - box.Min.X - r.s(24)
-		name := r.clipTo(nf, w.name, room)
 		day := w.day
 		if w.here {
 			day = locale.Weekday(s.now, screenLang()) + ", " + locale.MonthDay(s.now, screenLang()) + alarmSuffix(s)
 		}
-		if day == "" {
-			r.text(nf, name, box.Min.X, base-(capHeight(tf)-capHeight(nf))/2, nc)
-			continue
-		}
-		mid := top + h/2
-		r.text(nf, name, box.Min.X, mid-r.s(4), nc)
-		r.text(sf, r.clipTo(sf, day, room), box.Min.X, mid+capHeight(sf)+r.s(8), dim)
 		if w.here {
 			// Here is today: its date opens the calendar, as the date does on the other styles.
 			r.setDateAt(image.Rect(box.Min.X, top, box.Min.X+room, top+h))
+		}
+		name := r.clipTo(nf, w.name, room)
+		switch {
+		case day == "":
+			r.text(nf, name, box.Min.X, top+(h+capHeight(nf))/2, nc)
+		case twoLines:
+			nb := top + (h-block)/2 + capHeight(nf)
+			r.text(nf, name, box.Min.X, nb, nc)
+			r.text(sf, r.clipTo(sf, day, room), box.Min.X, nb+gap+capHeight(sf), dim)
+		default:
+			nb := top + (h+capHeight(nf))/2
+			r.text(nf, name, box.Min.X, nb, nc)
+			x := box.Min.X + r.width(nf, name) + r.s(14)
+			r.text(sf, r.clipTo(sf, day, box.Min.X+room-x), x, nb, dim)
 		}
 	}
 }
@@ -182,15 +193,22 @@ func (r *renderer) agendaStyle(s scene, box image.Rectangle) {
 	}
 }
 
-// glowStyle is the time over colors drifting slowly across the screen, like a lava lamp. Over a photo
-// the colors are left out: the photo is what is behind the clock then.
+// glowStyle is the time over colors drifting slowly across the screen, like a lava lamp; glowGround
+// has drawn the colors by then.
 func (r *renderer) glowStyle(s scene, box image.Rectangle) {
-	if s.slideshow == nil {
-		field := glowField(r.w/glowCell+1, r.h/glowCell+1, s.now, walnut, [3]color.RGBA{amber, ember, lerp(dim, amber, 0.3)})
-		xdraw.BiLinear.Scale(r.dst, r.dst.Rect, field, field.Bounds(), xdraw.Src, nil)
-	}
 	r.bigStyle(s, image.Rect(box.Min.X, box.Min.Y+r.s(24), box.Max.X, box.Max.Y-r.s(60)))
 	r.styleDate(s, r.w/2, box.Max.Y-r.s(8), 0)
+}
+
+// glowGround is the Glow style's colors over the whole screen, drawn first so that everything else on
+// the clock page (the timers, the weather, the strips) is drawn over them. Over a photo there are
+// none: the photo is what is behind the clock then.
+func (r *renderer) glowGround(s scene) {
+	if s.slideshow != nil {
+		return
+	}
+	field := r.glow.glowField(r.w/glowCell+1, r.h/glowCell+1, s.now, walnut, [3]color.RGBA{amber, ember, lerp(dim, amber, 0.3)})
+	r.glow.stretch(r.dst, field, nil)
 }
 
 // styleNameTag is the name of the style a swipe turned to, in the middle of the clock for a moment.

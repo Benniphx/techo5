@@ -107,6 +107,10 @@ type Display struct {
 	// styleNamed is the clock style a swipe turned to, said on the clock until styleNamedUntil.
 	styleNamed      string
 	styleNamedUntil time.Time
+	// clockUp is the last frame having been the clock page itself, in whatever style: not the light
+	// before an alarm, the screensaver, the night clock or another page. A swipe turns the style only
+	// on it.
+	clockUp bool
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
@@ -341,7 +345,7 @@ func build() *Display {
 	d.clock = clockSelect(d.wake)
 	d.clockStyleSel = clockStyleSelect(d)
 	setup.SetScreen(&setup.ScreenChoices{Styles: clockStyleOptions(), Current: clockStyleIndex, Choose: d.setClockStyle,
-		Taps: clockTapOptions(), TapNow: clockTapIndex, ChooseTap: func(i int) { setClockTap(d.clockTap, i) }})
+		Taps: clockTapOptions(), TapNow: clockTapIndex, ChooseTap: func(i int) { setClockTap(d.clockTap, i) }, Places: maxWorld})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
@@ -1219,13 +1223,14 @@ func (d *Display) gesture(g touch.Gesture) {
 }
 
 // styleSwipe is whether a swipe left or right lands on the clock itself, where it turns the clock
-// style: idle, nothing playing on the page, no weather page, sheet or camera view over it.
+// style: idle, the clock page on the screen (not now playing, the weather, the screensaver or the
+// light before an alarm), no sheet, camera view or finished turn's words over it.
 func (d *Display) styleSwipe() bool {
 	d.mu.Lock()
-	sheet, idle := d.sheet, d.view.Phase == "idle"
+	sheet, idle, up := d.sheet, d.view.Phase == "idle", d.clockUp
 	d.mu.Unlock()
 	_, camera := home.Get().Camera()
-	return idle && !sheet && !camera && d.onClock()
+	return idle && up && !sheet && !camera && d.onClock() && !d.answerUp(time.Now())
 }
 
 // favorite saves what is playing to favorites, and marks the star once it is saved.
@@ -2058,6 +2063,7 @@ func (d *Display) frame() time.Duration {
 		}
 	}
 	d.mu.Lock()
+	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock
 	if !boring {
 		d.slideshowIdleSince = time.Time{}
 	} else if d.slideshowIdleSince.IsZero() {

@@ -230,6 +230,8 @@ type scene struct {
 // building a face at each size is not something to do per frame.
 type renderer struct {
 	paint // the canvas, its size, and the settings screen's tap zones
+	// glow is the Glow style's images, kept between frames (glow.go).
+	glow glowBuffers
 
 	// flip is the flip clock's cards, at night or as a day style: what they show, and a flip under
 	// way; ink is what the LED and flip clocks are drawn in for the frame in hand.
