@@ -8,9 +8,9 @@
   installs the binary it names. This script produces both files and publishes them with gh.
 
 .EXAMPLE
-  .\tools\release.ps1 -Version v0.1.0 -Notes "First release: voice satellite on the Echo Show 5."
-  .\tools\release.ps1 -Version v0.1.1 -Notes "..." -Prerelease
-  .\tools\release.ps1 -Version v0.1.2 -Notes "..." -PrebuiltArm bin\echod-arm -PrebuiltArmDot bin\echod-arm-dot
+  .\tools\release.ps1 -Version v0.1.0 -Notes "First release: voice satellite on the Echo Show 5." -NoAgents
+  .\tools\release.ps1 -Version v0.1.1 -Notes "..." -Prerelease -NoAgents
+  .\tools\release.ps1 -Version v0.1.2 -Notes "..." -PrebuiltArm bin\echod-arm -PrebuiltArmDot bin\echod-arm-dot -Agents bin
 #>
 param(
     [Parameter(Mandatory)][ValidatePattern('^v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$')][string]$Version,

@@ -3,19 +3,24 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // osascript runs a script, given on standard input so nothing of it (typed text least of all) is on
 // a command line other programs can read, and says what macOS said when it refused: most often the
 // missing Accessibility permission.
 func osascript(lang, script string, secret bool) error {
-	cmd := exec.Command("osascript", "-l", lang, "-")
+	// A minute is more than any button's typing takes; an osascript that hangs mustn't hold the keys.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "osascript", "-l", lang, "-")
 	cmd.Stdin = strings.NewReader(script)
 	out, err := cmd.CombinedOutput()
 	if err == nil {
@@ -48,8 +53,14 @@ func pressCombo(c combo) error {
 	return osascript(lang, script, false)
 }
 
-// checkType: System Events types any text.
-func checkType(string) error { return nil }
+// checkType says whether macOS lets the agent type at all (System Events types any text), so a
+// missing permission reaches the Show rather than only this window.
+func checkType(string) error {
+	if !canPressKeys() {
+		return errors.New("macOS hasn't allowed it to press keys: System Settings > Privacy & Security > Accessibility, turn on the agent (or the Terminal it runs in)")
+	}
+	return nil
+}
 
 func typeText(s string) error {
 	script, err := macTypeScript(s)

@@ -148,7 +148,8 @@ func (f *Feature) Pair(addr, key string) (string, error) {
 		name = name[:64]
 	}
 	// Two computers with the same name would share buttons: the second would quietly take the first's.
-	if old, ok := config.Get().Deck.Computer(name); ok && old.Addr != addr {
+	// The same agent at a new address (its key is its own) is a re-pair, not a second computer.
+	if old, ok := config.Get().Deck.Computer(name); ok && old.Addr != addr && deckwire.NormalizeKey(old.Key) != deckwire.NormalizeKey(key) {
 		return "", fmt.Errorf("a computer called %q is already paired at %s: forget it first, or start this one's agent with -name", name, old.Addr)
 	}
 	if err := config.Set().Deck().PairComputer(config.DeckComputer{Name: name, Addr: addr, Key: key}); err != nil {

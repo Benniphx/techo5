@@ -20,6 +20,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -43,8 +44,15 @@ func main() {
 		// The other options given with -startup are the ones it starts with.
 		var keep []string
 		flag.Visit(func(f *flag.Flag) {
+			v := f.Value.String()
+			if f.Name == "dir" {
+				// Started at sign-in, it runs from another folder.
+				if abs, err := filepath.Abs(v); err == nil {
+					v = abs
+				}
+			}
 			if f.Name != "startup" && f.Name != "new-key" {
-				keep = append(keep, "-"+f.Name+"="+f.Value.String())
+				keep = append(keep, "-"+f.Name+"="+v)
 			}
 		})
 		if err := setStartup(*startup == "on", keep); err != nil {
@@ -96,8 +104,8 @@ Leave this window open while you use the deck.
 
 `, version, *name, key, *port, scripts, len(a.hello().Scripts), keysNote())
 
-	// Eight connections at once, two from any one address: a host on the network that opens and holds
-	// connections can't keep the paired Shows out.
+	// Eight connections at once, four from any one address: a host on the network that opens and holds
+	// connections can't keep the paired Shows out, and a Show pressing quickly isn't turned away.
 	sem := make(chan struct{}, 8)
 	var perMu sync.Mutex
 	per := map[string]int{}
@@ -113,7 +121,7 @@ Leave this window open while you use the deck.
 		}
 		from := hostOf(c.RemoteAddr())
 		perMu.Lock()
-		busy := per[from] >= 2
+		busy := per[from] >= 4
 		if !busy {
 			select {
 			case sem <- struct{}{}:
@@ -196,8 +204,10 @@ type agent struct {
 	apps      map[string]string // name -> what opens it
 	appList   []string
 
-	// typing is held while text is typed, so two presses don't interleave their letters.
-	typing sync.Mutex
+	// keys is held while keys are pressed or text typed, so two presses don't interleave (shift held
+	// for a capital turning a ctrl+c into ctrl+shift+c); queued counts the typing waiting for it.
+	keys   sync.Mutex
+	queued atomic.Int32
 }
 
 // loadScripts reads the script list again when it changed since it was last read, so a line added
@@ -205,6 +215,10 @@ type agent struct {
 func (a *agent) loadScripts(force bool) {
 	st, err := os.Stat(a.scriptsPath)
 	if err != nil {
+		// Deleted: nothing runs until it's back.
+		a.mu.Lock()
+		a.scripts, a.scriptsAt = nil, time.Time{}
+		a.mu.Unlock()
 		return
 	}
 	a.mu.Lock()
@@ -213,7 +227,12 @@ func (a *agent) loadScripts(force bool) {
 	if same {
 		return
 	}
-	if err := checkPrivate(st); err != nil {
+	err = checkPrivate(st)
+	if dir, derr := os.Stat(filepath.Dir(a.scriptsPath)); err == nil && derr == nil {
+		// The folder too: whoever can write to it can put another list in its place.
+		err = checkPrivate(dir)
+	}
+	if err != nil {
 		log.Printf("not using %s: %v", a.scriptsPath, err)
 		a.mu.Lock()
 		a.scripts, a.scriptsAt = nil, st.ModTime()
@@ -318,7 +337,10 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		h := a.hello()
 		return deckwire.Reply{OK: true, Hello: &h}
 	case deckwire.OpRefresh:
-		a.refresh()
+		// The script list now; the app list after answering, since asking Windows for it can take
+		// longer than the Show waits.
+		a.loadScripts(true)
+		go a.refresh()
 		h := a.hello()
 		return deckwire.Reply{OK: true, Hello: &h}
 	case deckwire.OpKeys:
@@ -326,6 +348,8 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		if err != nil {
 			return fail(err)
 		}
+		a.keys.Lock()
+		defer a.keys.Unlock()
 		return fail(pressCombo(combo))
 	case deckwire.OpType:
 		// Checked now and typed after answering: a long text takes longer to type than the Show waits,
@@ -336,9 +360,14 @@ func (a *agent) do(req deckwire.Request) deckwire.Reply {
 		if err := checkType(req.Arg); err != nil {
 			return fail(err)
 		}
+		if a.queued.Add(1) > 4 {
+			a.queued.Add(-1)
+			return fail(errors.New("still typing the last few"))
+		}
 		go func() {
-			a.typing.Lock()
-			defer a.typing.Unlock()
+			defer a.queued.Add(-1)
+			a.keys.Lock()
+			defer a.keys.Unlock()
 			if err := typeText(req.Arg); err != nil {
 				log.Printf("typing failed: %v", err)
 			}

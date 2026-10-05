@@ -84,10 +84,11 @@ func (d *Display) onClock() bool {
 // with the same key look the same.
 func deckFrameKey(s scene, ringing, calling bool) string {
 	if !s.showDeck || s.showVolume || ringing || calling || s.setupAsking || s.showAnnouncement ||
-		s.showReminder || s.popup != nil || s.bt.Pairing {
+		s.showReminder || s.popup != nil || s.bt.Pairing || s.pin.open || s.redClock || s.announceRecording {
 		return ""
 	}
-	return fmt.Sprintf("%+v", s.deck)
+	// The theme too: the deck is drawn in its colors, and a change from the setup page should show.
+	return fmt.Sprintf("%+v|%v|%s", s.deck, s.muted, config.Get().Screen.Theme)
 }
 
 // deckScene fills in what the deck page shows, when it is up.

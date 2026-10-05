@@ -214,9 +214,12 @@ func typeGroups(s string) ([][]uint16, error) {
 	return groups, nil
 }
 
-// checkType says whether all of s can be typed, before any of it is.
+// checkType says whether all of s can be typed, and the keyboard made, before any of it is typed.
 func checkType(s string) error {
-	_, err := typeGroups(s)
+	if _, err := typeGroups(s); err != nil {
+		return err
+	}
+	_, err := openKeyboard()
 	return err
 }
 

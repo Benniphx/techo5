@@ -160,18 +160,42 @@ func (c *Client) Track(items []Item) {
 func (c *Client) Run(ctx context.Context, cfg func() Config) {
 	wait := retryFirst
 	for ctx.Err() == nil {
+		// The session's own context, made before the settings are read, so a Restart from here on ends
+		// this session and not the last one.
+		sctx, end := context.WithCancel(ctx)
+		c.mu.Lock()
+		c.stop = end
+		c.mu.Unlock()
 		conf := cfg()
 		if strings.TrimSpace(conf.Addr) == "" {
+			end()
 			c.setProblem("")
-			if !sleep(ctx, unsetEvery) {
+			t := time.NewTimer(unsetEvery)
+			select {
+			case <-ctx.Done():
+				t.Stop()
 				return
+			case <-c.restart:
+				t.Stop()
+			case <-t.C:
 			}
 			continue
 		}
 		start := time.Now()
-		err := c.session(ctx, conf)
+		err := c.session(sctx, conf)
+		restarted := sctx.Err() != nil
+		end()
 		if ctx.Err() != nil {
 			return
+		}
+		if restarted {
+			// Restarted for new settings: try them now, without a "lost the connection" in between.
+			select {
+			case <-c.restart:
+			default:
+			}
+			wait = retryFirst
+			continue
 		}
 		c.setProblem(problemText(err))
 		slog.Info("obs: connection ended", "err", err)
@@ -226,17 +250,6 @@ func problemText(err error) string {
 	}
 }
 
-func sleep(ctx context.Context, d time.Duration) bool {
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-t.C:
-		return true
-	}
-}
-
 // URL is the WebSocket address for addr: a host gets the default port.
 func URL(addr string) (string, error) {
 	addr = strings.TrimSpace(addr)
@@ -266,11 +279,6 @@ func (c *Client) session(ctx context.Context, conf Config) error {
 	if err != nil {
 		return err
 	}
-	ctx, end := context.WithCancel(ctx)
-	defer end()
-	c.mu.Lock()
-	c.stop = end
-	c.mu.Unlock()
 	dctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 	d := websocket.Dialer{Subprotocols: []string{"obswebsocket.json"}, HandshakeTimeout: dialTimeout}

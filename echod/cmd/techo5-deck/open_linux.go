@@ -123,8 +123,9 @@ func setStartup(on bool, args []string) error {
 }
 
 // desktopQuote quotes one argument of a desktop entry's Exec line as the Desktop Entry spec has it:
-// in double quotes, a backslash before " ` $ and \, and % doubled.
+// in double quotes with a backslash before " ` $ and \, and % doubled; then, since Exec is itself a
+// string value of the file, each backslash doubled again.
 func desktopQuote(a string) string {
 	a = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "`", "\\`", `$`, `\$`, `%`, `%%`).Replace(a)
-	return `"` + a + `"`
+	return strings.ReplaceAll(`"`+a+`"`, `\`, `\\`)
 }

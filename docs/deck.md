@@ -128,7 +128,7 @@ The agent makes a virtual keyboard, which works the same under X11 and Wayland. 
 permission to use `/dev/uinput` once:
 
 ```
-sudo groupadd --system uinput
+sudo groupadd -f --system uinput
 sudo usermod -aG uinput $USER
 echo 'KERNEL=="uinput", GROUP="uinput", MODE="0660"' | sudo tee /etc/udev/rules.d/60-techo5-deck.rules
 sudo udevadm control --reload && sudo udevadm trigger
@@ -167,7 +167,9 @@ Save it, then **Refresh** on the setup page (the Show also asks again every minu
 - **Type text** buttons never show their text on the Show (they say "Type text" unless you give
   them a label), and the agent's window logs only how many characters it typed.
 - Windows won't let it press keys into a window that's running as administrator, or while the
-  screen is locked. The button turns red and the agent's window says why.
+  screen is locked. A key press turns the button red and the agent's window says why; **Type text**
+  answers the Show before it types (a long text takes a while), so a failure partway shows only in
+  the agent's window.
 - Scripts run with the shell of the computer: `cmd` on Windows, `sh` on macOS and Linux.
 
 ## Good to know
