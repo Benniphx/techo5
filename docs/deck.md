@@ -80,10 +80,15 @@ once with `-startup on` (`-startup off` undoes it).
 
 ### macOS
 
-The agent presses keys through macOS's own automation, which needs permission once: the first
-press asks for it, or turn it on in **System Settings → Privacy & Security → Accessibility** for the
-agent (or for Terminal, if you start it from there). Until then the agent's window and the setup
-page say it can't press keys there yet. macOS also asks the first time the agent goes on the
+The agent presses keys through macOS's own automation, which needs two permissions once:
+
+1. When the agent starts, macOS asks whether Terminal (or the agent) may control **System
+   Events**: choose **Allow**.
+2. In **System Settings → Privacy & Security → Accessibility**, turn on Terminal (or the agent).
+   It appears in that list after the first key press is refused. Then start the agent again.
+
+Until then the agent's window says what's missing, and the setup page says it can't press keys
+there yet. macOS also asks the first time the agent goes on the
 network: allow it. All keys work except Print Screen and F21 to F24, which Mac keyboards don't
 have; `cmd` is the Command key.
 
