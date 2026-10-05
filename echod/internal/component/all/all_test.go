@@ -42,6 +42,7 @@ var registered = []string{
 	"cpu_cores",
 	"cpu_cores_online",
 	"cpu_temperature",
+	"dlna",
 	"duck_on_near_miss",
 	"failure_effect",
 	"firmware",
@@ -66,6 +67,7 @@ var registered = []string{
 	"last_wake_word",
 	"load_average",
 	"lux",
+	"lyrics",
 	"max_listen_1",
 	"max_listen_2",
 	"max_think_1",
@@ -90,6 +92,7 @@ var registered = []string{
 	"night_volume",
 	"noise_layer_1",
 	"noise_layer_2",
+	"now_playing_follows",
 	"phone",
 	"phone_answer",
 	"phone_hangup",
@@ -155,6 +158,7 @@ var registered = []string{
 	"segment_9",
 	"sendspin",
 	"sendspin_state",
+	"settings_lock",
 	"setup_page",
 	"sleep_timer",
 	"slideshow_folder",
@@ -193,6 +197,9 @@ var registered = []string{
 	"wifi_received",
 	"wifi_sent",
 	"wifi_signal",
+	"screen_clock_tap",
+	"screen_dashboard_return",
+	"screen_dashboard_tiles",
 }
 
 func TestEveryComponentStillRegisters(t *testing.T) {

@@ -986,8 +986,9 @@ In YAML, refer to these actions as `esphome.<node>_dashboard_show` and `esphome.
 
 `dashboard_show` puts the dashboard up, the same as swiping it in (on a Spot, the Dashboard item in
 the ring menu). It stays up until `dashboard_hide`, a swipe or "go home" takes it down. It doesn't
-time out after 10 minutes the way one opened by hand does. If the settings, a camera or a call has the
-screen, the dashboard comes up once they're done. The **Dashboard** setting must not be **Off**.
+time out the way one opened by hand does (after **Dashboard returns to the clock after**, 10 minutes
+unless changed). If the settings, a camera or a call has the screen, the dashboard comes up once
+they're done. The **Dashboard** setting must not be **Off**.
 
 `dashboard_hide` goes back to the clock. With **Dashboard when idle** on, the clock stays for 2
 minutes, then the dashboard comes back, the same as swiping it away.
@@ -1267,6 +1268,33 @@ action: esphome.office_ssh_keys
 data:
   keys: |
     ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample you@your-pc
+```
+
+## Set the settings lock's PIN
+
+In YAML, refer to this action as `esphome.<node>_settings_lock_pin`.
+
+Sets the PIN the device asks for before its settings screen opens (Show and Spot). Everything else on
+the device works without it: the clock, music, the voice assistant, calls. The **Settings lock**
+switch shows whether a PIN is set; turning it off removes the PIN, which is the way back in if it is
+forgotten. The PIN can also be set on the device (Settings → Privacy & Security → Settings lock) and
+on the setup page.
+
+> **Good to know**
+>
+> Like `ssh_keys`, this is refused unless Home Assistant's *ESPHome* link to the device already has a
+> real encryption key set, so the PIN never crosses the network in the clear.
+
+### pin (Required)
+
+*string*
+
+4 to 8 digits. Empty removes the PIN and the lock.
+
+```yaml
+action: esphome.office_settings_lock_pin
+data:
+  pin: "2468"
 ```
 
 ## Sign a device in to a SIP account

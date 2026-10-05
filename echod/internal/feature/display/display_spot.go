@@ -48,6 +48,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
@@ -124,7 +125,9 @@ type Display struct {
 	callBtn *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
 	weatherFx *esphome.Switch
-	lang      *esphome.Select
+	// muteRing is the muted ring drawn thin and dim, on or off (mutering_spot.go).
+	muteRing *esphome.Switch
+	lang     *esphome.Select
 
 	mu      sync.Mutex
 	on      bool
@@ -135,7 +138,7 @@ type Display struct {
 	// dashboard, a finger moving on it, a level being slid, the idle one put away until, and a finger
 	// held still on it.
 	dash          bool
-	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not spotDashForget
+	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not spotDashForgotten
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool
@@ -278,6 +281,7 @@ func build() *Display {
 	d.turnStyle = turnStyleSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
+	d.muteRing = muteRingSwitch(d.wake)
 	d.lang = langSelect()
 	voice.Changed.Listen(d.changed)
 	media.Get().OnVolume.Listen(d.volumeMoved)
@@ -287,6 +291,7 @@ func build() *Display {
 	alarm.Get().Changed.Listen(func(struct{}) { d.ringLights() })
 	remind.Get().Changed.Listen(func(struct{}) { d.reminderLights() })
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
+	d.watchRoom()
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	onMissed(d.wake)
 	hastate.Get().Changed.Listen(func(u hastate.Update) {
@@ -322,7 +327,7 @@ func (d *Display) Name() string { return "screen" }
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang}
 }
 
 // Restore lights the panel the way it was left.
@@ -334,6 +339,7 @@ func (d *Display) Restore(c config.Config) {
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
+	setMuteRingSubtle(d.muteRing, c.Screen.MuteRingSubtle)
 	d.setAuto(c.Screen.Auto, false)
 	d.apply(c.Screen.On, c.Screen.Brightness, false)
 }
@@ -350,6 +356,7 @@ func (d *Display) command(s esphome.LightState) {
 }
 
 func (d *Display) apply(on bool, pct int, save bool) {
+	presence.Hush() // the screen's own light is about to change; the camera is not to take it for somebody
 	pct = min(max(pct, 0), 100)
 	d.mu.Lock()
 	d.on, d.ceiling = on, pct
@@ -384,6 +391,9 @@ func (d *Display) setAuto(on bool, save bool) {
 }
 
 func (d *Display) relight(jump bool) {
+	if jump {
+		presence.Hush() // a sudden change of the screen's light, not somebody
+	}
 	// One at a time from working out the level to writing it: the settle ticker, a reading and a
 	// setting changed on the screen all relight, and a level worked out first must not land last.
 	d.lightMu.Lock()
@@ -537,14 +547,14 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 	}
 
-	if d.callGesture(g) || d.ringGesture(g) {
+	if d.callGesture(g) || d.ringGesture(g) || d.pinGesture(g) {
 		return
 	}
 	// A browser asking to be let in: its face takes every tap, and only the two answers decide.
 	if setup.Get().Waiting() {
 		if g.Kind == touch.Tap {
 			if allow, answered := askTapSpot(g.Y); answered {
-				setup.Get().Answer(allow)
+				answerSetup(allow)
 			}
 		}
 		d.wake()
@@ -1150,6 +1160,14 @@ func (d *Display) frame() time.Duration {
 	}
 	d.mu.Unlock()
 
+	_, reminding := remind.Get().Showing()
+	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen() ||
+		sunriseProgress(now) > 0 || setup.Get().Waiting() || reminding
+	if d.awayTick(now, on, busy, inNight(now)) {
+		d.mu.Lock()
+		on = d.on
+		d.mu.Unlock()
+	}
 	if !on {
 		return time.Hour
 	}
@@ -1165,6 +1183,7 @@ func (d *Display) frame() time.Duration {
 		s.eq.wave = waveOn()
 	}
 	s.muted, _ = mute.Get().Muted()
+	s.mutedSubtle = muteRingSubtle.Load()
 	// A stream this player is carrying is the room's when it is what is being heard: the face names it,
 	// and says what it is doing, though the audio never passes through this player's own stream. Both,
 	// not just playing: the face tests paused first, so a station left paused underneath would label
@@ -1172,6 +1191,8 @@ func (d *Display) frame() time.Duration {
 	// underneath it, is not the room's at all (see media.Player.Carried).
 	s.playing, s.paused = musicState()
 	s.maxVolume = config.VolumeSteps
+	s.pin = pinNow(now)
+	relockOnClose(s.sheetOpen)
 	if s.sheetOpen {
 		s.sheet = d.sheetView(now)
 	}
@@ -1231,6 +1252,9 @@ func (d *Display) frame() time.Duration {
 	s.nowPlaying = s.phase == "idle" && d.showsNowPlaying()
 	if s.nowPlaying || (s.menuOpen && s.menuMode == modeRadio) {
 		s.radio = home.Get().Radio()
+		if s.radio.Followed {
+			s.playing, s.paused = s.radio.Playing, s.radio.Paused
+		}
 		if rows := radioRows(s.radio, s.playing || s.paused); s.radioSel >= len(rows) || s.radioSel < 0 {
 			s.radioSel = min(max(s.radioSel, 0), max(len(rows)-1, 0))
 			d.mu.Lock()

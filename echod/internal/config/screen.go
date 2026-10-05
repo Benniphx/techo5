@@ -80,6 +80,10 @@ type Screen struct {
 	// animation is on unless somebody turns it off, so a saved file without this is animated.
 	WeatherStill bool `json:"weather_still,omitempty"`
 
+	// MuteRingSubtle draws the Spot's muted ring thin and a dimmer red, for a dark room. Off until
+	// somebody wants it, so an update changes nobody's screen.
+	MuteRingSubtle bool `json:"mute_ring_subtle,omitempty"`
+
 	// MusicStrip is how many seconds music plays on the full now-playing page before the Show goes
 	// back to its clock with the music in a strip at the foot; none keeps the full page.
 	MusicStrip int `json:"music_strip,omitempty"`
@@ -88,6 +92,10 @@ type Screen struct {
 	// "nl" — empty for all of them. It has nothing to do with what the assistant understands or
 	// says, which is Home Assistant's pipeline; it decides only which pages a sentence brings up.
 	Language string `json:"language,omitempty"`
+
+	// ClockTap is what a tap on the clock does: empty starts a voice turn, as it always has,
+	// "dashboard" puts the dashboard up, and "nothing" leaves it, for a panel that is talked to.
+	ClockTap string `json:"clock_tap,omitempty"`
 }
 
 // DefaultTheme is the palette a new device comes up in.
@@ -197,6 +205,10 @@ func (w ScreenWriter) WeatherStill(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.WeatherStill = v })
 }
 
+func (w ScreenWriter) MuteRingSubtle(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.MuteRingSubtle = v })
+}
+
 func (w ScreenWriter) CallButton(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.CallButton = v })
 }
@@ -207,6 +219,10 @@ func (w ScreenWriter) MusicStrip(seconds int) error {
 
 func (w ScreenWriter) Language(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.Language = v })
+}
+
+func (w ScreenWriter) ClockTap(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.ClockTap = v })
 }
 
 // Custom saves a palette and makes it the theme.

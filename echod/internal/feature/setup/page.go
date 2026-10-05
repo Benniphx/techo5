@@ -237,6 +237,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveReolink(r)
 	case "talkback":
 		problem = saveTalkBack(r)
+	case "lock":
+		problem = saveLock(r)
 	case "place":
 		problem = savePlace(r)
 	case "calendar":
@@ -249,6 +251,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		}
 	case "dashboard":
 		problem = saveDashboard(r)
+	case "dashpanel":
+		problem = saveDashboardPanel(r)
 	case "timezone":
 		zone := strings.TrimSpace(r.PostFormValue("zone"))
 		switch {
@@ -346,11 +350,13 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		dashboardSection(w, token)
 	case "photos":
 		screenSection(w, token)
+		dashboardPanelSection(w, token)
 		photosSection(w, token)
 	case "weather":
 		placeSection(w, token)
 		calendarLinksSection(w, token)
 	case "privacy":
+		lockSection(w, token)
 		privacySection(w)
 	case "general":
 		nameSection(w, token)
