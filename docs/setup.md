@@ -187,6 +187,16 @@ the Spot too, in its settings.
 
 - **Clock format**, **Clock position** (center, or a smaller clock in a bottom corner so a photo
   stays in view) and **Date color**.
+- **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
+  (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
+  and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
+  from the bottom), *World* (the time here and in other places), *Agenda* (today's and tomorrow's
+  events beside the time) and *Glow* (soft colors drifting behind the time). Swipe left or right
+  across the clock for the next style or the one before; its name shows for a moment. The night
+  clock keeps its own look. Also in Home Assistant and on the setup page's Screen & Photos tab.
+- **World clock places** (setup page, Screen & Photos tab): the World style's places, as time zone
+  names with commas between them, like `America/Chicago, Europe/Paris, Asia/Tokyo`. Up to three; the
+  Spot shows the first two. Leave it empty for New York, London and Tokyo.
 - **Theme**, **Answer time** and **Now playing** (the full page, or a strip over the clock).
 - **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, *Deck*
   to open TECHO5 Deck (until a deck has buttons, a tap still starts Assist), or *Nothing*, for a panel
