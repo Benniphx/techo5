@@ -57,11 +57,6 @@ func startApps() map[string]string {
 	return apps
 }
 
-func skipApp(name string) bool {
-	low := strings.ToLower(name)
-	return strings.Contains(low, "uninstall") || strings.Contains(low, "readme") || strings.Contains(low, "help")
-}
-
 // shortcutApps is the Start menu's shortcut files, for everybody and for this user, by name.
 func shortcutApps() map[string]string {
 	apps := map[string]string{}

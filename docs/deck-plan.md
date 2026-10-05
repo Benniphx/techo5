@@ -4,7 +4,7 @@ A Show as a stream deck: a grid of touch buttons that switch OBS scenes, start a
 press keyboard shortcuts on a computer, open apps and run scripts. The presses go straight to OBS
 or the computer, not through Home Assistant, so they feel instant and work without it.
 
-**Status (2026-10-05):** design agreed with the user. Step 1 (the deck page and OBS) built and tested on a Show. Step 2 (the Windows agent) built on branch `deck`: it lives in `echod/cmd/techo5-deck`, beside the daemon, so both ends share one protocol package (`internal/lib/deckwire`); a console window for now, the tray later. Decided: the name is TECHO5 Deck
+**Status (2026-10-05):** design agreed with the user. Step 1 (the deck page and OBS) built and tested on a Show. Steps 2 and 3 (the agent for Windows, macOS and Linux) built on branch `deck`: it lives in `echod/cmd/techo5-deck`, beside the daemon, so both ends share one protocol package (`internal/lib/deckwire`); a console window for now, the tray later. Decided: the name is TECHO5 Deck
 (`techo5-deck` for files and the program); it opens with a swipe up from the bottom edge; the agent
 lives in this repository; the Show only (no Spot for now, maybe later).
 

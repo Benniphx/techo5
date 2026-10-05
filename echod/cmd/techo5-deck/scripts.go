@@ -61,3 +61,9 @@ func readScripts(path string) ([]script, error) {
 func sortFold(s []string) {
 	slices.SortFunc(s, func(a, b string) int { return strings.Compare(strings.ToLower(a), strings.ToLower(b)) })
 }
+
+// skipApp is an app not worth listing for a button: uninstallers, read-me files, help.
+func skipApp(name string) bool {
+	low := strings.ToLower(name)
+	return strings.Contains(low, "uninstall") || strings.Contains(low, "readme") || strings.Contains(low, "help")
+}

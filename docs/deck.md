@@ -55,12 +55,14 @@ Home Assistant can press a button too, with the `deck_press` action
 ## Computer buttons
 
 Buttons can press a shortcut or a media key, type text, open an app or a website, or run a script
-on a computer. That needs the **TECHO5 Deck agent** running there: one program, nothing to install.
-Windows for now; macOS and Linux are next.
+on a computer. That needs the **TECHO5 Deck agent** running there: one program, nothing to install,
+for Windows, macOS and Linux.
 
-1. Download `techo5-deck.exe` from the release and run it. A window opens with the computer's name
-   and a **pairing key** of 32 letters and digits. The first time, Windows asks whether to let it
-   on the network: allow it on **private networks**.
+1. Download the agent for your computer from the release and run it: `techo5-deck.exe` on Windows,
+   `techo5-deck` on macOS and Linux (from a terminal; see [macOS](#macos) and [Linux](#linux) for
+   the one-time permission each needs). It shows the computer's name and a **pairing key** of 32
+   letters and digits. The first time, Windows asks whether to let it on the network: allow it on
+   **private networks**.
 2. On the Show's setup page, **Screen & Photos → Deck → Computers**: **Look for computers**, pick
    yours (or type its address), type the key, and **Pair**. It says **Connected** with how many
    apps and scripts it found.
@@ -69,18 +71,43 @@ Windows for now; macOS and Linux are next.
      or a media key: `media_play_pause`, `media_next`, `media_previous`, `volume_up`,
      `volume_down`, `volume_mute`.
    - **Type text**: the words to type, as they are.
-   - **Open app or website**: an app from the Start menu by its name (the box suggests them), or an
-     `https://` address.
+   - **Open app or website**: an app by its name, as the Start menu, the Applications folder or
+     the desktop's app list names it (the box suggests them), or an `https://` address.
    - **Run script**: a name from the agent's script list (below).
 
-Keep the agent's window open while you use the deck. To have it start when you sign in, run
-`techo5-deck.exe -startup on` once (`-startup off` undoes it).
+Keep the agent's window open while you use the deck. To have it start when you sign in, run it
+once with `-startup on` (`-startup off` undoes it).
+
+### macOS
+
+The agent presses keys through macOS's own automation, which needs permission once: the first
+press asks for it, or turn it on in **System Settings → Privacy & Security → Accessibility** for the
+agent (or for Terminal, if you start it from there). Until then the agent's window and the setup
+page say it can't press keys there yet. macOS also asks the first time the agent goes on the
+network: allow it. All keys work except Print Screen and F21 to F24, which Mac keyboards don't
+have; `cmd` is the Command key.
+
+### Linux
+
+The agent makes a virtual keyboard, which works the same under X11 and Wayland. That needs
+permission to use `/dev/uinput` once:
+
+```
+sudo usermod -aG input $USER
+echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee /etc/udev/rules.d/60-techo5-deck.rules
+sudo udevadm control --reload && sudo udevadm trigger
+```
+
+Then sign out and back in. **Type text** types plain letters, digits and punctuation, as a US
+keyboard layout has them; other characters aren't typed yet. Apps are the ones in your desktop's
+app list; they open with `gtk-launch` or `gio`.
 
 ### The script list
 
 Scripts are listed on the computer, never on the Show: a paired Show can run only what's in the
 list, and only somebody at the computer can change it. The list is `scripts.txt` in the agent's
-folder (`%APPDATA%\TECHO5 Deck`), one per line, a name, `=`, and the command:
+folder (`%APPDATA%\TECHO5 Deck` on Windows, `~/Library/Application Support/TECHO5 Deck` on macOS,
+`~/.config/TECHO5 Deck` on Linux), one per line, a name, `=`, and the command:
 
 ```
 Backup = robocopy "C:\Users\me\Documents" "D:\Backup\Documents" /MIR
@@ -96,6 +123,7 @@ Save it, then **Refresh** on the setup page (the Show also asks again every minu
 - `techo5-deck.exe -new-key` makes a new key; every paired Show then has to pair again.
 - Windows won't let it press keys into a window that's running as administrator, or while the
   screen is locked. The button turns red and the agent's window says why.
+- Scripts run with the shell of the computer: `cmd` on Windows, `sh` on macOS and Linux.
 
 ## Good to know
 

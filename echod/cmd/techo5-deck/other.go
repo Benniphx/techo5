@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !linux && !darwin
 
 package main
 
@@ -8,24 +8,16 @@ import (
 	"runtime"
 )
 
-// macOS and Linux come next (docs/deck-plan.md, step 3). Until then the agent runs there, opens
-// websites and runs its scripts, but presses no keys and lists no apps.
+// Anything but Windows, Linux and macOS runs the agent for websites and scripts, and presses no keys.
 
-var errNotYet = errors.New("pressing keys isn't on " + runtime.GOOS + " yet")
+var errNotHere = errors.New("pressing keys isn't on " + runtime.GOOS)
 
 func canPressKeys() bool          { return false }
-func pressCombo(combo) error      { return errNotYet }
-func typeText(string) error       { return errNotYet }
+func pressCombo(combo) error      { return errNotHere }
+func typeText(string) error       { return errNotHere }
 func listApps() map[string]string { return map[string]string{} }
-func openApp(string) error        { return errNotYet }
-func setStartup(bool) error       { return errors.New("start at sign-in isn't on " + runtime.GOOS + " yet") }
-
-func openURL(u string) error {
-	opener := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		opener = "open"
-	}
-	return exec.Command(opener, u).Start()
-}
+func openApp(string) error        { return errNotHere }
+func setStartup(bool) error       { return errNotHere }
+func openURL(u string) error      { return exec.Command("xdg-open", u).Start() }
 
 func runScript(command string) error { return exec.Command("/bin/sh", "-c", command).Start() }
