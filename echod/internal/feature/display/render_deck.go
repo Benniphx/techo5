@@ -159,7 +159,7 @@ func (r *paint) sNumOr1() int { return max(r.sNum, 1) }
 func (r *paint) sDenOr1() int { return max(r.sDen, 1) }
 
 // deckHit is the button a tap at p landed on, in the deck last drawn.
-func (r *paint) deckHit(p image.Point) (int, bool) {
+func (r *renderer) deckHit(p image.Point) (int, bool) {
 	r.zmu.Lock()
 	defer r.zmu.Unlock()
 	for i, z := range r.deckZones {

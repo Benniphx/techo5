@@ -67,15 +67,15 @@ func DeckActions() []DeckAction {
 func (a DeckAction) Label() string {
 	switch a {
 	case DeckOBSScene:
-		return "OBS: switch scene"
+		return "Switch scene"
 	case DeckOBSStream:
-		return "OBS: start/stop streaming"
+		return "Stream on/off"
 	case DeckOBSRecord:
-		return "OBS: start/stop recording"
+		return "Record on/off"
 	case DeckOBSMute:
-		return "OBS: mute/unmute"
+		return "Mute/unmute"
 	case DeckOBSSource:
-		return "OBS: show/hide a source"
+		return "Show/hide a source"
 	}
 	return "Empty"
 }
@@ -194,6 +194,23 @@ func (w DeckWriter) Button(p, i int, b DeckButton) error {
 		}
 		btns[i] = b.tidy()
 		c.Deck.Pages[p].Buttons = btns
+	})
+}
+
+// Page sets page p's buttons all at once, adding pages up to it as needed.
+func (w DeckWriter) Page(p int, buttons []DeckButton) error {
+	if p < 0 || p >= DeckPagesMax {
+		return nil
+	}
+	tidy := make([]DeckButton, 0, min(len(buttons), DeckColsMax*DeckRowsMax))
+	for _, b := range buttons[:min(len(buttons), DeckColsMax*DeckRowsMax)] {
+		tidy = append(tidy, b.tidy())
+	}
+	return w.st.Update(func(c *Config) {
+		for len(c.Deck.Pages) <= p {
+			c.Deck.Pages = append(c.Deck.Pages, DeckPage{})
+		}
+		c.Deck.Pages[p].Buttons = tidy
 	})
 }
 

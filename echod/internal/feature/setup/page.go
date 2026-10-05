@@ -253,6 +253,12 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveDashboard(r)
 	case "dashpanel":
 		problem = saveDashboardPanel(r)
+	case "deckobs":
+		problem = saveDeckOBS(r)
+	case "deckgrid":
+		problem = saveDeckGrid(r)
+	case "deckpage":
+		problem = saveDeckPage(r)
 	case "timezone":
 		zone := strings.TrimSpace(r.PostFormValue("zone"))
 		switch {
@@ -351,6 +357,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	case "photos":
 		screenSection(w, token)
 		dashboardPanelSection(w, token)
+		deckSection(w, token)
 		photosSection(w, token)
 	case "weather":
 		placeSection(w, token)

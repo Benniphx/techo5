@@ -4,7 +4,7 @@ A Show as a stream deck: a grid of touch buttons that switch OBS scenes, start a
 press keyboard shortcuts on a computer, open apps and run scripts. The presses go straight to OBS
 or the computer, not through Home Assistant, so they feel instant and work without it.
 
-**Status (2026-10-05):** design agreed with the user, nothing built. Decided: the name is TECHO5 Deck
+**Status (2026-10-05):** design agreed with the user. Step 1 (the deck page and OBS) built on branch `deck`, not yet on a device. Decided: the name is TECHO5 Deck
 (`techo5-deck` for files and the program); it opens with a swipe up from the bottom edge; the agent
 lives in this repository; the Show only (no Spot for now, maybe later).
 
@@ -47,7 +47,7 @@ lives in this repository; the Show only (no Spot for now, maybe later).
   a color. Several pages, with dots at the bottom and a swipe between them, like a Stream Deck's
   folders.
 - **Opening it:** a swipe **up from the bottom edge** of the clock, the top edge's swipe mirrored. It
-  only counts when it starts in the strip along the bottom edge (the same width as the top edge's), and
+  only counts when it starts in the strip along the bottom edge (90 of the Show 5's 480 rows, thinner than the top edge's band so the volume keeps most of the screen), and
   only once a deck is set up: a Show without one keeps swipe up as volume up everywhere. A swipe down,
   or the back gesture the dashboard uses, puts it away. Tap on the clock gains **Deck** beside Assist,
   Dashboard and Nothing. The deck stays up until it's put away, or returns to the clock after a time

@@ -236,6 +236,10 @@ type renderer struct {
 	flip flipState
 	ink  clockInk
 
+	// deckZones are the deck's buttons where they were last drawn, in order, read by the touch
+	// goroutine under zmu (render_deck.go).
+	deckZones []image.Rectangle
+
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles.go).
 	styleFaces map[styleFaceKey]font.Face
 

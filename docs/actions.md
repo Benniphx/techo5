@@ -1016,6 +1016,21 @@ actions:
       - action: esphome.office_dashboard_hide
 ```
 
+## Press a deck button
+
+In YAML, refer to this action as `esphome.<node>_deck_press`.
+
+Does what a TECHO5 Deck button does, as if it were pressed on the screen: an automation can switch
+an OBS scene or start the stream with it. Show only. See [TECHO5 Deck](deck.md).
+
+### page (Required)
+
+The page, counting from 1.
+
+### button (Required)
+
+The button on that page, counting from 1, row by row: on a 4-across deck the second row starts at 5.
+
 ## Choose the weather shown on the idle screen
 
 In YAML, refer to this action as `esphome.<node>_home_weather`.

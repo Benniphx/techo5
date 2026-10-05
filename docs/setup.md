@@ -188,9 +188,12 @@ the Spot too, in its settings.
 - **Clock format**, **Clock position** (center, or a smaller clock in a bottom corner so a photo
   stays in view) and **Date color**.
 - **Theme**, **Answer time** and **Now playing** (the full page, or a strip over the clock).
-- **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, or
-  *Nothing*, for a panel you only talk to. A voice request under way still takes the tap. Also on the
-  setup page's Screen & Photos tab. See [Dashboards](dashboards.md) for the rest of a panel setup.
+- **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, *Deck*
+  to open TECHO5 Deck, or *Nothing*, for a panel you only talk to. A voice request under way still
+  takes the tap. Also on the setup page's Screen & Photos tab. See [Dashboards](dashboards.md) for the
+  rest of a panel setup.
+- **TECHO5 Deck** (Show): pages of buttons for OBS Studio, opened with a swipe up from the bottom
+  edge of the clock. Set up on the setup page's Screen & Photos tab. See [TECHO5 Deck](deck.md).
 - **Screen language** (Settings → General): the clock's day and date, the forecast's days, the
   weather's words and the alarm after the date are written in it: German, Spanish, French, Italian or
   Dutch, and English for *Match all* or *English*. It also picks which words the screen listens for.
