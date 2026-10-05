@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -56,6 +57,28 @@ type API struct {
 	mu      sync.Mutex
 	nextPSK *esphome.PSK
 	unkeyed bool
+
+	// keyed is what the device serves with, for the mDNS record: keyNone (plaintext), keyZero (the
+	// all-zeros key a Home Assistant may replace, adopt.go) or keyReal. Written by Run between
+	// serving, read by advertise.
+	keyed atomic.Int32
+}
+
+const (
+	keyNone int32 = iota
+	keyZero
+	keyReal
+)
+
+// keyKind is what a key is, for keyed.
+func keyKind(k *esphome.PSK) int32 {
+	switch {
+	case k == nil:
+		return keyNone
+	case k.IsZero():
+		return keyZero
+	}
+	return keyReal
 }
 
 var (
@@ -187,6 +210,7 @@ func (a *API) Run(ctx context.Context) error {
 		slog.Error("opening the api port failed", "port", layout.Port, "err", err)
 	}
 
+	a.keyed.Store(keyKind(a.srv.PSK))
 	for {
 		ln, err := net.Listen("tcp", a.srv.Addr)
 		if err != nil {
@@ -225,6 +249,7 @@ func (a *API) Run(ctx context.Context) error {
 		a.srv.Info.BluetoothFeatures = bluetooth.Get().Features()
 		if k := a.takeNextPSK(); k != nil {
 			a.srv.PSK = k
+			a.keyed.Store(keyKind(k))
 			slog.Info("serving with a new key", "provisioned", !k.IsZero())
 		}
 		slog.Info("serving again", "bluetooth", a.srv.Info.BluetoothFeatures)
