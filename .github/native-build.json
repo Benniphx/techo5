@@ -1,7 +1,7 @@
 {
-  "release_tag": "v0.9.30",
-  "upstream_commit": "4d9147524b24a0058f338e36fbdbf9d4f04ab11d",
-  "source_digest": "48f2101c247c12cd55ba4ea660add3679cf2f53ec8d62e7abd43531e0f23c7c1",
+  "release_tag": "v1.0.0",
+  "upstream_commit": "9fd82a881b61302eb83aac97424da81f8e4e8cde",
+  "source_digest": "f3acde9afc647858ce16bc1939bd172c61ac680306a06711a44b699071b7c42d",
   "firmware_schema": 2,
-  "version": "v0.9.30-realtime.1"
+  "version": "v1.0.0-realtime.1"
 }
