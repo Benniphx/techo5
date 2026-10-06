@@ -148,3 +148,23 @@ func TestTheSwipeSettingOnTheSetupPage(t *testing.T) {
 		t.Error("unticking it did not turn it off")
 	}
 }
+
+// The note tying swiping to Tap on the clock shows only where there is a Tap on the clock (the Show,
+// not the Spot).
+func TestTheSwipeNoteOnlyWithATapOnTheClock(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	t.Cleanup(func() { SetScreen(nil) })
+	const note = "Tap on the clock is Nothing"
+	for _, c := range []struct {
+		name string
+		taps []string
+	}{{"no Tap on the clock", nil}, {"a Tap on the clock", []string{"Assist", "Nothing"}}} {
+		SetScreen(&ScreenChoices{Styles: []string{"Classic"}, Current: func() int { return 0 }, Choose: func(int) {},
+			Swipe: func(bool) {}, Taps: c.taps, TapNow: func() int { return 0 }, ChooseTap: func(int) {}})
+		w := httptest.NewRecorder()
+		screenSection(w, "tok")
+		if got, want := strings.Contains(w.Body.String(), note), c.taps != nil; got != want {
+			t.Errorf("%s: the note shown %v, want %v", c.name, got, want)
+		}
+	}
+}
