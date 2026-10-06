@@ -83,7 +83,7 @@ type session struct {
 	wallPaused bool // a video with no sound, or with its sound run out, paused
 	lastHeard  time.Duration
 	lastClock  time.Duration // the wall clock's last answer: it does not go back
-	lastMove   time.Time // when the clock last moved, for stuckFor
+	lastMove   time.Time     // when the clock last moved, for stuckFor
 }
 
 func newSession(id uint64, req Request, u *url.URL, scr Screen, panelW, panelH int) *session {
