@@ -97,6 +97,7 @@ var registered = []string{
 	"phone_answer",
 	"phone_hangup",
 	"phone_peer",
+	"phone_ring_sound",
 	"purge_cache",
 	"quiet_hours",
 	"radar_source",
