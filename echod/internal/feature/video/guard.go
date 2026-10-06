@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os/exec"
 	"sync"
 	"syscall"
 	"time"
@@ -29,30 +30,46 @@ import (
 // address ffmpeg is given.
 
 var (
-	guardOnce sync.Once
-	guardURL  string
-	guardErr  error
+	guardMu  sync.Mutex
+	guardURL string
 )
 
 // guardProxy is the proxy's address for ffmpeg's -http_proxy, password and all, starting it the first
-// time it is wanted.
+// time it is wanted (and again later, if it could not be started then).
 func guardProxy() (string, error) {
-	guardOnce.Do(func() {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			guardErr = fmt.Errorf("the decoder's proxy: %w", err)
-			return
+	guardMu.Lock()
+	defer guardMu.Unlock()
+	if guardURL != "" {
+		return guardURL, nil
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if errors.Is(err, syscall.EADDRNOTAVAIL) {
+		// These images leave loopback down, with no 127.0.0.1 on it: brought up, it is what it is on any
+		// Linux, and nothing reaches it from the network.
+		loopbackUp()
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+	}
+	if err != nil {
+		return "", fmt.Errorf("the decoder's proxy: %w", err)
+	}
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	pass := hex.EncodeToString(b[:])
+	g := &guard{auth: "Basic " + base64.StdEncoding.EncodeToString([]byte("video:"+pass))}
+	srv := &http.Server{Handler: g, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(ln) }()
+	guardURL = "http://video:" + pass + "@" + ln.Addr().String()
+	slog.Info("video: the decoder fetches through a proxy of the daemon's (no owner match in this kernel)")
+	return guardURL, nil
+}
+
+// loopbackUp brings the loopback interface up with its address; a variable for the tests.
+var loopbackUp = func() {
+	for _, args := range [][]string{{"link", "set", "lo", "up"}, {"addr", "add", "127.0.0.1/8", "dev", "lo"}} {
+		if out, err := exec.Command("ip", args...).CombinedOutput(); err != nil {
+			slog.Info("video: bringing loopback up", "ip", args, "err", err, "said", clip(string(out), 200))
 		}
-		var b [16]byte
-		_, _ = rand.Read(b[:])
-		pass := hex.EncodeToString(b[:])
-		g := &guard{auth: "Basic " + base64.StdEncoding.EncodeToString([]byte("video:"+pass))}
-		srv := &http.Server{Handler: g, ReadHeaderTimeout: 10 * time.Second}
-		go func() { _ = srv.Serve(ln) }()
-		guardURL = "http://video:" + pass + "@" + ln.Addr().String()
-		slog.Info("video: the decoder fetches through a proxy of the daemon's (no owner match in this kernel)")
-	})
-	return guardURL, guardErr
+	}
 }
 
 // guard is the proxy.
