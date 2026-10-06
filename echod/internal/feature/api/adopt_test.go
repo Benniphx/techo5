@@ -111,3 +111,24 @@ func TestARestartShutsAWindowPastItsTime(t *testing.T) {
 		t.Error("a window a key was set in was kept")
 	}
 }
+
+// A timer left from an earlier window does not shut a window opened again since: only the window's own
+// end shuts it.
+func TestAnEarlierWindowsTimerLeavesALaterWindowOpen(t *testing.T) {
+	adoptFiles(t)
+	a := newTestAPI()
+	until, err := a.OpenAdoption()
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.takeNextPSK()
+	// The first window's timer, firing now: its end is earlier than the window open now.
+	a.shutAdoptionAt(until.Add(-5 * time.Minute))
+	time.Sleep(100 * time.Millisecond)
+	if k, err := loadPSK(keyFile); err != nil || !k.IsZero() {
+		t.Errorf("an earlier window's timer shut this one: key %v (%v)", k, err)
+	}
+	if a.AdoptionOpenUntil().IsZero() {
+		t.Error("the window no longer says it is open")
+	}
+}

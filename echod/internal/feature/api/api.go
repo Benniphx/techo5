@@ -205,6 +205,7 @@ func (a *API) Start(ctx context.Context) error {
 		// raises a repair to update firmware the device does not run (compat.go).
 		Model:             layout.Model + " · TECHO5 " + layout.Version,
 		Version:           ESPHomeCompat,
+		ESPHomeVersion:    ESPHomeCompat,
 		VoiceFeatures:     voice.Features,
 		BluetoothFeatures: bluetooth.Get().Features(),
 

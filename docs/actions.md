@@ -70,7 +70,9 @@ Assistant. Alarms, radio stations, Wi-Fi and its other settings stay.
 Afterward, delete the device from **Settings → Devices & services → ESPHome** in your Home Assistant.
 The new key isn't shown anywhere. To add the device to another Home Assistant later, open its setup
 page, go to **General**, and choose **Let a Home Assistant add this device**: for 15 minutes the
-device has no key, and the Home Assistant that adds it sets one.
+device has no key, and the Home Assistant that adds it sets one. Home Assistant sends that key over
+your network unencrypted, as it does for ESPHome devices, so open the window only on a network you
+trust. Adding a device with nothing typed needs a recent Home Assistant (tested with 2026.9).
 
 ### confirm (Required)
 
