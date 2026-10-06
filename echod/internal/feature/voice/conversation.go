@@ -91,6 +91,7 @@ const (
 	evSpeaking                     // VAD detected speech has started
 	evSpokeEnd                     // the device heard the speaker finish; text is the turn's id
 	evLookHere                     // the answer put something on the screen: no listening again after it
+	evCutOff                       // another sound took the speaker from the reply (event.reply)
 )
 
 type event struct {
@@ -103,8 +104,9 @@ type event struct {
 	msg   string
 	at    time.Time
 
-	// reply is which reply an evPlaying is about (reply.id). One from a reply that was stopped, or
-	// from anything that is not a reply, must not take the turn's deadline away.
+	// reply is which reply an evPlaying or evCutOff is about (reply.id). One from a reply that was
+	// stopped, or from anything that is not a reply, must not take the turn's deadline away or end
+	// the turn after it.
 	reply uint64
 }
 
@@ -484,6 +486,18 @@ func (c *conversation) handle(e event) {
 		}
 		c.disarm()
 
+	case evCutOff:
+		// An announcement, or an alarm, took the speaker from the reply. Nothing else would end the
+		// turn: its deadline went when the reply's audio arrived, and only a reply that played out
+		// posts evPlayed, so it stayed replying until somebody canceled it. It ends here, and nothing
+		// follows it: listening again would open over whatever cut it off.
+		if c.phase != phaseReplying || e.reply != c.reply.id {
+			return
+		}
+		slog.Info("the reply was cut off by another sound", "slot", c.slot+1)
+		c.clearPending()
+		c.idle("cut off", activity.Canceled)
+
 	case evError:
 		// Two devices in earshot both hear the wake word and both start a turn. Home Assistant keeps the
 		// first and refuses the rest, so this arrives on every device that lost — which is not a failure
@@ -709,10 +723,14 @@ func (c *conversation) speak(url string) {
 	safe.Go("reply", func() {
 		<-held.Done()
 
-		// A reply that was stopped - canceled, or interrupted by a wake word - fails its fetch with the
-		// context canceled, which says nothing about the url. Taken as a failure, it moved the wake word
-		// to streamed replies for good.
+		// A reply that was stopped - canceled, interrupted by a wake word, or cut off by another sound -
+		// fails its fetch with the context canceled, which says nothing about the url. Taken as a
+		// failure, it moved the wake word to streamed replies for good. Canceling and a wake word end
+		// the turn themselves; another sound taking the speaker does not, so the loop is told.
 		if held.Stopped() {
+			if held.Preempted() {
+				c.post(event{kind: evCutOff, reply: id})
+			}
 			return
 		}
 		if err := held.Err(); err != nil {

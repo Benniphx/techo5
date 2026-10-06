@@ -167,3 +167,29 @@ func TestALatePlayingFromAStoppedReplyKeepsTheNextDeadline(t *testing.T) {
 		t.Fatal("the reply's own audio left its deadline running")
 	}
 }
+
+// An announcement cuts off a reply that is playing: it takes the speaker, and the reply is stopped.
+// The turn is not left saying it is replying with nothing to say, and nothing to end it: its deadline
+// went when the reply's audio arrived, and only a reply that played out ended it.
+func TestAReplyCutOffByAnAnnouncementEndsTheTurn(t *testing.T) {
+	c := thinkingTurn(t)
+	reply, release := heldSpeech(t)
+	close(release)
+	c.handle(event{kind: evReplyText, text: "It's noon."})
+	c.handle(event{kind: evReplyURL, url: reply})
+	c.handle(next(t, c, evPlaying))
+	if c.phase != phaseReplying || c.deadline != nil {
+		t.Fatalf("with its audio playing the turn is %s, deadline %v", c.phase, c.deadline != nil)
+	}
+
+	news, release := heldSpeech(t)
+	close(release)
+	c.announce(esphome.Announce{MediaID: news})
+	end := time.Now().Add(5 * time.Second)
+	for c.phase != phaseIdle && time.Now().Before(end) {
+		settle(c, 10*time.Millisecond)
+	}
+	if c.phase != phaseIdle {
+		t.Fatalf("after its reply was cut off the turn is still %s", c.phase)
+	}
+}
