@@ -29,6 +29,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
@@ -224,6 +225,17 @@ type scene struct {
 
 	// artFx is the weather moving over the weather art, when the slideshow shows it (weather_art.go).
 	artFx skyFx
+
+	// video is the video player (feature/video); showVideo is its page, over everything but what covers
+	// it (videoCovered), and videoLive that page with its picture coming, when only its controls are
+	// drawn on the canvas; videoControls is the controls being up. showVideoAsk is the question about a
+	// DLNA video, videoAsk what it asks (render_video.go).
+	video         video.State
+	showVideo     bool
+	videoLive     bool
+	videoControls bool
+	showVideoAsk  bool
+	videoAsk      videoAsk
 }
 
 // renderer draws scenes onto one canvas. Faces are made once: parsing a font is cheap, but
@@ -241,6 +253,11 @@ type renderer struct {
 	// deckZones are the deck's buttons where they were last drawn, in order, read by the touch
 	// goroutine under zmu (render_deck.go).
 	deckZones []image.Rectangle
+
+	// videoZones are the video page's controls where they were last drawn, under zmu, and videoOver
+	// what of the canvas goes over the picture (render_video.go).
+	videoZones []image.Rectangle
+	videoOver  image.Rectangle
 
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles.go).
 	styleFaces map[styleFaceKey]font.Face
@@ -400,6 +417,16 @@ func (r *renderer) draw(s scene) {
 	if !s.showRadar {
 		r.shapes = alertOverlay{} // the alert shapes' picture is the page's size: kept only while the rain map is up
 	}
+	r.videoOver = image.Rectangle{}
+	// A video is over everything it is not covered by (video.go decides which), the night clock
+	// included, and has no header: the picture is the screen.
+	if s.showVideo {
+		r.videoOver = r.videoPage(s)
+		return
+	}
+	r.zmu.Lock()
+	r.videoZones = nil
+	r.zmu.Unlock()
 	r.artDrawn = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
@@ -439,6 +466,11 @@ func (r *renderer) draw(s scene) {
 	// it. Under a call and under a ringing alarm, both of which are somebody already being answered.
 	if s.setupAsking {
 		r.setupAskPage(s)
+		return
+	}
+	// A DLNA video asking to be shown, the same way: an answer from somebody at the device.
+	if s.showVideoAsk {
+		r.videoAskPage(s)
 		return
 	}
 	if s.bt.Pairing {

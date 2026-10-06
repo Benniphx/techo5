@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 )
 
 // Screen is what the picture is made for: the canvas the daemon draws on (960×480 on the Show 5,
@@ -104,16 +105,21 @@ type Decoding struct {
 }
 
 // netArgs are the input options every run of the decoder has: the network only, and patience for it.
-func netArgs(caFile string, insecure bool) []string {
+// The certificate options go only with an https address: ffmpeg refuses an option nothing it opened
+// took, and an http address opens no TLS. (A playlist fetched over http whose parts are https is
+// fetched as ffmpeg does by default, unchecked.)
+func netArgs(url, caFile string, insecure bool) []string {
 	a := []string{
 		"-protocol_whitelist", protocols,
 		// A connection that stops sending for this long ends the video, rather than leaving it frozen.
 		"-rw_timeout", "15000000",
 		"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_delay_max", "4",
 	}
-	if insecure {
+	switch {
+	case !strings.HasPrefix(url, "https://"):
+	case insecure:
 		a = append(a, "-tls_verify", "0")
-	} else {
+	default:
 		a = append(a, "-tls_verify", "1")
 		if caFile != "" {
 			a = append(a, "-ca_file", caFile)
@@ -126,7 +132,7 @@ func netArgs(caFile string, insecure bool) []string {
 // the stream, prints what it found and stops.
 func ProbeArgs(url, caFile string, insecure bool) []string {
 	a := []string{"-hide_banner", "-nostdin"}
-	a = append(a, netArgs(caFile, insecure)...)
+	a = append(a, netArgs(url, caFile, insecure)...)
 	return append(a, "-i", url)
 }
 
@@ -164,7 +170,7 @@ const (
 // stereo on its standard output.
 func DecodeArgs(d Decoding) []string {
 	a := []string{"-hide_banner", "-nostdin", "-loglevel", "error"}
-	a = append(a, netArgs(d.CAFile, d.Insecure)...)
+	a = append(a, netArgs(d.URL, d.CAFile, d.Insecure)...)
 	_, h := d.Info.Display()
 	t := threads(int(h))
 	a = append(a, "-threads", strconv.Itoa(t))

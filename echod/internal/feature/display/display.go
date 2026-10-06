@@ -48,6 +48,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/ambient"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/screen"
@@ -310,6 +311,17 @@ type Display struct {
 	// demoUntil puts placeholders where the sheet shows the owner's details (name, network,
 	// address, SSH key names), for screenshots that are going to be published.
 	demoUntil time.Time
+
+	// The video page (video.go): its controls up until videoUntil; videoOnScreen the last frame having
+	// drawn it, for the touch handler; videoTried the last video it showed, whose failure it says.
+	// videoPainting and videoOver are the frame loop's alone: frames to paint after this frame, with
+	// that of the canvas over them, and videoLast the frame on the panel.
+	videoUntil    time.Time
+	videoOnScreen bool
+	videoTried    uint64
+	videoPainting bool
+	videoOver     image.Rectangle
+	videoLast     *video.Frame
 }
 
 var (
@@ -410,6 +422,7 @@ func build() *Display {
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Asked.Listen(d.dashboardAsked)
 	deck.Get().Changed.Listen(d.deckChanged)
+	video.Get().Changed.Listen(func(struct{}) { d.wake() })
 	assistant.SetScreen(d.showPage)
 	return d
 }
@@ -824,6 +837,17 @@ func (d *Display) gesture(g touch.Gesture) {
 			}
 		}
 		d.wake()
+		return
+	}
+
+	// A DLNA video asking to be shown, the same way; and then the video page, which takes every finger.
+	if id, _, _, asking := video.Get().Asking(); asking {
+		d.videoAskGesture(g, id)
+		d.wake()
+		return
+	}
+	if d.videoUp() {
+		d.videoGesture(g)
 		return
 	}
 
@@ -1399,7 +1423,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// And a browser asking to be let in to the setup page: its Allow has to be seen and pressed,
 		// and whoever is asking is standing at the device.
 		// A talk through a camera is a conversation at the door: the screen it needs stays lit.
-		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
+		// And a video: somebody asked for it to be watched.
+		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting() ||
+			video.Get().State().Active()
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
@@ -1744,6 +1770,8 @@ func (d *Display) Start(context.Context) error {
 	d.wide = w > 1000 || h > 1000
 	d.mu.Unlock()
 	d.logo = newSplash(w, h)
+	fw, fh := dev.FrameSize()
+	video.Get().UseScreen(video.Screen{W: w, H: h, Rotated: dev.Rotated(), PixFmt: dev.PixFmt()}, fw, fh)
 	d.mu.Lock()
 	d.booting, d.started = true, time.Now()
 	d.mu.Unlock()
@@ -1767,6 +1795,14 @@ func (d *Display) Run(ctx context.Context) error {
 	go d.settle(ctx)
 	for {
 		wait := d.frame()
+		if d.videoPainting {
+			// The video's frames, until the frame loop has to look again.
+			d.paintVideo(ctx, wait, d.videoOver)
+			if ctx.Err() != nil {
+				return nil
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -1778,6 +1814,7 @@ func (d *Display) Run(ctx context.Context) error {
 
 // frame draws what the moment calls for and says how long until the next one is due.
 func (d *Display) frame() time.Duration {
+	d.videoPainting = false
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
 	volume, volAt := d.volume, d.volAt
@@ -1798,6 +1835,11 @@ func (d *Display) frame() time.Duration {
 	}
 	if !on && d.popupUp() != nil && !nightNow(now) {
 		// A pop-up lights a dark panel by day. At night it waits there, dark, until the screen is woken.
+		d.apply(true, d.ceilingOrDefault(), false)
+		on = true
+	}
+	if !on && video.Get().State().Active() {
+		// A video lights a dark panel, day or night: somebody asked for it to be watched.
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
@@ -2032,6 +2074,10 @@ func (d *Display) frame() time.Duration {
 	// still standing in it. It was set only on the idle page once, and the press could not be given
 	// without leaving settings first.
 	s.setupAsking = setup.Get().Waiting()
+	d.videoScene(&s, now)
+	if s.showVideo {
+		boring = false
+	}
 
 	// The announcement state is read every frame like the setup page's, for the same reason: the
 	// drawer's button, the page an arriving one puts up and the line that says this microphone is
@@ -2089,6 +2135,16 @@ func (d *Display) frame() time.Duration {
 	d.callShown = s.callButton
 	d.mu.Unlock()
 
+	if s.showVideo && s.videoLive {
+		// The picture's own frames go to the panel (paintVideo); the canvas holds only the controls.
+		d.r.draw(s)
+		d.videoPainting, d.videoOver = true, d.r.videoOver
+		d.answerVideoShots()
+		return d.videoNext(now)
+	}
+	if !s.showVideo {
+		d.dropVideoFrame()
+	}
 	if key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle); key != "" && key == d.deckDrawn {
 		// The deck as it was last drawn, and nothing over it: drawing it again would only cost.
 		d.answerShots()

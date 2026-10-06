@@ -119,6 +119,29 @@ const probeHLS = `Input #0, hls, from 'https://media.example.com/live/index.m3u8
 At least one output file must be specified
 `
 
+// What the public Mux test stream says: each variant's sound before its picture.
+const probeMux = `Input #0, hls, from 'https://media.example.com/x36xhzz.m3u8':
+  Duration: 00:10:34.58, start: 10.000000, bitrate: 0 kb/s
+  Program 0
+    Metadata:
+      variant_bitrate : 0
+  Stream #0:0[0x0]: Audio: aac (LC) ([15][0][0][0] / 0x000F), 44100 Hz, stereo, fltp, start 10.010100
+  Stream #0:1[0x0]: Video: h264 (High) ([27][0][0][0] / 0x001B), yuv420p, 1280x720 [SAR 1:1 DAR 16:9], 60 fps, 60 tbr, 90k tbn, start 10.033322
+  Program 1
+    Metadata:
+      variant_bitrate : 0
+  Stream #0:2[0x1]: Audio: aac (HE-AAC) ([15][0][0][0] / 0x000F), 44100 Hz, stereo, fltp, start 10.000000
+  Stream #0:3[0x1]: Video: h264 (Constrained Baseline) ([27][0][0][0] / 0x001B), yuv420p, 320x184 [SAR 1:1 DAR 40:23], 30 fps, 30 tbr, 90k tbn, start 10.000000
+  Program 2
+  Stream #0:4[0x2]: Audio: aac (HE-AAC) ([15][0][0][0] / 0x000F), 44100 Hz, stereo, fltp, start 10.000000
+  Stream #0:5[0x2]: Video: h264 (Constrained Baseline) ([27][0][0][0] / 0x001B), yuv420p, 512x288 [SAR 1:1 DAR 16:9], 30 fps, 30 tbr, 90k tbn, start 10.000000
+  Program 3
+  Stream #0:6[0x3]: Audio: aac (LC) ([15][0][0][0] / 0x000F), 44100 Hz, stereo, fltp, start 10.010100
+  Stream #0:7[0x3]: Video: h264 (High) ([27][0][0][0] / 0x001B), yuv420p, 848x480 [SAR 1:1 DAR 53:30], 60 fps, 60 tbr, 90k tbn, start 10.033322
+  Stream #0:8[0x4]: Audio: aac (LC) ([15][0][0][0] / 0x000F), 44100 Hz, stereo, fltp, start 10.010100
+At least one output file must be specified
+`
+
 const probeAnamorphic = `Input #0, mpegts, from 'http://192.168.1.20/dvd.ts':
   Duration: 00:01:00.00, start: 1.000000, bitrate: 6000 kb/s
   Stream #0:0[0x100]: Video: mpeg4 (Simple Profile) ([16][0][0][0] / 0x0010), yuv420p(tv, progressive), 720x480 [SAR 32:27 DAR 16:9], 29.97 fps, 29.97 tbr, 90k tbn
@@ -161,6 +184,14 @@ func TestWhatFFmpegSaysIsRead(t *testing.T) {
 	}
 	if i.VideoIndex != 1 || i.AudioIndex != 1 || i.Height != 720 || i.Duration != 0 {
 		t.Errorf("hls: %+v", i)
+	}
+
+	i, err = ParseProbe(probeMux)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i.VideoIndex != 0 || i.AudioIndex != 0 || i.Height != 720 || i.FPS != 60 {
+		t.Errorf("mux: %+v", i)
 	}
 
 	// Its sound is AC-3, which this device does not decode: the video plays without it.
@@ -273,13 +304,18 @@ func TestTheDecoderArguments(t *testing.T) {
 		}
 	}
 
-	// No sound to play: no sound output. 1080p: four threads and the cheap deblocking. Insecure TLS: no
-	// checking.
+	// No sound to play: no sound output. 1080p: four threads and the cheap deblocking. Plain http: no
+	// certificate options, which ffmpeg would refuse for an input that opens no TLS.
 	info, _ = ParseProbe(probeAnamorphic)
 	info.Height, info.Width = 1080, 1920
-	a = DecodeArgs(Decoding{URL: "http://192.168.1.20/dvd.ts", Info: info, Screen: Screen{W: 960, H: 480, Rotated: true}, Insecure: true})
-	if has("pipe:1") || !has("-threads", "4") || !has("-skip_loop_filter", "nonref") || !has("-tls_verify", "0") || has("-ca_file") {
+	a = DecodeArgs(Decoding{URL: "http://192.168.1.20/dvd.ts", Info: info, Screen: Screen{W: 960, H: 480, Rotated: true}, CAFile: "/etc/ssl/certs/ca-certificates.crt"})
+	if has("pipe:1") || !has("-threads", "4") || !has("-skip_loop_filter", "nonref") || has("-tls_verify") || has("-ca_file") {
 		t.Errorf("silent 1080p: %q", a)
+	}
+	// Insecure TLS: https unchecked.
+	a = DecodeArgs(Decoding{URL: "https://192.168.1.20/dvd.ts", Info: info, Screen: Screen{W: 960, H: 480, Rotated: true}, CAFile: "/etc/ssl/certs/ca-certificates.crt", Insecure: true})
+	if !has("-tls_verify", "0") || has("-ca_file") {
+		t.Errorf("insecure: %q", a)
 	}
 	// Unturned (a panel drawn as it is): no transpose, and a filled screen needs no bars.
 	if f := Filter(Info{Width: 1920, Height: 960}, Screen{W: 960, H: 480, PixFmt: "rgba"}); f != "fps=fps=30/1:start_time=0,scale=960:480:flags=fast_bilinear,format=yuv420p,scale,format=rgba" {

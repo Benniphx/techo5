@@ -18,14 +18,19 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// ffmpegPath is the decoder in the image (tools/linux/build-ffmpeg.sh); a variable for a test daemon
-// run from elsewhere (TECHO5_FFMPEG).
-var ffmpegPath = func() string {
+// ffmpegPath is the decoder, when the tests set one; else TECHO5_FFMPEG names it (a test daemon run
+// with its own), else it is the image's (tools/linux/build-ffmpeg.sh).
+var ffmpegPath string
+
+func decoderPath() string {
+	if ffmpegPath != "" {
+		return ffmpegPath
+	}
 	if p := os.Getenv("TECHO5_FFMPEG"); p != "" {
 		return p
 	}
 	return "/usr/local/bin/techo5-ffmpeg"
-}()
+}
 
 // caFile is where the image keeps the certificate authorities, for https.
 const caFile = "/etc/ssl/certs/ca-certificates.crt"
@@ -33,7 +38,7 @@ const caFile = "/etc/ssl/certs/ca-certificates.crt"
 // Installed is whether this image carries the decoder: an older image offers the switches but plays
 // nothing.
 func Installed() bool {
-	_, err := os.Stat(ffmpegPath)
+	_, err := os.Stat(decoderPath())
 	return err == nil
 }
 
@@ -107,7 +112,7 @@ func start(ctx context.Context, args []string, decode, sound bool) (*decoder, er
 		return nil, err
 	}
 	d := &decoder{stderr: &tail{}, done: make(chan struct{})}
-	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+	cmd := exec.CommandContext(ctx, decoderPath(), args...)
 	cmd.Dir = "/"
 	cmd.Env = decoderEnv
 	cmd.Stderr = d.stderr

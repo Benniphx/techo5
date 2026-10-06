@@ -49,6 +49,7 @@ var (
 	reTBR      = regexp.MustCompile(`, ([0-9.]+)(k?) tbr\b`)
 	reRotation = regexp.MustCompile(`rotation of (-?[0-9.]+) degrees`)
 	reDuration = regexp.MustCompile(`Duration: (\d+):(\d\d):(\d\d(?:\.\d+)?)`)
+	reProgram  = regexp.MustCompile(`^\s*Program (\d+)`)
 )
 
 // most is the largest picture worth choosing among a stream's variants: past it, a variant only costs
@@ -61,6 +62,7 @@ func ParseProbe(out string) (Info, error) {
 	info := Info{VideoIndex: -1, AudioIndex: -1, SARNum: 1, SARDen: 1}
 	type videoStream struct {
 		idx, n        int // its place among video streams, and among all streams
+		program       int // the variant it belongs to in a stream that has them, else -1
 		w, h          int
 		sarN, sarD    int
 		fps           float64
@@ -70,13 +72,13 @@ func ParseProbe(out string) (Info, error) {
 		attachedImage bool
 	}
 	type audioStream struct {
-		idx, n int
-		codec  string
+		idx, n, program int
+		codec           string
 	}
 	var vids []videoStream
 	var auds []audioStream
 	nv, na, n := 0, 0, 0
-	lastVideo := -1
+	lastVideo, program := -1, -1
 	var problem string
 	sc := bufio.NewScanner(strings.NewReader(out))
 	sc.Buffer(make([]byte, 64<<10), 1<<20)
@@ -87,6 +89,11 @@ func ParseProbe(out string) (Info, error) {
 			mi, _ := strconv.Atoi(m[2])
 			s, _ := strconv.ParseFloat(m[3], 64)
 			info.Duration = time.Duration(h)*time.Hour + time.Duration(mi)*time.Minute + time.Duration(s*float64(time.Second))
+			continue
+		}
+		if m := reProgram.FindStringSubmatch(line); m != nil {
+			program, _ = strconv.Atoi(m[1])
+			lastVideo = -1
 			continue
 		}
 		if m := reRotation.FindStringSubmatch(line); m != nil && lastVideo >= 0 {
@@ -105,7 +112,7 @@ func ParseProbe(out string) (Info, error) {
 		kind, codec, rest := m[1], m[2], m[3]
 		switch kind {
 		case "Video":
-			v := videoStream{idx: nv, n: n, sarN: 1, sarD: 1, codec: codec, usable: videoCodecs[codec],
+			v := videoStream{idx: nv, n: n, program: program, sarN: 1, sarD: 1, codec: codec, usable: videoCodecs[codec],
 				attachedImage: strings.Contains(rest, "(attached pic)")}
 			if s := reSize.FindStringSubmatch(rest); s != nil {
 				v.w, _ = strconv.Atoi(s[1])
@@ -127,7 +134,7 @@ func ParseProbe(out string) (Info, error) {
 			lastVideo = len(vids) - 1
 			nv++
 		case "Audio":
-			auds = append(auds, audioStream{idx: na, n: n, codec: codec})
+			auds = append(auds, audioStream{idx: na, n: n, program: program, codec: codec})
 			na++
 			lastVideo = -1
 		default:
@@ -168,10 +175,10 @@ func ParseProbe(out string) (Info, error) {
 	if v.sarN > 0 && v.sarD > 0 {
 		info.SARNum, info.SARDen = v.sarN, v.sarD
 	}
-	// The sound: the first usable stream after the picture (a stream's variants list each picture with
-	// its own sound after it), or else the first usable at all.
+	// The sound: the first usable stream of the picture's own variant, when the stream has variants
+	// (a second variant would be a second download), or else the first usable at all.
 	for _, a := range auds {
-		if audioCodecs[a.codec] && a.n > v.n {
+		if audioCodecs[a.codec] && v.program >= 0 && a.program == v.program {
 			info.AudioIndex, info.AudioCodec = a.idx, a.codec
 			break
 		}
