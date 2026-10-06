@@ -96,3 +96,74 @@ func TestACanceledReplyKeepsItsDelivery(t *testing.T) {
 		t.Fatalf("after a cancel the wake word's delivery is %q, want %q", got, config.DeliveryWhole)
 	}
 }
+
+// next waits for the turn to post an event of kind and returns it unhandled, handling the rest.
+func next(t *testing.T, c *conversation, kind eventKind) event {
+	t.Helper()
+	end := time.After(5 * time.Second)
+	for {
+		select {
+		case e := <-c.events:
+			if e.kind == kind {
+				return e
+			}
+			c.handle(e)
+		case <-end:
+			t.Fatalf("no event of kind %d arrived", kind)
+		}
+	}
+}
+
+// An announcement made while a turn is thinking is not the turn's answer arriving. It used to say it
+// was, and the turn lost its deadline: a pipeline that then never answered left it thinking for good.
+func TestAnAnnouncementKeepsTheTurnsDeadline(t *testing.T) {
+	c := thinkingTurn(t)
+	url, release := heldSpeech(t)
+	close(release)
+
+	c.announce(esphome.Announce{MediaID: url})
+	end := time.Now().Add(5 * time.Second)
+	for !c.sound.Busy() && time.Now().Before(end) {
+		settle(c, 10*time.Millisecond)
+	}
+	for c.sound.Busy() && time.Now().Before(end) {
+		settle(c, 10*time.Millisecond)
+	}
+	settle(c, 100*time.Millisecond)
+
+	if c.phase != phaseThinking {
+		t.Fatalf("the turn is %s, want thinking", c.phase)
+	}
+	if c.deadline == nil {
+		t.Fatal("the announcement took the thinking turn's deadline away")
+	}
+}
+
+// A reply's audio arriving is what ends the wait for it, but only that reply's. One stopped after its
+// audio was queued can still have its evPlaying waiting in the loop, and handled in the next turn it
+// took that turn's deadline away before any of its own answer had arrived.
+func TestALatePlayingFromAStoppedReplyKeepsTheNextDeadline(t *testing.T) {
+	c := thinkingTurn(t)
+	first, release := heldSpeech(t)
+	close(release)
+	c.handle(event{kind: evReplyText, text: "It's noon."})
+	c.handle(event{kind: evReplyURL, url: first})
+	late := next(t, c, evPlaying)
+
+	c.handle(event{kind: evCancel})
+	c.think() // the next turn, its answer still to come
+	second, release := heldSpeech(t)
+	c.handle(event{kind: evReplyText, text: "It's one."})
+	c.handle(event{kind: evReplyURL, url: second})
+
+	c.handle(late)
+	if c.deadline == nil {
+		t.Fatal("the stopped reply's audio took the next turn's deadline away")
+	}
+
+	close(release)
+	c.handle(next(t, c, evPlaying))
+	if c.deadline != nil {
+		t.Fatal("the reply's own audio left its deadline running")
+	}
+}

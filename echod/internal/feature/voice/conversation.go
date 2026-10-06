@@ -86,7 +86,7 @@ const (
 	evCancel                       // the user gave up on it
 	evTimeout                      // Home Assistant never closed the run
 	evPending                      // a turn held back for the last one to close has waited long enough
-	evPlaying                      // the reply has audio, so the pipeline owes nothing more
+	evPlaying                      // the reply (event.reply) has audio, so the pipeline owes nothing more
 	evContinue                     // Home Assistant wants the answer to a question it just asked
 	evSpeaking                     // VAD detected speech has started
 	evSpokeEnd                     // the device heard the speaker finish; text is the turn's id
@@ -102,6 +102,10 @@ type event struct {
 	code  string
 	msg   string
 	at    time.Time
+
+	// reply is which reply an evPlaying is about (reply.id). One from a reply that was stopped, or
+	// from anything that is not a reply, must not take the turn's deadline away.
+	reply uint64
 }
 
 // conversation runs one turn at a time: microphone audio up, pipeline events back, spoken reply out.
@@ -181,6 +185,9 @@ type conversation struct {
 
 	reply reply
 
+	// replies counts the replies spoken, to give each its id.
+	replies uint64
+
 	// shown is what a screen is told: the phase and the words so far. Reset when a turn opens, so a
 	// new turn never shows the last one's answer.
 	shown State
@@ -200,6 +207,9 @@ type nextTurn struct {
 type reply struct {
 	url    string
 	stream *stream
+
+	// id tells this reply's evPlaying from a stopped one's. Zero is no reply.
+	id uint64
 }
 
 func newConversation(vs *esphome.VoiceSatellite) *conversation {
@@ -465,6 +475,13 @@ func (c *conversation) handle(e event) {
 		c.startPending()
 
 	case evPlaying:
+		// Only the reply being spoken. An announcement used to post this too, and one made while a
+		// turn was thinking took its deadline away, so a pipeline that never answered left the turn
+		// thinking for good. And a reply stopped just after its audio was queued can have left its own
+		// waiting in the loop, to be handled in the next turn.
+		if e.reply == 0 || e.reply != c.reply.id {
+			return
+		}
 		c.disarm()
 
 	case evError:
@@ -665,7 +682,10 @@ func (c *conversation) think() {
 func (c *conversation) speak(url string) {
 	c.stopStreaming()
 	c.enter(phaseReplying)
-	c.reply = reply{url: url}
+	c.replies++
+	id := c.replies
+	c.reply = reply{url: url, id: id}
+	playing := func() { c.post(event{kind: evPlaying, reply: id}) }
 
 	c.showPhase(wakeword.ReplyingEffect(c.slot))
 	c.player.Sounding(true)
@@ -673,12 +693,12 @@ func (c *conversation) speak(url string) {
 	// The deadline is left as it was. Text arriving is not the pipeline delivering: it still owes the
 	// audio, and the limit it was given when the device stopped listening goes on running until some
 	// of that audio turns up.
-	errand := func(ctx context.Context, p *speaker.Player) error { return c.play(ctx, url) }
+	errand := func(ctx context.Context, p *speaker.Player) error { return c.play(ctx, url, playing) }
 	if url == "" {
 		s := newStream(c.speaker.Splices(), c.speaker.Underruns(), wakeword.Buffer(c.slot))
 		c.reply.stream = s
 		errand = func(ctx context.Context, p *speaker.Player) error {
-			return s.play(ctx, p, func() { c.post(event{kind: evPlaying}) })
+			return s.play(ctx, p, playing)
 		}
 	}
 
