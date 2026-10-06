@@ -82,6 +82,7 @@ type session struct {
 	wallFrom   time.Time
 	wallPaused bool // a video with no sound, or with its sound run out, paused
 	lastHeard  time.Duration
+	lastClock  time.Duration // the wall clock's last answer: it does not go back
 	lastMove   time.Time // when the clock last moved, for stuckFor
 }
 
@@ -120,6 +121,9 @@ func (s *session) run(insecure bool) {
 	s.mu.Lock()
 	dec := s.dec
 	s.videoIn = true
+	// The frames go with the session: some 22 MB, which nothing reads again. A frame the screen still
+	// has comes back to a list nobody takes from, and goes with it.
+	s.ready, s.free = nil, nil
 	s.cond.Broadcast()
 	s.mu.Unlock()
 	if dec != nil {
@@ -377,7 +381,9 @@ func (s *session) clock() time.Duration {
 		at, ok := media.Get().Heard(TrackName)
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		if ok && at != s.lastHeard {
+		// Only forward: what is queued is counted as it is handed over, so a moment's count can come
+		// out short of the last one, and a picture is never sent back for it.
+		if ok && at > s.lastHeard {
 			s.lastHeard, s.lastMove = at, time.Now()
 		}
 		return s.lastHeard
@@ -389,6 +395,8 @@ func (s *session) clock() time.Duration {
 		at += time.Since(s.wallFrom)
 		s.lastMove = time.Now()
 	}
+	at = max(at, s.lastClock)
+	s.lastClock = at
 	return at
 }
 

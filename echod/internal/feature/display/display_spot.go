@@ -1235,6 +1235,9 @@ func (d *Display) frame() time.Duration {
 			on = true
 		}
 	}
+	if !on && !video.Get().State().Active() {
+		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
+	}
 	if !on && vs.Frames {
 		// Dark with a video playing: its frames are taken as they fall due so its sound goes on.
 		video.Get().Covered(false)

@@ -29,6 +29,9 @@ func init() {
 // askFor is how long the screen asks before a DLNA video is taken as not wanted.
 const askFor = 30 * time.Second
 
+// pausedFor is how long a video may stay paused before it is stopped.
+const pausedFor = 30 * time.Minute
+
 // notNowFor is how long an address the screen said Not now to is refused without asking again, so a
 // controller that retries does not keep the question on the screen.
 const notNowFor = 10 * time.Minute
@@ -126,11 +129,26 @@ func (f *Feature) tell() {
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
 	var last Phase
+	var pausedID uint64
+	var pausedAt time.Time
 	for {
 		select {
 		case <-f.publish:
-		case <-tick.C:
-			if st := f.State(); st.Phase == last || (!st.Active() && last == Idle) {
+		case now := <-tick.C:
+			st := f.State()
+			// A video left paused this long is over, as a paused track is (media.stoppedFor): the
+			// decoder and its frames are not kept waiting for ever.
+			switch {
+			case st.Phase != Paused:
+				pausedID = 0
+			case st.ID != pausedID:
+				pausedID, pausedAt = st.ID, now
+			case now.Sub(pausedAt) > pausedFor:
+				slog.Info("video: paused too long; stopped", "id", st.ID, "after", pausedFor)
+				pausedID = 0
+				f.StopID(st.ID)
+			}
+			if st.Phase == last || (!st.Active() && last == Idle) {
 				continue
 			}
 			f.Changed.Emit(struct{}{})
