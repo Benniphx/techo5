@@ -98,7 +98,8 @@ var shellPath = "/bin/sh"
 // its arguments, the address among them, reach it as its own arguments ("$0" "$@"), never as text it
 // reads as a command.
 func wrap(path string, args []string) (string, []string) {
-	script := ""
+	// The kernel's choice when memory runs out, before anything of the daemon's.
+	script := "echo 1000 > /proc/self/oom_score_adj && "
 	for _, l := range limits {
 		script += "ulimit " + l + " && "
 	}

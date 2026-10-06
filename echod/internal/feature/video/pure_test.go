@@ -299,6 +299,7 @@ func TestTheDecoderArguments(t *testing.T) {
 	}
 	for _, seq := range [][]string{
 		{"-protocol_whitelist", "http,https,tcp,tls,hls,crypto"},
+		{"-max_pixels", "2088960"},
 		{"-tls_verify", "1"},
 		{"-ca_file", "/etc/ssl/certs/ca-certificates.crt"},
 		{"-threads", "3"},
@@ -347,7 +348,8 @@ func TestTheDecoderArguments(t *testing.T) {
 		t.Errorf("proxied: %q", a)
 	}
 	p := ProbeArgs("http://192.168.1.20/x.mp4", "", false, "")
-	if p[len(p)-1] != "http://192.168.1.20/x.mp4" || slices.Index(p, "-protocol_whitelist") < 0 || slices.Index(p, "-ca_file") >= 0 {
+	if p[len(p)-1] != "http://192.168.1.20/x.mp4" || slices.Index(p, "-protocol_whitelist") < 0 || slices.Index(p, "-ca_file") >= 0 ||
+		slices.Index(p, "-max_pixels") < 0 {
 		t.Errorf("probe: %q", p)
 	}
 }

@@ -91,6 +91,11 @@ func threads(height int) int {
 	return 4
 }
 
+// maxPixels bounds a picture the decoder will take: 1920×1088, the largest 1080p frame. A stream that
+// claims more (4K, or a header made up to make it allocate) is refused before a frame is decoded. It
+// bounds what ffmpeg makes too, and the panel's frames (at most the Show 8's 1280×800) are well under.
+const maxPixels = "2088960"
+
 // protocols is all the decoder may open: the network, never a file (it has none built in either).
 const protocols = "http,https,tcp,tls,hls,crypto"
 
@@ -146,7 +151,7 @@ func netArgs(url, caFile string, insecure bool, proxy string) []string {
 // ProbeArgs asks ffmpeg what is at the address and nothing more: with no output it reads the start of
 // the stream, prints what it found and stops.
 func ProbeArgs(url, caFile string, insecure bool, proxy string) []string {
-	a := []string{"-hide_banner", "-nostdin"}
+	a := []string{"-hide_banner", "-nostdin", "-max_pixels", maxPixels}
 	a = append(a, netArgs(url, caFile, insecure, proxy)...)
 	return append(a, "-i", url)
 }
@@ -195,7 +200,7 @@ const (
 // DecodeArgs runs the decoder: the picture as raw frames on file descriptor 3, the sound as 16-bit
 // stereo on its standard output.
 func DecodeArgs(d Decoding) []string {
-	a := []string{"-hide_banner", "-nostdin", "-loglevel", "error"}
+	a := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-max_pixels", maxPixels}
 	a = append(a, netArgs(d.URL, d.CAFile, d.Insecure, d.Proxy)...)
 	_, h := d.Info.Display()
 	t := threads(int(h))
