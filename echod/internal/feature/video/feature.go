@@ -31,7 +31,7 @@ const askFor = 30 * time.Second
 
 // notNowFor is how long an address the screen said Not now to is refused without asking again, so a
 // controller that retries does not keep the question on the screen.
-const notNowFor = time.Minute
+const notNowFor = 10 * time.Minute
 
 // Feature is the video player.
 type Feature struct {
@@ -217,6 +217,10 @@ func (f *Feature) Play(req Request) (uint64, error) {
 		if until, ok := f.notNow[req.From]; ok && time.Now().Before(until) {
 			f.mu.Unlock()
 			return 0, ErrDeclined
+		}
+		if f.ask != nil && f.ask.req.From != req.From {
+			f.mu.Unlock()
+			return 0, ErrBusy
 		}
 		f.ask = &ask{id: id, req: req, until: time.Now().Add(askFor)}
 		f.mu.Unlock()
@@ -419,6 +423,9 @@ func (f *Feature) State() State {
 	f.mu.Lock()
 	s, a := f.cur, f.ask
 	st := State{Phase: Idle, Ended: f.ended, Failed: f.failed, Err: f.err, ErrAt: f.errAt}
+	if a != nil {
+		st.AskID = a.id
+	}
 	f.mu.Unlock()
 	switch {
 	case s != nil:

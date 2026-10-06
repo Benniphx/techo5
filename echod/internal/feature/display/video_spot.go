@@ -33,6 +33,11 @@ func (d *Display) videoSceneSpot(s *roundScene, now time.Time) {
 	if id, from, title, ok := video.Get().Asking(); ok {
 		s.showVideoAsk, s.videoAsk = true, videoAsk{id: id, from: from, title: title}
 	}
+	drawnAsk := uint64(0)
+	if s.showVideoAsk && s.call.Phase == phone.Idle && !s.ringing.any() && !s.pin.open && !s.setupAsking {
+		drawnAsk = s.videoAsk.id
+	}
+	d.vask.drawn(drawnAsk, now)
 	d.mu.Lock()
 	failedRecently := st.Failed != 0 && st.Failed == d.videoTried && now.Sub(st.ErrAt) < videoFailShown
 	up := st.Active() && st.Phase != video.Asking

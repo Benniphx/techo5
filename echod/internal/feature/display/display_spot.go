@@ -257,6 +257,7 @@ type Display struct {
 	videoPainting bool
 	videoOver     image.Rectangle
 	vp            videoPainter
+	vask          askLatch
 	videoLit      uint64
 }
 
@@ -579,8 +580,8 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 	// A DLNA video asking to be shown, the same way; then the video face, which takes every finger.
-	if id, _, _, asking := video.Get().Asking(); asking {
-		if g.Kind == touch.Tap {
+	if _, _, _, asking := video.Get().Asking(); asking {
+		if id, ok := d.vask.answerable(time.Now()); ok && g.Kind == touch.Tap {
 			if allow, answered := askTapSpot(g.Y); answered {
 				go video.Get().Answer(id, allow)
 			}

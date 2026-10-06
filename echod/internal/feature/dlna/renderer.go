@@ -539,6 +539,11 @@ func (r *renderer) syncVideoLocked(vs video.State) {
 	if r.state != stPlaying && r.state != stPaused && r.state != stLoading {
 		return
 	}
+	if r.videoID != 0 && vs.AskID == r.videoID {
+		// Asked about on the screen while another video plays: still on its way.
+		r.state = stLoading
+		return
+	}
 	if r.videoID == 0 || vs.ID != r.videoID || !vs.Active() {
 		r.ended = r.videoID != 0 && vs.Ended == r.videoID
 		r.state, r.videoID = stStopped, 0

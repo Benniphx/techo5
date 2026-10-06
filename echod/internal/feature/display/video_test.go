@@ -136,3 +136,28 @@ func TestVideoTimes(t *testing.T) {
 		}
 	}
 }
+
+// A tap answers the question drawn, and only once it has been up a moment.
+func TestATapAnswersOnlyTheDrawnQuestion(t *testing.T) {
+	var l askLatch
+	now := time.Now()
+	if _, ok := l.answerable(now); ok {
+		t.Error("answerable with nothing drawn")
+	}
+	l.drawn(7, now)
+	if _, ok := l.answerable(now.Add(askSettle / 2)); ok {
+		t.Error("answerable before it settled")
+	}
+	l.drawn(7, now.Add(askSettle/2)) // drawn again: still the same question, still from now
+	if id, ok := l.answerable(now.Add(askSettle)); !ok || id != 7 {
+		t.Errorf("answerable %d %v", id, ok)
+	}
+	l.drawn(8, now.Add(askSettle))
+	if _, ok := l.answerable(now.Add(askSettle + time.Millisecond)); ok {
+		t.Error("a question that just changed was answerable")
+	}
+	l.drawn(0, now.Add(2*askSettle))
+	if _, ok := l.answerable(now.Add(10 * askSettle)); ok {
+		t.Error("answerable after it went")
+	}
+}

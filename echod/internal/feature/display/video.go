@@ -37,6 +37,12 @@ func (d *Display) videoScene(s *scene, now time.Time) {
 	if id, from, title, ok := video.Get().Asking(); ok {
 		s.showVideoAsk, s.videoAsk = true, videoAsk{id: id, from: from, title: title}
 	}
+	// What draw() puts over the question (render.go) leaves it undrawn, and so unanswerable.
+	drawnAsk := uint64(0)
+	if s.showVideoAsk && s.call.Phase == phone.Idle && !s.ring.any() && !s.pin.open && !s.setupAsking {
+		drawnAsk = s.videoAsk.id
+	}
+	d.vask.drawn(drawnAsk, now)
 	d.mu.Lock()
 	tried := d.videoTried
 	d.mu.Unlock()
@@ -128,9 +134,14 @@ func (d *Display) showVideoControls() {
 	d.mu.Unlock()
 }
 
-// videoAskGesture is a finger on the question about a DLNA video: only the two answers answer it.
-func (d *Display) videoAskGesture(g touch.Gesture, id uint64) {
+// videoAskGesture is a finger on the question about a DLNA video: only the two answers answer it, and
+// only the question drawn, once it has settled (askLatch).
+func (d *Display) videoAskGesture(g touch.Gesture) {
 	if g.Kind != touch.Tap || d.r == nil {
+		return
+	}
+	id, ok := d.vask.answerable(time.Now())
+	if !ok {
 		return
 	}
 	if allow, answered := d.r.askTap(g.X, g.Y); answered {

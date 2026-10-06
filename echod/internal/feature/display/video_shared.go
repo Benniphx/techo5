@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/color"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
@@ -56,6 +57,34 @@ func videoTime(d time.Duration) string {
 		return fmt.Sprintf("%d:%02d:%02d", sec/3600, sec/60%60, sec%60)
 	}
 	return fmt.Sprintf("%d:%02d", sec/60, sec%60)
+}
+
+// askSettle is how long a DLNA video's question has to be on the screen before a tap answers it: a
+// finger already on its way to whatever was there must not answer a question that has just come up.
+const askSettle = 500 * time.Millisecond
+
+// askLatch is the DLNA video question the screen last drew, and when it first drew it. A tap answers
+// that question and no other: a request that changed it since is not what the finger saw.
+type askLatch struct {
+	mu sync.Mutex
+	id uint64
+	at time.Time
+}
+
+// drawn is the frame having drawn question id (0: none).
+func (l *askLatch) drawn(id uint64, now time.Time) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if id != l.id {
+		l.id, l.at = id, now
+	}
+}
+
+// answerable is the question a tap now answers: the one drawn, once it has been up askSettle.
+func (l *askLatch) answerable(now time.Time) (uint64, bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.id, l.id != 0 && now.Sub(l.at) >= askSettle
 }
 
 // videoPainter is the frame loop's hold on a video's frames: the frame on the panel (kept until the

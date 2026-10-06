@@ -396,3 +396,33 @@ func TestTheFenceIsMadeOnceForTheUser(t *testing.T) {
 		t.Error("a fence that would not go in was taken")
 	}
 }
+
+// A DLNA video asked about while another plays: the state says so (AskID), and while the question is
+// up a second address is refused rather than put in its place; Not now holds that address off.
+func TestTheQuestionStaysWhatWasAsked(t *testing.T) {
+	f := fake(t, 100000, true)
+	if err := config.Set().Video().DLNA(true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Play(Request{URL: "http://192.168.1.20/a.mp4"}); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, Playing)
+	id, err := f.Play(Request{URL: "http://192.168.1.20/b.mp4", Origin: FromDLNA, From: "192.168.1.30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := f.State(); st.Phase != Playing || st.AskID != id {
+		t.Errorf("asking while playing: %+v", st)
+	}
+	if _, err := f.Play(Request{URL: "http://192.168.1.20/c.mp4", Origin: FromDLNA, From: "192.168.1.31"}); !errors.Is(err, ErrBusy) {
+		t.Errorf("a second address replaced the question: %v", err)
+	}
+	if aid, _, _, _ := f.Asking(); aid != id {
+		t.Errorf("the question is %d, want %d", aid, id)
+	}
+	f.Answer(id, false)
+	if until := f.notNow["192.168.1.30"]; time.Until(until) < 9*time.Minute {
+		t.Errorf("Not now holds the address off only until %v", until)
+	}
+}

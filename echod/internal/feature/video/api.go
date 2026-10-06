@@ -55,6 +55,10 @@ type State struct {
 	// Frames is whether the picture has begun to arrive.
 	Frames bool
 
+	// AskID is the DLNA video whose question is on the screen, when there is one: while another video
+	// plays, the state is that video's, and this is how the one asking knows it is still asked about.
+	AskID uint64
+
 	// Shown and Dropped count frames.
 	Shown, Dropped int
 
@@ -76,6 +80,9 @@ var (
 	ErrNotHere = errors.New("video: this device has no video player")
 	// ErrDeclined is an address the screen just said Not now to.
 	ErrDeclined = errors.New("video: not now")
+	// ErrBusy is a DLNA video from one address while the screen is asking about another's: the question
+	// on the screen is not changed under the finger answering it.
+	ErrBusy = errors.New("video: the screen is asking about another video")
 	// ErrNotInstalled is an image without the decoder.
 	ErrNotInstalled = errors.New("video: this image has no video decoder")
 )
