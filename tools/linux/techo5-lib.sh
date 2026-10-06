@@ -238,6 +238,10 @@ t5_wifi_mac() {
 # seconds; association is allowed WIFI_WAIT seconds (60).
 t5_wifi_up() {
 	mod=$1; conf=$2; IP=
+	# Loopback first: nothing brought it up before (the kernel leaves it down and no init script of
+	# Android's runs), and the video player's guard proxy (feature/video/guard.go) listens on it. Up,
+	# it is what it is on any Linux: 127.0.0.1, which nothing on the network reaches.
+	ip link set lo up 2>/dev/null
 	if ! ip link show wlan0 >/dev/null 2>&1; then
 		[ -e "$mod" ] || { log "wifi: driver not found at $mod"; return 1; }
 		insmod "$mod" 2>/tmp/insmod.err || { log "wifi: insmod failed: $(cat /tmp/insmod.err)"; return 1; }

@@ -44,8 +44,9 @@ func guardProxy() (string, error) {
 	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if errors.Is(err, syscall.EADDRNOTAVAIL) {
-		// These images leave loopback down, with no 127.0.0.1 on it: brought up, it is what it is on any
-		// Linux, and nothing reaches it from the network.
+		// An image from before boot brought loopback up (techo5-lib.sh's t5_wifi_up), or a test daemon
+		// run on one: loopback is down, with no 127.0.0.1 on it. Brought up here as well, so the guard
+		// works whatever the image; on a current image this is never reached.
 		loopbackUp()
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
