@@ -1432,10 +1432,11 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// and whoever is asking is standing at the device.
 		// A talk through a camera is a conversation at the door: the screen it needs stays lit.
 		// And a video: somebody asked for it to be watched.
-		vs := video.Get().State()
-		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting() ||
-			(vs.Active() && vs.Phase != video.Asking)
-		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
+		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
+		// A video playing keeps the screen as it is: lit at the night light's level if it came on at
+		// night (frame), not put out under it.
+		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle ||
+			video.Get().State().Active()
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
 		if !lift && active {
@@ -1853,6 +1854,13 @@ func (d *Display) frame() time.Duration {
 		// only by day: anybody on the network can ask, and at night the question waits out unseen.
 		d.videoLit = vs.ID
 		if !on {
+			// At night at the night light's level, as a turn's words are: a video asked for at 2 a.m.
+			// is not the room lit up.
+			if night {
+				d.mu.Lock()
+				d.nightGlow, d.nightDark = true, false
+				d.mu.Unlock()
+			}
 			d.apply(true, d.ceilingOrDefault(), false)
 			on = true
 		}
