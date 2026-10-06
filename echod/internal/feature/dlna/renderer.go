@@ -306,22 +306,17 @@ func (r *renderer) play() error {
 // startVideo hands the song to the video player, which asks on the screen first for an address it
 // has not been told to allow. The transport reads TRANSITIONING until the picture comes.
 func (r *renderer) startVideo(gen int, s song) error {
-	if media.Get().Receiving() == home.DLNAName {
-		// The song this renderer was playing goes: left playing, it would be nobody's to stop, since the
-		// transport is the video's now.
-		media.ClearPosition()
-		media.Get().Stop()
-	}
-	id, err := video.Play(video.Request{URL: s.uri, Title: s.title, Origin: video.FromDLNA, From: s.from})
+	id, err := playVideo(video.Request{URL: s.uri, Title: s.title, Origin: video.FromDLNA, From: s.from})
 	r.mu.Lock()
 	if r.gen != gen {
 		r.mu.Unlock()
 		if err == nil {
-			video.StopID(id)
+			stopVideoID(id)
 		}
 		return nil
 	}
 	if err != nil {
+		// Refused (off, busy, Not now): the song this renderer was playing plays on.
 		r.state = stStopped
 		r.mu.Unlock()
 		slog.Info("dlna: the video was not played", "title", s.title, "err", err)
@@ -330,9 +325,24 @@ func (r *renderer) startVideo(gen int, s song) error {
 	}
 	r.videoID, r.state, r.started, r.pausedAt, r.pausedFor = id, stLoading, time.Now(), time.Time{}, 0
 	r.mu.Unlock()
+	// Taken: the song this renderer was playing goes. Left playing, it would be nobody's to stop, since
+	// the transport is the video's now.
+	stopOurSong()
 	r.f.e.changed()
 	return nil
 }
+
+// The video player and the speaker, as startVideo uses them; tests put their own in.
+var (
+	playVideo   = video.Play
+	stopVideoID = video.StopID
+	stopOurSong = func() {
+		if media.Get().Receiving() == home.DLNAName {
+			media.ClearPosition()
+			media.Get().Stop()
+		}
+	}
+)
 
 // stopVideo stops the video the renderer started, if it is still the one playing.
 func (r *renderer) stopVideo() {

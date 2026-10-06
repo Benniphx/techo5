@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 )
 
 const videoDIDL = `<DIDL-Lite xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/">` +
@@ -108,5 +109,43 @@ func TestWhatIsAVideo(t *testing.T) {
 	s := parseSong("http://192.0.2.10/film.mp4", videoDIDL)
 	if s.class != "object.item.videoItem.movie" || s.mime != "video/mp4" {
 		t.Errorf("parsed %+v", s)
+	}
+}
+
+// A video the player refuses leaves the song playing; one it takes stops it, and only then.
+func TestARefusedVideoLeavesTheSongPlaying(t *testing.T) {
+	oldPlay, oldStopID, oldStopSong := playVideo, stopVideoID, stopOurSong
+	t.Cleanup(func() { playVideo, stopVideoID, stopOurSong = oldPlay, oldStopID, oldStopSong })
+	stopped := 0
+	stopOurSong = func() { stopped++ }
+	stopVideoID = func(uint64) {}
+	f := &Feature{}
+	f.r.f = f
+	film := song{uri: "http://192.0.2.10/film.mp4", title: "A Short Film", video: true, from: "192.0.2.20"}
+	for _, refusal := range []error{video.ErrOff, video.ErrBusy, video.ErrDeclined} {
+		playVideo = func(video.Request) (uint64, error) {
+			if stopped != 0 {
+				t.Errorf("%v: the song was stopped before the player answered", refusal)
+			}
+			return 0, refusal
+		}
+		if err := f.r.startVideo(f.r.gen, film); err == nil {
+			t.Errorf("%v: taken", refusal)
+		}
+		if stopped != 0 {
+			t.Errorf("%v: the song was stopped", refusal)
+		}
+	}
+	playVideo = func(video.Request) (uint64, error) {
+		if stopped != 0 {
+			t.Error("the song was stopped before the player answered")
+		}
+		return 7, nil
+	}
+	if err := f.r.startVideo(f.r.gen, film); err != nil {
+		t.Fatalf("taken: %v", err)
+	}
+	if stopped != 1 || f.r.videoID != 7 || f.r.state != stLoading {
+		t.Errorf("taken: song stopped %d times, video %d, state %v", stopped, f.r.videoID, f.r.state)
 	}
 }
