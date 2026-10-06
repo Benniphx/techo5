@@ -14,7 +14,10 @@ import (
 // being drawn must never wait on, so home's place is looked up off the caller's goroutine, once a day;
 // the times themselves are worked out from the last place found, which is quick. A new day with the
 // lookup failing still gets that day's times, from where home was yesterday.
-var sunKept struct {
+var sunKept sunKeeper
+
+// sunKeeper is what sunKept holds.
+type sunKeeper struct {
 	mu        sync.Mutex
 	day       string // the day rise and set are for
 	rise, set time.Time
@@ -34,10 +37,7 @@ func (f *Feature) SunTimes(now time.Time) (rise, set time.Time, ok bool) {
 	day := now.Format("2006-01-02")
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if k.looked != day && !k.asking && now.After(k.retry) {
-		k.asking = true
-		safe.Go("sun times", func() { sunLookUp(day) })
-	}
+	k.lookUp(now, day)
 	if !k.placed {
 		return time.Time{}, time.Time{}, false
 	}
@@ -68,6 +68,25 @@ func (f *Feature) SkyNow(w Weather, days []hass.Day, now time.Time) string {
 		return w.Condition
 	}
 	return f.SkyAt(days[0].Condition, now)
+}
+
+// Place is home's latitude and longitude as last found, for the weather art's moon, which is worked
+// out from it a minute at a time; ok is false until it is known. It looks home up as SunTimes does.
+func (f *Feature) Place(now time.Time) (lat, lon float64, ok bool) {
+	k := &sunKept
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.lookUp(now, now.Format("2006-01-02"))
+	return k.lat, k.lon, k.placed
+}
+
+// lookUp starts finding home's place, once a day, unless that is under way or waiting to try again.
+// The caller holds mu.
+func (k *sunKeeper) lookUp(now time.Time, day string) {
+	if k.looked != day && !k.asking && now.After(k.retry) {
+		k.asking = true
+		safe.Go("sun times", func() { sunLookUp(day) })
+	}
 }
 
 // sunLookUp finds home's place, and has the times worked out again from it.
