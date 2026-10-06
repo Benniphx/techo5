@@ -4,8 +4,12 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 )
+
+// reNumeric is a host made of numbers alone, decimal or hex, between dots.
+var reNumeric = regexp.MustCompile(`^(0x[0-9a-f]*|[0-9]+)(\.(0x[0-9a-f]*|[0-9]+))*\.?$`)
 
 // mostURL bounds an address: anything longer is not one a person or a server meant.
 const mostURL = 4096
@@ -53,9 +57,15 @@ func CheckURL(raw string) (*url.URL, error) {
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return nil, errors.New("the device does not fetch from itself")
 	}
-	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() ||
+	ip := net.ParseIP(host)
+	if ip != nil && (ip.IsLoopback() || ip.IsUnspecified() || ip.IsMulticast() ||
 		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()) {
 		return nil, errors.New("the device does not fetch from " + host)
+	}
+	// The other ways of writing an address the C library takes and Go does not (127.1, 2130706433,
+	// 0x7f000001): refused rather than told apart, since nobody writes a real one so.
+	if ip == nil && reNumeric.MatchString(host) {
+		return nil, errors.New("not an address this device fetches from: " + host)
 	}
 	return u, nil
 }

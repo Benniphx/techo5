@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,14 +93,24 @@ func newSession(id uint64, req Request, u *url.URL, scr Screen, panelW, panelH i
 	return s
 }
 
-// scrub takes the address out of what ffmpeg said: it can carry a password or a server's token.
+// scrub takes addresses out of what ffmpeg said, as Redacted does: any of them (the one asked for, a
+// redirect's, a playlist's parts) can carry a password or a server's token.
 func (s *session) scrub(err error) error {
 	if err == nil {
 		return nil
 	}
-	msg := strings.ReplaceAll(err.Error(), s.req.URL, Redacted(s.u))
-	msg = strings.ReplaceAll(msg, s.u.String(), Redacted(s.u))
-	return errors.New(msg)
+	return errors.New(scrubURLs(err.Error()))
+}
+
+var reURL = regexp.MustCompile(`(?i)\bhttps?://[^\s'"]+`)
+
+func scrubURLs(msg string) string {
+	return reURL.ReplaceAllStringFunc(msg, func(raw string) string {
+		if u, err := url.Parse(raw); err == nil {
+			return Redacted(u)
+		}
+		return "the address"
+	})
 }
 
 // run plays the video until it ends, fails or is stopped.
@@ -201,10 +211,14 @@ func (s *session) play(insecure bool) (error, bool) {
 	s.mu.Lock()
 	read := s.read
 	s.mu.Unlock()
-	if read == 0 {
-		if readErr != nil && !errors.Is(readErr, io.EOF) {
-			return readErr, false
-		}
+	switch {
+	case s.ctx.Err() != nil:
+		return nil, false
+	case readErr != nil && !errors.Is(readErr, io.EOF):
+		return readErr, false
+	case read == 0 || dec.err != nil:
+		// No picture at all, or the decoder failed partway (a connection lost, a stream it could not
+		// read): not a video that played to its end.
 		return dec.why(), false
 	}
 	return nil, true
@@ -378,6 +392,12 @@ func (s *session) soundOut() {
 	}
 	s.soundIn = true
 	s.wallBase, s.wallFrom = s.lastHeard, time.Now()
+	// A pause held by the sound's track is the wall clock's now.
+	if s.src != nil && s.src.begun() && media.Get().Receiving() == TrackName {
+		if _, p := media.Get().Playing(); p {
+			s.wallPaused = true
+		}
+	}
 }
 
 // paused is whether the video is paused: its sound, held by the media player (a pause from here, from
@@ -465,13 +485,23 @@ func (a *soundSource) begin() {
 	// Held across the start, so a session stopped meanwhile either never starts its track or knows it
 	// has one to stop (end). The track's own reads wait for it on another goroutine.
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	if a.ending {
+		a.mu.Unlock()
 		return
 	}
 	a.first, a.started = buf[:n], true
 	media.Get().PlayReceived(TrackName, a, soundRate, soundChannels)
 	media.Get().SetReceivedTrack(TrackName, a.s.req.Title, "", "")
+	a.mu.Unlock()
+	// Paused before the sound came (covered while loading, or a pause from Home Assistant): the pause is
+	// the track's from now, since the sound is the clock.
+	a.s.mu.Lock()
+	held := a.s.wallPaused
+	a.s.wallPaused = false
+	a.s.mu.Unlock()
+	if held {
+		media.Get().Pause()
+	}
 }
 
 func (a *soundSource) begun() bool {

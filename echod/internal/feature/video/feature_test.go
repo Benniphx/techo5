@@ -306,3 +306,12 @@ func TestTheDecoderIsBounded(t *testing.T) {
 		}
 	}
 }
+
+// Every address in what ffmpeg says is cut down as the log's is: a redirect's or a playlist part's token
+// is not passed on.
+func TestWhatFFmpegSaysLosesItsTokens(t *testing.T) {
+	got := scrubURLs("Server returned 403 for 'https://cdn.example.com/seg1.ts?token=secret' after http://user:pw@nas/x.m3u8")
+	if strings.Contains(got, "secret") || strings.Contains(got, "pw") || !strings.Contains(got, "cdn.example.com/seg1.ts") {
+		t.Errorf("scrubbed: %s", got)
+	}
+}

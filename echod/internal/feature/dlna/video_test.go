@@ -74,6 +74,16 @@ func TestAVideoIsTakenOnlyWhileDLNAVideoIsOn(t *testing.T) {
 	if code, _ := set("http://192.0.2.10/song.flac", didl); code != http.StatusOK || f.r.cur.video {
 		t.Errorf("a song after a video: %d, video %v", code, f.r.cur.video)
 	}
+	// A video queued to follow is a video too, and refused the same way while DLNA video is off.
+	if code, _ := call(t, f, "AVTransport", "SetNextAVTransportURI",
+		`<InstanceID>0</InstanceID><NextURI>http://192.0.2.10/film.mp4</NextURI><NextURIMetaData>`+esc(videoDIDL)+`</NextURIMetaData>`); code != http.StatusOK || !f.r.next.video {
+		t.Errorf("a queued video: %d, video %v", code, f.r.next.video)
+	}
+	_ = config.Set().Video().DLNA(false)
+	if code, _ := call(t, f, "AVTransport", "SetNextAVTransportURI",
+		`<InstanceID>0</InstanceID><NextURI>http://192.0.2.10/film.mp4</NextURI><NextURIMetaData>`+esc(videoDIDL)+`</NextURIMetaData>`); code != 500 {
+		t.Errorf("a queued video with DLNA video off: %d", code)
+	}
 }
 
 func TestWhatIsAVideo(t *testing.T) {

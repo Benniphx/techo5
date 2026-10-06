@@ -84,7 +84,7 @@ func (d *Display) onClock() bool {
 // deckFrameKey is what a frame of the deck shows, or "" when the frame isn't just the deck: two frames
 // with the same key look the same.
 func deckFrameKey(s scene, ringing, calling bool) string {
-	if !s.showDeck || s.showVolume || ringing || calling || s.setupAsking || s.showAnnouncement ||
+	if !s.showDeck || s.showVideo || s.showVideoAsk || s.showVolume || ringing || calling || s.setupAsking || s.showAnnouncement ||
 		s.showReminder || s.popup != nil || s.bt.Pairing || s.pin.open || s.redClock || s.announceRecording {
 		return ""
 	}

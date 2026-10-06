@@ -240,7 +240,8 @@ func (f *Feature) begin(id uint64, req Request) {
 	old := f.cur
 	s := newSession(id, req, uu, f.scr, f.panelW, f.panelH)
 	s.ended, s.changed = f.sessionEnded, func() { f.Changed.Emit(struct{}{}) }
-	f.cur, f.ask, f.heldByUs = s, nil, false
+	// Whatever covered the last video is told again for this one by the next frame.
+	f.cur, f.ask, f.heldByUs, f.covered = s, nil, false, false
 	insecure := config.Get().Diag.InsecureTLS
 	f.mu.Unlock()
 	if old != nil {

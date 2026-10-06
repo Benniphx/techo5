@@ -103,8 +103,10 @@ func ParseProbe(out string) (Info, error) {
 		}
 		m := reStream.FindStringSubmatch(line)
 		if m == nil {
+			// A line of ffmpeg's own saying what went wrong; not one of its components' chatter ("[hls @ …]
+			// Opening …"), which names other addresses.
 			if t := strings.TrimSpace(line); t != "" && !strings.HasPrefix(t, "At least one output file") &&
-				!strings.HasPrefix(line, " ") && !strings.HasPrefix(t, "Input #") {
+				!strings.HasPrefix(line, " ") && !strings.HasPrefix(t, "Input #") && !strings.HasPrefix(t, "[") {
 				problem = t
 			}
 			continue

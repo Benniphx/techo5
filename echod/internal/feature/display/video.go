@@ -173,6 +173,9 @@ func (d *Display) paintVideo(ctx context.Context, wait time.Duration, over image
 			return
 		}
 		switch {
+		case fr != nil && d.videoDark:
+			video.Get().Done(fr)
+			continue
 		case fr != nil:
 			if err := d.dev.PresentFrame(fr.Pix, over); err != nil {
 				slog.Warn("presenting a video frame failed", "err", err)
@@ -180,7 +183,7 @@ func (d *Display) paintVideo(ctx context.Context, wait time.Duration, over image
 			video.Get().Done(d.videoLast)
 			d.videoLast, redraw = fr, false
 			continue
-		case redraw && d.videoLast != nil:
+		case redraw && d.videoLast != nil && !d.videoDark:
 			if err := d.dev.PresentFrame(d.videoLast.Pix, over); err != nil {
 				slog.Warn("presenting a video frame failed", "err", err)
 			}

@@ -134,7 +134,7 @@ func (r *renderer) avTransport(name string, args map[string]string, from string)
 	case "SetAVTransportURI":
 		return nil, r.set(args["CurrentURI"], args["CurrentURIMetaData"], from)
 	case "SetNextAVTransportURI":
-		return nil, r.setNext(args["NextURI"], args["NextURIMetaData"])
+		return nil, r.setNext(args["NextURI"], args["NextURIMetaData"], from)
 	case "Play":
 		return nil, r.play()
 	case "Pause":
@@ -224,7 +224,7 @@ func (r *renderer) set(uri, meta, from string) error {
 	return nil
 }
 
-func (r *renderer) setNext(uri, meta string) error {
+func (r *renderer) setNext(uri, meta, from string) error {
 	if uri == "" {
 		r.mu.Lock()
 		r.next = song{}
@@ -234,8 +234,13 @@ func (r *renderer) setNext(uri, meta string) error {
 	if err := checkURI(uri); err != nil {
 		return errInvalidArgs
 	}
+	next := parseSong(uri, meta)
+	next.from = from
+	if next.video = isVideo(next); next.video && !video.DLNAOn() {
+		return errNotVideo
+	}
 	r.mu.Lock()
-	r.next = parseSong(uri, meta)
+	r.next = next
 	if r.state != stStopped {
 		r.ended = false
 	}

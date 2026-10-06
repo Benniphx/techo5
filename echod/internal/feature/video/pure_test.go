@@ -16,6 +16,8 @@ func TestOnlyNetworkAddressesArePlayed(t *testing.T) {
 		"HTTPS://media.example.com/live/index.m3u8",
 		"http://user:pass@192.168.1.5/film.mkv",
 		"http://[2001:db8::1]/film.mp4",
+		"http://cafe.be/film.mp4",
+		"http://nas2/film.mp4",
 	}
 	for _, u := range good {
 		if _, err := CheckURL(u); err != nil {
@@ -45,6 +47,11 @@ func TestOnlyNetworkAddressesArePlayed(t *testing.T) {
 		"http://0.0.0.0/x",
 		"http://169.254.169.254/latest",
 		"http://224.0.0.1/x",
+		"http://127.1/x",
+		"http://2130706433/x",
+		"http://0x7f000001/x",
+		"http://0/x",
+		"http://0x7f.1/x",
 		"http://192.168.1.20/a b.mp4",
 		"http://192.168.1.20/a\nHost: evil",
 		"http://192.168.1.20/" + strings.Repeat("a", mostURL),

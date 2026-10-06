@@ -323,6 +323,7 @@ type Display struct {
 	videoOver     image.Rectangle
 	videoLast     *video.Frame
 	videoLit      uint64 // the last video that lit the panel (frame)
+	videoDark     bool   // the panel is off: paintVideo takes the frames without showing them
 }
 
 var (
@@ -1425,8 +1426,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// and whoever is asking is standing at the device.
 		// A talk through a camera is a conversation at the door: the screen it needs stays lit.
 		// And a video: somebody asked for it to be watched.
+		vs := video.Get().State()
 		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting() ||
-			video.Get().State().Active()
+			(vs.Active() && vs.Phase != video.Asking)
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
@@ -1815,7 +1817,7 @@ func (d *Display) Run(ctx context.Context) error {
 
 // frame draws what the moment calls for and says how long until the next one is due.
 func (d *Display) frame() time.Duration {
-	d.videoPainting = false
+	d.videoPainting, d.videoDark = false, false
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
 	volume, volAt := d.volume, d.volAt
@@ -1839,9 +1841,10 @@ func (d *Display) frame() time.Duration {
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
-	if vs := video.Get().State(); vs.Active() && vs.ID != d.videoLit {
+	if vs := video.Get().State(); vs.Active() && vs.ID != d.videoLit && (vs.Phase != video.Asking || !nightNow(now)) {
 		// A video starting lights a dark panel, day or night: somebody asked for it to be watched. Once
-		// per video, so a screen turned off while one plays stays off.
+		// per video, so a screen turned off while one plays stays off. A DLNA video asking first lights it
+		// only by day: anybody on the network can ask, and at night the question waits out unseen.
 		d.videoLit = vs.ID
 		if !on {
 			d.apply(true, d.ceilingOrDefault(), false)
@@ -1869,7 +1872,7 @@ func (d *Display) frame() time.Duration {
 	sheetUp, wifiUp := d.sheet, d.wifiOpen
 	d.mu.Unlock()
 	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen() ||
-		sunriseProgress(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp
+		sunriseProgress(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp || video.Get().State().Active()
 	if d.awayTick(now, on, busy, night) {
 		d.mu.Lock()
 		on = d.on
@@ -1882,6 +1885,13 @@ func (d *Display) frame() time.Duration {
 		}
 		d.answerShots()
 		return time.Second
+	}
+	if !on && video.Get().State().Frames {
+		// A dark panel with a video playing: its frames are still taken as they fall due, so its sound
+		// goes on (the decoder makes both), and nothing is drawn.
+		video.Get().Covered(false)
+		d.videoPainting, d.videoDark, d.videoOver = true, true, image.Rectangle{}
+		return videoRecheck
 	}
 	if !on {
 		// Dark panel: nothing to draw, and nothing to redraw until told, or until the night ends.
@@ -2144,6 +2154,7 @@ func (d *Display) frame() time.Duration {
 		// The picture's own frames go to the panel (paintVideo); the canvas holds only the controls.
 		d.r.draw(s)
 		d.videoPainting, d.videoOver = true, d.r.videoOver
+		d.deckDrawn = "" // the deck under it is drawn again once the video is gone
 		d.answerVideoShots()
 		return d.videoNext(now)
 	}

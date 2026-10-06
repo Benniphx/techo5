@@ -81,6 +81,9 @@ func (r *renderer) videoWords(s scene) {
 	head, sub := "Loading video…", name
 	if !v.Active() && v.Err != "" {
 		head, sub = "This video can't be played", v.Err
+		if s.demo {
+			sub = "Server returned 404 Not Found"
+		}
 	}
 	cy := r.h/2 - r.s(40)
 	if v.Active() || v.Err == "" {
@@ -177,7 +180,7 @@ func (r *renderer) videoAskPage(s scene) {
 	if title != "" {
 		r.text(r.small, r.fit(r.small, title, r.w-2*r.margin), r.margin, r.s(224), dim)
 	}
-	r.text(r.tiny, "Allow remembers this address. Not now asks again next time.", r.margin, r.s(268), dim)
+	r.text(r.tiny, "Allow remembers this address. Not now asks again later.", r.margin, r.s(268), dim)
 
 	no, yes := r.actionHalves()
 	rad := float64(r.s(actionRadius))
