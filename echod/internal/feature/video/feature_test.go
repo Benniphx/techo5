@@ -457,3 +457,33 @@ func TestAnAllowAfterVideoWentOffPlaysNothing(t *testing.T) {
 		t.Errorf("played with Video off: %+v", st)
 	}
 }
+
+// Why a video could not be played is in the Video error sensor, cleared once one plays.
+func TestTheVideoErrorSensor(t *testing.T) {
+	f := fake(t, 0, false) // a decoder that gives no picture at all
+	if _, err := f.Play(Request{URL: "http://192.168.1.20/a.mp4"}); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, Idle)
+	deadline := time.Now().Add(5 * time.Second)
+	for f.lastErr.Get() == "" && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if f.lastErr.Get() == "" {
+		t.Fatal("no error said")
+	}
+	decoderEnv = append(decoderEnv[:len(decoderEnv)-1:len(decoderEnv)-1], "TECHO5_FAKE_FRAMES=100000", "TECHO5_FAKE_HOLD=1")
+	if _, err := f.Play(Request{URL: "http://192.168.1.20/a.mp4"}); err != nil {
+		t.Fatal(err)
+	}
+	until(t, f, Playing)
+	for f.lastErr.Get() != "" && time.Now().Before(deadline.Add(5*time.Second)) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if e := f.lastErr.Get(); e != "" {
+		t.Errorf("still says %q while one plays", e)
+	}
+	if _, err := f.Play(Request{URL: "file:///etc/passwd"}); err == nil {
+		t.Fatal("a file was played")
+	}
+}

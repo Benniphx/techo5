@@ -42,6 +42,8 @@ const notNowFor = 10 * time.Minute
 type Feature struct {
 	on, dlna     *esphome.Switch
 	state, title *esphome.TextSensor
+	// lastErr is the Video error sensor: why the last video could not be played, empty once one plays.
+	lastErr *esphome.TextSensor
 
 	// Changed fires when there is something new to show or say: a video starting, its first frame,
 	// a pause, its end, a question. Listeners must not block.
@@ -97,7 +99,9 @@ func build() *Feature {
 		Base:      esphome.Base{ObjectID: "dlna_video", Name: "DLNA video", Icon: "mdi:cast", Category: esphome.CategoryConfig},
 		OnCommand: f.SetDLNA,
 	}
-	f.state = &esphome.TextSensor{Base: esphome.Base{ObjectID: "video_state", Name: "Video", Icon: "mdi:television-play"}}
+	f.state = &esphome.TextSensor{Base: esphome.Base{ObjectID: "video_state", Name: "Video state", Icon: "mdi:television-play"}}
+	f.lastErr = &esphome.TextSensor{Base: esphome.Base{ObjectID: "video_error", Name: "Video error", Icon: "mdi:television-off"}}
+	f.lastErr.Set("")
 	f.title = &esphome.TextSensor{Base: esphome.Base{ObjectID: "video_title", Name: "Video title", Icon: "mdi:filmstrip"}}
 	f.state.Set(string(Idle))
 	f.title.Set("")
@@ -114,7 +118,7 @@ func build() *Feature {
 func (f *Feature) Name() string { return "video" }
 
 func (f *Feature) Entities() []esphome.Entity {
-	return []esphome.Entity{f.on, f.dlna, f.state, f.title}
+	return []esphome.Entity{f.on, f.dlna, f.state, f.title, f.lastErr}
 }
 
 func (f *Feature) Restore(c config.Config) {
@@ -158,6 +162,9 @@ func (f *Feature) tell() {
 		st := f.State()
 		last = st.Phase
 		f.state.Set(string(st.Phase))
+		if st.Phase == Playing {
+			f.lastErr.Set("")
+		}
 		title := st.Title
 		if title == "" {
 			title = st.Host
@@ -308,6 +315,11 @@ func (f *Feature) sessionEnded(s *session, err error, itself bool) {
 		f.failed, f.err, f.errAt = s.id, err.Error(), time.Now()
 	}
 	f.mu.Unlock()
+	if err != nil {
+		// What the screen says too: a video that fails once it has started fails here, not as the
+		// action's answer, which was given when it started.
+		f.lastErr.Set(clip(err.Error(), 250))
+	}
 	shown, dropped, _ := s.numbers()
 	switch {
 	case err != nil:
@@ -518,6 +530,9 @@ func (f *Feature) Actions() []*esphome.Action {
 				_, err := f.Play(Request{URL: c.String("url"), Title: c.String("title"), Origin: FromHomeAssistant})
 				if err != nil && !strings.HasPrefix(err.Error(), "video: ") {
 					err = fmt.Errorf("video: %w", err)
+				}
+				if err != nil {
+					f.lastErr.Set(clip(err.Error(), 250))
 				}
 				return nil, err
 			},
