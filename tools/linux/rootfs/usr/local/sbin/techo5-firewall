@@ -66,19 +66,33 @@ echo "techo5-firewall: Wi-Fi inbound closed except 6053, 5353, 22, 8928, 8181, 5
 # names and redirects on its own, so this is where a name for 127.0.0.1 or a redirect to the device's
 # own address is refused (loopback carries both), and link-local with it. The daemon makes the same
 # chain for whichever user it runs the decoder as, and starts no decoder without it.
+#
+# Run again, it never leaves the decoder unfenced for a moment: the rules are made whole in a new chain,
+# the jump to it goes in, and only then does the old one come out and the new take its name.
 uid=$(sed -n 's/^techo5-video:[^:]*:\([0-9]*\):.*/\1/p' /etc/passwd)
 if [ -n "$uid" ]; then
+	fenced=1
 	for T in iptables-legacy ip6tables-legacy; do
-		$T -N TECHO5-VIDEO 2> /dev/null
-		$T -F TECHO5-VIDEO
-		$T -A TECHO5-VIDEO -o lo -p tcp -j REJECT --reject-with tcp-reset
-		$T -A TECHO5-VIDEO -o lo -j REJECT
-		$T -C OUTPUT -m owner --uid-owner "$uid" -j TECHO5-VIDEO 2> /dev/null ||
-			$T -I OUTPUT 1 -m owner --uid-owner "$uid" -j TECHO5-VIDEO
+		lo4=127.0.0.0/8; ll=169.254.0.0/16
+		[ $T = ip6tables-legacy ] && { lo4=::1/128; ll=fe80::/10; }
+		$T -w -F TECHO5-VIDEO-NEW 2> /dev/null; $T -w -X TECHO5-VIDEO-NEW 2> /dev/null
+		if $T -w -N TECHO5-VIDEO-NEW &&
+			$T -w -A TECHO5-VIDEO-NEW -o lo -p tcp -j REJECT --reject-with tcp-reset &&
+			$T -w -A TECHO5-VIDEO-NEW -o lo -j REJECT &&
+			$T -w -A TECHO5-VIDEO-NEW -d $lo4 -j REJECT &&
+			$T -w -A TECHO5-VIDEO-NEW -d $ll -j REJECT &&
+			$T -w -I OUTPUT 1 -m owner --uid-owner "$uid" -j TECHO5-VIDEO-NEW; then
+			while $T -w -D OUTPUT -m owner --uid-owner "$uid" -j TECHO5-VIDEO 2> /dev/null; do :; done
+			$T -w -F TECHO5-VIDEO 2> /dev/null && $T -w -X TECHO5-VIDEO 2> /dev/null
+			$T -w -E TECHO5-VIDEO-NEW TECHO5-VIDEO || fenced=
+		else
+			fenced=
+			$T -w -F TECHO5-VIDEO-NEW 2> /dev/null; $T -w -X TECHO5-VIDEO-NEW 2> /dev/null
+		fi
 	done
-	iptables-legacy -A TECHO5-VIDEO -d 127.0.0.0/8 -j REJECT
-	iptables-legacy -A TECHO5-VIDEO -d 169.254.0.0/16 -j REJECT
-	ip6tables-legacy -A TECHO5-VIDEO -d ::1/128 -j REJECT
-	ip6tables-legacy -A TECHO5-VIDEO -d fe80::/10 -j REJECT
-	echo "techo5-firewall: the video decoder (uid $uid) kept off the device" >&2
+	if [ -n "$fenced" ]; then
+		echo "techo5-firewall: the video decoder (uid $uid) kept off the device" >&2
+	else
+		echo "techo5-firewall: the video decoder could not be fenced here; the daemon keeps it off the device itself" >&2
+	fi
 fi
