@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -118,10 +119,24 @@ func (f *Feature) Restore(c config.Config) {
 		"decoder", Installed())
 }
 
-// tell keeps Home Assistant's two sensors up to date.
+// tell keeps Home Assistant's two sensors up to date. A video's sound can be paused from outside it
+// (Home Assistant's media player, the screen's music controls), which says nothing here: while a video
+// is up its state is looked at every second as well, and a change is told to everyone (Changed).
 func (f *Feature) tell() {
-	for range f.publish {
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	var last Phase
+	for {
+		select {
+		case <-f.publish:
+		case <-tick.C:
+			if st := f.State(); st.Phase == last || (!st.Active() && last == Idle) {
+				continue
+			}
+			f.Changed.Emit(struct{}{})
+		}
 		st := f.State()
+		last = st.Phase
 		f.state.Set(string(st.Phase))
 		title := st.Title
 		if title == "" {
@@ -459,10 +474,10 @@ func (f *Feature) Actions() []*esphome.Action {
 			Args: []esphome.Arg{{Name: "url", Type: esphome.ArgString}, {Name: "title", Type: esphome.ArgString}},
 			Run: func(c esphome.Call) (any, error) {
 				_, err := f.Play(Request{URL: c.String("url"), Title: c.String("title"), Origin: FromHomeAssistant})
-				if err != nil {
-					return nil, fmt.Errorf("video: %w", err)
+				if err != nil && !strings.HasPrefix(err.Error(), "video: ") {
+					err = fmt.Errorf("video: %w", err)
 				}
-				return nil, nil
+				return nil, err
 			},
 		},
 		{Name: "stop_video", Run: func(esphome.Call) (any, error) { f.Stop(); return nil, nil }},

@@ -31,7 +31,8 @@ func videoSection(w http.ResponseWriter, token string) {
 		  update brings it.</p>`)
 	}
 	fmt.Fprintf(w, `
-	 <p><label><input type="checkbox" name="on" value="yes" style="width:auto"%s> Videos: from Home Assistant</label></p>
+	 <p><label><input type="checkbox" name="on" value="yes" style="width:auto"%s> Play videos: from Home Assistant, and
+	  from DLNA when the next box is ticked too</label></p>
 	 <p><label><input type="checkbox" name="dlna" value="yes" style="width:auto"%s> DLNA video: from apps and media
 	  servers too (BubbleUPnP, Jellyfin, Windows Cast to device), while DLNA is on under Sound</label></p>
 	 <p class="note">Anyone on your network can send a DLNA video, so the first one from each address asks on

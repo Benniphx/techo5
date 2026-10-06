@@ -91,6 +91,9 @@ for c in fbprobe audioprobe rebootto btbridge; do cp "$ROOT/bin/$c-arm" "$STAGE/
 # The Spotify Connect receiver (librespot, Rust) is built separately too (tools/linux/build-librespot.sh in WSL).
 # The Spot's daemon offers neither receiver (feature/streaming), so its image carries neither.
 [ "$BUILD_TAGS" != spot ] && [ -e "$ROOT/bin/techo5-librespot-arm" ] && cp "$ROOT/bin/techo5-librespot-arm" "$STAGE/bin/techo5-librespot"
+# The video player's decoder (ffmpeg, C, tools/linux/build-ffmpeg.sh in WSL). The Show's daemon alone plays videos
+# (feature/video), so only its image carries it.
+[ -z "$BUILD_TAGS" ] && [ -e "$ROOT/bin/techo5-ffmpeg-arm" ] && cp "$ROOT/bin/techo5-ffmpeg-arm" "$STAGE/bin/techo5-ffmpeg"
 cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
 [ "$BUILD_TAGS" = spot ] && sed -i '/^shairport-sync/d' "$STAGE/tools/packages-rootfs.txt"
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"

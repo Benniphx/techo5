@@ -78,7 +78,7 @@ func FrameRate(fps float64) Rate {
 
 // threads is how many cores the decoder may use for a picture this tall: two hold 480p and 540p at
 // 30 frames a second with the daemon running, 720p wants three, 1080p everything (docs/cast-plan.md,
-// step 0).
+// step 0, and the device test of step 1).
 func threads(height int) int {
 	switch {
 	case height <= 540:
@@ -173,12 +173,9 @@ func DecodeArgs(d Decoding) []string {
 	a = append(a, netArgs(d.URL, d.CAFile, d.Insecure)...)
 	_, h := d.Info.Display()
 	t := threads(int(h))
+	// Past 720p every core, and best effort even so: the decoder's own shortcuts (skipping the
+	// deblocking) make ffmpeg 8 refuse to open the picture's output when given on its command line.
 	a = append(a, "-threads", strconv.Itoa(t))
-	if h > most {
-		// A picture past what the Show keeps up with: the deblocking of frames nothing refers back to
-		// is skipped, the cheapest loss there is. Best effort even so.
-		a = append(a, "-skip_loop_filter", "nonref")
-	}
 	a = append(a, "-i", d.URL)
 	a = append(a, "-map", "0:v:"+strconv.Itoa(d.Info.VideoIndex), "-an", "-sn", "-dn",
 		"-vf", Filter(d.Info, d.Screen), "-fps_mode", "passthrough",

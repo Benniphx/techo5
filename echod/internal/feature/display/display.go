@@ -322,6 +322,7 @@ type Display struct {
 	videoPainting bool
 	videoOver     image.Rectangle
 	videoLast     *video.Frame
+	videoLit      uint64 // the last video that lit the panel (frame)
 }
 
 var (
@@ -1838,10 +1839,14 @@ func (d *Display) frame() time.Duration {
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
-	if !on && video.Get().State().Active() {
-		// A video lights a dark panel, day or night: somebody asked for it to be watched.
-		d.apply(true, d.ceilingOrDefault(), false)
-		on = true
+	if vs := video.Get().State(); vs.Active() && vs.ID != d.videoLit {
+		// A video starting lights a dark panel, day or night: somebody asked for it to be watched. Once
+		// per video, so a screen turned off while one plays stays off.
+		d.videoLit = vs.ID
+		if !on {
+			d.apply(true, d.ceilingOrDefault(), false)
+			on = true
+		}
 	}
 	if !on && sunriseProgress(now) > 0 {
 		// The light before an alarm: the panel comes on dim and rises, so the room is lit before the

@@ -304,12 +304,12 @@ func TestTheDecoderArguments(t *testing.T) {
 		}
 	}
 
-	// No sound to play: no sound output. 1080p: four threads and the cheap deblocking. Plain http: no
-	// certificate options, which ffmpeg would refuse for an input that opens no TLS.
+	// No sound to play: no sound output. 1080p: four threads. Plain http: no certificate options, which
+	// ffmpeg would refuse for an input that opens no TLS.
 	info, _ = ParseProbe(probeAnamorphic)
 	info.Height, info.Width = 1080, 1920
 	a = DecodeArgs(Decoding{URL: "http://192.168.1.20/dvd.ts", Info: info, Screen: Screen{W: 960, H: 480, Rotated: true}, CAFile: "/etc/ssl/certs/ca-certificates.crt"})
-	if has("pipe:1") || !has("-threads", "4") || !has("-skip_loop_filter", "nonref") || has("-tls_verify") || has("-ca_file") {
+	if has("pipe:1") || !has("-threads", "4") || has("-skip_loop_filter") || has("-tls_verify") || has("-ca_file") {
 		t.Errorf("silent 1080p: %q", a)
 	}
 	// Insecure TLS: https unchecked.
