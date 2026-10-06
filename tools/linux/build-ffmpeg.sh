@@ -11,7 +11,8 @@
 #
 # Only what the player uses, so there is less in it to attack: the H.264, MPEG-4, AAC, MP3 and Opus
 # decoders; the MP4, Matroska, MPEG-TS, HLS, AAC, MP3, Ogg and WAV demuxers; the network protocols
-# (HTTP, HTTPS, TCP, TLS, HLS, crypto for AES HLS) and pipe for its output. There is no file protocol
+# (HTTP, HTTPS, TCP, TLS, HLS, crypto for AES HLS, and httpproxy for the daemon's guard proxy, which a
+# device whose kernel cannot fence the decoder sends everything through) and pipe for its output. There is no file protocol
 # at all: nothing a stream or a playlist names can make it read a file on the device, whatever its
 # protocol whitelist says. udp is in only because ffmpeg 8's TLS code links against it. The libraries
 # are static; only musl, libssl.so.3, libcrypto.so.3 and libz.so.1 (all in the rootfs) are shared.
@@ -69,7 +70,7 @@ FLAGS="--arch=arm --cpu=cortex-a53 --enable-neon \
 	--enable-decoder=h264,mpeg4,aac,aac_latm,mp3float,opus \
 	--enable-demuxer=mov,matroska,mpegts,hls,aac,mp3,ogg,wav \
 	--enable-parser=h264,mpeg4video,aac,aac_latm,mpegaudio,opus \
-	--enable-protocol=pipe,http,https,tcp,udp,tls,hls,crypto \
+	--enable-protocol=pipe,http,https,httpproxy,tcp,udp,tls,hls,crypto \
 	--enable-muxer=rawvideo,pcm_s16le,null \
 	--enable-encoder=rawvideo,pcm_s16le,wrapped_avframe \
 	--enable-filter=scale,format,transpose,pad,fps,hflip,vflip,null,anull,aresample,aformat"

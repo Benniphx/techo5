@@ -346,7 +346,7 @@ func TestWhatFFmpegSaysLosesItsTokens(t *testing.T) {
 // IPv4 and IPv6 both, and a rule that will not go in stops the decoder from starting.
 func TestTheFenceIsMadeOnceForTheUser(t *testing.T) {
 	saved := iptables
-	t.Cleanup(func() { iptables = saved })
+	t.Cleanup(func() { iptables, noOwner = saved, nil })
 	have := map[string]bool{}
 	var added []string
 	fail := ""

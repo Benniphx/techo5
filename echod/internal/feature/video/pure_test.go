@@ -333,7 +333,12 @@ func TestTheDecoderArguments(t *testing.T) {
 		t.Errorf("filter: %s", f)
 	}
 
-	p := ProbeArgs("http://192.168.1.20/x.mp4", "", false)
+	// Through the guard proxy: the proxy given, and its CONNECT allowed.
+	a = DecodeArgs(Decoding{URL: "https://192.168.1.20/x.mp4", Info: info, Screen: Screen{W: 960, H: 480}, Proxy: "http://video:pw@127.0.0.1:4567"})
+	if !has("-http_proxy", "http://video:pw@127.0.0.1:4567") || !has("-protocol_whitelist", "http,https,tcp,tls,hls,crypto,httpproxy") {
+		t.Errorf("proxied: %q", a)
+	}
+	p := ProbeArgs("http://192.168.1.20/x.mp4", "", false, "")
 	if p[len(p)-1] != "http://192.168.1.20/x.mp4" || slices.Index(p, "-protocol_whitelist") < 0 || slices.Index(p, "-ca_file") >= 0 {
 		t.Errorf("probe: %q", p)
 	}

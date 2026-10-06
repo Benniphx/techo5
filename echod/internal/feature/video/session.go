@@ -157,7 +157,13 @@ func (s *session) stop(quiet bool) {
 
 func (s *session) play(insecure bool) (error, bool) {
 	began := time.Now()
-	info, err := probe(s.ctx, s.u.String(), insecure)
+	// The network it may reach is everything but the device itself, by the kernel's fence or through
+	// the daemon's proxy (fence.go, guard.go): nothing is decoded until one of them holds.
+	proxy, err := netGuard()
+	if err != nil {
+		return err, false
+	}
+	info, err := probe(s.ctx, s.u.String(), insecure, proxy)
 	if s.ctx.Err() != nil {
 		return nil, false
 	}
@@ -175,7 +181,7 @@ func (s *session) play(insecure bool) (error, bool) {
 		"probed in", time.Since(began).Round(time.Millisecond))
 	s.changed()
 
-	dec, err := start(s.ctx, DecodeArgs(Decoding{URL: s.u.String(), Info: info, Screen: s.screen, CAFile: caFileIf(), Insecure: insecure}), true, s.sound)
+	dec, err := start(s.ctx, DecodeArgs(Decoding{URL: s.u.String(), Info: info, Screen: s.screen, CAFile: caFileIf(), Insecure: insecure, Proxy: proxy}), true, s.sound)
 	if err != nil {
 		return err, false
 	}

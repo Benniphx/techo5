@@ -104,20 +104,31 @@ type Decoding struct {
 	// stops certificates being checked (the device's own Insecure TLS setting).
 	CAFile   string
 	Insecure bool
+
+	// Proxy is the daemon's guard proxy, for a kernel that cannot fence the decoder (guard.go); empty
+	// when it can.
+	Proxy string
 }
 
 // netArgs are the input options every run of the decoder has: the network only, and patience for it.
 // The certificate options go only with an https address: ffmpeg refuses an option nothing it opened
 // took, and an http address opens no TLS. (A playlist fetched over http whose parts are https is
 // fetched as ffmpeg does by default, unchecked.)
-func netArgs(url, caFile string, insecure bool) []string {
+func netArgs(url, caFile string, insecure bool, proxy string) []string {
+	allowed := protocols
+	if proxy != "" {
+		allowed += ",httpproxy" // https through the proxy is a CONNECT, which ffmpeg calls a protocol
+	}
 	a := []string{
-		"-protocol_whitelist", protocols,
+		"-protocol_whitelist", allowed,
 		// A connection that stops sending for this long ends the video, rather than leaving it frozen.
 		"-rw_timeout", "15000000",
 		// A connection that drops partway is made again; one refused at the start is not tried again
 		// and again (ffmpeg's reconnect_on_network_error), so a wrong address says so at once.
 		"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4",
+	}
+	if proxy != "" {
+		a = append(a, "-http_proxy", proxy)
 	}
 	switch {
 	case !strings.HasPrefix(url, "https://"):
@@ -134,9 +145,9 @@ func netArgs(url, caFile string, insecure bool) []string {
 
 // ProbeArgs asks ffmpeg what is at the address and nothing more: with no output it reads the start of
 // the stream, prints what it found and stops.
-func ProbeArgs(url, caFile string, insecure bool) []string {
+func ProbeArgs(url, caFile string, insecure bool, proxy string) []string {
 	a := []string{"-hide_banner", "-nostdin"}
-	a = append(a, netArgs(url, caFile, insecure)...)
+	a = append(a, netArgs(url, caFile, insecure, proxy)...)
 	return append(a, "-i", url)
 }
 
@@ -174,7 +185,7 @@ const (
 // stereo on its standard output.
 func DecodeArgs(d Decoding) []string {
 	a := []string{"-hide_banner", "-nostdin", "-loglevel", "error"}
-	a = append(a, netArgs(d.URL, d.CAFile, d.Insecure)...)
+	a = append(a, netArgs(d.URL, d.CAFile, d.Insecure, d.Proxy)...)
 	_, h := d.Info.Display()
 	t := threads(int(h))
 	// Past 720p every core, and best effort even so: the decoder's own shortcuts (skipping the

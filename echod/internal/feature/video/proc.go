@@ -66,7 +66,9 @@ func lookupDecoderCred() (*syscall.Credential, error) {
 			continue
 		}
 		c := &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
-		// These Android kernels give a network socket only to the inet group.
+		// These Android kernels give a network socket only to the inet group (Android's AID_INET, 3003,
+		// whatever the image calls it; an image with nothing else on the network has no such group).
+		c.Groups = []uint32{aidInet}
 		if g, err := user.LookupGroup("inet"); err == nil {
 			if id, err := strconv.ParseUint(g.Gid, 10, 32); err == nil {
 				c.Groups = []uint32{uint32(id)}
@@ -120,13 +122,6 @@ func start(ctx context.Context, args []string, decode, sound bool) (*decoder, er
 	cred, err := decoderCred()
 	if err != nil {
 		return nil, err
-	}
-	if cred != nil {
-		// The network the decoder may reach is everything but the device itself (fence.go): checked
-		// at each start, so nothing runs if it cannot be made so.
-		if err := fence(cred.Uid); err != nil {
-			return nil, err
-		}
 	}
 	d := &decoder{stderr: &tail{}, done: make(chan struct{})}
 	name, argv := wrap(decoderPath(), args)
@@ -214,11 +209,14 @@ func (d *decoder) why() error {
 	return errors.New("the decoder stopped")
 }
 
-// probe asks ffmpeg what is at the address.
-func probe(ctx context.Context, url string, insecure bool) (Info, error) {
+// aidInet is the group Android's paranoid network gives sockets to.
+const aidInet = 3003
+
+// probe asks ffmpeg what is at the address, kept off the device by proxy ("" for the kernel's fence).
+func probe(ctx context.Context, url string, insecure bool, proxy string) (Info, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	d, err := start(ctx, ProbeArgs(url, caFileIf(), insecure), false, false)
+	d, err := start(ctx, ProbeArgs(url, caFileIf(), insecure, proxy), false, false)
 	if err != nil {
 		return Info{}, err
 	}

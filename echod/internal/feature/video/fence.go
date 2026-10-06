@@ -54,10 +54,17 @@ var iptables = func(tool string, args ...string) error {
 	return nil
 }
 
+// noOwner is the kernel having refused the owner match once: it will not take it later either, so the
+// fence is not tried again (guard.go is used instead).
+var noOwner error
+
 // ensureFence adds what is missing of the fence for uid, and says whether it is all there.
 func ensureFence(uid uint32) error {
 	fenceMu.Lock()
 	defer fenceMu.Unlock()
+	if noOwner != nil {
+		return noOwner
+	}
 	owner := []string{"-m", "owner", "--uid-owner", strconv.FormatUint(uint64(uid), 10), "-j", fenceChain}
 	for _, tool := range []string{"iptables-legacy", "ip6tables-legacy"} {
 		_ = iptables(tool, "-N", fenceChain) // there already, as often as not
@@ -73,7 +80,8 @@ func ensureFence(uid uint32) error {
 			continue
 		}
 		if err := iptables(tool, append([]string{"-I", "OUTPUT", "1"}, owner...)...); err != nil {
-			return fmt.Errorf("the decoder cannot be kept off the device: %w", err)
+			noOwner = fmt.Errorf("the kernel cannot match the decoder's packets to its user: %w", err)
+			return noOwner
 		}
 	}
 	return nil
