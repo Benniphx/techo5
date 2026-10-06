@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
@@ -17,6 +18,20 @@ import (
 type PCMSource interface {
 	io.ReadCloser
 	SetReadDeadline(time.Time) error
+}
+
+// keepWhileHeld names the received tracks whose audio is kept, not dropped, when it arrives while
+// the track is held up (KeepWhileHeld).
+var keepWhileHeld sync.Map
+
+// KeepWhileHeld marks the received track named name as one whose audio is never dropped for arriving
+// while it is paused or a reply has the speaker: the video's (feature/video), whose sound is its
+// picture's clock. Bluetooth, AirPlay, Spotify Connect and DLNA music keep the old way.
+func KeepWhileHeld(name string) { keepWhileHeld.Store(name, true) }
+
+func keepsWhileHeld(name string) bool {
+	_, ok := keepWhileHeld.Load(name)
+	return ok
 }
 
 // receiveQuiet is how long a remote may send nothing before its track ends. A phone that is paused
@@ -86,13 +101,19 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 		if n > 0 {
 			in := append(carry, buf[:n]...)
 			whole := len(in) - len(in)%(conv.channels*2)
-			// Held up between the read and the queue (a pause, or a reply taking the speaker), what was
-			// read waits for the track to go on rather than being dropped: it is the next of the track,
-			// and a video's picture follows its sound (Stream.Heard).
-			for samples := conv.run(in[:whole]); !m.offer(t, samples); {
-				if err := m.wait(ctx); err != nil {
-					return err
+			samples := conv.run(in[:whole])
+			if keepsWhileHeld(t.item) {
+				// Held up between the read and the queue (a pause, or a reply taking the speaker), what was
+				// read waits for the track to go on rather than being dropped: a video's picture follows
+				// its sound (Stream.Heard), and dropped, the sound would run ahead of it.
+				for !m.offer(t, samples) {
+					if err := m.wait(ctx); err != nil {
+						return err
+					}
 				}
+			} else {
+				// Every other received track as it always was: what arrives while it is held up goes.
+				m.queue(t, samples)
 			}
 			carry = append(carry[:0], in[whole:]...)
 		}

@@ -67,3 +67,37 @@ func TestAHeldTrackKeepsWhatArrives(t *testing.T) {
 		t.Error("a track that is over took samples, or held them")
 	}
 }
+
+// What arrives while a received track is held up is dropped, as it always was, for every received
+// track but one marked KeepWhileHeld (the video's), whose audio waits and is played.
+func TestOnlyTheVideosAudioIsKeptWhileHeld(t *testing.T) {
+	KeepWhileHeld("Video")
+	for _, tc := range []struct {
+		name string
+		kept bool
+	}{{"Bluetooth", false}, {"AirPlay", false}, {"DLNA", false}, {"Video", true}} {
+		s := NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
+		r, w, err := os.Pipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.PlayPCM(tc.name, pipeSrc{r}, speaker.Rate, 2)
+		time.Sleep(50 * time.Millisecond) // the track waiting on its first read
+		s.Pause()
+		_, _ = w.Write(make([]byte, 4800*4))
+		time.Sleep(100 * time.Millisecond)
+		s.Unpause()
+		time.Sleep(100 * time.Millisecond)
+		s.mu.Lock()
+		queued := uint64(0)
+		if s.track != nil {
+			queued = s.track.queued
+		}
+		s.mu.Unlock()
+		if got := queued > 0; got != tc.kept {
+			t.Errorf("%s: kept %v (queued %d), want %v", tc.name, got, queued, tc.kept)
+		}
+		s.Stop()
+		w.Close()
+	}
+}

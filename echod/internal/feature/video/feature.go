@@ -15,6 +15,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
@@ -24,6 +25,7 @@ const Here = true
 
 func init() {
 	component.Register(component.Device, Get(), component.Order(39))
+	media.KeepWhileHeld(TrackName)
 }
 
 // askFor is how long the screen asks before a DLNA video is taken as not wanted.
