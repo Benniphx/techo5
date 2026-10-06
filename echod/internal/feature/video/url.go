@@ -54,6 +54,11 @@ func CheckURL(raw string) (*url.URL, error) {
 	if host == "" {
 		return nil, errors.New("the address names no host")
 	}
+	if strings.Contains(host, "%") {
+		// An IPv6 address with a zone (fe80::1%wlan0) is a link on the device itself: never a media
+		// server's address, and not one Go and the C library read alike.
+		return nil, errors.New("not an address this device fetches from: " + host)
+	}
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return nil, errors.New("the device does not fetch from itself")
 	}

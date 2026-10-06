@@ -432,3 +432,9 @@ func TestTheQuestionStaysWhatWasAsked(t *testing.T) {
 		t.Errorf("Not now holds the address off only until %v", until)
 	}
 }
+
+func TestAZonedAddressIsTheDevicesOwn(t *testing.T) {
+	if !ownHost("fe80::1%wlan0") || ownHost("192.0.2.1") {
+		t.Error("ownHost is wrong about zones")
+	}
+}

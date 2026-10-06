@@ -521,6 +521,9 @@ func (f *Feature) Actions() []*esphome.Action {
 // ownHost is whether host is one of the device's own addresses, which the kernel would carry over
 // loopback: a video is never fetched from the device itself.
 func ownHost(host string) bool {
+	if strings.Contains(host, "%") {
+		return true // a zoned address is one of the device's own links (CheckURL refuses it first)
+	}
 	ip := net.ParseIP(host)
 	if ip == nil {
 		return false
