@@ -683,19 +683,25 @@ func (c *conversation) speak(url string) {
 	}
 
 	held := c.sound.ClaimSpeech("reply", errand)
+	// The slot is read here, on the loop: by the time the reply is over, the loop may be on another
+	// turn, and the slot is not the reply goroutine's to read.
+	slot := c.slot
 	safe.Go("reply", func() {
 		<-held.Done()
 
+		// A reply that was stopped - canceled, or interrupted by a wake word - fails its fetch with the
+		// context canceled, which says nothing about the url. Taken as a failure, it moved the wake word
+		// to streamed replies for good.
+		if held.Stopped() {
+			return
+		}
 		if err := held.Err(); err != nil {
 			slog.Error("playing the reply failed", "url", url, "err", err)
 			// A url that cannot be fetched would be silence every turn; the streamed copy arrives
 			// over the connection the device already has.
 			if url != "" {
-				wakeword.Get().FallBackToStream(c.slot)
+				wakeword.Get().FallBackToStream(slot)
 			}
-		}
-		if held.Stopped() {
-			return
 		}
 		c.post(event{kind: evPlayed, at: held.Quiet()})
 	})
