@@ -49,11 +49,19 @@ func (f *Feature) SunTimes(now time.Time) (rise, set time.Time, ok bool) {
 }
 
 // SkyAt is a condition as the sky looks at home at now: its night form (atNight) while the sun is
-// down. Night is from home's own sunrise and sunset, so it needs no Home Assistant; until those are
-// known, and on a day the sun does not rise or set, the condition is left as it was reported.
+// down. Night is from home's own sunrise and sunset, so it needs no Home Assistant; on a day the sun
+// does not rise or set (inside the polar circles), from the sun's height at now: the polar night is
+// night all day, the midnight sun day. Until home's place is known the condition is left as reported.
 func (f *Feature) SkyAt(cond string, now time.Time) string {
 	rise, set, ok := f.SunTimes(now)
-	if !ok || (!now.Before(rise) && now.Before(set)) {
+	if !ok {
+		lat, lon, placed := f.Place(now)
+		if !placed || sun.Up(lat, lon, now) {
+			return cond
+		}
+		return atNight(cond)
+	}
+	if !now.Before(rise) && now.Before(set) {
 		return cond
 	}
 	return atNight(cond)

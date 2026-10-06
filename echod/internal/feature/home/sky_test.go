@@ -100,3 +100,33 @@ func homeOnThePlains(t *testing.T) (noon, late, early time.Time) {
 	})
 	return noon, late, early
 }
+
+// Inside the polar circle, where the sun neither rises nor sets that day, night is from the sun's
+// height: the polar night has no sun even at noon, and the midnight sun shows one at midnight.
+func TestThePolarNightHasNoSun(t *testing.T) {
+	k := &sunKept
+	k.mu.Lock()
+	lat, lon, placed, looked := k.lat, k.lon, k.placed, k.looked
+	k.lat, k.lon, k.placed, k.day = 69.65, 18.96, true, ""
+	k.mu.Unlock()
+	t.Cleanup(func() {
+		k.mu.Lock()
+		k.lat, k.lon, k.placed, k.looked, k.day = lat, lon, placed, looked, ""
+		k.mu.Unlock()
+	})
+	f := &Feature{}
+	for _, c := range []struct {
+		at   time.Time
+		want string
+	}{
+		{time.Date(2026, 12, 21, 11, 0, 0, 0, time.UTC), "clear-night"},
+		{time.Date(2026, 6, 21, 23, 0, 0, 0, time.UTC), "sunny"},
+	} {
+		k.mu.Lock()
+		k.looked, k.day = c.at.Format("2006-01-02"), ""
+		k.mu.Unlock()
+		if got := f.SkyAt("sunny", c.at); got != c.want {
+			t.Errorf("sunny at %v is %q, want %q", c.at, got, c.want)
+		}
+	}
+}

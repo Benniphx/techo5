@@ -41,3 +41,30 @@ func TestMidnightSun(t *testing.T) {
 		t.Error("Svalbard at midsummer has a sunset")
 	}
 }
+
+// The sun's height: over the Arctic it stays down at noon in December and up at midnight in June,
+// and in mid latitudes it is up at noon and down at midnight, agreeing with Times.
+func TestTheSunsHeight(t *testing.T) {
+	tromso := func(m time.Month, d, h int) time.Time { return time.Date(2026, m, d, h, 0, 0, 0, time.UTC) }
+	if Up(69.65, 18.96, tromso(time.December, 21, 11)) {
+		t.Error("the sun was up at noon in the polar night")
+	}
+	if !Up(69.65, 18.96, tromso(time.June, 21, 23)) {
+		t.Error("the midnight sun was down")
+	}
+	denver, _ := time.LoadLocation("America/Denver")
+	day := time.Date(2026, 3, 20, 0, 0, 0, 0, denver)
+	rise, set, ok := Times(39.74, -104.99, day)
+	if !ok {
+		t.Fatal("no times")
+	}
+	if a := Altitude(39.74, -104.99, rise); a < -1.5 || a > 0 {
+		t.Errorf("at sunrise the sun is at %.2f degrees", a)
+	}
+	if a := Altitude(39.74, -104.99, set); a < -1.5 || a > 0 {
+		t.Errorf("at sunset the sun is at %.2f degrees", a)
+	}
+	if !Up(39.74, -104.99, day.Add(12*time.Hour)) || Up(39.74, -104.99, day) {
+		t.Error("noon and midnight the wrong way round")
+	}
+}
