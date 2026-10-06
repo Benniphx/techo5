@@ -18,6 +18,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
 // The guard is the fence (fence.go) for a kernel that cannot match a packet to its user: the Spot's
@@ -52,6 +54,11 @@ func closeGuard() {
 func guardProxy() (string, error) {
 	guardMu.Lock()
 	defer guardMu.Unlock()
+	// Under the lock closeGuard takes, after the switch is saved: once Video is off, the proxy either
+	// was open and is closed by it, or is not opened again here.
+	if !guardAllowed() {
+		return "", ErrOff
+	}
 	if guardURL != "" {
 		return guardURL, nil
 	}
@@ -231,9 +238,19 @@ func (g *guard) tunnel(w http.ResponseWriter, r *http.Request) {
 	down.Close()
 }
 
+// guardAllowed is whether videos may play, which the proxy is for; a variable for the tests.
+var guardAllowed = func() bool { return config.Get().Video.On }
+
 // netGuard is how the decoder's network is kept off the device for this run: "" when the kernel fences
-// its user (fence.go), else the guard's address for -http_proxy. An error is neither: no decoder.
-func netGuard() (string, error) {
+// its user (fence.go), else the guard's address for -http_proxy. An error is neither: no decoder. A
+// session stopped meanwhile, or Video turned off, gets nothing.
+func netGuard(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if !guardAllowed() {
+		return "", ErrOff
+	}
 	cred, err := decoderCred()
 	if err != nil {
 		return "", err

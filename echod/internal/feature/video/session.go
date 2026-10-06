@@ -163,7 +163,7 @@ func (s *session) play(insecure bool) (error, bool) {
 	began := time.Now()
 	// The network it may reach is everything but the device itself, by the kernel's fence or through
 	// the daemon's proxy (fence.go, guard.go): nothing is decoded until one of them holds.
-	proxy, err := netGuard()
+	proxy, err := netGuard(s.ctx)
 	if err != nil {
 		return err, false
 	}

@@ -4,6 +4,8 @@ package video
 
 import (
 	"bufio"
+	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -32,6 +34,9 @@ func TestTheGuardKeepsTheDecoderOffTheDevice(t *testing.T) {
 	refusing := false
 	refused = func(net.IP) bool { return refusing }
 
+	savedAllowed := guardAllowed
+	t.Cleanup(func() { guardAllowed = savedAllowed })
+	guardAllowed = func() bool { return true }
 	addr, err := guardProxy()
 	if err != nil {
 		t.Fatal(err)
@@ -106,6 +111,9 @@ func TestTheGuardKeepsTheDecoderOffTheDevice(t *testing.T) {
 
 // Turning Video off closes the proxy; the next video gets a new one, with a new password.
 func TestTheGuardClosesWithVideo(t *testing.T) {
+	saved := guardAllowed
+	t.Cleanup(func() { guardAllowed = saved })
+	guardAllowed = func() bool { return true }
 	a, err := guardProxy()
 	if err != nil {
 		t.Fatal(err)
@@ -124,4 +132,24 @@ func TestTheGuardClosesWithVideo(t *testing.T) {
 		t.Error("the proxy came back with the same address and password")
 	}
 	closeGuard()
+}
+
+// With Video off the proxy is not opened, and a session gets nothing from netGuard.
+func TestTheGuardStaysShutWithVideoOff(t *testing.T) {
+	saved := guardAllowed
+	t.Cleanup(func() { guardAllowed = saved })
+	guardAllowed = func() bool { return false }
+	closeGuard()
+	if _, err := guardProxy(); !errors.Is(err, ErrOff) {
+		t.Errorf("the proxy opened with Video off: %v", err)
+	}
+	if _, err := netGuard(context.Background()); !errors.Is(err, ErrOff) {
+		t.Errorf("netGuard with Video off: %v", err)
+	}
+	guardAllowed = func() bool { return true }
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := netGuard(ctx); err == nil {
+		t.Error("a stopped session was given a guard")
+	}
 }
