@@ -1,7 +1,9 @@
 package media
 
 import (
+	"io"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -72,22 +74,47 @@ func TestAHeldTrackKeepsWhatArrives(t *testing.T) {
 // track but one marked KeepWhileHeld (the video's), whose audio waits and is played.
 func TestOnlyTheVideosAudioIsKeptWhileHeld(t *testing.T) {
 	KeepWhileHeld("Video")
+	type offer struct {
+		item string
+		ok   bool
+	}
+	offers := make(chan offer, 16)
+	hook := func(item string, ok bool) { offers <- offer{item, ok} }
+	offeredHook.Store(&hook)
+	t.Cleanup(func() { offeredHook.Store(nil) })
+	next := func(name string) bool {
+		select {
+		case o := <-offers:
+			if o.item != name {
+				t.Fatalf("%s: an offer from %s", name, o.item)
+			}
+			return o.ok
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s: nothing offered", name)
+			return false
+		}
+	}
 	for _, tc := range []struct {
 		name string
 		kept bool
 	}{{"Bluetooth", false}, {"AirPlay", false}, {"DLNA", false}, {"Video", true}} {
 		s := NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		s.PlayPCM(tc.name, pipeSrc{r}, speaker.Rate, 2)
-		time.Sleep(50 * time.Millisecond) // the track waiting on its first read
+		src := newChanSrc()
+		s.PlayPCM(tc.name, src, speaker.Rate, 2)
+		<-src.reads // the track waiting on its first read
 		s.Pause()
-		_, _ = w.Write(make([]byte, 4800*4))
-		time.Sleep(100 * time.Millisecond)
+		src.data <- make([]byte, 4800*4)
+		// Read while paused, the audio is offered and turned away: dropped, or kept for later.
+		if next(tc.name) {
+			t.Fatalf("%s: queued while paused", tc.name)
+		}
 		s.Unpause()
-		time.Sleep(100 * time.Millisecond)
+		if tc.kept && !next(tc.name) {
+			t.Errorf("%s: turned away again after the pause", tc.name)
+		}
+		if !tc.kept {
+			<-src.reads // on to the next read: nothing more of it is coming
+		}
 		s.mu.Lock()
 		queued := uint64(0)
 		if s.track != nil {
@@ -98,6 +125,36 @@ func TestOnlyTheVideosAudioIsKeptWhileHeld(t *testing.T) {
 			t.Errorf("%s: kept %v (queued %d), want %v", tc.name, got, queued, tc.kept)
 		}
 		s.Stop()
-		w.Close()
+		_ = src.Close()
 	}
 }
+
+// chanSrc is a received track's source the test feeds a read at a time, telling it each time a read
+// begins.
+type chanSrc struct {
+	data   chan []byte
+	reads  chan struct{}
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newChanSrc() *chanSrc {
+	return &chanSrc{data: make(chan []byte), reads: make(chan struct{}, 16), closed: make(chan struct{})}
+}
+
+func (c *chanSrc) Read(p []byte) (int, error) {
+	c.reads <- struct{}{}
+	select {
+	case b := <-c.data:
+		return copy(p, b), nil
+	case <-c.closed:
+		return 0, io.EOF
+	}
+}
+
+func (c *chanSrc) Close() error {
+	c.once.Do(func() { close(c.closed) })
+	return nil
+}
+
+func (c *chanSrc) SetReadDeadline(time.Time) error { return nil }
