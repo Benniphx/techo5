@@ -47,7 +47,7 @@ const (
 // artCondFor is Home Assistant's condition as a sky.
 func artCondFor(cond string) artCond {
 	switch strings.ToLower(cond) {
-	case "partlycloudy", "windy", "windy-variant":
+	case "partlycloudy", home.PartlyCloudyNight, "windy", "windy-variant":
 		return artPartly
 	case "cloudy", "exceptional":
 		return artCloudy

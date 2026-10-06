@@ -204,6 +204,10 @@ func Sky(cond, lang string) string {
 	switch cond {
 	case "", "unknown", "unavailable":
 		return ""
+	case "partlycloudy-night":
+		// The device's own night form of partly cloudy (home.PartlyCloudyNight): a moon behind the
+		// cloud rather than a sun, and the same words.
+		cond = "partlycloudy"
 	}
 	if w, ok := langs[lang]; ok {
 		if s, ok := w.sky[cond]; ok {
