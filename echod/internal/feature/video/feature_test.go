@@ -392,8 +392,14 @@ func TestTheFenceIsMadeOnceForTheUser(t *testing.T) {
 		t.Errorf("made again: %v %q", err, added)
 	}
 	fail = "65534"
-	if err := ensureFence(65534); err == nil {
-		t.Error("a fence that would not go in was taken")
+	if err := ensureFence(65534); err == nil || noOwner != nil {
+		t.Errorf("a fence that would not go in: %v, kept as for good: %v", err, noOwner)
+	}
+	if !ownerMissing(errors.New("iptables-legacy [-I OUTPUT 1 -m owner --uid-owner 65534 -j TECHO5-VIDEO]: exit status 1: Warning: Extension owner revision 0 not supported, missing kernel module? iptables: No chain/target/match by that name.")) {
+		t.Error("the Spot's answer was not taken for a missing owner match")
+	}
+	if ownerMissing(errors.New("iptables-legacy: exit status 4: Another app is currently holding the xtables lock")) {
+		t.Error("a held lock was taken for a missing owner match")
 	}
 }
 

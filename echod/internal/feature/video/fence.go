@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -46,12 +47,22 @@ var fenceRules = map[string][][]string{
 }
 
 // iptables runs one iptables command; a variable for the tests.
+// -w waits for the tables' lock: the firewall at boot, or another start, can be holding it, and
+// without it a busy moment would be taken for a fence that cannot be made.
 var iptables = func(tool string, args ...string) error {
-	out, err := exec.Command(tool, args...).CombinedOutput()
+	out, err := exec.Command(tool, append([]string{"-w"}, args...)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%s %v: %v: %s", tool, args, err, clip(string(out), 200))
 	}
 	return nil
+}
+
+// ownerMissing is whether an error from iptables says the kernel has no owner match, which no later
+// try will change: iptables-legacy says it cannot load the extension, or that the match is unknown.
+func ownerMissing(err error) bool {
+	s := err.Error()
+	return strings.Contains(s, "owner") && (strings.Contains(s, "not supported") || strings.Contains(s, "load match") ||
+		strings.Contains(s, "No chain/target/match"))
 }
 
 // noOwner is the kernel having refused the owner match once: it will not take it later either, so the
@@ -80,8 +91,11 @@ func ensureFence(uid uint32) error {
 			continue
 		}
 		if err := iptables(tool, append([]string{"-I", "OUTPUT", "1"}, owner...)...); err != nil {
-			noOwner = fmt.Errorf("the kernel cannot match the decoder's packets to its user: %w", err)
-			return noOwner
+			err = fmt.Errorf("the kernel cannot match the decoder's packets to its user: %w", err)
+			if ownerMissing(err) {
+				noOwner = err // for good; anything else is tried again at the next start
+			}
+			return err
 		}
 	}
 	return nil
