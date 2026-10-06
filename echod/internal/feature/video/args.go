@@ -115,7 +115,9 @@ func netArgs(url, caFile string, insecure bool) []string {
 		"-protocol_whitelist", protocols,
 		// A connection that stops sending for this long ends the video, rather than leaving it frozen.
 		"-rw_timeout", "15000000",
-		"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_delay_max", "4",
+		// A connection that drops partway is made again; one refused at the start is not tried again
+		// and again (ffmpeg's reconnect_on_network_error), so a wrong address says so at once.
+		"-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4",
 	}
 	switch {
 	case !strings.HasPrefix(url, "https://"):

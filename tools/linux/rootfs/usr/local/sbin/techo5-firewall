@@ -71,6 +71,7 @@ if [ -n "$uid" ]; then
 	for T in iptables-legacy ip6tables-legacy; do
 		$T -N TECHO5-VIDEO 2> /dev/null
 		$T -F TECHO5-VIDEO
+		$T -A TECHO5-VIDEO -o lo -p tcp -j REJECT --reject-with tcp-reset
 		$T -A TECHO5-VIDEO -o lo -j REJECT
 		$T -C OUTPUT -m owner --uid-owner "$uid" -j TECHO5-VIDEO 2> /dev/null ||
 			$T -I OUTPUT 1 -m owner --uid-owner "$uid" -j TECHO5-VIDEO

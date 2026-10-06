@@ -28,14 +28,17 @@ var fence = ensureFence
 
 var fenceMu sync.Mutex
 
-// fenceRules are the chain's rules, IPv4 and IPv6.
+// fenceRules are the chain's rules, IPv4 and IPv6. A connection is refused with a reset, so the
+// decoder says at once that it was refused rather than timing out; anything else with an ICMP answer.
 var fenceRules = map[string][][]string{
 	"iptables-legacy": {
+		{"-o", "lo", "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"},
 		{"-o", "lo", "-j", "REJECT"},
 		{"-d", "127.0.0.0/8", "-j", "REJECT"},
 		{"-d", "169.254.0.0/16", "-j", "REJECT"},
 	},
 	"ip6tables-legacy": {
+		{"-o", "lo", "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"},
 		{"-o", "lo", "-j", "REJECT"},
 		{"-d", "::1/128", "-j", "REJECT"},
 		{"-d", "fe80::/10", "-j", "REJECT"},
