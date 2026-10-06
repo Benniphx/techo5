@@ -58,11 +58,13 @@ var iptables = func(tool string, args ...string) error {
 }
 
 // ownerMissing is whether an error from iptables says the kernel has no owner match, which no later
-// try will change: iptables-legacy says it cannot load the extension, or that the match is unknown.
+// try will change. What iptables-legacy prints for it: "Extension owner revision 0 not supported,
+// missing kernel module?" (the Spot's kernel, measured) or "Couldn't load match `owner'" (no
+// extension at all). A bare "No chain/target/match by that name" is not enough: a chain gone missing
+// says that too.
 func ownerMissing(err error) bool {
 	s := err.Error()
-	return strings.Contains(s, "owner") && (strings.Contains(s, "not supported") || strings.Contains(s, "load match") ||
-		strings.Contains(s, "No chain/target/match"))
+	return strings.Contains(s, "Extension owner") || strings.Contains(s, "load match `owner'")
 }
 
 // noOwner is the kernel having refused the owner match once: it will not take it later either, so the

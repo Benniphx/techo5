@@ -401,6 +401,12 @@ func TestTheFenceIsMadeOnceForTheUser(t *testing.T) {
 	if ownerMissing(errors.New("iptables-legacy: exit status 4: Another app is currently holding the xtables lock")) {
 		t.Error("a held lock was taken for a missing owner match")
 	}
+	if !ownerMissing(errors.New("iptables v1.8.13 (legacy): Couldn't load match `owner':No such file or directory")) {
+		t.Error("a missing extension was not taken for a missing owner match")
+	}
+	if ownerMissing(errors.New("iptables-legacy [-I OUTPUT 1 -m owner --uid-owner 89 -j TECHO5-VIDEO]: exit status 1: iptables: No chain/target/match by that name.")) {
+		t.Error("a missing chain was taken for a missing owner match")
+	}
 }
 
 // A DLNA video asked about while another plays: the state says so (AskID), and while the question is
