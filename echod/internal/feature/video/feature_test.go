@@ -302,7 +302,7 @@ func TestTheDecoderIsBounded(t *testing.T) {
 	ffmpegPath = "/bin/sh"
 	decoderCred = func() (*syscall.Credential, error) { return nil, nil }
 	// From its first instruction: no sleep before it looks.
-	d, err := start(context.Background(), []string{"-c", "cat /proc/self/limits >&2; echo nice=$(cut -d' ' -f19 /proc/self/stat) >&2"}, false, false)
+	d, err := start(context.Background(), []string{"-c", "cat /proc/self/limits >&2; echo nice=$(cut -d' ' -f19 /proc/self/stat) oom=$(cat /proc/self/oom_score_adj) >&2"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,7 +319,7 @@ func TestTheDecoderIsBounded(t *testing.T) {
 			t.Errorf("%s: %q", want, line)
 		}
 	}
-	if !strings.Contains(out, "nice=5") {
+	if !strings.Contains(out, "nice=5") || !strings.Contains(out, "oom=1000") {
 		t.Errorf("not niced: %s", out)
 	}
 }
@@ -436,5 +436,24 @@ func TestTheQuestionStaysWhatWasAsked(t *testing.T) {
 func TestAZonedAddressIsTheDevicesOwn(t *testing.T) {
 	if !ownHost("fe80::1%wlan0") || ownHost("192.0.2.1") {
 		t.Error("ownHost is wrong about zones")
+	}
+}
+
+// An Allow tapped after Video went off plays nothing.
+func TestAnAllowAfterVideoWentOffPlaysNothing(t *testing.T) {
+	f := fake(t, 100000, true)
+	if err := config.Set().Video().DLNA(true); err != nil {
+		t.Fatal(err)
+	}
+	id, err := f.Play(Request{URL: "http://192.168.1.20/a.mp4", Origin: FromDLNA, From: "192.168.1.30"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set().Video().On(false); err != nil {
+		t.Fatal(err)
+	}
+	f.Answer(id, true)
+	if st := f.State(); st.Active() {
+		t.Errorf("played with Video off: %+v", st)
 	}
 }

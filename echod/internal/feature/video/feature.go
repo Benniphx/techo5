@@ -178,6 +178,7 @@ func (f *Feature) SetOn(on bool) {
 	slog.Info("setting changed", "setting", "video", "using", on)
 	if !on {
 		f.Stop()
+		closeGuard()
 	}
 	f.Changed.Emit(struct{}{})
 }
@@ -265,6 +266,13 @@ func (f *Feature) begin(id uint64, req Request) {
 		return
 	}
 	f.mu.Lock()
+	// Asked again here, under the lock SetOn's stop takes too: an Allow tapped after Video went off, or
+	// a start that crossed the switch, plays nothing.
+	if c := config.Get().Video; !c.On || (req.Origin == FromDLNA && !c.DLNA) {
+		f.mu.Unlock()
+		slog.Info("video: not started: videos were turned off", "id", id)
+		return
+	}
 	old := f.cur
 	s := newSession(id, req, uu, f.scr, f.panelW, f.panelH)
 	s.ended, s.changed = f.sessionEnded, func() { f.Changed.Emit(struct{}{}) }

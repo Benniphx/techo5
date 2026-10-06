@@ -103,3 +103,25 @@ func TestTheGuardKeepsTheDecoderOffTheDevice(t *testing.T) {
 		t.Error("a CONNECT to a refused address was made")
 	}
 }
+
+// Turning Video off closes the proxy; the next video gets a new one, with a new password.
+func TestTheGuardClosesWithVideo(t *testing.T) {
+	a, err := guardProxy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	closeGuard()
+	u, _ := url.Parse(a)
+	if c, err := net.Dial("tcp", u.Host); err == nil {
+		c.Close()
+		t.Error("the proxy still listens after it was closed")
+	}
+	b, err := guardProxy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Error("the proxy came back with the same address and password")
+	}
+	closeGuard()
+}

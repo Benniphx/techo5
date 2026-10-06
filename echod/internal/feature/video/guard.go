@@ -5,6 +5,7 @@ package video
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -32,7 +33,19 @@ import (
 var (
 	guardMu  sync.Mutex
 	guardURL string
+	guardSrv *http.Server
 )
+
+// closeGuard stops the proxy, when Video is turned off: nothing is listening for the decoder while no
+// video can play. The next video starts it again, with a new password.
+func closeGuard() {
+	guardMu.Lock()
+	defer guardMu.Unlock()
+	if guardSrv != nil {
+		_ = guardSrv.Close()
+		guardSrv, guardURL = nil, ""
+	}
+}
 
 // guardProxy is the proxy's address for ffmpeg's -http_proxy, password and all, starting it the first
 // time it is wanted (and again later, if it could not be started then).
@@ -59,6 +72,7 @@ func guardProxy() (string, error) {
 	g := &guard{auth: "Basic " + base64.StdEncoding.EncodeToString([]byte("video:"+pass))}
 	srv := &http.Server{Handler: g, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(ln) }()
+	guardSrv = srv
 	guardURL = "http://video:" + pass + "@" + ln.Addr().String()
 	slog.Info("video: the decoder fetches through a proxy of the daemon's (no owner match in this kernel)")
 	return guardURL, nil
@@ -129,7 +143,7 @@ var hopHeaders = []string{"Proxy-Authorization", "Proxy-Connection", "Connection
 	"Transfer-Encoding", "Upgrade"}
 
 func (g *guard) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Proxy-Authorization") != g.auth {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("Proxy-Authorization")), []byte(g.auth)) != 1 {
 		w.Header().Set("Proxy-Authenticate", `Basic realm="techo5"`)
 		http.Error(w, "proxy authorization required", http.StatusProxyAuthRequired)
 		return
