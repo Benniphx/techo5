@@ -42,12 +42,18 @@ data:
   title: "Front door, 7:42"
 ```
 
-`stop_video`, `pause_video` and `resume_video` do what they say. The **Video** sensor says `idle`,
-`asking`, `loading`, `playing` or `paused`, and **Video title** names what's playing.
+`stop_video`, `pause_video` and `resume_video` do what they say. The **Video state** sensor says
+`idle`, `asking`, `loading`, `playing` or `paused`, and **Video title** names what's playing.
+
+`play_video` answers as soon as the video starts loading. One that turns out not to play (the
+server says no, the file is HEVC, the connection drops) says why on the screen for a few seconds and
+in the **Video error** sensor, which clears once a video plays; it isn't an error on the action.
+A refused address (not `http` or `https`, or the device itself) is an error on the action, and goes
+in the sensor too.
 
 The sound plays through the Show's speaker like music: the Show's volume, Home Assistant's media
-player and its pause all work on it. Music or radio started afterward takes the speaker and ends the
-video.
+player and its pause all work on it. Starting a video stops music that's playing, and music or radio
+started afterward takes the speaker and ends the video. A video left paused for 30 minutes stops.
 
 Home Assistant's own media player (`media_player.play_media`) can't send a video this way: Home
 Assistant turns what it sends into sound first. Use `play_video`, or the Show's DLNA renderer (Home
@@ -55,13 +61,17 @@ Assistant finds it as a DLNA media player).
 
 ## Play a video from an app (DLNA)
 
-With **DLNA video** on, the Show shows up as a DLNA renderer that takes video. BubbleUPnP, Jellyfin,
-Kodi-style controllers and Windows' *Cast to device* can send to it.
+With **DLNA video** on, the Show shows up as a DLNA renderer that takes video. BubbleUPnP on
+Android, Jellyfin's apps, Kodi and VLC's renderer lists, a Plex Media Server's DLNA server through
+any of those, and Windows' *Cast to device* can send to it. So can Home Assistant's own DLNA media
+player for the Show, once Home Assistant has found it.
 
 The first video from each address asks on the screen: **Show a video from 192.168.1.30?** Tap
 **Allow** to play it and remember that address. **Not now** leaves it, and that address isn't asked
-again for a minute. Nobody answering in 30 seconds is Not now. Home Assistant's `play_video` never
-asks.
+again for ten minutes. Nobody answering in 30 seconds is Not now. While the question is up, a video
+from another address is turned away rather than put in its place. Home Assistant's `play_video`
+never asks, but Home Assistant's DLNA media player is a DLNA controller like any other: the first
+video it sends asks once too.
 
 An allowed address is remembered for 30 days after it last sent a video: one that hasn't sent any
 for that long asks again (a phone's address on your network can go to another device). The Video
@@ -77,6 +87,8 @@ Play, pause, stop and the volume work from the app. Seeking doesn't, yet.
 - **Swipe down**, or **Stop**, ends the video. The screen goes back to where it was.
 - A call, an alarm or a timer ringing, the settings, a camera or a voice turn goes on top. The video
   pauses under it and goes on once it's gone.
+- **At night** a video that turns the screen on lights it at the night light's level, not full
+  brightness, and the screen stays as it is while the video plays.
 
 ## Good to know
 
@@ -85,9 +97,12 @@ Play, pause, stop and the volume work from the app. Seeking doesn't, yet.
 - The video player is a separate program (ffmpeg) that the device runs only while a video plays. It
   runs as a user that can't change anything on the device, with limits on its memory, and it can
   only open network addresses, never a file on the device. It can't reach the device itself either:
-  an address whose name, or a redirect, leads back to the device is refused by the device's
-  firewall.
+  an address whose name, or a redirect, leads back to the device is refused, by the device's
+  firewall on the Show and by a proxy in the daemon that the player goes through on the Spot.
 - An `https://` address has its certificate checked, unless **Skip certificate checks** is on (a
   diagnostic switch in Home Assistant).
 - A Show 5 uses about one core for a 480p video and one and a half for 720p, with the rest of the
   Show still answering.
+- **Over Bluetooth headphones or a speaker**, the picture may run ahead of the sound: the player
+  times the picture by the sound leaving the Show, and Bluetooth adds its own delay after that. (A
+  theory, not measured yet.)

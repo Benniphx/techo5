@@ -76,7 +76,7 @@ func (s State) Active() bool { return s.Phase != Idle && s.Phase != "" }
 var (
 	// ErrOff is a video asked for with the Video switch off (or DLNA video, for a DLNA one).
 	ErrOff = errors.New("video: videos are off on this device")
-	// ErrNotHere is a device with no video player: the Spot and the Dot.
+	// ErrNotHere is a device with no video player: the Dot.
 	ErrNotHere = errors.New("video: this device has no video player")
 	// ErrDeclined is an address the screen just said Not now to.
 	ErrDeclined = errors.New("video: not now")

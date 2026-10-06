@@ -15,7 +15,7 @@ import (
 )
 
 // The Video section: both switches off on a new device, saved as ticked, and the allowed addresses
-// counted and forgotten, never listed.
+// listed with the day each was last used (one run out is not), and forgotten.
 func TestTheVideoSection(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	page := func() string {

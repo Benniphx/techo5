@@ -101,8 +101,8 @@ How the fork's Cast works:
 - **Transport:** TCP port 8940, one phone at a time, the port opened in the firewall only while Cast
   is on. mDNS `_techo5cast._tcp` so the app finds the Show.
 - **Encryption:** Noise `NNpsk0_25519_ChaChaPoly_SHA256`, keyed by a random 80-bit key the Show makes
-  when Cast is turned on. The key reaches the phone through a QR code on the Show's screen. Same
-  family as our dashcast and deck links.
+  when Cast is turned on. The key reaches the phone through a QR code on the Show's screen. Same kind
+  as our dashcast and deck links.
 - **Consent:** on by default, the Show asks "Cast to this screen?" with Accept and Decline. Twenty
   seconds without an answer declines. A phone accepted in the last five minutes gets back in
   without asking.
@@ -287,14 +287,15 @@ My suggestion is to stop after step 3, see who asks for phones, and decide then.
 - **Ask before showing** is on by default for DLNA and for screen sharing (the code is the asking).
   Home Assistant's own action doesn't ask: it is already authenticated.
 - **ffmpeg parses untrusted files.** A media file is a classic way into a decoder. So: our own current
-  ffmpeg build, not Alpine 3.12's; run as an unprivileged user with no write access, with memory and
-  CPU limits, killed when the video ends; a protocol whitelist of `http,https,tcp,tls,hls,crypto`, so a
-  playlist can't make it read local files. (Built: and no file protocol compiled in at all.)
-- **Left open:** the address is checked before ffmpeg starts (no loopback, link-local or multicast
-  literal, not the device's own address), but ffmpeg resolves names and follows redirects itself, so
-  a name or a redirect that leads to the device's loopback is not refused the way the DLNA music
-  fetcher refuses it. Only Home Assistant and allowed DLNA addresses can start a fetch. A firewall
-  rule by the decoder's uid would close it, if the kernel has the owner match.
+  ffmpeg build, not Alpine 3.12's; run as an unprivileged user with no write access, with limits on
+  its memory, files and cores and a lower priority (nice; there is no CPU limit), killed when the
+  video ends; a protocol whitelist of `http,https,tcp,tls,hls,crypto`, so a playlist can't make it
+  read local files. (Built: and no file protocol compiled in at all.)
+- **Names and redirects that lead to the device** (built): ffmpeg resolves names and follows
+  redirects itself, so checking the address first is not enough. On the Show the kernel refuses
+  anything the decoder's user sends to loopback or link-local (the firewall's TECHO5-VIDEO chain, by
+  uid). The Spot's kernel has no owner match, so there the decoder goes through a proxy in the daemon
+  that makes every connection itself and refuses the device's own addresses, after redirects too.
 - **The Show fetches whatever address it is given.** That is already true of DLNA music. Video makes
   it no worse, but the docs say so.
 - **No new keys to manage** for steps 1 and 2. Step 3's code lives for one session.
