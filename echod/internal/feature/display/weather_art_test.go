@@ -28,7 +28,7 @@ func TestWeatherArtDraws(t *testing.T) {
 			for _, p := range [][2]int{{showWide, showHigh}, {show8Wide, show8High}} {
 				land := paintLandscape(artKey{c, when, p[0], p[1], 42})
 				frame := image.NewRGBA(land.base.Rect)
-				composeArt(frame, land, moonAt(0, 0, false, at), at.Unix())
+				composeArt(frame, land, artBodies{moon: moonAt(0, 0, false, at)}, at.Unix())
 				img := image.NewRGBA(image.Rect(0, 0, p[0], p[1]))
 				s := scene{now: at, phase: "idle", weather: home.Weather{Condition: cond, Temp: "72°"}, slideshow: frame, artFx: fxFor(cond)}
 				newRenderer(img).draw(s)

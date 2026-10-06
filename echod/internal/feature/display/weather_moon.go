@@ -63,12 +63,12 @@ func moonAt(lat, lon float64, placed bool, now time.Time) artMoon {
 	return m
 }
 
-// moonPath is where the moon is in k's sky when it is along through its pass: its center on the
-// horizon at moonrise and moonset, where the mountains hide it until it has climbed, and highest
-// halfway. It rises on the left, in the east of a sky seen facing south, and on the right where home is
-// south of the equator and the sky is seen facing north. The round Spot shows only the circle in its
-// square, so the arc there keeps clear of the corners.
-func moonPath(k artKey, along float64, south bool) (x, y float64) {
+// skyPath is where the sun or the moon is in k's sky when it is along through its pass, 0 at rising
+// and 1 at setting: its center on the horizon at either end, where the mountains hide it until it has
+// climbed, and highest halfway. It rises on the left, in the east of a sky seen facing south, and on
+// the right where home is south of the equator and the sky is seen facing north. The round Spot shows
+// only the circle in its square, so the arc there keeps clear of the corners.
+func skyPath(k artKey, along float64, south bool) (x, y float64) {
 	w, h := float64(k.w), float64(k.h)
 	side, top := 0.07, 0.12
 	if k.w == k.h {
@@ -127,7 +127,7 @@ func drawMoon(frame *image.RGBA, land *artLand, m artMoon) {
 	var cx, cy float64
 	switch {
 	case m.placed && m.up:
-		cx, cy = moonPath(k, m.along, m.south)
+		cx, cy = skyPath(k, m.along, m.south)
 	case !m.placed && k.when == artNight:
 		cx, cy = w*0.8, h*0.3
 	default:

@@ -37,6 +37,7 @@ type moonScene struct {
 	phase moon.Phase
 	along float64
 	south bool
+	sun   float64 // by day, the sun's place through its day
 }
 
 // low is where a moon in phase p is low in the night sky: a waxing moon sets in the evening, a waning
@@ -56,21 +57,21 @@ func moonScenes() []moonScene {
 	for _, p := range moonPhases {
 		ph := moon.PhaseAt(p.at)
 		out = append(out,
-			moonScene{"night-" + p.name + "-high", artClear, artNight, ph, 0.5, false},
-			moonScene{"night-" + p.name + "-low", artClear, artNight, ph, low(ph), false})
+			moonScene{"night-" + p.name + "-high", artClear, artNight, ph, 0.5, false, 0},
+			moonScene{"night-" + p.name + "-low", artClear, artNight, ph, low(ph), false, 0})
 	}
 	gib, cres := moon.PhaseAt(time.Date(2026, 10, 22, 0, 0, 0, 0, time.UTC)), moon.PhaseAt(moonPhases[5].at)
 	quarter := moon.PhaseAt(moonPhases[1].at)
 	return append(out,
-		moonScene{"night-first-quarter-partly", artPartly, artNight, quarter, 0.5, false},
-		moonScene{"night-full-partly", artPartly, artNight, moon.PhaseAt(moonPhases[2].at), 0.35, false},
-		moonScene{"night-full-fog", artFog, artNight, moon.PhaseAt(moonPhases[2].at), 0.4, false},
-		moonScene{"night-full-cloudy", artCloudy, artNight, moon.PhaseAt(moonPhases[2].at), 0.5, false},
-		moonScene{"night-first-quarter-south", artClear, artNight, quarter, 0.3, true},
-		moonScene{"day-waxing-gibbous-afternoon", artClear, artDay, gib, 0.15, false},
-		moonScene{"day-waning-crescent-morning", artClear, artDay, cres, 0.6, false},
-		moonScene{"day-waxing-gibbous-partly", artPartly, artDay, gib, 0.2, false},
-		moonScene{"dusk-waxing-gibbous", artClear, artDusk, gib, 0.1, false},
+		moonScene{"night-first-quarter-partly", artPartly, artNight, quarter, 0.5, false, 0},
+		moonScene{"night-full-partly", artPartly, artNight, moon.PhaseAt(moonPhases[2].at), 0.35, false, 0},
+		moonScene{"night-full-fog", artFog, artNight, moon.PhaseAt(moonPhases[2].at), 0.4, false, 0},
+		moonScene{"night-full-cloudy", artCloudy, artNight, moon.PhaseAt(moonPhases[2].at), 0.5, false, 0},
+		moonScene{"night-first-quarter-south", artClear, artNight, quarter, 0.3, true, 0},
+		moonScene{"day-waxing-gibbous-afternoon", artClear, artDay, gib, 0.15, false, 0.75},
+		moonScene{"day-waning-crescent-morning", artClear, artDay, cres, 0.6, false, 0.25},
+		moonScene{"day-waxing-gibbous-partly", artPartly, artDay, gib, 0.2, false, 0.7},
+		moonScene{"dusk-waxing-gibbous", artClear, artDusk, gib, 0.1, false, 0},
 	)
 }
 
@@ -82,7 +83,7 @@ func writeMoonPreviews(t *testing.T, dir, prefix string, w, h int, show func(art
 	for _, s := range moonScenes() {
 		land := paintLandscape(artKey{s.cond, s.when, w, h, 42})
 		frame := image.NewRGBA(land.base.Rect)
-		composeArt(frame, land, artMoon{phase: s.phase, up: true, along: s.along, south: s.south, placed: true}, at.Unix())
+		composeArt(frame, land, artBodies{s.sun, true, artMoon{phase: s.phase, up: true, along: s.along, south: s.south, placed: true}}, at.Unix())
 		img := show(frame, conds[s.cond])
 		if dir == "" {
 			continue
@@ -96,13 +97,15 @@ func writeMoonPreviews(t *testing.T, dir, prefix string, w, h int, show func(art
 	}
 }
 
-// moonAtPx is the art composed with m over a clear landscape k, and the landscape alone.
+// moonAtPx is the art composed with m over landscape k, without its clouds, and the same art with
+// no moon.
 func moonAtPx(k artKey, m artMoon) (frame, base *image.RGBA) {
 	land := paintLandscape(k)
 	land.clouds = nil
-	frame = image.NewRGBA(land.base.Rect)
-	composeArt(frame, land, m, 0)
-	return frame, land.base
+	frame, base = image.NewRGBA(land.base.Rect), image.NewRGBA(land.base.Rect)
+	composeArt(frame, land, artBodies{moon: m}, 0)
+	composeArt(base, land, artBodies{moon: artMoon{placed: true}}, 0)
+	return frame, base
 }
 
 func pxLuma(c color.RGBA) float64 { return luma(c.R, c.G, c.B) }
@@ -117,7 +120,7 @@ func TestArtMoonDraws(t *testing.T) {
 	}
 	high := artMoon{phase: quarter, up: true, along: 0.5, placed: true}
 	frame, base := moonAtPx(k, high)
-	cx, cy := moonPath(k, 0.5, false)
+	cx, cy := skyPath(k, 0.5, false)
 	r := 800 * 0.038
 	right, left := frame.RGBAAt(int(cx+r/2), int(cy)), frame.RGBAAt(int(cx-r/2), int(cy))
 	if pxLuma(right) < 150 || pxLuma(left) > 90 {
@@ -167,7 +170,7 @@ func TestArtMoonDraws(t *testing.T) {
 	// Just risen, its middle is still behind the mountains.
 	risen := artMoon{phase: quarter, up: true, along: 0, placed: true}
 	frame, base = moonAtPx(k, risen)
-	x, y := moonPath(k, 0, false)
+	x, y := skyPath(k, 0, false)
 	if frame.RGBAAt(int(x), int(y)) != base.RGBAAt(int(x), int(y)) {
 		t.Error("the moon shows in front of the mountains")
 	}
@@ -185,13 +188,13 @@ func TestArtMoonDraws(t *testing.T) {
 // highest halfway.
 func TestMoonPath(t *testing.T) {
 	k := artKey{artClear, artNight, 800, 480, 42}
-	x0, y0 := moonPath(k, 0.1, false)
-	x1, y1 := moonPath(k, 0.5, false)
-	x2, _ := moonPath(k, 0.9, false)
+	x0, y0 := skyPath(k, 0.1, false)
+	x1, y1 := skyPath(k, 0.5, false)
+	x2, _ := skyPath(k, 0.9, false)
 	if x0 >= x1 || x1 >= x2 || y1 >= y0 {
 		t.Errorf("north: %.0f,%.0f then %.0f,%.0f then %.0f", x0, y0, x1, y1, x2)
 	}
-	if s0, _ := moonPath(k, 0.1, true); s0 <= x1 {
+	if s0, _ := skyPath(k, 0.1, true); s0 <= x1 {
 		t.Errorf("south: rises at %.0f, left of the middle", s0)
 	}
 }
@@ -203,5 +206,52 @@ func BenchmarkArtMoon(b *testing.B) {
 	m := artMoon{phase: moon.PhaseAt(moonPhases[2].at), up: true, along: 0.4, placed: true}
 	for b.Loop() {
 		drawMoon(frame, land, m)
+	}
+}
+
+// By day the sun is on its arc: in the east in the morning, which is the left seen from the north and
+// the right from the south; under the mountains at sunrise; gone from an overcast sky and at night.
+func TestArtSunArc(t *testing.T) {
+	day := artKey{artClear, artDay, 800, 480, 42}
+	land := paintLandscape(day)
+	land.clouds = nil
+	bright := func(k artKey, b artBodies) (x, y int) {
+		l := land
+		if k != day {
+			l = paintLandscape(k)
+			l.clouds = nil
+		}
+		frame := image.NewRGBA(l.base.Rect)
+		composeArt(frame, l, b, 0)
+		best := -1.0
+		for py := 0; py < k.h; py++ {
+			for px := 0; px < k.w; px++ {
+				if v := pxLuma(frame.RGBAAt(px, py)) - pxLuma(l.base.RGBAAt(px, py)); v > best {
+					best, x, y = v, px, py
+				}
+			}
+		}
+		if best < 20 {
+			return -1, -1
+		}
+		return x, y
+	}
+	if x, _ := bright(day, artBodies{sunAlong: 0.25, sunOK: true}); x < 0 || x >= 400 {
+		t.Errorf("morning sun from the north at x %d; want the left half", x)
+	}
+	if x, _ := bright(day, artBodies{sunAlong: 0.25, sunOK: true, moon: artMoon{south: true}}); x < 400 {
+		t.Errorf("morning sun from the south at x %d; want the right half", x)
+	}
+	if x, y := bright(day, artBodies{sunAlong: 0.5, sunOK: true}); x < 380 || x > 420 || y > 120 {
+		t.Errorf("noon sun at %d,%d; want high in the middle", x, y)
+	}
+	if x, _ := bright(day, artBodies{sunAlong: 0, sunOK: true}); x >= 0 {
+		t.Error("the sun shows in front of the mountains at sunrise")
+	}
+	if x, _ := bright(artKey{artCloudy, artDay, 800, 480, 42}, artBodies{sunAlong: 0.5, sunOK: true}); x >= 0 {
+		t.Error("the sun shows through an overcast sky")
+	}
+	if x, _ := bright(artKey{artClear, artNight, 800, 480, 42}, artBodies{sunAlong: 0.5, sunOK: true, moon: artMoon{placed: true}}); x >= 0 {
+		t.Error("a sun at night")
 	}
 }

@@ -25,7 +25,7 @@ func TestSpotWeatherArtDraws(t *testing.T) {
 		for when := artDawn; when <= artNight; when++ {
 			land := paintLandscape(artKey{c, when, side, side, 42})
 			frame := image.NewRGBA(land.base.Rect)
-			composeArt(frame, land, moonAt(0, 0, false, at), at.Unix())
+			composeArt(frame, land, artBodies{moon: moonAt(0, 0, false, at)}, at.Unix())
 			img := image.NewRGBA(image.Rect(0, 0, side, side))
 			newRoundRenderer(img).draw(roundScene{now: at, phase: "idle", weather: home.Weather{Condition: cond, Temp: "72°"}, slideshow: frame, artFx: fxFor(cond)})
 			if dir == "" {

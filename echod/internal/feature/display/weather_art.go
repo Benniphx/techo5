@@ -128,8 +128,16 @@ type artLand struct {
 	clouds  []artCloud
 	skyline []float64 // for each column, the top of the mountains and the hill in front
 
+	sun     *image.NRGBA // the day's sun with its glow, drawn the first time it is needed
 	moon    *image.NRGBA // the moon as last drawn for this landscape, kept while it looks the same
 	moonKey moonSpriteKey
+}
+
+// artBodies is what moves across the art's sky: the sun by day, and the moon.
+type artBodies struct {
+	sunAlong float64 // through the day, 0 at sunrise and 1 at sunset
+	sunOK    bool    // sunAlong is known: without it, the sun stays where it always was
+	moon     artMoon // its south says which way both cross the sky
 }
 
 // weatherArt keeps the landscape in hand and the frame last composed from it.
@@ -146,10 +154,10 @@ type weatherArt struct {
 // arts is the one weather art a device keeps.
 var arts weatherArt
 
-// artFrame is the weather art for now, w by h: the landscape with the moon where it is (m) and the
-// clouds where they have drifted to. nil until the first landscape is drawn, which happens off this
-// goroutine; after that, a change of weather or of the part of the day shows the old one until the new
-// one is ready.
+// artFrame is the weather art for now, w by h: the landscape with the sun and the moon where they are
+// (the moon from m) and the clouds where they have drifted to. nil until the first landscape is drawn,
+// which happens off this goroutine; after that, a change of weather or of the part of the day shows the
+// old one until the new one is ready.
 func artFrame(now time.Time, cond string, rise, set time.Time, sunOK bool, m artMoon, w, h int) *image.RGBA {
 	k := artKey{artCondFor(cond), artTimeFor(now, rise, set, sunOK), w, h, artSeed()}
 	a := &arts
@@ -183,17 +191,22 @@ func artFrame(now time.Time, cond string, rise, set time.Time, sunOK bool, m art
 	if a.frame == nil || a.frame.Rect != a.land.base.Rect {
 		a.frame = image.NewRGBA(a.land.base.Rect)
 	}
-	composeArt(a.frame, a.land, m, sec)
+	b := artBodies{moon: m, sunOK: sunOK && set.After(rise)}
+	if b.sunOK {
+		b.sunAlong = float64(now.Sub(rise)) / float64(set.Sub(rise))
+	}
+	composeArt(a.frame, a.land, b, sec)
 	a.frameAt = sec
 	a.gen++
 	return a.frame
 }
 
-// composeArt lays the moon and then the clouds over the landscape into frame: the moon where m has it,
-// the clouds where they have drifted to at sec, so they pass in front of it.
-func composeArt(frame *image.RGBA, land *artLand, m artMoon, sec int64) {
+// composeArt lays the sun, the moon and then the clouds over the landscape into frame: the sun and the
+// moon where b has them, the clouds where they have drifted to at sec, so they pass in front.
+func composeArt(frame *image.RGBA, land *artLand, b artBodies, sec int64) {
 	copy(frame.Pix, land.base.Pix)
-	drawMoon(frame, land, m)
+	drawSun(frame, land, b)
+	drawMoon(frame, land, b.moon)
 	t := float64(sec % 86400)
 	w := float64(land.base.Rect.Dx())
 	for _, c := range land.clouds {
@@ -265,30 +278,24 @@ func paintLandscape(k artKey) *artLand {
 		draw.Draw(img, image.Rect(0, y, k.w, y+1), image.NewUniform(k.skyAt(float64(y))), image.Point{}, draw.Src)
 	}
 
-	// Stars on a clear night, and the sun, low at dawn and dusk, by day. The moon is not drawn here:
-	// it moves, so it is laid over the landscape as the art is shown (drawMoon).
+	// Stars on a clear night, and the sun low at dawn and dusk. The day's sun and the moon are not
+	// drawn here: they move, so they are laid over the landscape as the art is shown (drawSun, drawMoon).
 	switch {
 	case k.when == artNight && !overcast:
 		for range int(w * h / 1400) {
 			b := uint8(120 + rng.IntN(136))
 			artDisc(img, rng.Float64()*w, rng.Float64()*horizon*0.9, []float64{0.6, 0.8, 1.1}[rng.IntN(3)], color.RGBA{b, b, uint8(min(255, int(b)+20)), 255}, 1)
 		}
-	case !overcast || k.cond == artFog:
-		sx, sy, sr := w*0.8, h*0.34, unit*0.028
-		sun := color.RGBA{255, 248, 220, 255}
-		switch k.when {
-		case artDawn:
-			sx, sy, sr, sun = w*0.3, horizon-h*0.04, unit*0.036, color.RGBA{255, 200, 150, 255}
-		case artDusk:
+	case (!overcast || k.cond == artFog) && (k.when == artDawn || k.when == artDusk):
+		sx, sy, sr, sun := w*0.3, horizon-h*0.04, unit*0.036, color.RGBA{255, 200, 150, 255}
+		if k.when == artDusk {
 			sx, sy, sr, sun = w*0.68, horizon-h*0.05, unit*0.04, color.RGBA{255, 170, 90, 255}
 		}
-		if k.when != artNight {
-			artGlow(img, sx, sy, sr*4, sun, 0.35)
-			if k.cond == artFog {
-				sun = lerp(sun, hor, 0.5)
-			}
-			artDisc(img, sx, sy, sr, sun, 1)
+		artGlow(img, sx, sy, sr*4, sun, 0.35)
+		if k.cond == artFog {
+			sun = lerp(sun, hor, 0.5)
 		}
+		artDisc(img, sx, sy, sr, sun, 1)
 	}
 
 	// Three ranges of mountains, far to near, each nearer one darker.
@@ -495,6 +502,53 @@ func blendMask(img *image.RGBA, m *image.Alpha, x, y int, c color.RGBA, alpha fl
 			d[2] = uint8((uint32(d[2])*(255-k) + uint32(c.B)*k) / 255)
 		}
 	}
+}
+
+// drawSun lays the day's sun into frame on its arc from sunrise to sunset, behind land's mountains;
+// at dawn and dusk it is low in the landscape itself. Dimmed through fog, hidden by an overcast sky.
+func drawSun(frame *image.RGBA, land *artLand, b artBodies) {
+	k := land.key
+	if k.when != artDay || k.overcast() && k.cond != artFog {
+		return
+	}
+	w, h := float64(k.w), float64(k.h)
+	x, y := w*0.8, h*0.34
+	if b.sunOK {
+		x, y = skyPath(k, b.sunAlong, b.moon.south)
+	}
+	if land.sun == nil {
+		r := math.Max(w, h) * 0.028
+		sun := color.RGBA{255, 248, 220, 255}
+		disc := sun
+		if k.cond == artFog {
+			_, hor := k.skyColors()
+			disc = lerp(sun, hor, 0.5)
+		}
+		land.sun = sunSprite(r, sun, disc)
+	}
+	blendSprite(frame, land.skyline, land.sun, int(math.Round(x)), int(math.Round(y)))
+}
+
+// sunSprite is a sun of radius r, its disc in disc over a glow in glow four times as wide, centered
+// on (0, 0): the same light artGlow and artDisc paint.
+func sunSprite(r float64, glow, disc color.RGBA) *image.NRGBA {
+	reach := int(r*4) + 1
+	spr := image.NewNRGBA(image.Rect(-reach, -reach, reach+1, reach+1))
+	for py := -reach; py <= reach; py++ {
+		for px := -reach; px <= reach; px++ {
+			d := math.Hypot(float64(px), float64(py))
+			g := clamp01(1 - d/(r*4))
+			ga := 0.35 * g * g
+			da := clamp01(r - d + 0.5)
+			a := da + ga*(1-da)
+			if a <= 0 {
+				continue
+			}
+			c := lerp(glow, disc, da/a)
+			spr.SetNRGBA(px, py, color.NRGBA{c.R, c.G, c.B, uint8(math.Round(a * 255))})
+		}
+	}
+	return spr
 }
 
 // artDisc is a soft-edged disc.
