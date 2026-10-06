@@ -778,7 +778,8 @@ func (d *Display) gesture(g touch.Gesture) {
 	// press is the way to the full screen, as the first touch used to be; nothing else on a night
 	// light does anything, since nobody can see what they are pressing on a screen this dim.
 	d.mu.Lock()
-	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting()
+	_, _, _, asking := video.Get().Asking()
+	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting() && !asking
 	d.mu.Unlock()
 	if glowing {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -1885,6 +1886,9 @@ func (d *Display) frame() time.Duration {
 		}
 		d.answerShots()
 		return time.Second
+	}
+	if !on && !video.Get().State().Active() {
+		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
 	if !on && video.Get().State().Frames {
 		// A dark panel with a video playing: its frames are still taken as they fall due, so its sound
