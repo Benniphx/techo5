@@ -91,8 +91,21 @@ func (l *askLatch) answerable(now time.Time) (uint64, bool) {
 // next is up, so the controls can be put over it again), and whether the panel is dark, when the frames
 // are taken as they fall due and not shown.
 type videoPainter struct {
-	last *video.Frame
-	dark bool
+	last  *video.Frame
+	dark  bool
+	black []byte
+}
+
+// blackFrame is a frame of black for the panel, made once.
+func (p *videoPainter) blackFrame(dev *screen.Device) []byte {
+	w, h := dev.FrameSize()
+	if len(p.black) != w*h*4 {
+		p.black = make([]byte, w*h*4)
+		for i := 3; i < len(p.black); i += 4 {
+			p.black[i] = 0xff
+		}
+	}
+	return p.black
 }
 
 // drop gives back the frame kept for the panel once the video page is gone.
@@ -127,8 +140,14 @@ func (p *videoPainter) paint(ctx context.Context, dev *screen.Device, poke <-cha
 			video.Get().Done(p.last)
 			p.last, redraw = fr, false
 			continue
-		case redraw && p.last != nil && !p.dark:
-			if err := dev.PresentFrame(p.last.Pix, over); err != nil {
+		case redraw && !p.dark:
+			// The frame on the panel again, with the controls as they are now; black under them when
+			// there is none to hand (the page has just been uncovered), never the page that was over it.
+			pix := p.blackFrame(dev)
+			if p.last != nil {
+				pix = p.last.Pix
+			}
+			if err := dev.PresentFrame(pix, over); err != nil {
 				slog.Warn("presenting a video frame failed", "err", err)
 			}
 			redraw = false

@@ -2158,7 +2158,8 @@ func (d *Display) frame() time.Duration {
 		d.answerVideoShots()
 		return d.videoNext(now)
 	}
-	if !s.showVideo {
+	if !s.showVideo && !s.video.Active() {
+		// Kept while the video is only covered: uncovered, paused, the frame it stopped on is put back.
 		d.dropVideoFrame()
 	}
 	if key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle); key != "" && key == d.deckDrawn {

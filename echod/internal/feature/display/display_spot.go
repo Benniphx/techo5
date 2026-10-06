@@ -1412,8 +1412,8 @@ func (d *Display) frame() time.Duration {
 		}
 		return d.videoNextSpot(now)
 	}
-	if !s.showVideo {
-		d.vp.drop()
+	if !s.showVideo && !s.video.Active() {
+		d.vp.drop() // kept while the video is only covered (the Show's frame loop says why)
 	}
 	drawn := time.Now()
 	d.r.draw(s)
