@@ -87,8 +87,10 @@ Play, pause, stop and the volume work from the app. Seeking doesn't, yet.
 - **Swipe down**, or **Stop**, ends the video. The screen goes back to where it was.
 - A call, an alarm or a timer ringing, the settings, a camera or a voice turn goes on top. The video
   pauses under it and goes on once it's gone.
-- **At night** a video that turns the screen on lights it at the night light's level, not full
-  brightness, and the screen stays as it is while the video plays.
+- **At night** a video that turns the Show's screen on lights it at the night light's level (half
+  brightness if you haven't chosen a night light), not full brightness, and the screen stays as it is
+  while the video plays. Its controls work as by day: a tap brings them up, a swipe down ends it.
+  The Spot is never brighter than 30% at night anyway, video or not.
 
 ## Good to know
 

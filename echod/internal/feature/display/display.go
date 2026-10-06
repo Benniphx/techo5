@@ -550,7 +550,7 @@ func (d *Display) relight(jump bool) {
 		target = dayBacklight(d.ceiling, d.autoOn && haveLux, lux, dimmest())
 		if d.nightGlow {
 			target = float64(d.glowBacklight()) // relight holds mu
-		} else if phone.Get().Busy() && nightNow(time.Now()) {
+		} else if (phone.Get().Busy() || video.Get().State().Active()) && nightNow(time.Now()) {
 			target = math.Min(target, screen.BacklightMax/2) // a call at night: enough to see who it is
 		}
 	}
@@ -784,7 +784,9 @@ func (d *Display) gesture(g touch.Gesture) {
 	// light does anything, since nobody can see what they are pressing on a screen this dim.
 	d.mu.Lock()
 	_, _, _, asking := video.Get().Asking()
-	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting() && !asking
+	// Not on the video page either: its controls work at night as by day (the night light's rule is
+	// the clock's, a hand in the dark more likely a knock than a request).
+	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting() && !asking && !d.videoOnScreen
 	d.mu.Unlock()
 	if glowing {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -1471,7 +1473,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		}
 		slog.Info("screen: night, going dark")
 		d.mu.Lock()
-		d.nightDark = true
+		// Dark, not a night light: a glow left set (a video lit the screen at the night light's level)
+		// would have the next tap light it at that level, with only a long press doing anything.
+		d.nightDark, d.nightGlow = true, false
 		d.mu.Unlock()
 		d.apply(false, d.ceilingOrDefault(), false)
 		return true
@@ -1856,7 +1860,8 @@ func (d *Display) frame() time.Duration {
 		if !on {
 			// At night at the night light's level, as a turn's words are: a video asked for at 2 a.m.
 			// is not the room lit up.
-			if night {
+			// With no night light set, it is the night's half brightness (relight), as for a call.
+			if night && config.Get().Screen.NightLight {
 				d.mu.Lock()
 				d.nightGlow, d.nightDark = true, false
 				d.mu.Unlock()
