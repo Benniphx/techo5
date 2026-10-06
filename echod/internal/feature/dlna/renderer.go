@@ -306,6 +306,12 @@ func (r *renderer) play() error {
 // startVideo hands the song to the video player, which asks on the screen first for an address it
 // has not been told to allow. The transport reads TRANSITIONING until the picture comes.
 func (r *renderer) startVideo(gen int, s song) error {
+	if media.Get().Receiving() == home.DLNAName {
+		// The song this renderer was playing goes: left playing, it would be nobody's to stop, since the
+		// transport is the video's now.
+		media.ClearPosition()
+		media.Get().Stop()
+	}
 	id, err := video.Play(video.Request{URL: s.uri, Title: s.title, Origin: video.FromDLNA, From: s.from})
 	r.mu.Lock()
 	if r.gen != gen {
