@@ -198,6 +198,7 @@ var registered = []string{
 	"wifi_sent",
 	"wifi_signal",
 	"screen_clock_tap",
+	"screen_clock_style_swipe",
 	"screen_dashboard_return",
 	"screen_dashboard_tiles",
 }

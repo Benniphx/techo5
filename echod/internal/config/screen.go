@@ -103,6 +103,10 @@ type Screen struct {
 	// "dashboard" puts the dashboard up, "deck" the deck (Show), and "nothing" leaves it, for a panel
 	// that is talked to.
 	ClockTap string `json:"clock_tap,omitempty"`
+
+	// NoStyleSwipe stops a swipe left or right across the clock from turning its style (on unless
+	// this is set; display/style_swipe.go).
+	NoStyleSwipe bool `json:"no_style_swipe,omitempty"`
 }
 
 // DefaultTheme is the palette a new device comes up in.
@@ -219,6 +223,10 @@ func (w ScreenWriter) WeatherStill(v bool) error {
 
 func (w ScreenWriter) MuteRingSubtle(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.MuteRingSubtle = v })
+}
+
+func (w ScreenWriter) NoStyleSwipe(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NoStyleSwipe = v })
 }
 
 func (w ScreenWriter) CallButton(v bool) error {

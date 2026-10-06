@@ -192,8 +192,12 @@ the Spot too, in its settings.
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
   from the bottom), *World* (the time here and in other places), *Agenda* (today's and tomorrow's
   events beside the time) and *Glow* (soft colors drifting behind the time). Swipe left or right
-  across the clock for the next style or the one before; its name shows for a moment. The night
-  clock keeps its own look. Also in Home Assistant and on the setup page's Screen & Photos tab.
+  across the clock for the next style or the one before; its name shows for a moment, and a swipe
+  the other way puts the last style back. The night clock keeps its own look. Also in Home Assistant
+  and on the setup page's Screen & Photos tab.
+- **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
+  switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
+  **Tap on the clock** is *Nothing*, too.
 - **World clock places** (setup page, Screen & Photos tab): the World style's places, as time zone
   names with commas between them, like `America/Chicago, Europe/Paris, Asia/Tokyo`. Up to three; the
   Spot shows the first two. Leave it empty for New York, London and Tokyo.

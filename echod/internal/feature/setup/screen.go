@@ -35,6 +35,9 @@ type ScreenChoices struct {
 
 	// Places is how many of the World style's places the screen has room for.
 	Places int
+
+	// Swipe sets Swipe between clock styles, telling Home Assistant.
+	Swipe func(bool)
 }
 
 // maxWorldPlaces is how many World places the page takes: the most any screen shows.
@@ -78,6 +81,13 @@ func screenSection(w http.ResponseWriter, token string) {
 	 <input id="world" name="world" value="%s" placeholder="America/New_York, Europe/London, Asia/Tokyo">
 	 <p class="note">For the World clock style: up to %d time zone names, with commas between them. Leave it
 	  empty for New York, London and Tokyo.%s</p>`, html.EscapeString(places), maxWorldPlaces, fewerPlaces(s.Places))
+	swipe := ""
+	if !config.Get().Screen.NoStyleSwipe {
+		swipe = " checked"
+	}
+	fmt.Fprintf(w, `<p><label><input type="checkbox" name="swipe" value="yes" style="width:auto"%s> Swipe between clock
+	 styles: a swipe left or right across the clock turns to the next style or the one before</label></p>
+	 <p class="note">Off whenever Tap on the clock is Nothing, too.</p>`, swipe)
 	if len(s.Taps) > 0 {
 		fmt.Fprint(w, `<label for="clocktap">Tap on the clock</label><select id="clocktap" name="clocktap">`)
 		now := s.TapNow()
@@ -140,6 +150,13 @@ func saveScreen(r *http.Request) string {
 	}
 	if tap >= 0 && tap != s.TapNow() {
 		s.ChooseTap(tap)
+	}
+	if on := r.PostFormValue("swipe") == "yes"; on == config.Get().Screen.NoStyleSwipe {
+		if s.Swipe != nil {
+			s.Swipe(on)
+		} else if err := config.Set().Screen().NoStyleSwipe(!on); err != nil {
+			return "the swipe setting could not be saved"
+		}
 	}
 	if has && !slices.Equal(places, config.Get().Screen.WorldClocks) {
 		if err := config.Set().Screen().WorldClocks(places); err != nil {

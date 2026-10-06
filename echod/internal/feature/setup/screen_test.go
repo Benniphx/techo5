@@ -128,3 +128,23 @@ func TestTheScreenSectionShowsWorldPlaces(t *testing.T) {
 		t.Error("the places were not escaped")
 	}
 }
+
+// The swipe setting on the setup page: ticked on a new device, and saved unticked.
+func TestTheSwipeSettingOnTheSetupPage(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	set := false
+	SetScreen(&ScreenChoices{Styles: []string{"Classic"}, Current: func() int { return 0 }, Choose: func(int) {},
+		Swipe: func(on bool) { set = true; _ = config.Set().Screen().NoStyleSwipe(!on) }})
+	t.Cleanup(func() { SetScreen(nil) })
+	w := httptest.NewRecorder()
+	screenSection(w, "tok")
+	if !strings.Contains(w.Body.String(), `name="swipe" value="yes" style="width:auto" checked`) {
+		t.Error("not ticked on a new device")
+	}
+	if p := saveScreen(form(screenForm("0", "", false))); p != "" {
+		t.Fatal(p)
+	}
+	if !set || !config.Get().Screen.NoStyleSwipe {
+		t.Error("unticking it did not turn it off")
+	}
+}

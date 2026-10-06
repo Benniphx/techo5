@@ -131,6 +131,8 @@ type Display struct {
 	turnStyle  *esphome.Select // Turn screen: Classic, Wave or Bars
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
+	// styleSwipeSw is Swipe between clock styles (style_swipe.go).
+	styleSwipeSw *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
 	weatherFx *esphome.Switch
 	// muteRing is the muted ring drawn thin and dim, on or off (mutering_spot.go).
@@ -294,11 +296,12 @@ func build() *Display {
 	d.clock = clockSelect(d.wake)
 	d.clockStyleSel = clockStyleSelect(d)
 	setup.SetScreen(&setup.ScreenChoices{Styles: clockStyleOptions(), Current: clockStyleIndex, Choose: d.setClockStyle,
-		Places: spotWorld})
+		Places: spotWorld, Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.turnStyle = turnStyleSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
+	d.styleSwipeSw = styleSwipeSwitch()
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.muteRing = muteRingSwitch(d.wake)
 	d.lang = langSelect()
@@ -346,7 +349,7 @@ func (d *Display) Name() string { return "screen" }
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw}
 }
 
 // Restore lights the panel the way it was left.
@@ -357,6 +360,7 @@ func (d *Display) Restore(c config.Config) {
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
+	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	setMuteRingSubtle(d.muteRing, c.Screen.MuteRingSubtle)
 	d.setAuto(c.Screen.Auto, false)
@@ -733,7 +737,7 @@ func (d *Display) gesture(g touch.Gesture) {
 		d.mu.Lock()
 		idle, up := d.view.Phase == "idle", d.clockUp
 		d.mu.Unlock()
-		if !idle || !up || d.answerUp(time.Now()) {
+		if !idle || !up || d.answerUp(time.Now()) || !styleSwipeOn() {
 			return
 		}
 		if g.Kind == touch.SwipeLeft {
