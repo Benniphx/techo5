@@ -114,9 +114,10 @@ func shutAdoption() (*esphome.PSK, error) {
 	return &k, nil
 }
 
-// keySet is a Home Assistant setting the device's key. It is kept, and a device that was serving
-// with no key serves with it from the next connection on: without that, the zero key would go on
-// letting anybody in until the next restart.
+// keySet is a Home Assistant setting the device's key. It is kept, and is the key in force from now
+// on: the server that took it serves with it, and so does every server after (Run makes a new one each
+// time it listens). A device that was serving with no key is reconnected onto it: without that, the
+// zero key would go on letting anybody in until the next restart.
 func (a *API) keySet(k esphome.PSK) error {
 	if err := writePSK(keyFile, k); err != nil {
 		return err
@@ -124,6 +125,7 @@ func (a *API) keySet(k esphome.PSK) error {
 	_ = os.Remove(adoptPath)
 	a.mu.Lock()
 	unkeyed := a.unkeyed
+	a.useKey(&k)
 	a.mu.Unlock()
 	if unkeyed {
 		slog.Info("api: a Home Assistant added this device and set its key")
@@ -157,7 +159,7 @@ func (a *API) takeNextPSK() *esphome.PSK {
 	k := a.nextPSK
 	a.nextPSK = nil
 	if k != nil {
-		a.unkeyed = k.IsZero()
+		a.useKey(k)
 	}
 	return k
 }
