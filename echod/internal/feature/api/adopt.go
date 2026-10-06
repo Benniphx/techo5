@@ -99,12 +99,17 @@ func (a *API) shutAdoptionAt(until time.Time) {
 			return
 		}
 		k, err := shutAdoption()
-		a.mu.Unlock()
 		if err != nil {
+			a.mu.Unlock()
 			slog.Error("api: shutting the window a Home Assistant could add this device in", "err", err)
 			return
 		}
-		a.serveWith(k)
+		// Queued under the same lock, so a key a Home Assistant sets on its last moment's connection
+		// (keySet, which clears the queue) wins over the window's: the device then serves the key it
+		// keeps.
+		a.nextPSK = k
+		a.mu.Unlock()
+		a.Reconnect()
 	})
 }
 
@@ -136,6 +141,8 @@ func (a *API) keySet(k esphome.PSK) error {
 		return err
 	}
 	_ = os.Remove(adoptPath)
+	// A key queued by the window's timer a moment ago is not the one kept now: this one is.
+	a.nextPSK = nil
 	unkeyed := a.unkeyed
 	a.useKey(&k)
 	a.mu.Unlock()

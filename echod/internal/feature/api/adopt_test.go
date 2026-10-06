@@ -132,3 +132,32 @@ func TestAnEarlierWindowsTimerLeavesALaterWindowOpen(t *testing.T) {
 		t.Error("the window no longer says it is open")
 	}
 }
+
+// A key set in the moment after the window's timer shut it, on the connection it has not dropped yet,
+// is the key both kept and served: the window's own key, queued a moment before, gives way to it.
+func TestAKeySetAsTheWindowShutsIsServed(t *testing.T) {
+	adoptFiles(t)
+	a := newTestAPI()
+	if _, err := a.OpenAdoption(); err != nil {
+		t.Fatal(err)
+	}
+	a.takeNextPSK() // the server has taken the zero key
+	// The window's end, due now.
+	due := time.Now().Add(-time.Second).UTC().Truncate(time.Second)
+	if err := os.WriteFile(adoptPath, []byte(due.Format(time.RFC3339)+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a.shutAdoptionAt(due)
+	time.Sleep(100 * time.Millisecond) // the timer has shut it and queued its key
+	var theirs esphome.PSK
+	theirs[3] = 7
+	if err := a.keySet(theirs); err != nil {
+		t.Fatal(err)
+	}
+	if k, err := loadPSK(keyFile); err != nil || *k != theirs {
+		t.Fatalf("the key kept is %v (%v), want Home Assistant's", k, err)
+	}
+	if s := a.nextServer(); s.PSK == nil || *s.PSK != theirs {
+		t.Errorf("the next server serves %v, want the key kept", s.PSK)
+	}
+}
