@@ -388,7 +388,7 @@ func build() *Display {
 	touch.Get().Gestures.Listen(d.gesture)
 	// A device with no address a while after boot gets the Wi-Fi page without being asked: a
 	// fresh unit, or one carried to another house. The page ends the splash (frame), which would
-	// otherwise wait for Home Assistant for ever on a device that cannot reach it.
+	// otherwise wait for Home Assistant forever on a device that cannot reach it.
 	go func() {
 		time.Sleep(noAddressWait)
 		if wifi.Available() && wifi.Current(context.Background()).Address == "" {
@@ -1934,7 +1934,7 @@ func (d *Display) frame() time.Duration {
 		slog.Info("splash done", "after", now.Sub(started).Round(time.Millisecond))
 	}
 	// A ring ends the splash whatever else is or is not ready. Waiting on Home Assistant's voice
-	// pipeline has no timeout, so a device that never reaches it stays on the logo for ever — and an
+	// pipeline has no timeout, so a device that never reaches it stays on the logo forever — and an
 	// alarm going off behind a logo is a screen that will not say what is making the noise or where
 	// to press to stop it. Nothing the splash is waiting for is needed to draw a ringing page.
 	if booting && ring.any() {

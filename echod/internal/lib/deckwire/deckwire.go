@@ -235,7 +235,7 @@ func (s *Conn) Send(v any) error {
 	return writeFrame(s.c, ct)
 }
 
-// Receive reads one message into v, waiting up to wait (zero waits for ever).
+// Receive reads one message into v, waiting up to wait (zero waits forever).
 func (s *Conn) Receive(v any, wait time.Duration) error {
 	if wait > 0 {
 		_ = s.c.SetReadDeadline(time.Now().Add(wait))

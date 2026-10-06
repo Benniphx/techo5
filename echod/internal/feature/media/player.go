@@ -350,7 +350,7 @@ func build() *Player {
 	// The speaker settles this: a device whose tuning would not load stays off however it is set. What
 	// is saved is what was asked, not what it managed — a device that cannot tune today may be able to
 	// tomorrow, when its coefficients arrive or a release learns its tuning, and writing the settled
-	// false back would leave it untuned for ever with nobody having chosen that.
+	// false back would leave it untuned forever with nobody having chosen that.
 	p.asp.OnCommand = func(want bool) {
 		settled := speaker.Get().SetASP(want)
 		p.asp.Set(settled)
