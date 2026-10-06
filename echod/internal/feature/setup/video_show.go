@@ -1,11 +1,13 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package setup
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
@@ -37,8 +39,19 @@ func videoSection(w http.ResponseWriter, token string) {
 	  servers too (BubbleUPnP, Jellyfin, Windows Cast to device), while DLNA is on under Sound</label></p>
 	 <p class="note">Anyone on your network can send a DLNA video, so the first one from each address asks on
 	  the screen first.</p>`, checked(c.On), checked(c.DLNA))
-	if n := len(c.Allowed); n > 0 {
-		fmt.Fprintf(w, `<p><label><input type="checkbox" name="forget" value="yes" style="width:auto"> Forget the %d %s
+	now := time.Now()
+	var live []config.AllowedAddr
+	for _, a := range c.Allowed {
+		if c.IsAllowed(a.Addr, now) {
+			live = append(live, a)
+		}
+	}
+	if n := len(live); n > 0 {
+		fmt.Fprint(w, `<p class="note">Allowed to send videos, each for 30 days after it last sent one:</p><ul class="note">`)
+		for i := len(live) - 1; i >= 0; i-- { // the most recent first
+			fmt.Fprintf(w, `<li>%s, last used %s</li>`, html.EscapeString(live[i].Addr), live[i].Used.Local().Format("Jan 2, 2006"))
+		}
+		fmt.Fprintf(w, `</ul><p><label><input type="checkbox" name="forget" value="yes" style="width:auto"> Forget the %d %s
 		 allowed to send videos, so each asks again</label></p>`, n, plural(n, "address", "addresses"))
 	}
 	fmt.Fprint(w, `<p><button type="submit">Save</button></p></form></fieldset>`)

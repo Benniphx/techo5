@@ -1,8 +1,8 @@
-//go:build dot || spot
+//go:build dot
 
 package video
 
-// Here is whether this device plays videos: the Spot and the Dot do not (doc.go).
+// Here is whether this device plays videos: the Dot does not (doc.go).
 const Here = false
 
 func Play(Request) (uint64, error) { return 0, ErrNotHere }

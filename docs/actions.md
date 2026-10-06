@@ -1037,8 +1037,8 @@ The button on that page, counting from 1, row by row: on a 4-across deck the sec
 
 In YAML, refer to this action as `esphome.<node>_play_video`.
 
-Plays a video full screen on the Show, with its sound, in place of any video already playing. Show
-only, and only while the **Video** switch is on. See [Video](video.md).
+Plays a video full screen, with its sound, in place of any video already playing. Show and Spot,
+and only while the **Video** switch is on. See [Video](video.md).
 
 ### url (Required)
 

@@ -1,4 +1,4 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package video
 
@@ -213,7 +213,7 @@ func (f *Feature) Play(req Request) (uint64, error) {
 	}
 	f.seq++
 	id := f.seq
-	if req.Origin == FromDLNA && !c.IsAllowed(req.From) {
+	if req.Origin == FromDLNA && !c.IsAllowed(req.From, time.Now()) {
 		if until, ok := f.notNow[req.From]; ok && time.Now().Before(until) {
 			f.mu.Unlock()
 			return 0, ErrDeclined
@@ -226,6 +226,12 @@ func (f *Feature) Play(req Request) (uint64, error) {
 		return id, nil
 	}
 	f.mu.Unlock()
+	if req.Origin == FromDLNA {
+		// Its thirty days start again.
+		if err := config.Set().Video().Allow(req.From, time.Now()); err != nil {
+			slog.Warn("video: remembering the address failed", "err", err)
+		}
+	}
 	f.begin(id, req)
 	return id, nil
 }
@@ -306,7 +312,7 @@ func (f *Feature) Answer(id uint64, allow bool) {
 		f.Changed.Emit(struct{}{})
 		return
 	}
-	if err := config.Set().Video().Allow(a.req.From); err != nil {
+	if err := config.Set().Video().Allow(a.req.From, time.Now()); err != nil {
 		slog.Warn("video: remembering the address failed", "err", err)
 	}
 	f.begin(a.id, a.req)

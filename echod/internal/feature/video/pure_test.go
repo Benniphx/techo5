@@ -254,6 +254,10 @@ func TestThePictureKeepsItsShape(t *testing.T) {
 			t.Errorf("%s: %+v, want %+v", tc.name, got, tc.want)
 		}
 	}
+	// The Spot: the square, as the Show's screen is filled.
+	if got := FitIn(Info{Width: 1280, Height: 720}, Screen{W: 480, H: 480}); got != (Fit{W: 480, H: 270, X: 0, Y: 104}) {
+		t.Errorf("spot 16:9: %+v", got)
+	}
 	// The Show 8.
 	if got := FitIn(Info{Width: 1280, Height: 720}, Screen{W: 1280, H: 800}); got != (Fit{W: 1280, H: 720, X: 0, Y: 40}) {
 		t.Errorf("show 8: %+v", got)

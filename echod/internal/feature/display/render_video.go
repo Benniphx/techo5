@@ -3,11 +3,8 @@
 package display
 
 import (
-	"fmt"
 	"image"
-	"image/color"
 	"image/draw"
-	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 )
@@ -22,17 +19,6 @@ const (
 	videoGap     = 16
 	videoIcon    = 44
 )
-
-// videoStrip is the controls' shade: dark enough for white over any picture, light enough to see the
-// picture through.
-var videoStrip = color.RGBA{0x00, 0x00, 0x00, 0xb0}
-
-// videoAsk is the question about a DLNA video, as drawn.
-type videoAsk struct {
-	id    uint64
-	from  string
-	title string
-}
 
 // videoButtons are the controls, left to right: play or pause and stop on the left, quieter and louder
 // on the right.
@@ -189,13 +175,4 @@ func (r *renderer) videoAskPage(s scene) {
 	r.text(r.body, "Not now", no.Min.X+(no.Dx()-r.width(r.body, "Not now"))/2, mid+r.s(14), fg)
 	fg = r.buttonFace(yes, rad, btnPrimary)
 	r.text(r.title, "Allow", yes.Min.X+(yes.Dx()-r.width(r.title, "Allow"))/2, mid+r.s(16), fg)
-}
-
-// videoTime is a place in a video as a player says it: 4:05, or 1:04:05 past an hour.
-func videoTime(d time.Duration) string {
-	sec := int(max(d, 0) / time.Second)
-	if sec >= 3600 {
-		return fmt.Sprintf("%d:%02d:%02d", sec/3600, sec/60%60, sec%60)
-	}
-	return fmt.Sprintf("%d:%02d", sec/60, sec%60)
 }

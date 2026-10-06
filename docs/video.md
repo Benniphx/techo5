@@ -1,9 +1,10 @@
 # Video
 
-An Echo Show can play a video full screen, with its sound. Home Assistant sends it an address, or a
+An Echo Show or Spot can play a video full screen, with its sound. Home Assistant sends it an address, or a
 DLNA app on your phone or computer sends it one, and the Show plays it.
 
-Show only (the Echo Show 5 and Show 8). The Spot and the Dot don't play videos.
+The Echo Show 5, the Show 8 and the Spot. The Dot has no screen. On the Spot's round screen a wide
+picture fills the width, and the edge of the glass takes its corners.
 
 ## What plays
 
@@ -59,14 +60,17 @@ The first video from each address asks on the screen: **Show a video from 192.16
 again for a minute. Nobody answering in 30 seconds is Not now. Home Assistant's `play_video` never
 asks.
 
-To make every address ask again, tick **Forget the … addresses** in the Video section and **Save**.
+An allowed address is remembered for 30 days after it last sent a video: one that hasn't sent any
+for that long asks again (a phone's address on your network can go to another device). The Video
+section on the setup page lists them with the day each was last used. To make every address ask
+again, tick **Forget the … addresses** and **Save**.
 
 Play, pause, stop and the volume work from the app. Seeking doesn't, yet.
 
 ## On the screen
 
 - **Tap** shows the controls for a few seconds: play or pause, stop, quieter and louder, with the
-  title and the time.
+  title and the time. On the Spot they're across the bottom of the circle.
 - **Swipe down**, or **Stop**, ends the video. The screen goes back to where it was.
 - A call, an alarm or a timer ringing, the settings, a camera or a voice turn goes on top. The video
   pauses under it and goes on once it's gone.
@@ -75,9 +79,11 @@ Play, pause, stop and the volume work from the app. Seeking doesn't, yet.
 
 - **The Show fetches whatever address it's given.** That's already true of DLNA music. Only
   Home Assistant, and DLNA apps you allowed, can send one.
-- The video player is a separate program (ffmpeg) that the Show runs only while a video plays. It
+- The video player is a separate program (ffmpeg) that the device runs only while a video plays. It
   runs as a user that can't change anything on the device, with limits on its memory, and it can
-  only open network addresses, never a file on the device.
+  only open network addresses, never a file on the device. It can't reach the device itself either:
+  an address whose name, or a redirect, leads back to the device is refused by the device's
+  firewall.
 - An `https://` address has its certificate checked, unless **Skip certificate checks** is on (a
   diagnostic switch in Home Assistant).
 - A Show 5 uses about one core for a 480p video and one and a half for 720p, with the rest of the

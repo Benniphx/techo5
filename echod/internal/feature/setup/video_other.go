@@ -1,10 +1,10 @@
-//go:build dot || spot
+//go:build dot
 
 package setup
 
 import "net/http"
 
-// Videos are the Show's alone: on the Spot and the Dot there is no section, and a form posted for one
+// Videos are the Show's and the Spot's: on the Dot there is no section, and a form posted for one
 // is refused.
 
 func videoSection(http.ResponseWriter, string) {}

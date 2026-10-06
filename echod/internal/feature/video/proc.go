@@ -1,4 +1,4 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package video
 
@@ -77,22 +77,32 @@ func lookupDecoderCred() (*syscall.Credential, error) {
 	return nil, errors.New("no user to run the decoder as in this image")
 }
 
-// limits are what the decoder may use. Memory is bounded well under what the device has, so a stream
-// that makes it grow cannot take the daemon down with it; it may write no file at all (pipes are not
-// files), keep no core, and open few.
-var limits = []struct {
-	res int
-	max uint64
-}{
-	{unix.RLIMIT_AS, 640 << 20},
-	{unix.RLIMIT_FSIZE, 0},
-	{unix.RLIMIT_CORE, 0},
-	{unix.RLIMIT_NOFILE, 64},
-}
+// limits are what the decoder may use, as the shell's ulimit takes them. Memory is bounded well under
+// what the device has (640 MB, in kilobytes), so a stream that makes it grow cannot take the daemon
+// down with it; it may write no file at all (pipes are not files), keep no core, and open few.
+var limits = []string{"-v 655360", "-f 0", "-c 0", "-n 64"}
 
 // niceness is how far below the daemon the decoder runs: the wake word and the speaker come first,
 // and a picture that falls behind drops frames rather than holding them up.
-const niceness = 5
+const niceness = "5"
+
+// shellPath is the shell the decoder is started through (wrap).
+var shellPath = "/bin/sh"
+
+// wrap is the decoder's command line with its limits and niceness set before it runs a single
+// instruction of its own: the user's shell (busybox's, in the image) is started as the decoder's
+// user, lowers its own limits and niceness, and execs ffmpeg in its place, so ffmpeg starts bounded
+// rather than being bounded a moment after it has started. The shell's script is fixed; ffmpeg and
+// its arguments, the address among them, reach it as its own arguments ("$0" "$@"), never as text it
+// reads as a command.
+func wrap(path string, args []string) (string, []string) {
+	script := ""
+	for _, l := range limits {
+		script += "ulimit " + l + " && "
+	}
+	script += `exec nice -n ` + niceness + ` "$0" "$@"`
+	return shellPath, append([]string{"-c", script, path}, args...)
+}
 
 // decoder is one run of ffmpeg.
 type decoder struct {
@@ -111,8 +121,16 @@ func start(ctx context.Context, args []string, decode, sound bool) (*decoder, er
 	if err != nil {
 		return nil, err
 	}
+	if cred != nil {
+		// The network the decoder may reach is everything but the device itself (fence.go): checked
+		// at each start, so nothing runs if it cannot be made so.
+		if err := fence(cred.Uid); err != nil {
+			return nil, err
+		}
+	}
 	d := &decoder{stderr: &tail{}, done: make(chan struct{})}
-	cmd := exec.CommandContext(ctx, decoderPath(), args...)
+	name, argv := wrap(decoderPath(), args)
+	cmd := exec.CommandContext(ctx, name, argv...)
 	cmd.Dir = "/"
 	cmd.Env = decoderEnv
 	cmd.Stderr = d.stderr
@@ -152,12 +170,6 @@ func start(ctx context.Context, args []string, decode, sound bool) (*decoder, er
 	for _, f := range closeAfter {
 		f.Close() // the child's now
 	}
-	pid := cmd.Process.Pid
-	for _, l := range limits {
-		lim := unix.Rlimit{Cur: l.max, Max: l.max}
-		_ = unix.Prlimit(pid, l.res, &lim, nil)
-	}
-	_ = unix.Setpriority(unix.PRIO_PROCESS, pid, niceness)
 	d.cmd = cmd
 	go func() {
 		d.err = cmd.Wait()

@@ -1,4 +1,4 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package video
 
@@ -70,7 +70,7 @@ func fake(t *testing.T, frames int, hold bool) *Feature {
 	ffmpegPath = exe
 	decoderCred = func() (*syscall.Credential, error) { return nil, nil }
 	limits = nil // the Go runtime of the stand-in reserves more address space than ffmpeg is allowed
-	decoderEnv = []string{"TECHO5_FAKE_FFMPEG=1", "TECHO5_FAKE_FRAME=" + strconv.Itoa(FrameBytes(testW, testH)),
+	decoderEnv = []string{"PATH=/usr/bin:/bin", "TECHO5_FAKE_FFMPEG=1", "TECHO5_FAKE_FRAME=" + strconv.Itoa(FrameBytes(testW, testH)),
 		"TECHO5_FAKE_FRAMES=" + strconv.Itoa(frames)}
 	if hold {
 		decoderEnv = append(decoderEnv, "TECHO5_FAKE_HOLD=1")
@@ -238,7 +238,7 @@ func TestADLNAVideoAsksFirst(t *testing.T) {
 	}
 	f.Answer(id, true)
 	until(t, f, Playing)
-	if !config.Get().Video.IsAllowed("192.168.1.31") {
+	if !config.Get().Video.IsAllowed("192.168.1.31", time.Now()) {
 		t.Error("the address was not remembered")
 	}
 	f.Stop()
@@ -247,6 +247,19 @@ func TestADLNAVideoAsksFirst(t *testing.T) {
 	}
 	if f.State().Phase == Asking {
 		t.Error("an allowed address was asked again")
+	}
+	// Each play starts the address's thirty days again.
+	if used := config.Get().Video.Allowed; len(used) != 1 || time.Since(used[0].Used) > time.Minute {
+		t.Errorf("allowed %+v", used)
+	}
+	// One unused for thirty days asks again.
+	f.Stop()
+	if err := config.Set().Video().Allow("192.168.1.40", time.Now().Add(-config.AllowedFor-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	req.From = "192.168.1.40"
+	if _, err := f.Play(req); err != nil || f.State().Phase != Asking {
+		t.Errorf("a run-out allowance played without asking: %v %s", err, f.State().Phase)
 	}
 	// Home Assistant never asks.
 	f.Stop()
@@ -261,7 +274,7 @@ func TestTheSwitchesStopWhatTheyCover(t *testing.T) {
 	if err := config.Set().Video().DLNA(true); err != nil {
 		t.Fatal(err)
 	}
-	if err := config.Set().Video().Allow("192.168.1.30"); err != nil {
+	if err := config.Set().Video().Allow("192.168.1.30", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.Play(Request{URL: "http://192.168.1.20/a.mp4", Origin: FromDLNA, From: "192.168.1.30"}); err != nil {
@@ -288,7 +301,8 @@ func TestTheDecoderIsBounded(t *testing.T) {
 	t.Cleanup(func() { limits, ffmpegPath, decoderCred = saved, savedPath, savedCred })
 	ffmpegPath = "/bin/sh"
 	decoderCred = func() (*syscall.Credential, error) { return nil, nil }
-	d, err := start(context.Background(), []string{"-c", "sleep 0.3; cat /proc/self/limits >&2"}, false, false)
+	// From its first instruction: no sleep before it looks.
+	d, err := start(context.Background(), []string{"-c", "cat /proc/self/limits >&2; echo nice=$(cut -d' ' -f19 /proc/self/stat) >&2"}, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,6 +319,18 @@ func TestTheDecoderIsBounded(t *testing.T) {
 			t.Errorf("%s: %q", want, line)
 		}
 	}
+	if !strings.Contains(out, "nice=5") {
+		t.Errorf("not niced: %s", out)
+	}
+}
+
+// The address reaches the shell as an argument, never as its script.
+func TestTheWrapperTakesNothingAsACommand(t *testing.T) {
+	name, argv := wrap("/usr/local/bin/techo5-ffmpeg", []string{"-i", "http://x/$(reboot);`id`"})
+	if name != "/bin/sh" || argv[0] != "-c" || strings.Contains(argv[1], "http") || argv[2] != "/usr/local/bin/techo5-ffmpeg" ||
+		argv[len(argv)-1] != "http://x/$(reboot);`id`" {
+		t.Errorf("%s %q", name, argv)
+	}
 }
 
 // Every address in what ffmpeg says is cut down as the log's is: a redirect's or a playlist part's token
@@ -313,5 +339,60 @@ func TestWhatFFmpegSaysLosesItsTokens(t *testing.T) {
 	got := scrubURLs("Server returned 403 for 'https://cdn.example.com/seg1.ts?token=secret' after http://user:pw@nas/x.m3u8")
 	if strings.Contains(got, "secret") || strings.Contains(got, "pw") || !strings.Contains(got, "cdn.example.com/seg1.ts") {
 		t.Errorf("scrubbed: %s", got)
+	}
+}
+
+// The fence is made once and found again: each rule and the jump for the user added only when missing,
+// IPv4 and IPv6 both, and a rule that will not go in stops the decoder from starting.
+func TestTheFenceIsMadeOnceForTheUser(t *testing.T) {
+	saved := iptables
+	t.Cleanup(func() { iptables = saved })
+	have := map[string]bool{}
+	var added []string
+	fail := ""
+	iptables = func(tool string, args ...string) error {
+		key := tool + " " + strings.Join(args[1:], " ")
+		switch args[0] {
+		case "-N":
+			return nil
+		case "-C":
+			if have[key] {
+				return nil
+			}
+			return errors.New("no such rule")
+		}
+		if fail != "" && strings.Contains(key, fail) {
+			return errors.New("refused")
+		}
+		k := tool + " " + strings.Join(args[1:], " ")
+		if args[0] == "-I" {
+			k = tool + " " + args[1] + " " + strings.Join(args[3:], " ")
+		}
+		have[k] = true
+		added = append(added, k)
+		return nil
+	}
+	if err := ensureFence(89); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(added, "\n")
+	for _, want := range []string{
+		"iptables-legacy TECHO5-VIDEO -o lo -j REJECT",
+		"iptables-legacy TECHO5-VIDEO -d 127.0.0.0/8 -j REJECT",
+		"ip6tables-legacy TECHO5-VIDEO -d ::1/128 -j REJECT",
+		"iptables-legacy OUTPUT -m owner --uid-owner 89 -j TECHO5-VIDEO",
+		"ip6tables-legacy OUTPUT -m owner --uid-owner 89 -j TECHO5-VIDEO",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("not added: %s\n%s", want, joined)
+		}
+	}
+	added = nil
+	if err := ensureFence(89); err != nil || len(added) != 0 {
+		t.Errorf("made again: %v %q", err, added)
+	}
+	fail = "65534"
+	if err := ensureFence(65534); err == nil {
+		t.Error("a fence that would not go in was taken")
 	}
 }

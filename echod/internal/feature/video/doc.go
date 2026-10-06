@@ -11,6 +11,6 @@
 // sound reaches it and dropped when a later one is already due. The display owns the screen and
 // paints the frames (feature/display, hardware/screen).
 //
-// The Show only: the Spot's round screen would need a layout of its own, and the Dot has no screen.
-// On those the package says it is not here, and DLNA offers no video.
+// The Show and the Spot (whose round face has a layout of its own, in feature/display). The Dot has no
+// screen: there the package says it is not here, and DLNA offers no video.
 package video

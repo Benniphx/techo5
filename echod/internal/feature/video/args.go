@@ -34,7 +34,9 @@ func (i Info) Display() (w, h float64) {
 }
 
 // FitIn is the largest the picture goes on the screen with its shape kept, in the middle, the rest
-// left black: bars above and below a wide film, at the sides of a tall one.
+// left black: bars above and below a wide film, at the sides of a tall one. On the Spot's round panel
+// too: fitted inside the circle a 16:9 picture is barely 418 wide and looked small in the previews, so
+// it fills the square and the bezel takes its corners.
 func FitIn(i Info, s Screen) Fit {
 	dw, dh := i.Display()
 	if dw <= 0 || dh <= 0 || s.W <= 0 || s.H <= 0 {

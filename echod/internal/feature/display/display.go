@@ -315,15 +315,14 @@ type Display struct {
 	// The video page (video.go): its controls up until videoUntil; videoOnScreen the last frame having
 	// drawn it, for the touch handler; videoTried the last video it showed, whose failure it says.
 	// videoPainting and videoOver are the frame loop's alone: frames to paint after this frame, with
-	// that of the canvas over them, and videoLast the frame on the panel.
+	// that of the canvas over them, and vp the frames themselves (video_shared.go).
 	videoUntil    time.Time
 	videoOnScreen bool
 	videoTried    uint64
 	videoPainting bool
 	videoOver     image.Rectangle
-	videoLast     *video.Frame
+	vp            videoPainter
 	videoLit      uint64 // the last video that lit the panel (frame)
-	videoDark     bool   // the panel is off: paintVideo takes the frames without showing them
 }
 
 var (
@@ -1817,7 +1816,7 @@ func (d *Display) Run(ctx context.Context) error {
 
 // frame draws what the moment calls for and says how long until the next one is due.
 func (d *Display) frame() time.Duration {
-	d.videoPainting, d.videoDark = false, false
+	d.videoPainting, d.vp.dark = false, false
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
 	volume, volAt := d.volume, d.volAt
@@ -1890,7 +1889,7 @@ func (d *Display) frame() time.Duration {
 		// A dark panel with a video playing: its frames are still taken as they fall due, so its sound
 		// goes on (the decoder makes both), and nothing is drawn.
 		video.Get().Covered(false)
-		d.videoPainting, d.videoDark, d.videoOver = true, true, image.Rectangle{}
+		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
 		return videoRecheck
 	}
 	if !on {

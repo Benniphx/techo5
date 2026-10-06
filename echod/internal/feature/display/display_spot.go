@@ -53,6 +53,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/ambient"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/buttons"
@@ -248,6 +249,15 @@ type Display struct {
 	shots chan chan *image.RGBA
 	dev   *screen.Device
 	r     *roundRenderer
+
+	// The video face (video_spot.go), as the Show's display holds its page.
+	videoUntil    time.Time
+	videoOnScreen bool
+	videoTried    uint64
+	videoPainting bool
+	videoOver     image.Rectangle
+	vp            videoPainter
+	videoLit      uint64
 }
 
 var (
@@ -566,6 +576,20 @@ func (d *Display) gesture(g touch.Gesture) {
 			}
 		}
 		d.wake()
+		return
+	}
+	// A DLNA video asking to be shown, the same way; then the video face, which takes every finger.
+	if id, _, _, asking := video.Get().Asking(); asking {
+		if g.Kind == touch.Tap {
+			if allow, answered := askTapSpot(g.Y); answered {
+				go video.Get().Answer(id, allow)
+			}
+		}
+		d.wake()
+		return
+	}
+	if d.videoUpSpot() {
+		d.videoGestureSpot(g)
 		return
 	}
 	// The microphone open for an announcement: its face takes every gesture, because a face nobody
@@ -1084,6 +1108,9 @@ func (d *Display) Start(context.Context) error {
 	}
 	d.dev = dev
 	d.r = newRoundRenderer(dev.Canvas())
+	fw, fh := dev.FrameSize()
+	w, h := dev.Size()
+	video.Get().UseScreen(video.Screen{W: w, H: h, Rotated: dev.Rotated(), PixFmt: dev.PixFmt()}, fw, fh)
 	d.settleScreen(dev)
 	slog.Info("screen open", "fb", dev.String())
 	return nil
@@ -1103,6 +1130,13 @@ func (d *Display) Run(ctx context.Context) error {
 	go d.settle(ctx)
 	for {
 		wait := d.frame()
+		if d.videoPainting {
+			d.vp.paint(ctx, d.dev, d.poke, wait, d.videoOver)
+			if ctx.Err() != nil {
+				return nil
+			}
+			continue
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -1113,6 +1147,7 @@ func (d *Display) Run(ctx context.Context) error {
 }
 
 func (d *Display) frame() time.Duration {
+	d.videoPainting, d.vp.dark = false, false
 	now := time.Now()
 	d.mu.Lock()
 	nightChanged := d.wasNight != inNight(now)
@@ -1183,12 +1218,27 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 
 	_, reminding := remind.Get().Showing()
+	vs := video.Get().State()
 	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen() ||
-		sunriseProgress(now) > 0 || setup.Get().Waiting() || reminding
+		sunriseProgress(now) > 0 || setup.Get().Waiting() || reminding || vs.Active()
 	if d.awayTick(now, on, busy, inNight(now)) {
 		d.mu.Lock()
 		on = d.on
 		d.mu.Unlock()
+	}
+	if vs.Active() && vs.ID != d.videoLit && (vs.Phase != video.Asking || !inNight(now)) {
+		// A video starting lights a dark face, once per video; a DLNA video's question only by day.
+		d.videoLit = vs.ID
+		if !on {
+			d.apply(true, d.ceilingOrDefault(), false)
+			on = true
+		}
+	}
+	if !on && vs.Frames {
+		// Dark with a video playing: its frames are taken as they fall due so its sound goes on.
+		video.Get().Covered(false)
+		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
+		return videoRecheck
 	}
 	if !on {
 		return time.Hour
@@ -1346,6 +1396,24 @@ func (d *Display) frame() time.Duration {
 
 	d.dashSceneSpot(&s)
 	s.callButton = callButton.Load()
+	d.videoSceneSpot(&s, now)
+	if s.showVideo && s.videoLive {
+		// The picture's own frames go to the panel; the canvas holds only the controls.
+		d.r.draw(s)
+		d.videoPainting, d.videoOver = true, d.r.videoOver
+		for pending := true; pending; {
+			select {
+			case reply := <-d.shots:
+				reply <- d.vp.shot(d.dev, d.dev.Canvas())
+			default:
+				pending = false
+			}
+		}
+		return d.videoNextSpot(now)
+	}
+	if !s.showVideo {
+		d.vp.drop()
+	}
 	drawn := time.Now()
 	d.r.draw(s)
 	d.mu.Lock()

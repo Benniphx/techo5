@@ -1,4 +1,4 @@
-//go:build !dot && !spot
+//go:build !dot
 
 package video
 
@@ -126,7 +126,9 @@ func (s *session) run(insecure bool) {
 		dec.stop()
 	}
 	if src := s.sound0(); src != nil {
+		soundTurns.Lock()
 		src.end()
+		soundTurns.Unlock()
 	}
 	s.ended(s, s.scrub(err), itself)
 }
@@ -146,6 +148,8 @@ func (s *session) stop(quiet bool) {
 	if src == nil {
 		return
 	}
+	soundTurns.Lock()
+	defer soundTurns.Unlock()
 	if started := src.end(); quiet && started && media.Get().Receiving() == TrackName {
 		media.Get().Stop()
 	}
@@ -474,6 +478,10 @@ type soundSource struct {
 	endOnce sync.Once
 }
 
+// soundTurns is held while a video's sound track is started or a session's sound is ended, so the two
+// never cross: a track started by a session already over would take the speaker from the next.
+var soundTurns sync.Mutex
+
 // begin waits for the first of the sound, and plays it as a received track.
 func (a *soundSource) begin() {
 	buf := make([]byte, 16384)
@@ -482,17 +490,21 @@ func (a *soundSource) begin() {
 		a.s.soundOut()
 		return
 	}
-	// Held across the start, so a session stopped meanwhile either never starts its track or knows it
-	// has one to stop (end). The track's own reads wait for it on another goroutine.
+	// Starting the track and ending a session take turns (soundTurns), so a session stopped meanwhile
+	// either never starts its track or knows it has one to stop. Not under a.mu: the clock and the
+	// state read it, and they are not to wait on the media player starting a track.
+	soundTurns.Lock()
 	a.mu.Lock()
 	if a.ending {
 		a.mu.Unlock()
+		soundTurns.Unlock()
 		return
 	}
 	a.first, a.started = buf[:n], true
+	a.mu.Unlock()
 	media.Get().PlayReceived(TrackName, a, soundRate, soundChannels)
 	media.Get().SetReceivedTrack(TrackName, a.s.req.Title, "", "")
-	a.mu.Unlock()
+	soundTurns.Unlock()
 	// Paused before the sound came (covered while loading, or a pause from Home Assistant): the pause is
 	// the track's from now, since the sound is the clock.
 	a.s.mu.Lock()

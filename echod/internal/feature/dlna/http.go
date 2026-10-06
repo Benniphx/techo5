@@ -356,7 +356,7 @@ const audioProtocols = "http-get:*:audio/mpeg:*,http-get:*:audio/mp3:*,http-get:
 	"http-get:*:audio/wav:*,http-get:*:audio/x-wav:*,http-get:*:audio/wave:*"
 
 // sinkProtocols are what the renderer says it takes: the songs, and videos as well while DLNA video is
-// on (feature/video), so a controller offers the Show only what it will play.
+// on (feature/video), so a controller offers the device only what it will play.
 func sinkProtocols() string {
 	if video.DLNAOn() {
 		return audioProtocols + "," + video.DLNAProtocols
