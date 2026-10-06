@@ -9,8 +9,9 @@
 # root (~/alpine-armv7-cast) and takes a while under QEMU; later runs reuse it and rebuild only what
 # changed. A change to the configure flags below reconfigures by itself.
 #
-# Only what the player uses, so there is less in it to attack: the H.264, MPEG-4, AAC, MP3 and Opus
-# decoders; the MP4, Matroska, MPEG-TS, HLS, AAC, MP3, Ogg and WAV demuxers; the network protocols
+# Only what the player uses, so there is less in it to attack: the H.264, MPEG-4, AAC, MP3, Opus, AC-3 and
+# E-AC-3 decoders (media servers' films have AC-3 sound as often as not); the MP4, Matroska, MPEG-TS,
+# HLS, AAC, MP3, Ogg and WAV demuxers; acompressor and alimiter, which bring a film's quiet sound up; the network protocols
 # (HTTP, HTTPS, TCP, TLS, HLS, crypto for AES HLS, and httpproxy for the daemon's guard proxy, which a
 # device whose kernel cannot fence the decoder sends everything through) and pipe for its output. There is no file protocol
 # at all: nothing a stream or a playlist names can make it read a file on the device, whatever its
@@ -67,13 +68,13 @@ FLAGS="--arch=arm --cpu=cortex-a53 --enable-neon \
 	--enable-static --disable-shared --enable-pthreads \
 	--enable-openssl --enable-zlib --enable-network \
 	--enable-swscale --enable-swresample --enable-avfilter \
-	--enable-decoder=h264,mpeg4,aac,aac_latm,mp3float,opus \
+	--enable-decoder=h264,mpeg4,aac,aac_latm,mp3float,opus,ac3,eac3 \
 	--enable-demuxer=mov,matroska,mpegts,hls,aac,mp3,ogg,wav \
-	--enable-parser=h264,mpeg4video,aac,aac_latm,mpegaudio,opus \
+	--enable-parser=h264,mpeg4video,aac,aac_latm,mpegaudio,opus,ac3 \
 	--enable-protocol=pipe,http,https,httpproxy,tcp,udp,tls,hls,crypto \
 	--enable-muxer=rawvideo,pcm_s16le,null \
 	--enable-encoder=rawvideo,pcm_s16le,wrapped_avframe \
-	--enable-filter=scale,format,transpose,pad,fps,hflip,vflip,null,anull,aresample,aformat"
+	--enable-filter=scale,format,transpose,pad,fps,hflip,vflip,null,anull,aresample,aformat,acompressor,alimiter"
 
 cat > "$SDK/build/techo5-ffmpeg.sh" <<INSIDE
 #!/bin/sh

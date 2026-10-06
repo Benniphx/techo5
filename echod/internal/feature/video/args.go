@@ -174,11 +174,22 @@ func Filter(i Info, s Screen) string {
 }
 
 // Sound is what the sound is made into: what the speaker plays, padded from the stream's own start
-// so its first sample is at the picture's time zero.
+// so its first sample is at the picture's time zero, then brought up to about where music is.
+//
+// Films and home videos are mixed far quieter than music: Big Buck Bunny is -27 LUFS over its length
+// and -38 over its opening minute, where music is about -14, so at the same volume step a video was
+// all but silent (measured on a Show 5 2nd gen, the samples going to the speaker: the video path
+// adds no loss of its own; the same noise as a video and as a Home Assistant track came out 0.2 dB
+// apart). A compressor brings it up with no look-ahead, which matters here: the sound is the clock,
+// and a filter that holds seconds of it back (dynaudnorm does, by its window) leaves the picture
+// waiting for sound that has not come out yet. Above -38 dBFS RMS it compresses 5:1 with a soft knee,
+// then 12x (+21.6 dB) of makeup, so a quiet film comes up most and music hardly at all (measured:
+// -37.9 LUFS comes out at -20.4, -27 at -17, -17.7 at -14.9); a limiter keeps the peaks under 0.89
+// (-1 dBFS), so nothing clips. Attack 20 ms and release 800 ms keep a scene from pumping.
 const (
 	soundRate     = 48000
 	soundChannels = 2
-	soundFilter   = "aresample=48000:async=1:first_pts=0"
+	soundFilter   = "aresample=48000:async=1:first_pts=0,acompressor=threshold=0.0125:ratio=5:attack=20:release=800:knee=4:makeup=12:detection=rms,alimiter=limit=0.89:attack=5:release=100:level=disabled"
 )
 
 // DecodeArgs runs the decoder: the picture as raw frames on file descriptor 3, the sound as 16-bit

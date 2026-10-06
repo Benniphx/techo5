@@ -201,13 +201,18 @@ func TestWhatFFmpegSaysIsRead(t *testing.T) {
 		t.Errorf("mux: %+v", i)
 	}
 
-	// Its sound is AC-3, which this device does not decode: the video plays without it.
+	// Its sound is AC-3, as a media server's films so often are: decoded and mixed down.
 	i, err = ParseProbe(probeAnamorphic)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if i.SARNum != 32 || i.SARDen != 27 || i.AudioIndex != -1 || i.AudioCodec != "ac3" || i.VideoCodec != "mpeg4" {
+	if i.SARNum != 32 || i.SARDen != 27 || i.AudioIndex != 0 || i.AudioCodec != "ac3" || i.VideoCodec != "mpeg4" {
 		t.Errorf("anamorphic: %+v", i)
+	}
+	// DTS is not decoded: the video plays silent.
+	i, _ = ParseProbe(strings.Replace(probeAnamorphic, "Audio: ac3", "Audio: dts", 1))
+	if i.AudioIndex != -1 || i.AudioCodec != "dts" {
+		t.Errorf("dts: %+v", i)
 	}
 
 	// A song with its cover is not a video.
@@ -299,7 +304,7 @@ func TestTheDecoderArguments(t *testing.T) {
 		{"-vf", "fps=fps=24/1:start_time=0,scale=852:480:flags=fast_bilinear,format=yuv420p,pad=960:480:54:0:black,transpose=1,scale,format=bgra"},
 		{"-f", "rawvideo", "-pix_fmt", "bgra", "pipe:3"},
 		{"-map", "0:a:0"},
-		{"-af", "aresample=48000:async=1:first_pts=0", "-ac", "2", "-ar", "48000", "-f", "s16le", "pipe:1"},
+		{"-af", "aresample=48000:async=1:first_pts=0,acompressor=threshold=0.0125:ratio=5:attack=20:release=800:knee=4:makeup=12:detection=rms,alimiter=limit=0.89:attack=5:release=100:level=disabled", "-ac", "2", "-ar", "48000", "-f", "s16le", "pipe:1"},
 	} {
 		if !has(seq...) {
 			t.Errorf("no %q in %q", seq, a)
@@ -318,7 +323,7 @@ func TestTheDecoderArguments(t *testing.T) {
 	// No sound to play: no sound output. 1080p: four threads. Plain http: no certificate options, which
 	// ffmpeg would refuse for an input that opens no TLS.
 	info, _ = ParseProbe(probeAnamorphic)
-	info.Height, info.Width = 1080, 1920
+	info.Height, info.Width, info.AudioIndex = 1080, 1920, -1
 	a = DecodeArgs(Decoding{URL: "http://192.168.1.20/dvd.ts", Info: info, Screen: Screen{W: 960, H: 480, Rotated: true}, CAFile: "/etc/ssl/certs/ca-certificates.crt"})
 	if has("pipe:1") || !has("-threads", "4") || has("-skip_loop_filter") || has("-tls_verify") || has("-ca_file") {
 		t.Errorf("silent 1080p: %q", a)

@@ -11,7 +11,10 @@ picture fills the width, and the edge of the glass takes its corners.
 - **Addresses:** `http://` and `https://` only. MP4, MKV, MPEG-TS and HLS (`.m3u8`) streams.
 - **Picture:** H.264 (and old MPEG-4). 720p or less plays best. 1080p plays on a Show 5 but uses
   almost all of it. HEVC (H.265), VP9 and AV1 don't play.
-- **Sound:** AAC, MP3 and Opus. A video whose sound is something else (AC-3, DTS) plays without it.
+- **Sound:** AAC, MP3, Opus, AC-3 and E-AC-3 (Dolby Digital), surround mixed down to stereo. A
+  video whose sound is something else (DTS, TrueHD) plays without it.
+- **Loudness:** films are mixed much quieter than music, so the Show evens a video's sound out to
+  about music's level as it plays: the volume steps mean the same for both.
 - **Not:** protected video (Netflix, Prime Video, Disney+ and the like), local files, `rtsp://`
   cameras. The YouTube app's Cast button won't find the Show either: that's Google Cast.
 

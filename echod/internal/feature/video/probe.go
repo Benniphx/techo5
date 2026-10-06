@@ -38,7 +38,7 @@ type Info struct {
 // Usable codecs: what the image's ffmpeg decodes (tools/linux/build-ffmpeg.sh).
 var (
 	videoCodecs = map[string]bool{"h264": true, "mpeg4": true}
-	audioCodecs = map[string]bool{"aac": true, "aac_latm": true, "mp3": true, "mp3float": true, "opus": true}
+	audioCodecs = map[string]bool{"aac": true, "aac_latm": true, "mp3": true, "mp3float": true, "opus": true, "ac3": true, "eac3": true}
 )
 
 var (
