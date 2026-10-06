@@ -143,7 +143,7 @@ func (f *Feature) tell() {
 		case now := <-tick.C:
 			st := f.State()
 			// A video left paused this long is over, as a paused track is (media.stoppedFor): the
-			// decoder and its frames are not kept waiting for ever.
+			// decoder and its frames are not kept waiting forever.
 			switch {
 			case st.Phase != Paused:
 				pausedID = 0

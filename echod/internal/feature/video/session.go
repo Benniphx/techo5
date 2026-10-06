@@ -29,7 +29,7 @@ const queueBytes = 22 << 20
 
 // stuckFor is how long the frames may wait full, with the sound not moving and nothing paused, before
 // the oldest is dropped: a stream whose sound comes later in the file than its picture would
-// otherwise wait for ever on a decoder waiting for the frames to be taken.
+// otherwise wait forever on a decoder waiting for the frames to be taken.
 const stuckFor = 400 * time.Millisecond
 
 // statsEvery is how often a playing video's numbers go in the log.
