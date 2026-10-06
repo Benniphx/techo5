@@ -205,6 +205,9 @@ the Spot too, in its settings.
   rest of a panel setup.
 - **TECHO5 Deck** (Show): pages of buttons for OBS Studio, opened with a swipe up from the bottom
   edge of the clock. Set up on the setup page's Screen & Photos tab. See [TECHO5 Deck](deck.md).
+- **Video** (Show): videos full screen from Home Assistant's `play_video` action and, with **DLNA
+  video** on, from DLNA apps. Off on a new device. On the setup page's Screen & Photos tab. See
+  [Video](video.md).
 - **Screen language** (Settings → General): the clock's day and date, the forecast's days, the
   weather's words and the alarm after the date are written in it: German, Spanish, French, Italian or
   Dutch, and English for *Match all* or *English*. It also picks which words the screen listens for.

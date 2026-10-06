@@ -1033,6 +1033,45 @@ The page, counting from 1.
 
 The button on that page, counting from 1, row by row: on a 4-across deck the second row starts at 5.
 
+## Play a video
+
+In YAML, refer to this action as `esphome.<node>_play_video`.
+
+Plays a video full screen on the Show, with its sound, in place of any video already playing. Show
+only, and only while the **Video** switch is on. See [Video](video.md).
+
+### url (Required)
+
+*string*
+
+An `http://` or `https://` address: MP4, MKV, MPEG-TS or HLS, best as H.264 at 720p or less. Other
+kinds of address (files, `rtsp://`) are refused.
+
+### title (Required)
+
+*string*
+
+What the screen and the **Video title** sensor call it. `""` for none: they show the address's host
+instead.
+
+```yaml
+action: esphome.office_play_video
+data:
+  url: "http://192.168.1.20:8096/Videos/clip.mp4"
+  title: "Front door"
+```
+
+## Stop, pause or carry on a video
+
+In YAML, refer to these actions as `esphome.<node>_stop_video`, `esphome.<node>_pause_video` and
+`esphome.<node>_resume_video`. They take nothing, and do nothing when no video is playing. Stop also
+takes down a DLNA video's question on the screen.
+
+```yaml
+action: esphome.office_stop_video
+data: {}
+```
+
 ## Choose the weather shown on the idle screen
 
 In YAML, refer to this action as `esphome.<node>_home_weather`.
