@@ -86,7 +86,14 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 		if n > 0 {
 			in := append(carry, buf[:n]...)
 			whole := len(in) - len(in)%(conv.channels*2)
-			m.queue(t, conv.run(in[:whole]))
+			// Held up between the read and the queue (a pause, or a reply taking the speaker), what was
+			// read waits for the track to go on rather than being dropped: it is the next of the track,
+			// and a video's picture follows its sound (Stream.Heard).
+			for samples := conv.run(in[:whole]); !m.offer(t, samples); {
+				if err := m.wait(ctx); err != nil {
+					return err
+				}
+			}
 			carry = append(carry[:0], in[whole:]...)
 		}
 		switch {

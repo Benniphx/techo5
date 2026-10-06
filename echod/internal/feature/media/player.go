@@ -1210,6 +1210,10 @@ func (p *Player) PlayReceived(name string, src PCMSource, rate, channels int) {
 // Receiving names what is being played from a remote, empty when nothing is.
 func (p *Player) Receiving() string { return p.stream.Receiving() }
 
+// Heard is how far into the received track named name the room has heard, and whether that track is
+// the one loaded now (Stream.Heard).
+func (p *Player) Heard(name string) (time.Duration, bool) { return p.stream.Heard(name) }
+
 // receivedTrack is a receiver's song, and the received track it is about.
 type receivedTrack struct{ From, Title, Artist, Album string }
 
