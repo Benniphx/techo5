@@ -70,10 +70,7 @@ func (r *roundRenderer) clockWeather(w home.Weather, baseline int) {
 func (r *roundRenderer) weatherFace(s roundScene) (bolt image.Rectangle) {
 	r.clear()
 	days := s.forecast
-	cond := s.weather.Condition
-	if cond == "" && len(days) > 0 {
-		cond = days[0].Condition
-	}
+	cond := weatherNow(s.weather, days, s.now)
 	big := s.weather.Temp
 	if big == "" && len(days) > 0 {
 		big = fmt.Sprintf("%.0f°", days[0].High)

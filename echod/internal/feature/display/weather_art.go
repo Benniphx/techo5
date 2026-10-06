@@ -540,7 +540,7 @@ func sceneArt(now time.Time, w, h int) (*image.RGBA, skyFx) {
 	if !hm.SlideshowArt() {
 		return nil, fxNone
 	}
-	cond := weatherNow(hm.Weather(), hm.Forecast())
+	cond := weatherNow(hm.Weather(), hm.Forecast(), now)
 	rise, set, ok := hm.SunTimes(now)
 	return artFrame(now, cond, rise, set, ok, w, h), skyNow(cond)
 }

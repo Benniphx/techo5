@@ -1246,7 +1246,7 @@ func (d *Display) frame() time.Duration {
 		if v := home.Get().Radar(); s.radarOn {
 			s.radar = v
 		} else {
-			s.sky = skyNow(weatherNow(s.weather, s.forecast))
+			s.sky = skyNow(weatherNow(s.weather, s.forecast, s.now))
 		}
 	}
 	s.nowPlaying = s.phase == "idle" && d.showsNowPlaying()

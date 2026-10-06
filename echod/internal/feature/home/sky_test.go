@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
@@ -11,23 +12,9 @@ import (
 // the moon; the rest are left alone. Night is from home's own sunrise and sunset, so a device with no
 // Home Assistant gets it too, and one that does not know where home is yet is left as reported.
 func TestTheSkyAtNightHasNoSun(t *testing.T) {
+	noon, late, early := homeOnThePlains(t)
 	k := &sunKept
-	k.mu.Lock()
-	lat, lon, placed, looked := k.lat, k.lon, k.placed, k.looked
-	zone := time.FixedZone("CDT", -5*60*60)
-	noon := time.Date(2026, 9, 16, 13, 0, 0, 0, zone)
-	k.lat, k.lon, k.placed = 40.0, -100.0, true // on the plains: up about 7:25, down about 7:45
-	k.looked, k.day = noon.Format("2006-01-02"), ""
-	k.mu.Unlock()
-	t.Cleanup(func() {
-		k.mu.Lock()
-		k.lat, k.lon, k.placed, k.looked, k.day = lat, lon, placed, looked, ""
-		k.mu.Unlock()
-	})
-
 	f := &Feature{}
-	late := time.Date(2026, 9, 16, 23, 0, 0, 0, zone)
-	early := time.Date(2026, 9, 16, 1, 0, 0, 0, zone)
 	for _, c := range []struct {
 		cond      string
 		day, dark string
@@ -67,4 +54,49 @@ func TestTheSkyAtNightHasNoSun(t *testing.T) {
 			t.Errorf("in %s the night form is %q, want %q", lang, got, want)
 		}
 	}
+}
+
+// Without a reading, a screen shows today's forecast in its place. That is a daytime forecast, and
+// standing in for the reading after dark it takes the night form too, or the page showed a sun at
+// night. A reading is taken as it is: it has its night form already (Weather).
+func TestTodaysForecastInPlaceOfTheReadingAtNight(t *testing.T) {
+	noon, late, _ := homeOnThePlains(t)
+	f := &Feature{}
+	days := []hass.Day{{When: noon, Condition: "partlycloudy"}, {When: noon.AddDate(0, 0, 1), Condition: "sunny"}}
+
+	if got := f.SkyNow(Weather{}, days, noon); got != "partlycloudy" {
+		t.Errorf("by day the forecast in place of the reading is %q, want partlycloudy", got)
+	}
+	if got := f.SkyNow(Weather{}, days, late); got != PartlyCloudyNight {
+		t.Errorf("at night the forecast in place of the reading is %q, want %q", got, PartlyCloudyNight)
+	}
+	if got := f.SkyNow(Weather{Condition: "rainy"}, days, late); got != "rainy" {
+		t.Errorf("with a reading the screen shows %q, want the reading", got)
+	}
+	if got := f.SkyNow(Weather{}, nil, late); got != "" {
+		t.Errorf("with nothing at all the screen shows %q", got)
+	}
+}
+
+// homeOnThePlains puts home at 40 N 100 W for the test, where the sun is up from about 7:25 to 7:45
+// on the day it returns times for: one in the afternoon, eleven at night and one in the morning.
+func homeOnThePlains(t *testing.T) (noon, late, early time.Time) {
+	t.Helper()
+	zone := time.FixedZone("CDT", -5*60*60)
+	noon = time.Date(2026, 9, 16, 13, 0, 0, 0, zone)
+	late = time.Date(2026, 9, 16, 23, 0, 0, 0, zone)
+	early = time.Date(2026, 9, 16, 1, 0, 0, 0, zone)
+
+	k := &sunKept
+	k.mu.Lock()
+	lat, lon, placed, looked := k.lat, k.lon, k.placed, k.looked
+	k.lat, k.lon, k.placed = 40.0, -100.0, true
+	k.looked, k.day = noon.Format("2006-01-02"), "" // looked up already, so nothing asks Home Assistant
+	k.mu.Unlock()
+	t.Cleanup(func() {
+		k.mu.Lock()
+		k.lat, k.lon, k.placed, k.looked, k.day = lat, lon, placed, looked, ""
+		k.mu.Unlock()
+	})
+	return noon, late, early
 }

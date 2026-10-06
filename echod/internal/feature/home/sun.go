@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/sun"
 )
@@ -56,6 +57,17 @@ func (f *Feature) SkyAt(cond string, now time.Time) string {
 		return cond
 	}
 	return atNight(cond)
+}
+
+// SkyNow is the condition a screen shows for now: the reading, or without one today's forecast in its
+// place. The reading has its night form already (Weather); the forecast's day is a daytime forecast,
+// so standing in for the reading after dark it takes the night form here, or the page showed a sun
+// at night. The forecast's own row keeps its day icons.
+func (f *Feature) SkyNow(w Weather, days []hass.Day, now time.Time) string {
+	if w.Condition != "" || len(days) == 0 {
+		return w.Condition
+	}
+	return f.SkyAt(days[0].Condition, now)
 }
 
 // sunLookUp finds home's place, and has the times worked out again from it.

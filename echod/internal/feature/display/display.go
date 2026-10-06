@@ -1983,7 +1983,7 @@ func (d *Display) frame() time.Duration {
 		// pressed rather than starting then; it fetches only when due.
 		s.radar = home.Get().Radar()
 		if !s.showRadar {
-			s.sky = skyNow(weatherNow(s.weather, s.forecast))
+			s.sky = skyNow(weatherNow(s.weather, s.forecast, s.now))
 		}
 	}
 	if !s.showRadar {
