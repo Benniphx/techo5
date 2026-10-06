@@ -68,3 +68,20 @@ func TestTheSunsHeight(t *testing.T) {
 		t.Error("noon and midnight the wrong way round")
 	}
 }
+
+// Known heights, from NOAA's solar calculator: Tromso at local solar noon on December 21 (10:42 UTC)
+// and at local solar midnight on June 21 (22:46 UTC), both within half a degree.
+func TestTheSunsHeightAtTromso(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		at   time.Time
+		want float64
+	}{
+		{"midwinter noon", time.Date(2026, time.December, 21, 10, 42, 0, 0, time.UTC), -3.1},
+		{"midsummer midnight", time.Date(2026, time.June, 21, 22, 46, 0, 0, time.UTC), 3.1},
+	} {
+		if got := Altitude(69.65, 18.96, c.at); got < c.want-0.5 || got > c.want+0.5 {
+			t.Errorf("%s: %.2f degrees, want %.1f", c.name, got, c.want)
+		}
+	}
+}
