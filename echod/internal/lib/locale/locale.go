@@ -84,13 +84,40 @@ var langs = map[string]*words{
 
 // phrases are the few words written beside a date: today, as the forecast heads its first day, and
 // the next alarm after the clock's date.
+//
+// And the words of the clock styles that list a day: the Agenda's (today, tomorrow, an event under way
+// or all day, a calendar with nothing on it) and the World clock's (a place a day ahead or behind).
 var phrases = map[string]map[string]string{
-	"de": {"today": "Heute", "alarm": "Wecker", "snoozed": "Schlummern bis"},
-	"es": {"today": "Hoy", "alarm": "Alarma", "snoozed": "Pospuesta hasta"},
-	"fr": {"today": "Aujourd'hui", "alarm": "Réveil", "snoozed": "Reporté à"},
-	"it": {"today": "Oggi", "alarm": "Sveglia", "snoozed": "Posticipata alle"},
-	"nl": {"today": "Vandaag", "alarm": "Wekker", "snoozed": "Sluimeren tot"},
+	"de": {"today": "Heute", "alarm": "Wecker", "snoozed": "Schlummern bis", "tomorrow": "Morgen", "yesterday": "Gestern",
+		"now": "Jetzt", "allday": "Ganztägig", "nothing": "Keine Termine", "nothingtoday": "Heute nichts",
+		"nothingelse": "Heute nichts mehr"},
+	"es": {"today": "Hoy", "alarm": "Alarma", "snoozed": "Pospuesta hasta", "tomorrow": "Mañana", "yesterday": "Ayer",
+		"now": "Ahora", "allday": "Todo el día", "nothing": "Nada en el calendario", "nothingtoday": "Nada hoy",
+		"nothingelse": "Nada más hoy"},
+	"fr": {"today": "Aujourd'hui", "alarm": "Réveil", "snoozed": "Reporté à", "tomorrow": "Demain", "yesterday": "Hier",
+		"now": "Maintenant", "allday": "Toute la journée", "nothing": "Rien au calendrier",
+		"nothingtoday": "Rien aujourd'hui", "nothingelse": "Plus rien aujourd'hui"},
+	"it": {"today": "Oggi", "alarm": "Sveglia", "snoozed": "Posticipata alle", "tomorrow": "Domani", "yesterday": "Ieri",
+		"now": "Ora", "allday": "Tutto il giorno", "nothing": "Niente in calendario", "nothingtoday": "Niente oggi",
+		"nothingelse": "Nient'altro oggi"},
+	"nl": {"today": "Vandaag", "alarm": "Wekker", "snoozed": "Sluimeren tot", "tomorrow": "Morgen", "yesterday": "Gisteren",
+		"now": "Nu", "allday": "Hele dag", "nothing": "Niets in de agenda", "nothingtoday": "Niets vandaag",
+		"nothingelse": "Verder niets vandaag"},
 }
+
+// Tomorrow and Yesterday are the days either side of today, as a list or a place's clock names them.
+func Tomorrow(lang string) string  { return phrase(lang, "tomorrow", "Tomorrow") }
+func Yesterday(lang string) string { return phrase(lang, "yesterday", "Yesterday") }
+
+// Now is an event under way; AllDay one that has no time.
+func Now(lang string) string    { return phrase(lang, "now", "Now") }
+func AllDay(lang string) string { return phrase(lang, "allday", "All day") }
+
+// NothingOn is a calendar with nothing coming; NothingToday a day with nothing on it, and NothingElse
+// one whose events are over.
+func NothingOn(lang string) string    { return phrase(lang, "nothing", "Nothing on the calendar") }
+func NothingToday(lang string) string { return phrase(lang, "nothingtoday", "Nothing today") }
+func NothingElse(lang string) string  { return phrase(lang, "nothingelse", "Nothing else today") }
 
 // Today is "Today", as the forecast heads its first day.
 func Today(lang string) string { return phrase(lang, "today", "Today") }

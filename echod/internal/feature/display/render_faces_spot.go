@@ -115,7 +115,7 @@ func (r *roundRenderer) agendaFace(s roundScene) {
 	r.line(90, 188, 390, 188, 2, colTrack)
 	f := r.styleFace(false, 20)
 	if len(s.style.next) == 0 {
-		r.centered(f, "Nothing on the calendar", 240, colDim)
+		r.centered(f, locale.NothingOn(screenLang()), 240, colDim)
 		r.footLine(s, 300, "")
 		return
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // How the home screen's clock looks all day, on the Show and the Spot alike: the classic face, or one
@@ -167,6 +168,8 @@ type styleFacts struct {
 	days      []hass.Day
 	next      []hass.Event
 	places    []worldPlace
+	// hadToday is today having had an event that is over now, for the Agenda's "nothing else today".
+	hadToday bool
 }
 
 func styleFactsFor(style string, now time.Time) (f styleFacts) {
@@ -179,6 +182,8 @@ func styleFactsFor(style string, now time.Time) (f styleFacts) {
 		f.next = upcomingEvents(now, 3)
 	case styleAgenda:
 		f.next = upcomingEvents(now, 8)
+		events, _ := home.Get().EventsOn(now)
+		f.hadToday = slices.ContainsFunc(events, func(e hass.Event) bool { return !e.End.After(now) })
 	case styleWorld:
 		f.places = worldPlaces(config.Get().Screen.WorldClocks)
 	}
@@ -246,9 +251,9 @@ func placeDay(now time.Time, loc *time.Location) string {
 	b := time.Date(there.Year(), there.Month(), there.Day(), 0, 0, 0, 0, time.UTC)
 	switch {
 	case b.After(a):
-		return "Tomorrow"
+		return locale.Tomorrow(screenLang())
 	case b.Before(a):
-		return "Yesterday"
+		return locale.Yesterday(screenLang())
 	}
 	return ""
 }

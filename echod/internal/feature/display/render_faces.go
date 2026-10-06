@@ -150,10 +150,11 @@ func (r *renderer) agendaStyle(s scene, box image.Rectangle) {
 	r.fxLine(float64(col-r.s(20)), float64(box.Min.Y), float64(col-r.s(20)), float64(box.Max.Y), float64(r.s(2)), ember, 1)
 	head := r.styleFace(true, 20)
 	y := box.Min.Y + r.s(28)
-	r.text(head, "TODAY", col, y, dim)
+	lang := screenLang()
+	r.text(head, strings.ToUpper(locale.Today(lang)), col, y, dim)
 	y += r.s(48)
 	if len(s.style.next) == 0 {
-		r.text(r.small, "Nothing on the calendar", col, y, dim)
+		r.text(r.small, locale.NothingOn(lang), col, y, dim)
 		return
 	}
 	events := slices.Clone(s.style.next)
@@ -163,7 +164,12 @@ func (r *renderer) agendaStyle(s scene, box image.Rectangle) {
 	saidTomorrow := false
 	tx := col + r.s(130)
 	if !events[0].Start.Before(tomorrow) {
-		r.text(r.small, "Nothing else today", col, y, dim)
+		// "Nothing else" only after a day that had something; a day with nothing at all says so.
+		none := locale.NothingToday(lang)
+		if s.style.hadToday {
+			none = locale.NothingElse(lang)
+		}
+		r.text(r.small, none, col, y, dim)
 		y += r.s(48)
 	}
 	for _, e := range events {
@@ -173,17 +179,17 @@ func (r *renderer) agendaStyle(s scene, box image.Rectangle) {
 				return
 			}
 			y += r.s(10)
-			r.text(head, "TOMORROW", col, y, dim)
+			r.text(head, strings.ToUpper(locale.Tomorrow(lang)), col, y, dim)
 			y += r.s(46)
 			saidTomorrow = true
 		}
 		if y > box.Max.Y {
 			return
 		}
-		when := "All day"
+		when := locale.AllDay(lang)
 		switch {
 		case !e.AllDay && !e.Start.After(s.now):
-			when = "Now"
+			when = locale.Now(lang)
 		case !e.AllDay:
 			when = clockText(e.Start)
 		}
