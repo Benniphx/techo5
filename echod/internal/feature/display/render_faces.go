@@ -60,7 +60,7 @@ func (r *renderer) worldStyle(s scene, box image.Rectangle) {
 		at        time.Time
 		here      bool
 	}
-	rows := []row{{name: "Here", at: s.now, here: true}}
+	rows := []row{{name: locale.Here(screenLang()), at: s.now, here: true}}
 	for _, p := range s.style.places {
 		rows = append(rows, row{name: p.name, day: placeDay(s.now, p.loc), at: s.now.In(p.loc)})
 	}

@@ -76,7 +76,7 @@ func TestTheClockStylesWords(t *testing.T) {
 		if got := [3]string{Tomorrow(lang), AllDay(lang), NothingOn(lang)}; got != want {
 			t.Errorf("%q: %q, want %q", lang, got, want)
 		}
-		for _, w := range []string{Yesterday(lang), Now(lang), NothingToday(lang), NothingElse(lang)} {
+		for _, w := range []string{Here(lang), Yesterday(lang), Now(lang), NothingToday(lang), NothingElse(lang)} {
 			if w == "" {
 				t.Errorf("%q: an empty word", lang)
 			}

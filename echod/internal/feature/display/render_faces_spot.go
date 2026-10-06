@@ -54,7 +54,7 @@ func (r *roundRenderer) worldFace(s roundScene) {
 		at        time.Time
 		here      bool
 	}
-	rows := []row{{name: "Here", day: locale.DayAndNumber(s.now, screenLang()), at: s.now, here: true}}
+	rows := []row{{name: locale.Here(screenLang()), day: locale.DayAndNumber(s.now, screenLang()), at: s.now, here: true}}
 	for _, p := range s.style.places[:min(len(s.style.places), spotWorld)] {
 		rows = append(rows, row{name: p.name, day: placeDay(s.now, p.loc), at: s.now.In(p.loc)})
 	}

@@ -88,22 +88,25 @@ var langs = map[string]*words{
 // And the words of the clock styles that list a day: the Agenda's (today, tomorrow, an event under way
 // or all day, a calendar with nothing on it) and the World clock's (a place a day ahead or behind).
 var phrases = map[string]map[string]string{
-	"de": {"today": "Heute", "alarm": "Wecker", "snoozed": "Schlummern bis", "tomorrow": "Morgen", "yesterday": "Gestern",
+	"de": {"here": "Hier", "today": "Heute", "alarm": "Wecker", "snoozed": "Schlummern bis", "tomorrow": "Morgen", "yesterday": "Gestern",
 		"now": "Jetzt", "allday": "Ganztägig", "nothing": "Keine Termine", "nothingtoday": "Heute nichts",
 		"nothingelse": "Heute nichts mehr"},
-	"es": {"today": "Hoy", "alarm": "Alarma", "snoozed": "Pospuesta hasta", "tomorrow": "Mañana", "yesterday": "Ayer",
+	"es": {"here": "Aquí", "today": "Hoy", "alarm": "Alarma", "snoozed": "Pospuesta hasta", "tomorrow": "Mañana", "yesterday": "Ayer",
 		"now": "Ahora", "allday": "Todo el día", "nothing": "Nada en el calendario", "nothingtoday": "Nada hoy",
 		"nothingelse": "Nada más hoy"},
-	"fr": {"today": "Aujourd'hui", "alarm": "Réveil", "snoozed": "Reporté à", "tomorrow": "Demain", "yesterday": "Hier",
+	"fr": {"here": "Ici", "today": "Aujourd'hui", "alarm": "Réveil", "snoozed": "Reporté à", "tomorrow": "Demain", "yesterday": "Hier",
 		"now": "Maintenant", "allday": "Toute la journée", "nothing": "Rien au calendrier",
 		"nothingtoday": "Rien aujourd'hui", "nothingelse": "Plus rien aujourd'hui"},
-	"it": {"today": "Oggi", "alarm": "Sveglia", "snoozed": "Posticipata alle", "tomorrow": "Domani", "yesterday": "Ieri",
+	"it": {"here": "Qui", "today": "Oggi", "alarm": "Sveglia", "snoozed": "Posticipata alle", "tomorrow": "Domani", "yesterday": "Ieri",
 		"now": "Ora", "allday": "Tutto il giorno", "nothing": "Niente in calendario", "nothingtoday": "Niente oggi",
 		"nothingelse": "Nient'altro oggi"},
-	"nl": {"today": "Vandaag", "alarm": "Wekker", "snoozed": "Sluimeren tot", "tomorrow": "Morgen", "yesterday": "Gisteren",
+	"nl": {"here": "Hier", "today": "Vandaag", "alarm": "Wekker", "snoozed": "Sluimeren tot", "tomorrow": "Morgen", "yesterday": "Gisteren",
 		"now": "Nu", "allday": "Hele dag", "nothing": "Niets in de agenda", "nothingtoday": "Niets vandaag",
 		"nothingelse": "Verder niets vandaag"},
 }
+
+// Here is the World clock's own place.
+func Here(lang string) string { return phrase(lang, "here", "Here") }
 
 // Tomorrow and Yesterday are the days either side of today, as a list or a place's clock names them.
 func Tomorrow(lang string) string  { return phrase(lang, "tomorrow", "Tomorrow") }
