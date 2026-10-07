@@ -15,7 +15,7 @@ func TestRealtimeDashboardPreservesVoicePhaseAndPagePriority(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, test := range []struct {
-		name string
+		name                           string
 		camera, drawer, realtime, want bool
 	}{
 		{name: "voice", realtime: true, want: true},

@@ -1740,14 +1740,20 @@ func (d *Display) Run(ctx context.Context) error {
 // nativeRealtimeGesture keeps touches on the active voice card while settings
 // and the stock higher-priority pages retain their own controls.
 func (d *Display) nativeRealtimeGesture(g touch.Gesture) bool {
- if !voice.Get().RealtimeBusy() { return false }
- d.mu.Lock()
- settings := d.sheet || d.wifiOpen
- d.mu.Unlock()
- if settings { return false }
- if g.Kind == touch.Tap { voice.Get().Cancel() }
- d.wake()
- return true
+	if !voice.Get().RealtimeBusy() {
+		return false
+	}
+	d.mu.Lock()
+	settings := d.sheet || d.wifiOpen
+	d.mu.Unlock()
+	if settings {
+		return false
+	}
+	if g.Kind == touch.Tap {
+		voice.Get().Cancel()
+	}
+	d.wake()
+	return true
 }
 
 // frame draws what the moment calls for and says how long until the next one is due.
