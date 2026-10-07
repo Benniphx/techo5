@@ -61,6 +61,9 @@ func Install(ctx context.Context, m Manifest, progress func(float32)) error {
 
 	staged := filepath.Join(layout.StateDir, "echod.incoming")
 	defer os.Remove(staged)
+	// What an earlier try fetched of another release only takes up room, and has to go before the
+	// room is measured, or a nearly full partition refuses every release after it.
+	dropParts(staged+".*.part", partPath(staged, b))
 
 	// Both partitions are asked for the room before anything is fetched. The download lands on the
 	// state partition and is then copied into /system beside the binary it replaces, so the space has

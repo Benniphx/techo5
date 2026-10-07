@@ -32,6 +32,11 @@ var client = &http.Client{
 		if len(via) >= 10 {
 			return errors.New("update: stopped after 10 redirects")
 		}
+		// The hash would still catch a changed file, but what is being fetched is nobody else's
+		// business: an https asset does not go on over plain http.
+		if via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+			return fmt.Errorf("update: refusing a redirect from https to %s", req.URL.Scheme)
+		}
 		if r := via[0].Header.Get("Range"); r != "" {
 			req.Header.Set("Range", r)
 		}

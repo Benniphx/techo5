@@ -50,6 +50,15 @@ var (
 // errStalled is a connection dropped because nothing arrived on it for stallTimeout.
 var errStalled = errors.New("nothing arrived")
 
+// errBadResume is a server that would not carry on from where the file got to: a 416, or a 206 for
+// some other part of it. The kept bytes are dropped for it.
+var errBadResume = errors.New("the server would not resume")
+
+// badResumes is how many of those in a row are taken before the download is given one plain fetch
+// from the beginning, and then no more tries. Without it, a server that cuts every connection and
+// will not resume would have the file fetched from nothing, cut, and refused, until downloadCap.
+const badResumes = 2
+
 var (
 	slowMu   sync.Mutex
 	slowHook func(bytesPerSecond int64)
@@ -110,6 +119,23 @@ func dropParts(pattern, keep string) {
 	}
 }
 
+// sweepRootfs clears the rootfs directory of what earlier installs left, before its room is measured.
+// What an earlier try fetched of this release is kept so the download can carry on from it; what was
+// fetched of any other release is only taking up room. A whole tarball is left behind when the device
+// goes down during slotctl: this release's is checked again as though it were a partial download,
+// and any other is removed.
+func sweepRootfs(to string, b Binary) {
+	dir, part := filepath.Dir(to), partPath(to, b)
+	dropParts(filepath.Join(dir, "techo5-rootfs-*.part"), part)
+	dropParts(filepath.Join(dir, "techo5-rootfs-*.tar.gz"), to)
+	if _, err := os.Stat(to); err == nil {
+		os.Remove(part)
+		if err := os.Rename(to, part); err != nil {
+			os.Remove(to)
+		}
+	}
+}
+
 // download fetches the binary and proves it before it is allowed near /system. The hash is taken as the
 // bytes go past rather than by reading the file back, so nothing has to hold sixteen megabytes in memory
 // on a device with half a gigabyte. Bytes from an earlier try are read back once, to start the hash.
@@ -124,6 +150,7 @@ func download(ctx context.Context, b Binary, to string, progress func(float32)) 
 	dropParts(to+".*.part", part)
 
 	wait := firstBackoff
+	refused, lastTry := 0, false
 	for failed := 1; ; failed++ {
 		before := partial(to, b)
 		err := fetch(ctx, b, part, progress)
@@ -131,9 +158,19 @@ func download(ctx context.Context, b Binary, to string, progress func(float32)) 
 			return os.Rename(part, to)
 		}
 		var f finalError
-		if errors.As(err, &f) {
+		if errors.As(err, &f) || lastTry {
 			os.Remove(part)
 			return err
+		}
+		switch {
+		case errors.Is(err, errBadResume):
+			if refused++; refused >= badResumes {
+				slog.Warn("update: the server will not resume; one more try from the beginning", "err", err)
+				os.Remove(part)
+				lastTry = true
+			}
+		case before > 0:
+			refused = 0 // it resumed
 		}
 		if ctx.Err() != nil {
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -197,11 +234,16 @@ func fetch(ctx context.Context, b Binary, part string, progress func(float32)) e
 		progress(1)
 	}
 	if err := f.Sync(); err != nil {
-		return err
+		return final(fmt.Errorf("update: writing %s: %w", part, err))
 	}
 
-	if have != b.Size {
+	// More than offered is the wrong file. Less, with the connection closed cleanly, is a body that
+	// ended early (a short 206, or a proxy that closes without a length), so the next try carries on.
+	if have > b.Size {
 		return final(fmt.Errorf("update: %d bytes, offered as %d", have, b.Size))
+	}
+	if have < b.Size {
+		return fmt.Errorf("update: the connection closed at %d of %d bytes", have, b.Size)
 	}
 	if got := hex.EncodeToString(sum.Sum(nil)); got != b.SHA256 {
 		err := fmt.Errorf("update: hash %s, offered as %s", got, b.SHA256)
@@ -251,7 +293,7 @@ func receive(ctx context.Context, b Binary, f *os.File, sum hash.Hash, have int6
 		}
 		if !ok || from != have {
 			restart()
-			return have, have, fmt.Errorf("update: asked for %s from byte %d, sent %q", b.URL, have, resp.Header.Get("Content-Range"))
+			return have, have, fmt.Errorf("update: asked for %s from byte %d, sent %q: %w", b.URL, have, resp.Header.Get("Content-Range"), errBadResume)
 		}
 		slog.Info("update: resuming the download", "from", have, "size", b.Size)
 	case code == http.StatusOK:
@@ -263,7 +305,7 @@ func receive(ctx context.Context, b Binary, f *os.File, sum hash.Hash, have int6
 		}
 	case code == http.StatusRequestedRangeNotSatisfiable:
 		restart()
-		return have, have, fmt.Errorf("update: fetching %s from byte %d: %s", b.URL, have, resp.Status)
+		return have, have, fmt.Errorf("update: fetching %s from byte %d: %s: %w", b.URL, have, resp.Status, errBadResume)
 	case code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || code >= 500:
 		return have, have, fmt.Errorf("update: fetching %s: %s", b.URL, resp.Status)
 	default:
@@ -281,12 +323,31 @@ func receive(ctx context.Context, b Binary, f *os.File, sum hash.Hash, have int6
 	// check say "more than offered" rather than silently accepting a truncation.
 	c := newCounter(io.LimitReader(resp.Body, b.Size-have+1), have, b.Size, progress)
 	c.moved = func() { dog.Reset(stallTimeout) }
-	n, err := io.Copy(io.MultiWriter(f, sum), c)
+	w := &disk{to: f}
+	n, err := io.Copy(io.MultiWriter(w, sum), c)
 	have += n
+	if w.err != nil {
+		// The device's own storage, full or failing: another try would only fill it again.
+		return start, have, final(fmt.Errorf("update: writing %s: %w", f.Name(), w.err))
+	}
 	if err != nil {
 		return start, have, stalled(ctx, fmt.Errorf("update: downloading %s: %w", b.URL, err))
 	}
 	return start, have, nil
+}
+
+// disk is the partial file, remembering a failed write so it can be told from a failed read.
+type disk struct {
+	to  io.Writer
+	err error
+}
+
+func (d *disk) Write(p []byte) (int, error) {
+	n, err := d.to.Write(p)
+	if err != nil {
+		d.err = err
+	}
+	return n, err
 }
 
 // stalled names a failure for what it was when the watchdog caused it.

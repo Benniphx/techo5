@@ -50,9 +50,7 @@ func installRootfs(ctx context.Context, m Manifest, progress func(float32)) erro
 		return err
 	}
 	to := filepath.Join(rootfsDir, "techo5-rootfs-"+m.Version+".tar.gz")
-	// What an earlier try fetched of this release is kept so the download can carry on from it; what
-	// was fetched of any other release is only taking up room.
-	dropParts(filepath.Join(rootfsDir, "techo5-rootfs-*.part"), partPath(to, b))
+	sweepRootfs(to, b)
 	// Before the fetch, not after it: a tarball this size arriving on a full data partition is how the
 	// device ends up with no room for its own state either.
 	if err := room(rootfsDir, b.Size-partial(to, b)); err != nil {
