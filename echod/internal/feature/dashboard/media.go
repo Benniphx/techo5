@@ -214,10 +214,15 @@ func allStates() ([]hass.LiveEntity, error) {
 // routesFor is how long which Music Assistant player goes with which tile's player is kept.
 const routesFor = 10 * time.Minute
 
+// routesRetry is how long a failed look is left before the next: while Home Assistant is down, taps
+// would otherwise queue up behind each other's timeouts, each asking again.
+const routesRetry = 30 * time.Second
+
 var routes struct {
 	sync.Mutex
-	to map[string]string
-	at time.Time
+	to     map[string]string
+	at     time.Time
+	failed time.Time
 }
 
 // routeTransport is transportTo; a variable so that a test can see that a tap waits for none of it.
@@ -271,9 +276,10 @@ func queued(e hass.LiveEntity) bool {
 func maPlayerFor(entity string) string {
 	routes.Lock()
 	defer routes.Unlock()
-	if routes.to == nil || time.Since(routes.at) > routesFor {
+	if (routes.to == nil || time.Since(routes.at) > routesFor) && time.Since(routes.failed) > routesRetry {
 		states, err := allStates()
 		if err != nil {
+			routes.failed = time.Now()
 			return routes.to[entity]
 		}
 		players := maPlayers(states)
@@ -467,5 +473,6 @@ func maEntry() (string, error) {
 			return e.ID, nil
 		}
 	}
+	//lint:ignore ST1005 it starts with a name, and the sheet shows it as it is
 	return "", errors.New("Music Assistant is not set up in Home Assistant")
 }

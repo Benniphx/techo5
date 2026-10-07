@@ -4,6 +4,7 @@ package dashboard
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -219,6 +220,47 @@ func TestATapDoesNotWaitForItsRoute(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("the call was never made")
+	}
+}
+
+// A card that names its own target keeps it: only the tile's own player is routed to the group.
+func TestACardsOwnTargetIsNotRouted(t *testing.T) {
+	sent := make(chan any, 1)
+	prevRoute, prevCall := routeTransport, callService
+	routeTransport = func(string) string { return "media_player.ma_kitchen" }
+	callService = func(_ *hass.Live, _ context.Context, _, _ string, data map[string]any) error {
+		sent <- data["entity_id"]
+		return nil
+	}
+	t.Cleanup(func() { routeTransport, callService = prevRoute, prevCall })
+
+	everywhere := []any{"media_player.den", "media_player.kitchen"}
+	for _, c := range []struct {
+		name string
+		a    Action
+		want any
+	}{
+		{"no tile entity", Action{Service: "media_player.media_play_pause",
+			Data: map[string]any{"entity_id": everywhere}}, everywhere},
+		{"another target", Action{Entity: "sensor.music", Service: "media_player.media_play_pause",
+			Data: map[string]any{"entity_id": "media_player.den"}}, "media_player.den"},
+		{"an area of its own", Action{Entity: "media_player.sonos_kitchen", Service: "media_player.media_play_pause",
+			Data: map[string]any{"area_id": "kitchen"}}, "media_player.sonos_kitchen"},
+		{"the tile's own", Action{Entity: "media_player.sonos_kitchen", Service: "media_player.media_next_track"},
+			"media_player.ma_kitchen"},
+	} {
+		f := &Feature{}
+		f.drawn = &session{f: f, src: noSource{}, live: &hass.Live{}, states: map[string]hass.LiveEntity{},
+			pending: map[string]pending{}}
+		f.Tap(c.a)
+		select {
+		case got := <-sent:
+			if fmt.Sprint(got) != fmt.Sprint(c.want) {
+				t.Errorf("%s: sent to %v, want %v", c.name, got, c.want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Errorf("%s: the call was never made", c.name)
+		}
 	}
 }
 

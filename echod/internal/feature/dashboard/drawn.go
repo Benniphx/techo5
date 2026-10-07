@@ -285,9 +285,18 @@ func (f *Feature) Tap(a Action) {
 	}
 	// A media player's play or pause, next and back reach the whole group when Music Assistant plays
 	// there (transportTo). Which player that is takes a look at Home Assistant, so it is worked out with
-	// the call, off the goroutine the finger is on.
+	// the call, off the goroutine the finger is on. Only the tile's own player is routed: a card that
+	// names a target of its own ("pause everywhere") keeps it.
 	var route func() string
-	if domain == "media_player" && (service == "media_play_pause" || service == "media_next_track" || service == "media_previous_track") {
+	own, _ := data["entity_id"].(string)
+	other := false // a target of the card's own besides entities
+	for _, k := range []string{"area_id", "device_id", "floor_id", "label_id"} {
+		if _, has := data[k]; has {
+			other = true
+		}
+	}
+	if domain == "media_player" && a.Entity != "" && own == a.Entity && !other &&
+		(service == "media_play_pause" || service == "media_next_track" || service == "media_previous_track") {
 		route = func() string { return routeTransport(a.Entity) }
 	}
 	var p *pending
@@ -359,11 +368,13 @@ func (s *session) callVia(entity, domain, service string, data map[string]any, p
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		// The route first: it may wait on Home Assistant's REST side, and the call's own time is
+		// for the call.
 		if route != nil {
 			data["entity_id"] = route()
 		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		if err := callService(live, ctx, domain, service, data); err != nil {
 			slog.Warn("dashboard: a tap failed", "service", domain+"."+service, "err", err)
 			s.mu.Lock()
