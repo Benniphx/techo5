@@ -99,6 +99,8 @@ jobs:
           chmod +x "$HOME/apk/apk.static"
           bash tools/linux/build-aec.sh
           test -s bin/techo5-aec-arm
+          bash tools/linux/build-ffmpeg.sh
+          test -s bin/techo5-ffmpeg-arm
           # No PREBUILT_DAEMON override: build directly from the tested candidate.
           bash tools/linux/deploy-rootfs.sh --out "bin/release/techo5-rootfs-$VERSION.tar.gz" --version "$VERSION"
           cp bin/echod-arm bin/build-info.json bin/release/
