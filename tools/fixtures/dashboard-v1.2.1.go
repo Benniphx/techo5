@@ -47,7 +47,7 @@ func (d *Display) openDashboard() bool {
 	}
 	d.mu.Lock()
 	d.dash, d.dashHeld, d.dashTouched = true, false, time.Now()
-	d.drawer, d.sheet = false, false
+	d.drawer, d.sheet, d.deckUp = false, false, false
 	d.mu.Unlock()
 	slog.Info("dashboard up", "mode", dashboard.Get().Mode())
 	d.wake()
@@ -74,6 +74,7 @@ func (d *Display) dashboardAsked(up bool) {
 	d.mu.Lock()
 	if up {
 		d.dash, d.dashHeld, d.dashTouched, d.dashAwayUntil = true, true, time.Now(), time.Time{}
+		d.deckUp = false
 		d.mu.Unlock()
 		d.wake()
 		return
@@ -99,20 +100,9 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	away := time.Now().Before(d.dashAwayUntil)
 	d.mu.Unlock()
 
-	// Realtime keeps the dashboard under the voice overlay. Evaluate the stock
-	// page priorities on an idle copy so stable updates retain their own gates.
-	voiceScene := s
-	if s.realtime && s.phase != "idle" {
-		idle := *s
-		idle.phase = "idle"
-		s = &idle
-		asked = true
-	}
-
 	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer &&
-		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showWifi && !s.bt.Pairing &&
+		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showDeck && !s.showWifi && !s.bt.Pairing &&
 		(asked || (f.Idle() && !away && !s.nowPlaying))
-	s = voiceScene
 	s.showDash, s.dashMode = want, mode
 
 	streamed := want && mode == config.DashboardStreamed
@@ -139,7 +129,7 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	d.dashShowing = want
 	// Either way the page wants every finger as it moves: streamed, to scroll the page under it;
 	// drawn, to scroll and to slide a tile's level. The rest of the screen wants swipes.
-	follow := want && !(s.realtime && s.phase != "idle")
+	follow := want
 	changed := follow != d.dashFollow
 	d.dashFollow = follow
 	d.mu.Unlock()
