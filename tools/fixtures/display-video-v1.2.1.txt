@@ -1,0 +1,11 @@
+	// A DLNA video asking to be shown, the same way; and then the video page, which takes every finger.
+	if _, _, _, asking := video.Get().Asking(); asking {
+		d.videoAskGesture(g)
+		d.wake()
+		return
+	}
+	if d.videoUp() {
+		d.videoGesture(g)
+		return
+	}
+

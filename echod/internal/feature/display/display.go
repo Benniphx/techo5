@@ -807,6 +807,11 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
+	// Keep native voice touch ownership away from stable page insertions.
+	if !setup.Get().Waiting() && d.nativeRealtimeGesture(g) {
+		return
+	}
+
 	// A browser asking to be let in: its page takes every tap, and only the answers decide.
 	if setup.Get().Waiting() {
 		if g.Kind == touch.Tap {
@@ -818,20 +823,6 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		d.wake()
 		return
-	}
-
-	// Native realtime card owns touch, never the dashboard behind it.
-	if voice.Get().RealtimeBusy() {
-		d.mu.Lock()
-		settings := d.sheet || d.wifiOpen
-		d.mu.Unlock()
-		if !settings {
-			if g.Kind == touch.Tap {
-				voice.Get().Cancel()
-			}
-			d.wake()
-			return
-		}
 	}
 
 	// The microphone open for an announcement: the strip along the bottom is the way to end it, a tap
@@ -1744,6 +1735,19 @@ func (d *Display) Run(ctx context.Context) error {
 		case <-time.After(wait):
 		}
 	}
+}
+
+// nativeRealtimeGesture keeps touches on the active voice card while settings
+// and the stock higher-priority pages retain their own controls.
+func (d *Display) nativeRealtimeGesture(g touch.Gesture) bool {
+ if !voice.Get().RealtimeBusy() { return false }
+ d.mu.Lock()
+ settings := d.sheet || d.wifiOpen
+ d.mu.Unlock()
+ if settings { return false }
+ if g.Kind == touch.Tap { voice.Get().Cancel() }
+ d.wake()
+ return true
 }
 
 // frame draws what the moment calls for and says how long until the next one is due.
