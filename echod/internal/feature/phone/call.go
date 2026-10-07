@@ -340,9 +340,14 @@ func ring(ctx context.Context, tone []int16) {
 	if ctx.Err() != nil {
 		return // the call ended first; taking the speaker now would only cut off whatever has it
 	}
+	cycle := time.Duration(len(tone)) * time.Second / speaker.VoiceRate
 	claim := speaker.Sound().Claim("ringing", func(cctx context.Context, p *speaker.Player) error {
 		for {
 			p.PlayVoice(tone)
+			// With no playback device nothing is queued, and the cycle is waited out as though it had
+			// played, rather than resampling the whole tone again every look.
+			next := time.Now().Add(cycle)
+			idle := p.Queued() == 0
 			// Looked at every 50 ms even when nothing is queued: with no playback device nothing ever is,
 			// and a ring that only looked while sound was queued never stopped.
 			for {
@@ -355,7 +360,7 @@ func ring(ctx context.Context, tone []int16) {
 					return nil
 				case <-time.After(50 * time.Millisecond):
 				}
-				if p.Queued() == 0 {
+				if p.Queued() == 0 && (!idle || !time.Now().Before(next)) {
 					break
 				}
 			}

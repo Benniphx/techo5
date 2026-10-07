@@ -313,6 +313,9 @@ func fire(event string, st State, extra ...string) {
 
 // Run keeps the account signed in, and signs in again whenever the login changes.
 func (p *Phone) Run(ctx context.Context) error {
+	// The bell is a lot of sums. Built here, off the call's path, a first call or intercom ring takes
+	// the speaker at once rather than after them.
+	safe.Go("phone: build the bell", func() { bellRing() })
 	for {
 		acct, err := loadAccount()
 		if err != nil {
