@@ -91,6 +91,9 @@ func (r *renderer) styledClock(s scene, style string) {
 	case glance:
 		bottom = r.h - r.s(50) - r.s(46) - r.s(16)
 	}
+	if style == styleGlow {
+		r.glowGround(s)
+	}
 	if timers {
 		r.timersLine(s, bottom-r.s(16))
 		bottom -= r.s(64)
@@ -120,6 +123,14 @@ func (r *renderer) styledClock(s scene, style string) {
 	case styleDashboard:
 		r.dashboardStyle(s, box)
 		corner = false
+	case styleBinary:
+		r.binaryStyle(s, box)
+	case styleWorld:
+		r.worldStyle(s, box)
+	case styleAgenda:
+		r.agendaStyle(s, box)
+	case styleGlow:
+		r.glowStyle(s, box)
 	}
 	if glance {
 		r.glanceStrip(s.glance, s.callButton)
@@ -420,6 +431,8 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 		r.text(r.tiny, r.clipTo(r.tiny, e.Summary, r.w-r.margin-tx), tx, y, cream)
 		y += r.s(44)
 	}
+	// A tap on the column, its heading to its last line, opens the agenda.
+	r.setNextAt(image.Rect(col-r.s(20), top-r.s(10), r.w-r.margin, max(y-r.s(30), top+r.s(76))+r.s(10)))
 
 	// The coming days, when there is room for them; otherwise today's weather on a line, so the style that
 	// leaves out the weather corner still says what it is outside and still opens the forecast.
@@ -460,19 +473,25 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 }
 
 // dashWhen is when an event starts, as the dashboard writes it: "Now" for one under way, its time
-// today, "Tmrw" and the time after that, "Today" or "Tomorrow" for one with no time.
+// today, "Tmrw" and the time tomorrow, the weekday and the time after that, and "Today", "Tomorrow" or
+// the weekday alone for one with no time.
 func dashWhen(e hass.Event, now time.Time) string {
 	start, allDay := e.Start, e.AllDay
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	tomorrow, later := today.AddDate(0, 0, 1), today.AddDate(0, 0, 2)
 	switch {
 	case !allDay && !start.After(now):
 		return "Now"
-	case allDay && start.Before(today.AddDate(0, 0, 1)):
+	case allDay && start.Before(tomorrow):
 		return "Today"
-	case allDay:
+	case allDay && start.Before(later):
 		return "Tomorrow"
-	case start.Before(today.AddDate(0, 0, 1)):
+	case allDay:
+		return locale.ShortWeekday(start, screenLang())
+	case start.Before(tomorrow):
 		return clockText(start)
+	case start.Before(later):
+		return "Tmrw " + strings.TrimSpace(clockText(start))
 	}
-	return "Tmrw " + strings.TrimSpace(clockText(start))
+	return locale.ShortWeekday(start, screenLang()) + " " + strings.TrimSpace(clockText(start))
 }
