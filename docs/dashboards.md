@@ -74,8 +74,14 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
 
 - **Tap** a tile or a row to do what it says: lights, switches and fans toggle, covers open or close,
   players play or pause, scenes and scripts run, a card's own tap action does what it is set to.
-- **Slide** a finger along a light, cover or thermostat to set its brightness, position or
-  temperature. The tile fills as you slide, and it is set when you let go.
+- **Slide** a finger along a light, cover, thermostat or media player to set its brightness,
+  position, temperature or volume. The tile fills as you slide, and it is set when you let go.
+- **Long press** (Show only; on the Spot a long press is the ring menu):
+  - on a light that has whites or colors, for a sheet of them. The light follows your finger.
+  - on a media player, for a sheet with its controls, its volume, the speakers it can be grouped
+    with, and, with Music Assistant, your favorite playlists and radio stations. The favorites need
+    the device's token to belong to a Home Assistant administrator; with any other token the sheet
+    says so and shows the rest.
 - **Drag** up and down to scroll.
 
 **Streamed dashboards** work as the page itself does: tap, and drag to scroll.
@@ -84,7 +90,7 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
 
 | Home Assistant card | On the device |
 |---|---|
-| Tile, button, entity, light, thermostat, and the Mushroom entity cards | A tile: icon, name, state, tap; a slider for lights, covers and thermostats |
+| Tile, button, entity, light, thermostat, and the Mushroom entity cards | A tile: icon, name, state, tap; a slider for lights, covers, thermostats and media players |
 | Entities | A card of rows, with a switch for anything on or off |
 | Glance, Mushroom chips | Tiles |
 | Heading, Mushroom title | A heading |

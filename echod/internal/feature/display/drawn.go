@@ -84,9 +84,10 @@ func (s sheetSlider) at(x int) float64 {
 	return s.lo + min(max(f, 0), 1)*(s.hi-s.lo)
 }
 
-// holdStill is how far a finger may wander and still be a long press when it lifts: less than the
-// touchscreen's followMove, so a finger it began to follow never is.
-const holdStill = 10
+// holdStill is how far a finger may wander and still be a long press when it lifts: the touchscreen's
+// own followMove, so a finger it began to follow never is, and one it did not always is. Any less left
+// a slow press that drifted between the two as neither a long press nor a tap.
+const holdStill = 12
 
 // dashAdjusting is the level a finger is sliding, for the tile to draw it.
 type dashAdjusting struct {

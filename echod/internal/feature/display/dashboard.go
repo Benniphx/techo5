@@ -164,8 +164,11 @@ func (d *Display) overDashboard(s *scene) bool {
 	_, announcing := announce.Get().Showing()
 	_, reminding := remind.Get().Showing()
 	_, _, _, videoAsking := video.Get().Asking()
+	// The video's own state, not videoUp: that is what the last frame drew, and videoScene runs after
+	// this one, so the first frame of a video would still hold. The alert page is drawn in the
+	// dashboard's place (alertScene runs before this).
 	return s.pin.open || setup.Get().Waiting() || announce.Get().Recording() || announcing || reminding ||
-		d.popupUp() != nil || videoAsking || d.videoUp()
+		d.popupUp() != nil || videoAsking || d.videoUp() || video.Get().State().Active() || s.showAlert
 }
 
 // applyHolds tells the touchscreen whether to report a finger held still: for the night light's way up

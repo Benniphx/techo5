@@ -77,6 +77,9 @@ func TestTheDashboardKnowsWhatIsDrawnOverIt(t *testing.T) {
 // the volume's fill along the bar - also once it has wandered off the slider above or below, and
 // the sheet stays up when it lifts.
 func TestASheetsSliderFollowsTheFinger(t *testing.T) {
+	prevSettle := sliderSettle
+	sliderSettle = func(time.Duration, func()) *time.Timer { return nil } // no real timer to outlive the test
+	t.Cleanup(func() { sliderSettle = prevSettle })
 	r := newRenderer(image.NewRGBA(image.Rect(0, 0, showWide, showHigh)))
 	light := dashboard.LightColor{Entity: "light.desk", Name: "Desk lamp", Kelvin: true, MinK: 2700, MaxK: 6500, NowK: 2700}
 	r.draw(scene{now: time.Now(), phase: "idle", showDash: true, dashMode: config.DashboardDrawn, drawn: fourControls(), dashColor: &light})
@@ -147,7 +150,9 @@ func TestASheetsSliderSendsAsTheFingerMoves(t *testing.T) {
 		sent = append(sent, float64(a.Data["color_temp_kelvin"].(int)))
 		fades = append(fades, a.Data["transition"])
 	}
-	t.Cleanup(func() { sliderTap = prev })
+	prevSettle := sliderSettle
+	sliderSettle = func(time.Duration, func()) *time.Timer { return nil } // the lift sent again: not what this checks
+	t.Cleanup(func() { sliderTap, sliderSettle = prev, prevSettle })
 	got := func() []float64 {
 		mu.Lock()
 		defer mu.Unlock()
@@ -181,7 +186,8 @@ func TestASheetsSliderSendsAsTheFingerMoves(t *testing.T) {
 }
 
 // A held-back send whose timer fires only after the finger has lifted - too late to be stopped -
-// sends nothing: the light keeps where the finger lifted, not the value waiting before it.
+// sends nothing: the light keeps where the finger lifted, not the value waiting before it. And as a
+// step went out just before the lift, where it lifted is sent once more, in case that step arrives last.
 func TestALateHeldBackSendSendsNothing(t *testing.T) {
 	var mu sync.Mutex
 	var sent []int
@@ -196,7 +202,13 @@ func TestALateHeldBackSendSendsNothing(t *testing.T) {
 		late = f
 		return time.NewTimer(time.Hour) // stopped at the lift, but the callback is fired by hand
 	}
-	t.Cleanup(func() { sliderTap, sliderAfter = prevTap, prevAfter })
+	var settle func()
+	prevSettle := sliderSettle
+	sliderSettle = func(_ time.Duration, f func()) *time.Timer {
+		settle = f
+		return nil
+	}
+	t.Cleanup(func() { sliderTap, sliderAfter, sliderSettle = prevTap, prevAfter, prevSettle })
 
 	d := &Display{poke: make(chan struct{}, 1)}
 	d.dashColor = &dashboard.LightColor{Entity: "light.desk", Kelvin: true, MinK: 2000, MaxK: 6500}
@@ -208,10 +220,14 @@ func TestALateHeldBackSendSendsNothing(t *testing.T) {
 		t.Fatal("the held-back send started no timer")
 	}
 	late() // and the timer fires anyway
+	if settle == nil {
+		t.Fatal("the lift was not sent again")
+	}
+	settle()
 	mu.Lock()
 	defer mu.Unlock()
-	if len(sent) != 2 || sent[0] != 3000 || sent[1] != 4500 {
-		t.Errorf("sent %v, want 3000 and then where the finger lifted, 4500, and nothing after", sent)
+	if len(sent) != 3 || sent[0] != 3000 || sent[1] != 4500 || sent[2] != 4500 {
+		t.Errorf("sent %v, want 3000, then where the finger lifted, 4500, twice, and nothing else", sent)
 	}
 }
 

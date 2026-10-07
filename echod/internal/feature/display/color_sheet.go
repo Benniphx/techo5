@@ -239,6 +239,14 @@ type sliderSent struct {
 	gen     uint64
 }
 
+// sheetSettle is how long after the lift the value it lifted on is sent again, when a step went out
+// just before it: setting the same value twice changes nothing, and whichever of the two arrives last
+// is where the finger lifted.
+const sheetSettle = 500 * time.Millisecond
+
+// sliderSettle starts the timer for that; a variable for the tests.
+var sliderSettle = time.AfterFunc
+
 // sliderAfter starts the timer for a held-back send; a variable so that a test can fire one late, as
 // the race it guards against does.
 var sliderAfter = time.AfterFunc
@@ -247,26 +255,31 @@ var sliderAfter = time.AfterFunc
 // enough ago, else once it is (the last value a finger stopped on is sent too), and always when the
 // finger lifts - each value once.
 func (d *Display) sendSlider(s sheetSlider, value float64, final bool) {
-	kind := s.kind
+	d.slide(s, value, final, false, 0)
+}
+
+// slide is sendSlider, and a held-back send's timer firing (late, for the wait gen): the timer's
+// send is checked against gen in the same hold of d.mu that sends it, so a lift that lands in
+// between leaves it nothing to send.
+func (d *Display) slide(s sheetSlider, value float64, final, late bool, gen uint64) {
 	d.mu.Lock()
 	st := &d.sheetSent
-	st.pending = value
+	if late {
+		if st.gen != gen {
+			// The finger lifted, or a send went first, after this timer could no longer be stopped:
+			// what it would send is not what the slider shows.
+			d.mu.Unlock()
+			return
+		}
+		st.timer = nil
+		value = st.pending
+	} else {
+		st.pending = value
+	}
 	if wait := sheetSendEvery - time.Since(st.at); !final && wait > 0 {
 		if st.timer == nil {
 			gen := st.gen
-			st.timer = sliderAfter(wait, func() {
-				d.mu.Lock()
-				if d.sheetSent.gen != gen {
-					// The finger lifted, or a send went first, after this timer could no longer be
-					// stopped: what it would send is not what the slider shows.
-					d.mu.Unlock()
-					return
-				}
-				d.sheetSent.timer = nil
-				v := d.sheetSent.pending
-				d.mu.Unlock()
-				d.sendSlider(s, v, false)
-			})
+			st.timer = sliderAfter(wait, func() { d.slide(s, 0, false, true, gen) })
 		}
 		d.mu.Unlock()
 		return
@@ -277,15 +290,39 @@ func (d *Display) sendSlider(s sheetSlider, value float64, final bool) {
 	}
 	st.gen++ // a timer that fires anyway is too late
 	repeat := st.sent && st.value == value
+	// A step sent just before the lift may still be on its way: each send goes out on a goroutine of
+	// its own, so it can reach Home Assistant after the lift's (settle).
+	recent := st.sent && time.Since(st.at) < 2*sheetSendEvery
 	st.at, st.value, st.sent = time.Now(), value, true
 	if final {
 		*st = sliderSent{gen: st.gen} // the next finger starts afresh
 	}
+	gen = st.gen
 	c, m := d.dashColor, d.dashMedia
 	d.mu.Unlock()
 	if repeat {
 		return
 	}
+	d.sendSheet(s, value, final, c, m)
+	if final && recent {
+		sliderSettle(sheetSettle, func() {
+			d.mu.Lock()
+			// No finger since, and the same light's or player's sheet still up (the media sheet is copied
+			// on each change, so it is known by its player).
+			same := c != nil && d.dashColor != nil && d.dashColor.Entity == c.Entity ||
+				m != nil && d.dashMedia != nil && d.dashMedia.entity == m.entity
+			again := same && d.sheetSent.gen == gen && !d.sheetSent.sent
+			d.mu.Unlock()
+			if again {
+				d.sendSheet(s, value, true, c, m)
+			}
+		})
+	}
+}
+
+// sendSheet sends value to the light or speakers of slider s on sheet c or m.
+func (d *Display) sendSheet(s sheetSlider, value float64, final bool, c *dashboard.LightColor, m *mediaSheet) {
+	kind := s.kind
 	log := slog.Debug
 	if final {
 		log = slog.Info

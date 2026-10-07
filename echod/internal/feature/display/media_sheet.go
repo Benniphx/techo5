@@ -304,6 +304,9 @@ func (r *renderer) mediaSheet(v *mediaView, th dashboard.Theme) {
 	}
 	favRows := rows(len(m.lists.Favorites))
 	room := (r.h - r.s(16) - fixed - labelH) / (chipH + gap)
+	if favRows > room { // paged: the dots under them take a row's room too
+		room = (r.h - r.s(16) - fixed - labelH - r.s(16)) / (chipH + gap)
+	}
 	favRows = max(min(favRows, room), 0)
 	// The favorites a page holds, and the pages there are: more than fit are paged through.
 	perPage := max(favRows*cols, 1)
@@ -313,8 +316,9 @@ func (r *renderer) mediaSheet(v *mediaView, th dashboard.Theme) {
 	if pages > 1 {
 		dotsH = r.s(16)
 	}
-	// Without Music Assistant there is no music to choose, and no list to say so about.
-	music := m.loading || m.lists.MusicAssistant
+	// Without Music Assistant there is no music to choose, and no list to say so about. Lists that
+	// could not be had at all are said so, not passed over as a house without it.
+	music := m.loading || m.lists.MusicAssistant || m.problem != ""
 	notice := m.loading || m.lists.Target == "" || len(m.lists.Favorites) == 0
 	h := fixed
 	switch {
@@ -336,7 +340,7 @@ func (r *renderer) mediaSheet(v *mediaView, th dashboard.Theme) {
 	if now.Artist != "" && line != "" {
 		line += " · " + now.Artist
 	}
-	if line == "" || (now.State != "playing" && now.State != "paused") {
+	if line == "" || (now.State != "playing" && now.State != "paused" && now.State != "buffering") {
 		line = stateWord(now.State)
 	}
 	r.text(fc.sub, r.fit(fc.sub, line, inner), x0+pad, y+r.s(20), pal.sub)
@@ -420,11 +424,11 @@ func (r *renderer) mediaSheet(v *mediaView, th dashboard.Theme) {
 	case m.loading:
 		r.text(fc.sub, mediaWord(3), x0+pad, y+r.s(20), pal.sub)
 		y += r.s(30)
-	case m.lists.Target == "":
-		r.text(fc.sub, r.fit(fc.sub, mediaWord(5), inner), x0+pad, y+r.s(20), pal.sub)
-		y += r.s(30)
 	case m.problem != "" && len(m.lists.Favorites) == 0:
 		r.text(fc.sub, r.fit(fc.sub, m.problem, inner), x0+pad, y+r.s(20), pal.sub)
+		y += r.s(30)
+	case m.lists.Target == "":
+		r.text(fc.sub, r.fit(fc.sub, mediaWord(5), inner), x0+pad, y+r.s(20), pal.sub)
 		y += r.s(30)
 	case len(m.lists.Favorites) == 0:
 		r.text(fc.sub, mediaWord(4), x0+pad, y+r.s(20), pal.sub)

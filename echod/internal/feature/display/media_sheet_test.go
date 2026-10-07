@@ -144,7 +144,9 @@ func TestTheMediaSheetsVolumeMovesTheGroup(t *testing.T) {
 		defer mu.Unlock()
 		set[a.Entity] = a.Data["volume_level"].(float64)
 	}
-	t.Cleanup(func() { sliderTap = prev })
+	prevSettle := sliderSettle
+	sliderSettle = func(time.Duration, func()) *time.Timer { return nil } // the lift sent again: not what this checks
+	t.Cleanup(func() { sliderTap, sliderSettle = prev, prevSettle })
 
 	sheet := mediaSheet{entity: "media_player.den", volume: -1,
 		lists: dashboard.MediaLists{MusicAssistant: true, Target: "media_player.ma_den", Group: "media_player.ma_den",
