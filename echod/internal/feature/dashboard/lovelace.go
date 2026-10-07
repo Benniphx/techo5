@@ -442,6 +442,12 @@ func actionOf(m raw, entity string) *Action {
 	if tap == nil {
 		return nil
 	}
+	// Home Assistant asks first when an action carries a confirmation. There is no asking here, and
+	// one tap must not do what the dashboard's author wanted a second word for, so the card is only
+	// something to look at.
+	if c, ok := tap["confirmation"]; ok && c != nil && c != false {
+		return &Action{}
+	}
 	switch str(tap, "action") {
 	case "none":
 		return &Action{}
@@ -594,7 +600,11 @@ func (n rowsNode) blocks(l look) []Block {
 
 func (it tileItem) tile(states map[string]hass.LiveEntity) Tile {
 	if it.fixed {
-		return Tile{Name: it.name, Icon: orIcon(it.icon, "gesture-tap"), Value: it.value, Tap: it.action}
+		t := Tile{Name: it.name, Icon: orIcon(it.icon, "gesture-tap"), Value: it.value, Tap: it.action}
+		if t.Tap != nil && t.Tap.Service == "" && t.Tap.View == "" {
+			t.Tap = nil // tap_action none, or one that asks first: nothing to do on a tap
+		}
+		return t
 	}
 	e, ok := states[it.entity]
 	if !ok {

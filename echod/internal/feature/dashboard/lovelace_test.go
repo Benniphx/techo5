@@ -224,3 +224,35 @@ func TestPicturesInAGridBecomeAGallery(t *testing.T) {
 		t.Errorf("porch %+v", blocks[3])
 	}
 }
+
+// A tap_action with a confirmation is one Home Assistant asks about first. There is nothing here to
+// ask with, so the card does nothing on a tap rather than doing it at once.
+func TestATapThatAsksFirstDoesNothing(t *testing.T) {
+	var cards []any
+	if err := json.Unmarshal([]byte(`[
+	  {"type": "button", "name": "Asks", "tap_action": {"action": "perform-action", "perform_action": "lock.unlock", "target": {"entity_id": "lock.front"}, "confirmation": true}},
+	  {"type": "button", "name": "Asks in words", "tap_action": {"action": "perform-action", "perform_action": "script.leave", "confirmation": {"text": "Leave the house?"}}},
+	  {"type": "tile", "entity": "switch.kettle", "tap_action": {"action": "toggle", "confirmation": {}}},
+	  {"type": "button", "name": "Does not ask", "tap_action": {"action": "perform-action", "perform_action": "scene.turn_on", "confirmation": false}}
+	]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	lk := look{states: map[string]hass.LiveEntity{"switch.kettle": {ID: "switch.kettle", State: "off", Attrs: map[string]any{}}},
+		history: map[string][]point{}, pictures: map[string]image.Image{}}
+	var tiles []Tile
+	for _, b := range group(c.cards(cards)).blocks(lk) {
+		tiles = append(tiles, b.Tiles...)
+	}
+	if len(tiles) != 4 {
+		t.Fatalf("%d tiles, want 4: %+v", len(tiles), tiles)
+	}
+	for _, tl := range tiles[:3] {
+		if tl.Tap != nil {
+			t.Errorf("%q runs %+v on one tap, though it asks first in Home Assistant", tl.Name, tl.Tap)
+		}
+	}
+	if tl := tiles[3]; tl.Tap == nil || tl.Tap.Service != "scene.turn_on" {
+		t.Errorf("%q, with confirmation false, lost its tap: %+v", tl.Name, tl.Tap)
+	}
+}

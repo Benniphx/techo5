@@ -93,6 +93,7 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
 | Sensor, history graph, statistics graph, mini-graph-card, apexcharts-card | A graph of the recent history |
 | Gauge | A gauge, with its severity colors |
 | Picture entity (a camera), picture glance, picture | The picture; a camera updates every few seconds. A tap does what its `tap_action` says, such as opening a room's view |
+| Any card whose `tap_action` has a `confirmation` | Shown, but a tap does nothing: there is no way to ask first on the device, so it is not done on one tap |
 | Grid, vertical and horizontal stack, layout-card | Their cards, in place. A grid of pictures with `columns` set is a gallery, that many across; a grid without `columns` stays one under another here, where Home Assistant would put three across |
 | Conditional, and any card's or section's *visibility* | Hidden when its conditions are not met, as Home Assistant would, including screen-width rules |
 | Anything else | A tile naming the card, saying it is shown when streamed |
