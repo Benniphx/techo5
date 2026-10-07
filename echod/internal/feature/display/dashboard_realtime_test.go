@@ -15,19 +15,24 @@ func TestRealtimeDashboardPreservesVoicePhaseAndPagePriority(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, test := range []struct {
-		name                           string
+		name, phase                    string
 		camera, drawer, realtime, want bool
 	}{
 		{name: "voice", realtime: true, want: true},
+		{name: "idle voice with music", phase: "idle", realtime: true, want: true},
 		{name: "stock turn", want: false},
 		{name: "camera", realtime: true, camera: true},
 		{name: "drawer", realtime: true, drawer: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			s := scene{phase: "listening", realtime: test.realtime, nowPlaying: true, showCamera: test.camera}
+			phase := test.phase
+			if phase == "" {
+				phase = "listening"
+			}
+			s := scene{phase: phase, realtime: test.realtime, nowPlaying: true, showCamera: test.camera}
 			d := &Display{}
 			d.dashScene(&s, test.drawer)
-			if s.showDash != test.want || s.phase != "listening" || !s.nowPlaying {
+			if s.showDash != test.want || s.phase != phase || !s.nowPlaying {
 				t.Fatalf("dashboard=%v phase=%s playing=%v", s.showDash, s.phase, s.nowPlaying)
 			}
 		})

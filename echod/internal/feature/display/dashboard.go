@@ -102,7 +102,7 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	// Realtime keeps the dashboard under the voice overlay. Evaluate the stock
 	// page priorities on an idle copy so stable updates retain their own gates.
 	voiceScene := s
-	if s.realtime && s.phase != "idle" {
+	if s.realtime {
 		idle := *s
 		idle.phase = "idle"
 		s = &idle
