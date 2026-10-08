@@ -1,7 +1,7 @@
 {
-  "release_tag": "v1.2.1",
-  "upstream_commit": "a0b0f827f42af0b568c4baff61bac370c998ccff",
-  "source_digest": "e8a4b7ca01c93f09bcdd959672ef07324514dac4d1e21957d3911b6d93588df5",
+  "release_tag": "v1.2.2",
+  "upstream_commit": "bc85bc09765b67f71610c845c0f171bb7b6ecbad",
+  "source_digest": "409acfc3d6c1517dbbe0347e356c8ff8e2a347ecc86191aa423f89ea849b5103",
   "firmware_schema": 2,
-  "version": "v1.2.1-realtime.1"
+  "version": "v1.2.2-realtime.1"
 }
