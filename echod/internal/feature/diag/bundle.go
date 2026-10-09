@@ -33,9 +33,10 @@ import (
 // logTail is how much of the daemon's log goes in: enough to hold what just happened.
 const logTail = 400
 
-// wakeTail is how many of the log's wake word lines go in, from the whole of the current log (it starts
-// again when the daemon does): a device that wakes by mistake did it hours ago as often as just now,
-// and the last few hundred lines are long past it.
+// wakeTail is how many of the log's wake word lines go in, from the whole of the log file: a device
+// that wakes by mistake did it hours ago as often as just now, and the last few hundred lines are long
+// past it. The file keeps earlier runs (it is only started again when it is over 5 MB as the daemon
+// starts), so the times in it can go back to zero partway through.
 const wakeTail = 100
 
 // Bundle is the whole thing as text, ready to be sent to somebody.
@@ -200,9 +201,12 @@ type ring struct {
 	full  bool
 }
 
-func newRing(n int) *ring { return &ring{lines: make([]string, max(n, 1))} }
+func newRing(n int) *ring { return &ring{lines: make([]string, max(n, 0))} }
 
 func (r *ring) add(line string) {
+	if len(r.lines) == 0 {
+		return
+	}
 	r.lines[r.next] = line
 	r.next = (r.next + 1) % len(r.lines)
 	r.full = r.full || r.next == 0

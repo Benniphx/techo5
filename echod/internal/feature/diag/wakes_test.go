@@ -57,4 +57,7 @@ func TestTheWakesAreTheEnginesWakeLines(t *testing.T) {
 	if a, b := readLog(short, 400, 100); a != "one\ntwo" || b != "" {
 		t.Errorf("a short log gave %q and %q", a, b)
 	}
+	if a, _ := readLog(short, 0, 0); a != "" {
+		t.Errorf("asked for no lines, got %q", a)
+	}
 }
