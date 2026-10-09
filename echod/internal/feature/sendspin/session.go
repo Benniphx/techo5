@@ -668,7 +668,7 @@ func (s *session) reported() {
 }
 
 // What the player asks the server for, in the spec's client/state terms. Not measured: the output
-// latency (Player.Latency, at most a full ring: 64 ms on a Show 5, about 85 on a Dot) and a decoder
+// latency (Player.Latency, at most a full ring: 64 ms on a Show 5 or a Spot, about 85 on a Dot) and a decoder
 // starting from cold sit well inside the lead, and the buffer is Wi-Fi jitter with room to spare. The
 // room can hold 30 s (bufferSeconds), so these are floors, not caps.
 const (

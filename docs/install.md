@@ -362,8 +362,9 @@ radio_play_on_speaker:
         media_content_id: "{{ urls[station] }}"
 ```
 
-The `input_select`'s options are the same names as in `urls`; they are what the Favorites list
-shows. In Home Assistant's script editor (**Edit in YAML**), leave out the first line, which is the
+The `input_select`'s options are the station names the Favorites list shows, and the keys in `urls`
+are the same names (without an " on TuneIn" or " on iHeartRadio" at the end, which the device drops
+before it calls the script). In Home Assistant's script editor (**Edit in YAML**), leave out the first line, which is the
 script's id, and paste the rest one level less indented.
 
 **Stations from more than one place.** A station without a plain stream address can be played

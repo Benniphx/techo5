@@ -166,7 +166,7 @@ func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
 	behind := func(step int) float64 {
 		var sum float64
 		for _, s := range songs {
-			r, _ := levels(t, tun, s, step, 1, gainForStep(OutputSpeaker, step))
+			r, _ := levels(t, tun, s, step, 1, gainForStep(OutputSpeaker, step)*untunedTrim)
 			sum += r
 		}
 		return sum / float64(len(songs))
@@ -198,22 +198,22 @@ func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
 	}
 }
 
-// And the music keeps its punch: the peaks stand further above the average than they did when the
-// compressor was flattening every kick, or, where the dial is loud enough for the compressor to hold
-// it, at least punchyCrest above it.
 // punchyCrest is peaks over the average, in dB, that still sound like music rather than a flattened
 // version of it: about what the Dot keeps at step 20. The Spot reaches it from step 15, where its
 // compressor starts holding, and its old order already kept 14.8 dB.
 const punchyCrest = 15
 
+// And the music keeps its punch: the peaks stand further above the average than they did when the
+// compressor was flattening every kick, or, on the sets whose top was raised to the vendor's own
+// (evenTop) and from step 15 up, where the compressor starts holding, at least punchyCrest above it.
 func TestVolumeInFrontKeepsThePunch(t *testing.T) {
 	tun, curve := vendorTuning(t)
 	src := musicLike(6)
 	for _, step := range []int{1, 5, 10, 15, 20} {
 		g := gainForStep(OutputSpeaker, step)
-		oldRMS, oldPeak := levels(t, tun, src, step, 1, g)
+		oldRMS, oldPeak := levels(t, tun, src, step, 1, g*untunedTrim)
 		newRMS, newPeak := levels(t, tun, src, step, g*firstRatio(&curve, OutputSpeaker, step), 1)
-		if oldCrest, newCrest := oldPeak-oldRMS, newPeak-newRMS; newCrest < oldCrest+1 && newCrest < punchyCrest {
+		if oldCrest, newCrest := oldPeak-oldRMS, newPeak-newRMS; newCrest < oldCrest+1 && (!evenTop(tun.Name()) || step < 15 || newCrest < punchyCrest) {
 			t.Errorf("step %d: peaks %.1f dB over the average, %.1f dB before", step, newCrest, oldCrest)
 		}
 		t.Logf("step %2d: peaks %.1f dB over the average (was %.1f)", step, newPeak-newRMS, oldPeak-oldRMS)

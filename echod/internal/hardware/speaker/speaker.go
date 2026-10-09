@@ -205,11 +205,11 @@ const DefaultLatency = time.Duration(period*periods)*time.Second/Rate + OutputEx
 // which is a margin for deciding the room has gone quiet and is deliberately generous.
 //
 // The reading is taken in the write loop and used from the network goroutine, up to a period later
-// (16 ms on a Show 5, 21 on a Dot), so the time since it was taken comes off: without that, the anchor
-// sat up to a period early.
+// (16 ms on a Show 5 or a Spot, 21 on a Dot), so the time since it was taken comes off: without that,
+// the anchor sat up to a period early.
 //
-// A full ring is 3072 frames (64 ms) on a Show 5 and 4096 (about 85 ms) on a Dot, and just after a
-// write the card holds close to all of it. Measured on a 1st gen Show 5 (2026-10-02, idle loop feeding
+// A full ring is 3072 frames (64 ms) on a Show 5 or a Spot and 4096 (about 85 ms) on a Dot, and just
+// after a write the card holds close to all of it. Measured on a 1st gen Show 5 (2026-10-02, idle loop feeding
 // silence), at arbitrary moments it held 2528 to 2880 frames, 53 to 60 ms.
 //
 // A sink (Bluetooth) is not counted: the codec keeps its pace on silence while the sink plays the
@@ -659,16 +659,19 @@ func (p *Player) fill(buf []byte) {
 	// mix. The music comes out at the media volume either way, and a muted one stays muted under
 	// the alarm. On the tuned path the compressor narrows that difference a little, since it works
 	// on the sum; the lane that sets the output level is exact.
+	//
+	// The two are compared at the level they come out at: tuned with a curve in front, that is the
+	// curve's, which can rise where the usual one stands still (the Spot's and the Dot's vendor curves
+	// repeat values near the top).
 	gain, step := p.Volume(), int(p.step.Load())
 	mediaK, bellK := float32(1), float32(0)
 	if rang > 0 || p.ringing.Load() {
-		bs := int(p.bellStep.Load())
-		bg := p.gainFor(bs)
-		if bg > gain {
-			mediaK, bellK, gain, step = gain/bg, 1, bg, bs
-		} else if gain > 0 {
-			bellK = bg / gain
+		var first *[VolumeSteps + 1]float64
+		if tuned {
+			first = p.first
 		}
+		bs := int(p.bellStep.Load())
+		mediaK, bellK, gain, step = ringBalance(first, out, gain, step, p.gainFor(bs), bs)
 	}
 
 	// Where the tuning has a curve of its own the volume goes in front of it, as the vendor's chain
@@ -1012,6 +1015,27 @@ func firstRatio(first *[VolumeSteps + 1]float64, out Output, step int) float32 {
 		return 0
 	}
 	return float32(math.Pow(10, first[step]/20)) / usual
+}
+
+// ringBalance is how a ring and the media share the one gain after the tuning: the gain and step the
+// output goes at, the louder of the two, and what each lane is scaled by in front of it. They are
+// compared at the level they come out at, which with a curve in front of the tuning (first, nil when
+// untuned) is the curve's.
+func ringBalance(first *[VolumeSteps + 1]float64, out Output, gain float32, step int, bg float32, bs int) (mediaK, bellK, g float32, s int) {
+	level := func(s int, g float32) float32 {
+		if first != nil {
+			return g * firstRatio(first, out, s)
+		}
+		return g
+	}
+	lb, lm := level(bs, bg), level(step, gain)
+	if lb > lm {
+		return lm / lb, 1, bg, bs
+	}
+	if lm > 0 {
+		return 1, lb / lm, gain, step
+	}
+	return 1, 0, gain, step
 }
 
 // gainFor is the linear gain for a step on whatever the audio is going to now.

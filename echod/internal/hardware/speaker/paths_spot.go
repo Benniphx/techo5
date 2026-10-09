@@ -118,14 +118,17 @@ func DetectOutput() Output {
 // volume is in.
 const VolumeSteps = config.VolumeSteps
 
-// volumeCurves maps a volume step to attenuation in dB: the Dot's vendor curve, which the Spot's codec
-// and speaker are closest to. The Show's curve, which the Spot had before, is made for the Show's much
-// louder amplifier and left a Spot at half the dial about 16 dB quieter than Fire OS (#95).
+// volumeCurves maps a volume step to attenuation in dB. The speaker's is the Dot's vendor curve, which
+// the Spot's codec and speaker are closest to, 6 dB down: it is what plays when the
+// tuning is off or missing, with no limiter behind it, and it stops where the Spot's untuned curve
+// always has. Tuned, the speaker follows firstCurves instead, which is worked out from the vendor curve
+// itself. The Show's curve, which the Spot had before, is made for the Show's much louder amplifier
+// and left a tuned Spot at half the dial about 16 dB quieter than Fire OS (#95).
 var volumeCurves = map[Output][VolumeSteps + 1]float64{
 	OutputSpeaker: {
-		-90, -33, -30, -26, -25, -23, -21, -19, -17, -16,
-		-14, -13, -12, -10, -9, -8, -7, -5, -5, -4,
-		-4, -4, -4, -3, -3, -3, -3, -3, -2, -1, 0,
+		-90, -39, -36, -32, -31, -29, -27, -25, -23, -22,
+		-20, -19, -18, -16, -15, -14, -13, -11, -11, -10,
+		-10, -10, -10, -9, -9, -9, -9, -9, -8, -7, -6,
 	},
 	OutputHeadphone: {
 		-100, -39, -38, -36, -34, -33, -31, -29, -27, -26,
@@ -170,9 +173,9 @@ const DriverTuning = true
 // firstCurves puts the volume in front of the tuning, as on the Show (paths_cronos.go, which says
 // why and how these were worked out). The Spot's AFE.cfg has no volume stage of its own, so Android
 // turned the volume down before the tuning, which is where this puts it too. Worked out from a Spot's
-// own files the same way as the Dot's: each step up to 16 as loud as volumeCurves' step was behind the
-// tuning, and from 16 to 30 rising evenly to the same top, since the vendor curve's repeated values
-// leave steps there no louder than the one below.
+// own files the same way as the Dot's: each step up to 16 as loud as the vendor curve's step was behind
+// the tuning (volumeCurves 6 dB up), and from 16 to 30 rising evenly to the same top, since the vendor
+// curve's repeated values leave steps there no louder than the one below.
 var firstCurves = map[string][VolumeSteps + 1]float64{
 	"spot": {
 		-90, -45.8, -42.8, -38.9, -37.9, -35.8, -33.8, -31.7, -28.9, -27.3,
