@@ -31,6 +31,10 @@ import (
 // logTail is how much of the daemon's log goes in: enough to hold what just happened.
 const logTail = 400
 
+// wakeTail is how many of the log's wake word lines go in, from the whole log: a device that wakes by
+// mistake did it hours ago as often as just now, and the last few hundred lines are long past it.
+const wakeTail = 100
+
 // Bundle is the whole thing as text, ready to be sent to somebody.
 func Bundle() string {
 	r := redact.New()
@@ -74,6 +78,7 @@ func Bundle() string {
 	// them, and not under StateDir on any: an empty log section is the one thing a bundle cannot be
 	// missing, since it is what somebody asked for the bundle to see.
 	section("daemon log (last "+fmt.Sprint(logTail)+" lines)", tail(layout.LogPath, logTail))
+	section("wake words (last "+fmt.Sprint(wakeTail)+" detections and near misses)", wakes(layout.LogPath, wakeTail))
 	if layout.BootLog != "" {
 		section("boot log", tail(layout.BootLog, 120))
 	}
@@ -150,6 +155,24 @@ func tail(path string, n int) string {
 		lines = lines[len(lines)-n:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+// wakes is the last n wake word detections and near misses in the log at path, with their scores.
+func wakes(path string, n int) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var out []string
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if strings.Contains(line, "wake detected") || strings.Contains(line, "wake near miss") {
+			out = append(out, strings.TrimRight(line, "\r"))
+		}
+	}
+	if len(out) > n {
+		out = out[len(out)-n:]
+	}
+	return strings.Join(out, "\n")
 }
 
 func readTrim(path string) string {

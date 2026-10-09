@@ -331,3 +331,9 @@ While the lock is on, the PIN is also asked for when Home Assistant opens the se
 Open an [issue on GitHub](https://github.com/HuskerMinion/techo5/issues). Say which device and
 version (Settings → General → Updates shows it), what you did and what happened. Answers there help the next person
 too.
+
+Attach the device's diagnostics if you can: open its setup page (Settings → Privacy → Setup page, or
+the device's **Setup page** switch in Home Assistant on a Dot), go to **General** and press
+**Download diagnostics**. It holds the last of the device's log, its recent wake word detections and
+near misses, and what it is set to. Addresses, network names, keys and
+serial numbers are replaced before you get it, but give it a read before you post it.
