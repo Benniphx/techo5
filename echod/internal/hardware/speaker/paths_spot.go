@@ -118,13 +118,14 @@ func DetectOutput() Output {
 // volume is in.
 const VolumeSteps = config.VolumeSteps
 
-// volumeCurves maps a volume step to attenuation in dB. Not yet tuned on the Spot: the Show's curve,
-// linear in dB and topping out 6 dB under unity, which starts quiet rather than loud.
+// volumeCurves maps a volume step to attenuation in dB: the Dot's vendor curve, which the Spot's codec
+// and speaker are closest to. The Show's curve, which the Spot had before, is made for the Show's much
+// louder amplifier and left a Spot at half the dial about 16 dB quieter than Fire OS (#95).
 var volumeCurves = map[Output][VolumeSteps + 1]float64{
 	OutputSpeaker: {
-		-90, -45, -43.5, -42, -40.5, -39, -37.5, -36, -34.5, -33,
-		-31.5, -30, -28.5, -27, -25.5, -24, -22.8, -21.6, -20.4, -19.2,
-		-18, -16.8, -15.6, -14.4, -13.2, -12, -10.8, -9.6, -8.4, -7.2, -6,
+		-90, -33, -30, -26, -25, -23, -21, -19, -17, -16,
+		-14, -13, -12, -10, -9, -8, -7, -5, -5, -4,
+		-4, -4, -4, -3, -3, -3, -3, -3, -2, -1, 0,
 	},
 	OutputHeadphone: {
 		-100, -39, -38, -36, -34, -33, -31, -29, -27, -26,
@@ -168,13 +169,15 @@ const DriverTuning = true
 
 // firstCurves puts the volume in front of the tuning, as on the Show (paths_cronos.go, which says
 // why and how these were worked out). The Spot's AFE.cfg has no volume stage of its own, so Android
-// turned the volume down before the tuning, which is where this puts it too. Worked out from a
-// Spot's own files the same way as the Show's: each step as loud as it was.
+// turned the volume down before the tuning, which is where this puts it too. Worked out from a Spot's
+// own files the same way as the Dot's: each step up to 16 as loud as volumeCurves' step was behind the
+// tuning, and from 16 to 30 rising evenly to the same top, since the vendor curve's repeated values
+// leave steps there no louder than the one below.
 var firstCurves = map[string][VolumeSteps + 1]float64{
 	"spot": {
-		-90, -57.9, -56.4, -54.9, -53.3, -51.9, -50.4, -48.9, -47.4, -45.9,
-		-44.4, -42.9, -41.4, -39.8, -38.4, -36.8, -35.6, -34.4, -33.2, -31.9,
-		-30.3, -28.6, -26.7, -24.7, -22.6, -20.6, -18.8, -17.1, -15.4, -13.8, -12.1,
+		-90, -45.8, -42.8, -38.9, -37.9, -35.8, -33.8, -31.7, -28.9, -27.3,
+		-24, -22.3, -20.6, -17.6, -16.2, -14.9, -13.5, -12.8, -12.1, -11.4,
+		-10.6, -9.8, -9, -8.1, -7.1, -6.1, -4.9, -3.7, -2.5, -1.3, 0,
 	},
 }
 
