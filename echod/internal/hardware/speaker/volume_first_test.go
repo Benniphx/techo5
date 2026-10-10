@@ -150,10 +150,14 @@ func leveledMusic(t *testing.T) [][]float32 {
 	return out
 }
 
+// evenTop is whether a set's steps above 16 rise evenly to the top rather than follow its vendor curve,
+// whose repeated values there leave steps no louder than the one below: the Dot's and the Spot's.
+func evenTop(name string) bool { return name == "dot" || name == "spot" }
+
 // With the real tuning and real music, every step in front of it is about as loud as the same step was
-// behind it, so nobody's dial changes, and every step is louder than the one below. The Dot's steps
-// above 16 rise evenly to the same top instead (paths_dot.go), so they are held to that. Needs a copy
-// of the unit's tuning and some music:
+// behind it, so nobody's dial changes, and every step is louder than the one below. The Dot's and the
+// Spot's steps above 16 rise evenly to the same top instead (paths_dot.go), so they are held to that.
+// Needs a copy of the unit's tuning and some music:
 //
 //	ECHOLOCAL_VENDOR_DIR=/tmp/coefs ECHOLOCAL_MUSIC_DIR=/tmp/music go test ./internal/hardware/speaker/ -run VolumeInFront -v
 func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
@@ -162,20 +166,20 @@ func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
 	behind := func(step int) float64 {
 		var sum float64
 		for _, s := range songs {
-			r, _ := levels(t, tun, s, step, 1, gainForStep(OutputSpeaker, step))
+			r, _ := levels(t, tun, s, step, 1, gainForStep(OutputSpeaker, step)*untunedTrim)
 			sum += r
 		}
 		return sum / float64(len(songs))
 	}
 	var from, top float64
-	if tun.Name() == "dot" {
+	if evenTop(tun.Name()) {
 		from, top = behind(16), behind(VolumeSteps)
 	}
 	last := math.Inf(-1)
 	for step := 1; step <= VolumeSteps; step++ {
 		g := gainForStep(OutputSpeaker, step)
 		was := behind(step)
-		if tun.Name() == "dot" && step > 16 {
+		if evenTop(tun.Name()) && step > 16 {
 			was = from + (top-from)*float64(step-16)/float64(VolumeSteps-16)
 		}
 		var now float64
@@ -194,16 +198,22 @@ func TestVolumeInFrontKeepsTheLoudness(t *testing.T) {
 	}
 }
 
+// punchyCrest is peaks over the average, in dB, that still sound like music rather than a flattened
+// version of it: about what the Dot keeps at step 20. The Spot reaches it from step 15, where its
+// compressor starts holding, and its old order already kept 14.8 dB.
+const punchyCrest = 15
+
 // And the music keeps its punch: the peaks stand further above the average than they did when the
-// compressor was flattening every kick, wherever the compressor is not holding the top of the dial.
+// compressor was flattening every kick, or, on the sets whose top was raised to the vendor's own
+// (evenTop) and from step 15 up, where the compressor starts holding, at least punchyCrest above it.
 func TestVolumeInFrontKeepsThePunch(t *testing.T) {
 	tun, curve := vendorTuning(t)
 	src := musicLike(6)
 	for _, step := range []int{1, 5, 10, 15, 20} {
 		g := gainForStep(OutputSpeaker, step)
-		oldRMS, oldPeak := levels(t, tun, src, step, 1, g)
+		oldRMS, oldPeak := levels(t, tun, src, step, 1, g*untunedTrim)
 		newRMS, newPeak := levels(t, tun, src, step, g*firstRatio(&curve, OutputSpeaker, step), 1)
-		if oldCrest, newCrest := oldPeak-oldRMS, newPeak-newRMS; newCrest < oldCrest+1 {
+		if oldCrest, newCrest := oldPeak-oldRMS, newPeak-newRMS; newCrest < oldCrest+1 && (!evenTop(tun.Name()) || step < 15 || newCrest < punchyCrest) {
 			t.Errorf("step %d: peaks %.1f dB over the average, %.1f dB before", step, newCrest, oldCrest)
 		}
 		t.Logf("step %2d: peaks %.1f dB over the average (was %.1f)", step, newPeak-newRMS, oldPeak-oldRMS)

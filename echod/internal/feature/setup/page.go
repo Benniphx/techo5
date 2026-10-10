@@ -493,7 +493,7 @@ func (f *Feature) wifiSection(w http.ResponseWriter, token string, scan bool) {
 func diagnosticsSection(w http.ResponseWriter) {
 	fmt.Fprint(w, `<fieldset><legend>Something wrong?</legend>
 	 <p><a href="/setup/diagnostics.txt">Download diagnostics</a> — what this device knows about
-	  itself, the last of its log, and what it is set to.</p>
+	  itself, the last of its log, its recent wake words, and what it is set to.</p>
 	 <p class="note">Addresses, network names, keys and serial numbers are replaced before you get it,
 	  so it can go straight into an issue. Worth a look before you send it all the same.</p>
 	 </fieldset>`)

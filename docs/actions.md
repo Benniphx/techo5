@@ -1143,6 +1143,9 @@ In YAML, refer to this action as `esphome.<node>_home_radio`.
 Configures the device's Radio page: which stations it lists, what plays them, and what shows as
 "now playing". Screen devices only; the change takes effect the next time the device reconnects.
 
+Sample scripts, for stream addresses, Radio Browser and TuneIn stations, are under
+[Radio](install.md#radio) in the install guide.
+
 > **Good to know**
 >
 > Favorites (`stations`) play through a Home Assistant script over the device's normal API
