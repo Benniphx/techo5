@@ -117,6 +117,24 @@ a camera on the recorder that has no speaker shows Talk too, and says it has no 
 Cameras read straight from a Reolink recorder have no sound on the device, so for those Talk is
 one-way: you are heard at the door, but the visitor is not heard on the device.
 
+### A doorbell
+
+The device can be a Reolink doorbell's chime, with no Home Assistant needed: a press of the button
+rings the device and puts the doorbell's camera up for a minute (a Dot only rings). It rings for
+every press, at any hour, like any doorbell, and for nothing else: somebody walking up to the door
+does not ring it.
+
+1. Put the doorbell on a Reolink Home Hub or NVR. On its own, a Reolink battery doorbell does not
+   report its button to anything but the Reolink app; through a Hub it does.
+2. In the Reolink app, on the Hub or NVR (not the doorbell), turn on **ONVIF** under
+   `Settings > Network > Advanced > Server Settings`, and note its port (8000 unless changed).
+3. On the device's setup page, under **Connections**, set up the Hub or NVR in **Reolink cameras**,
+   then choose the doorbell's camera under **Doorbell** and save.
+
+The Doorbell section then says whether the device is listening, and when the button was last
+pressed. The chime is a mechanical door chime's three tones, played twice, at the alarm volume or
+the volume the device is at, whichever is louder.
+
 ## 5. Music
 
 - **Music Assistant.** Each device is a Sendspin player, on from the first boot. Music Assistant

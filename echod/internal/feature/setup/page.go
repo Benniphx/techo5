@@ -242,6 +242,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = removePhotos(r)
 	case "reolink":
 		problem = saveReolink(r)
+	case "doorbell":
+		problem = saveDoorbell(r)
+	case "doorbell-chime":
+		chimeDoorbell()
 	case "talkback":
 		problem = saveTalkBack(r)
 	case "lock":
@@ -363,6 +367,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 			 is not one this page can change.</p></fieldset>`)
 		}
 		reolinkSection(w, token)
+		doorbellSection(w, token)
 		talkBackSection(w, token)
 		dashboardSection(w, token)
 	case "photos":
