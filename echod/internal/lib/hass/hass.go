@@ -314,6 +314,16 @@ func (c *Client) baseURL() string {
 	return c.acc.URL
 }
 
+// Address is where Home Assistant is looked for, as the home_assistant action gave it, with no path:
+// "http://192.168.1.20:8123". Empty when none was given. For saying where it could not be reached.
+func (c *Client) Address() string {
+	u, err := neturl.Parse(c.baseURL())
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
+}
+
 // Entity is an entity's id and the name Home Assistant shows for it.
 type Entity struct {
 	ID, Name string

@@ -34,10 +34,11 @@ func TestAtTheDoorOnTheCallPage(t *testing.T) {
 		for name, s := range map[string]scene{
 			"call-at-door":         {atDoor: true},
 			"call-at-door-ringing": {atDoor: true, ring: ringState{timer: "Pasta"}},
+			"call-ringing":         {ring: ringState{timer: "Pasta"}},
 		} {
 			img := draw(s)
 			if same(img.Pix, plain.Pix) {
-				t.Errorf("%s%s: the page looks the same as a call with nobody at the door", name, panel.name)
+				t.Errorf("%s%s: the page looks the same as a plain call", name, panel.name)
 			}
 			if dir == "" {
 				continue
