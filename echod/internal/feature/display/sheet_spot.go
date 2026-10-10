@@ -398,6 +398,7 @@ func (d *Display) sheetGesture(g touch.Gesture) {
 	d.mu.Lock()
 	d.sheetAt = time.Now()
 	d.mu.Unlock()
+	stillHere()
 	switch g.Kind {
 	case touch.Hold:
 		d.mu.Lock()
@@ -443,9 +444,9 @@ func (d *Display) sheetGesture(g touch.Gesture) {
 			id := d.picker
 			d.picker = ""
 			d.mu.Unlock()
-			gate(id, d.sheetUp, func() { d.choose(id, z.opt) })
+			d.tapOption(id, z.opt)
 		case zoneRow:
-			gate(z.id, d.sheetUp, func() { d.rowTap(z.id, z.part, z.opt) })
+			d.tapRow(z)
 		}
 	}
 	d.wake()

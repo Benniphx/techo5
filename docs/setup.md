@@ -315,11 +315,12 @@ change, so guests and children can use the device without changing how it is set
 screen still opens without it, and what is part of using the device stays open to everyone: alarms
 and timers, the volume, bass and treble, the headphone output, the microphone, the wake sound, the
 sleep timer, and the brightness. Every other setting shows a padlock after its name and asks for the
-PIN when it is tapped. Once the PIN is in, the rest stay open until the settings close or are left
-alone for two minutes. Set it under Settings → Privacy & Security, on the setup page (Privacy), or
-with the [settings_lock_pin action](actions.md#set-the-settings-locks-pin). Five wrong tries in a
-row make the device wait before it takes another. The **Settings lock** switch in Home Assistant
-shows whether it is on; turning it off removes the PIN.
+PIN when it is tapped. The PIN pad shows which setting it is for, and the setting changes once the
+PIN is right. Once the PIN is in, the rest stay open until the settings close or are left alone for
+two minutes. Set it under Settings → Privacy & Security, on the setup page (Privacy), or with the
+[settings_lock_pin action](actions.md#set-the-settings-locks-pin). Five wrong tries in a row make
+the device wait before it takes another. The **Settings lock** switch in Home Assistant shows
+whether it is on; turning it off removes the PIN.
 
 While the lock is on, the PIN is also asked for when **Allow** is pressed on the setup page.
 

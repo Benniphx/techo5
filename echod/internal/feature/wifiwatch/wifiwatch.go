@@ -16,7 +16,10 @@
 // everyone instead: mDNS, router adverts, DHCP and the like arrive every few seconds on a busy network,
 // router adverts and membership queries every few minutes on a quiet one, and all of it stops when the
 // radio has gone deaf. (ARP would be the surest of all, but it is not IP, and these are the IP stack's
-// counters.)
+// counters.) The counters go by where a packet was addressed, not how it came: a router that sends
+// group traffic on to each device as its own (multicast to unicast), or a host on the network that
+// does, keeps the network heard through a broken group key, and the watcher then leaves it be, as it
+// did before.
 package wifiwatch
 
 import (
@@ -183,6 +186,14 @@ func (w *Watch) look(ctx context.Context) {
 			w.say("wifi: recovered: "+w.sign+" is back after reassociating",
 				"after", now.Sub(w.tried).Round(time.Second))
 			w.tried = time.Time{}
+			// Home Assistant back within settle of the try: the reassociation cured it, so the next
+			// deafness is a new one, cured as quickly. Group traffic is no such proof, since on a
+			// network heard only now and then it can come back within settle by chance, and taking
+			// that for a cure would be the loop the backoff is for: it waits out steady like any sign
+			// that comes back by itself.
+			if w.sign == signHA {
+				w.wait, w.notTill = firstWait, time.Time{}
+			}
 		}
 		w.lostAt = time.Time{}
 		if w.hereAt.IsZero() {

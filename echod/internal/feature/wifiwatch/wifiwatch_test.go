@@ -158,7 +158,9 @@ func TestDeafToBroadcastsItReassociatesOnceAndBacksOff(t *testing.T) {
 		t.Fatalf("no third try once the doubled wait was up: %d", wd.reassocs)
 	}
 
-	// Home Assistant back: the loss is over, but the wait starts over only once it has stayed.
+	// Home Assistant back by itself, long after the try: the loss is over, but the wait starts over
+	// only once it has stayed.
+	wd.run(w, 3*time.Minute)
 	wd.ha = true
 	wd.run(w, time.Minute)
 	if !w.lostAt.IsZero() || w.wait != mostWait {
@@ -167,6 +169,23 @@ func TestDeafToBroadcastsItReassociatesOnceAndBacksOff(t *testing.T) {
 	wd.run(w, steady)
 	if w.wait != firstWait {
 		t.Errorf("an hour back did not start the wait over: %v", w.wait)
+	}
+}
+
+// A reassociation that brings the sign back within settle cured it: the next deafness, however soon,
+// is cured after the first wait again, not the longest one.
+func TestACureStartsTheWaitOver(t *testing.T) {
+	wd := start()
+	w := wd.watch()
+	wd.run(w, time.Minute)
+	for range 3 {
+		wd.ha = false
+		wd.run(w, 5*time.Minute)
+		wd.ha = true
+		wd.run(w, time.Minute)
+	}
+	if wd.reassocs != 3 || wd.count("wifi: recovered") != 3 || w.wait != firstWait {
+		t.Errorf("%d tries, %d recoveries, wait %v; want 3, 3 and the first wait", wd.reassocs, wd.count("wifi: recovered"), w.wait)
 	}
 }
 

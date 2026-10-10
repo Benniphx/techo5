@@ -793,6 +793,7 @@ func (d *Display) choose(id string, i int) {
 
 // nextTap is a finger on the settings screen.
 func (d *Display) nextTap(x, y int) {
+	stillHere()
 	z, ok := d.r.zoneAt(x, y)
 	if !ok {
 		return
@@ -816,13 +817,34 @@ func (d *Display) nextTap(x, y int) {
 		id := d.picker
 		d.picker = ""
 		d.mu.Unlock()
-		gate(id, d.sheetUp, func() { d.choose(id, z.opt) })
+		d.tapOption(id, z.opt)
 	case zoneRow:
-		gate(z.id, d.sheetUp, func() { d.rowTap(z.id, z.part, z.opt) })
+		d.tapRow(z)
 	}
 }
 
-// rowTap is a tap on a row's control, past the settings lock: nextTap asks for the PIN first.
+// tapRow is a tap on a row, through the settings lock (gate, pin.go).
+func (d *Display) tapRow(z zone) {
+	if z.id == "weather" && z.part == partExtra {
+		d.rowTap(z.id, z.part, z.opt) // the Show's forecast, which changes nothing
+		return
+	}
+	gate(z.id, z.label, d.sheetUp, func() { d.rowTap(z.id, z.part, z.opt) })
+}
+
+// tapOption is a choice in an open list, through the settings lock. A list behind the lock is open
+// while locked only when the lock came back with it up, or when it was opened from afar; the PIN then
+// opens the lock and nothing more, since the list it was chosen from has gone and may read differently
+// when it is opened again.
+func (d *Display) tapOption(id string, opt int) {
+	if rowLocked(id) {
+		gate(id, "", d.sheetUp, nil)
+		return
+	}
+	gate(id, "", d.sheetUp, func() { d.choose(id, opt) })
+}
+
+// rowTap is a tap on a row's control, past the settings lock: tapRow asks for the PIN first.
 func (d *Display) rowTap(id string, p part, opt int) {
 	if d.alarmRowTap(id, p, opt) {
 		return
@@ -1046,6 +1068,7 @@ func (d *Display) sheetSwipe(g touch.Gesture) {
 	if d.r == nil {
 		return
 	}
+	stillHere()
 	by := notchPx
 	if g.Kind == touch.SwipeDown {
 		by = -notchPx

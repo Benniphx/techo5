@@ -297,6 +297,8 @@ type zone struct {
 	id   string
 	part part
 	opt  int
+
+	label string // a row's name, for the PIN pad when the row is behind the settings lock
 }
 
 // pickerView is a list of choices open over the card: one is picked, or a tap elsewhere puts it away.
@@ -656,7 +658,7 @@ func (r *paint) settingRow(card image.Rectangle, top int, row settingRow) {
 	fit := func(text string, rightEdge int) string { return r.fit(fc.value, text, rightEdge-labelEnd-r.s(rowGap)) }
 	add := func(r0 image.Rectangle, p part) {
 		if row.id != "" {
-			r.addZone(zone{r: r0, kind: zoneRow, id: row.id, part: p})
+			r.addZone(zone{r: r0, kind: zoneRow, id: row.id, part: p, label: row.label})
 		}
 	}
 	switch row.kind {
@@ -692,7 +694,7 @@ func (r *paint) settingRow(card image.Rectangle, top int, row settingRow) {
 			}
 			r.text(fc.button, name, b.Min.X+(chipW-r.width(fc.button, name))/2, cy+8, ink)
 			if row.id != "" {
-				r.addZone(zone{r: image.Rect(b.Min.X-chipGap/2, top, b.Max.X+chipGap/2, top+r.rowH()), kind: zoneRow, id: row.id, part: partDay, opt: i})
+				r.addZone(zone{r: image.Rect(b.Min.X-chipGap/2, top, b.Max.X+chipGap/2, top+r.rowH()), kind: zoneRow, id: row.id, part: partDay, opt: i, label: row.label})
 			}
 		}
 	case ctlStepper:

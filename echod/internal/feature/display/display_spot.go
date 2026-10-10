@@ -1186,6 +1186,11 @@ func (d *Display) frame() time.Duration {
 			d.closeMenu()
 		}
 	}
+	if d.sheetOpen && pinIsOpen() {
+		// The PIN pad over the settings takes the taps, and someone typing is someone there: the
+		// settings wait behind it rather than closing on them, which would lose what the PIN was for.
+		d.sheetAt = now
+	}
 	if d.sheetOpen && !d.dragging && d.draft == nil && now.Sub(d.sheetAt) > sheetIdle {
 		d.sheetOpen, d.picker = false, ""
 		d.followFingers(false)
