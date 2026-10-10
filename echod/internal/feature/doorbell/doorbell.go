@@ -130,6 +130,10 @@ type Feature struct {
 	settings func() (target, bool, string)
 	now      func() time.Time
 	waited   func(d time.Duration) // told of each wait Run takes, for a test; nil in use
+
+	// callsEnd has over is called each time a call ends, from Run's start; nil in a test.
+	callsEnd func(over func())
+	hooked   sync.Once
 }
 
 var shared = &Feature{
@@ -140,6 +144,25 @@ var shared = &Feature{
 	calling:  inCall,
 	settings: current,
 	now:      time.Now,
+	callsEnd: func(over func()) {
+		phone.Get().Changed.Listen(func(s phone.State) {
+			if s.Phase == phone.Idle {
+				over()
+			}
+		})
+	},
+}
+
+// callOver forgets a press made during a call once the call is over: "Someone's at the door" was
+// that call's news, not the next one's.
+func (f *Feature) callOver() {
+	f.mu.Lock()
+	was := !f.atDoor.IsZero()
+	f.atDoor = time.Time{}
+	f.mu.Unlock()
+	if was {
+		f.Changed.Emit(struct{}{})
+	}
 }
 
 func init() {
@@ -219,6 +242,9 @@ func current() (t target, ok bool, problem string) {
 // Run listens for presses for as long as the device is up, starting again whenever the settings
 // change or the recorder goes away.
 func (f *Feature) Run(ctx context.Context) error {
+	if f.callsEnd != nil {
+		f.hooked.Do(func() { f.callsEnd(f.callOver) })
+	}
 	wait := retryMin
 	for {
 		t, ok, problem := f.settings()
@@ -237,7 +263,7 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		}
 		if subscribed {
-			wait = retryMin // it worked until now: a fresh failure starts over at the shortest wait
+			wait = retryMin // it was heard until now: a fresh failure starts over at the shortest wait
 		}
 		if err == nil { // the settings changed: look again at once
 			continue
@@ -277,7 +303,7 @@ func (f *Feature) sleep(ctx context.Context, d time.Duration, t target, ok bool)
 
 // listen holds one subscription open and rings for what comes through it. It returns a nil error
 // when the settings no longer match t, and the error that ended it otherwise; subscribed is whether
-// it got as far as a subscription.
+// the recorder was heard, a pull answered on a subscription, and not only subscribed to.
 func (f *Feature) listen(ctx context.Context, t target) (subscribed bool, err error) {
 	// A poke that changes what to listen to ends whatever is in progress, a subscribing or a
 	// renewal as much as a pull; one that changes nothing ends nothing.
@@ -319,7 +345,6 @@ func (f *Feature) listen(ctx context.Context, t target) (subscribed bool, err er
 	if err != nil {
 		return ended(err)
 	}
-	subscribed = true
 	defer func() {
 		cctx, ccancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer ccancel()
@@ -337,6 +362,12 @@ func (f *Feature) listen(ctx context.Context, t target) (subscribed bool, err er
 		}
 		asked := time.Now()
 		evs, err := sub.Pull(sctx, pullWait)
+		if err == nil {
+			// Heard, not just subscribed: a recorder that takes the subscription and refuses every
+			// pull is still a failure, and keeps the growing wait between tries, or a refused login
+			// every few seconds could lock the account.
+			subscribed = true
+		}
 		for _, ev := range evs {
 			if pressed(ev, t.channel, t.several) {
 				f.press(t.camera)

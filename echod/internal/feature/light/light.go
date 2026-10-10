@@ -114,7 +114,9 @@ func (l *Light) Base() led.Color { return colorOf(l.light.Get()) }
 func (l *Light) Restore(c config.Config) {
 	saved := c.Ring.Light
 
-	if !saved.On {
+	if !saved.On || !led.HasRing {
+		// Off, or no ring: a light saved on before the control was taken away from a device with no
+		// ring would animate nothing for as long as the device is up.
 		slog.Info("restored", "what", "ring light", "on", false)
 		return
 	}

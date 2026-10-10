@@ -48,14 +48,18 @@ func doorbellSection(w http.ResponseWriter, token string) {
 		}
 		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, html.EscapeString(cam.Entity), sel, html.EscapeString(cam.Name))
 	}
+	does := "rings the device and shows the doorbell's camera for a minute"
+	if !hasScreen {
+		does = "rings the device" // a Dot has no screen to show the camera on
+	}
 	fmt.Fprintf(w, `</select>
 	 <label for="dbport">The recorder's ONVIF port</label>
 	 <input id="dbport" name="port" value="%d" inputmode="numeric" autocomplete="off">
-	 <p class="note">A press rings the device and shows the doorbell's camera for a minute, at any hour. Turn
+	 <p class="note">A press %s, at any hour. Turn
 	  on ONVIF for the Home Hub or NVR in the Reolink app (Settings > Network > Advanced > Server
 	  Settings), where its port is shown too. The doorbell itself has to be on the Hub or NVR: on its own, a
 	  Reolink battery doorbell does not report its button.</p>
-	 <p><button type="submit">Save</button></p></form>`, c.Doorbell.ONVIFPort())
+	 <p><button type="submit">Save</button></p></form>`, c.Doorbell.ONVIFPort(), does)
 	fmt.Fprint(w, `<form method="post" action="/setup/save">`)
 	hidden(w, token, "doorbell-chime", "connections")
 	fmt.Fprint(w, `<p><button type="submit">Play the chime</button></p></form></fieldset>`)

@@ -142,10 +142,11 @@ automation that wants to know too.
 
 > **Good to know**
 >
-> Reolink serves ONVIF over plain HTTP. The password itself is never sent, only a one-time digest
-> of it, but anybody on the network can see the traffic. A login of its own with as few rights as
-> the Hub allows is the tidy way. Whether a view-only user may follow the Hub's events has not been
-> tried: if the Doorbell section says the login was refused, use an administrator's.
+> Reolink serves ONVIF over plain HTTP. The password itself is never sent, only a one-time digest of
+> it, but anybody on the network can see the traffic, and could try to guess a weak password from
+> it. A strong password, on a login of its own with as few rights as the Hub allows, is the tidy
+> way. Whether a view-only user may follow the Hub's events has not been tried: if the Doorbell
+> section says the login was refused, use an administrator's.
 
 ## 5. Music
 

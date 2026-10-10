@@ -970,8 +970,9 @@ func (d *Display) gesture(g touch.Gesture) {
 
 	// A live camera: a tap takes it down, unless it lands on the sound's control — that silences what
 	// the camera is saying and leaves the view up, which is the whole use of it at a doorbell — or on
-	// Talk, which starts or ends talking through the camera.
-	if v, up := home.Get().Camera(); up {
+	// Talk, which starts or ends talking through the camera. Not while the settings are open: they are
+	// drawn over the camera, so the tap is for them, as on the Spot.
+	if v, up := home.Get().Camera(); up && !d.sheetUp() {
 		if g.Kind == touch.Tap {
 			if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
 				go talkback.Get().Toggle(v.Entity)

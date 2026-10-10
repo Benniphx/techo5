@@ -183,16 +183,17 @@ func TestRingsCappedPerMinute(t *testing.T) {
 }
 
 // hub is a recorder: it answers each pull with the next notifications queued, or waits for some.
-// fail makes every request fail; renews counts renewals and pulls the pulls.
+// fail makes every request fail, and failPull every pull; renews counts renewals and pulls the pulls.
 type hub struct {
-	mu     sync.Mutex
-	queue  []string
-	more   chan struct{}
-	fail   atomic.Bool
-	renews atomic.Int32
-	pulls  atomic.Int32
-	reqs   atomic.Int32
-	closed atomic.Bool
+	mu       sync.Mutex
+	queue    []string
+	more     chan struct{}
+	fail     atomic.Bool
+	failPull atomic.Bool
+	renews   atomic.Int32
+	pulls    atomic.Int32
+	reqs     atomic.Int32
+	closed   atomic.Bool
 }
 
 func newHub() *hub { return &hub{more: make(chan struct{}, 16)} }
@@ -226,6 +227,10 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply(`<CreatePullPointSubscriptionResponse><SubscriptionReference><wsa5:Address>http://198.51.100.9/onvif/PullSubManager?Idx=1</wsa5:Address></SubscriptionReference></CreatePullPointSubscriptionResponse>`)
 	case strings.Contains(ct, "PullMessages"):
 		h.pulls.Add(1)
+		if h.failPull.Load() {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		h.mu.Lock()
 		var next string
 		if len(h.queue) > 0 {
@@ -384,6 +389,50 @@ func TestRunBacksOffAndResets(t *testing.T) {
 	}
 	if w.f.Status().Listening {
 		t.Error("still listening with no doorbell")
+	}
+}
+
+// A recorder that takes the subscription and refuses every pull is a failure like any other: the wait
+// between tries keeps growing, rather than starting over at each subscription, which would be a
+// refused login every few seconds.
+func TestARecorderThatRefusesPullsBacksOff(t *testing.T) {
+	retryMin, retryMax = 10*time.Millisecond, 40*time.Millisecond
+	t.Cleanup(func() { retryMin, retryMax = 5*time.Second, time.Minute })
+
+	h := newHub()
+	h.failPull.Store(true)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	w := newWorld()
+	w.set(target{camera: "reolink:0", base: srv.URL}, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.f.Run(ctx)
+
+	var got []time.Duration
+	for range 4 {
+		got = append(got, <-w.waits)
+	}
+	want := []time.Duration{10 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond, 40 * time.Millisecond}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("waits %v, want %v", got, want)
+		}
+	}
+}
+
+// "Someone's at the door" is the news of the call it came during: once that call is over, the next
+// call's page does not say it.
+func TestTheDoorIsForgottenWhenTheCallEnds(t *testing.T) {
+	w := newWorld()
+	w.inCall = true
+	w.f.press("reolink:0")
+	if !w.f.AtDoor(w.clock) {
+		t.Fatal("a press during a call is not on the call's page")
+	}
+	w.f.callOver()
+	if w.f.AtDoor(w.clock) {
+		t.Error("the press is still news after the call ended")
 	}
 }
 
