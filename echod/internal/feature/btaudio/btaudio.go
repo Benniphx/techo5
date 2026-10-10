@@ -614,6 +614,8 @@ func (f *Feature) SetPairing(on bool) {
 	if on && a != nil {
 		f.pairOff = time.AfterFunc(pairingFor, func() { f.SetPairing(false) })
 		f.state.Status = "Put your earbuds in pairing mode"
+	} else if strings.HasPrefix(f.state.Status, "Pairing code") {
+		f.state.Status = "" // a question about a pairing that is over, which nothing else would replace
 	}
 	f.mu.Unlock()
 	f.pairing.Set(on && a != nil)

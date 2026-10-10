@@ -130,10 +130,13 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 		d.dashNight = false
 	}
 	asked, overNight := d.dash, d.dash && d.dashNight
+	// Under the red night clock a dashboard is not seen: one not opened from the night screen is put
+	// by rather than fetched and redrawn all night for nobody.
+	hidden := s.redClock && !overNight
 	away := time.Now().Before(d.dashAwayUntil)
 	d.mu.Unlock()
 
-	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer &&
+	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer && !hidden &&
 		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showDeck && !s.showWifi && !s.bt.Pairing &&
 		(asked || (f.Idle() && !away && !s.nowPlaying))
 	s.showDash, s.dashMode, s.dashAsked = want, mode, want && overNight
