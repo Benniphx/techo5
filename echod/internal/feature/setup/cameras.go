@@ -57,7 +57,7 @@ func saveReolink(r *http.Request) string {
 	if err != nil {
 		return "could not set up the cameras: " + err.Error()
 	}
-	doorbell.Get().Poke() // its address and login are the recorder's; taking the recorder away is not announced
+	doorbell.Get().Poke() // its address and login are the recorder's
 	slog.Info("setup page: Reolink cameras set", "cameras", n)
 	return ""
 }

@@ -34,7 +34,6 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
@@ -119,7 +118,6 @@ type Feature struct {
 	rang   []time.Time // the rings in the last minute, oldest first
 	atDoor time.Time   // a press during a call, shown on the call's page until atDoorFor after it
 	poke   chan struct{}
-	hooked sync.Once
 
 	// Changed fires when AtDoor may have changed; listeners must not block.
 	Changed hook.Hook[struct{}]
@@ -221,17 +219,12 @@ func current() (t target, ok bool, problem string) {
 // Run listens for presses for as long as the device is up, starting again whenever the settings
 // change or the recorder goes away.
 func (f *Feature) Run(ctx context.Context) error {
-	f.hooked.Do(func() {
-		// The recorder is set up in its own section: a new address, login or camera list there is a
-		// change to what this listens to.
-		home.Get().Changed.Listen(func(struct{}) { f.Poke() })
-	})
 	wait := retryMin
 	for {
 		t, ok, problem := f.settings()
 		if !ok {
 			f.setStatus(t.camera, false, problem)
-			if !f.sleep(ctx, lookEvery) {
+			if !f.sleep(ctx, lookEvery, t, ok) {
 				return nil
 			}
 			continue
@@ -250,27 +243,36 @@ func (f *Feature) Run(ctx context.Context) error {
 			continue
 		}
 		f.setStatus(t.camera, false, explain(err, t))
-		if !f.sleep(ctx, wait) {
+		if !f.sleep(ctx, wait, t, ok) {
 			return nil
 		}
 		wait = min(wait*2, retryMax)
 	}
 }
 
-// sleep waits d or for a poke. False when the device is stopping.
-func (f *Feature) sleep(ctx context.Context, d time.Duration) bool {
+// sleep waits d, or until the settings no longer say t and ok: at once if they changed before it
+// began, as a poke can be taken by a listen on its way out. A poke that leaves them as they were does
+// not end it, so the wait between tries of a recorder that refuses the login is kept whatever else
+// goes on; a burst of tries could have the recorder lock the account. False when the device is
+// stopping.
+func (f *Feature) sleep(ctx context.Context, d time.Duration, t target, ok bool) bool {
 	if f.waited != nil {
 		f.waited(d)
 	}
 	tm := time.NewTimer(d)
 	defer tm.Stop()
-	select {
-	case <-ctx.Done():
-		return false
-	case <-f.poke:
-	case <-tm.C:
+	for {
+		if now, nowOK, _ := f.settings(); nowOK != ok || now != t {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-f.poke:
+		case <-tm.C:
+			return true
+		}
 	}
-	return true
 }
 
 // listen holds one subscription open and rings for what comes through it. It returns a nil error
@@ -288,6 +290,12 @@ func (f *Feature) listen(ctx context.Context, t target) (subscribed bool, err er
 		for {
 			select {
 			case <-f.poke:
+				select {
+				case <-done: // listen is over: the poke is Run's, not this one's
+					f.Poke()
+					return
+				default:
+				}
 				if now, ok, _ := f.settings(); !ok || now != t {
 					moved.Store(true)
 					cancel()

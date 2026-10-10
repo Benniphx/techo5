@@ -191,6 +191,7 @@ type hub struct {
 	fail   atomic.Bool
 	renews atomic.Int32
 	pulls  atomic.Int32
+	reqs   atomic.Int32
 	closed atomic.Bool
 }
 
@@ -213,6 +214,7 @@ func note(source, state, op string) string {
 
 func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.ReadAll(r.Body)
+	h.reqs.Add(1)
 	if h.fail.Load() {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -382,6 +384,45 @@ func TestRunBacksOffAndResets(t *testing.T) {
 	}
 	if w.f.Status().Listening {
 		t.Error("still listening with no doorbell")
+	}
+}
+
+// Pokes that change nothing, as a busy device sends, do not cut a wait short: a recorder refusing the
+// login is not tried again any sooner, which could have it lock the account. One that changes the
+// settings still does.
+func TestPokesKeepTheBackoff(t *testing.T) {
+	retryMin, retryMax = 400*time.Millisecond, 400*time.Millisecond
+	t.Cleanup(func() { retryMin, retryMax = 5*time.Second, time.Minute })
+
+	h := newHub()
+	h.fail.Store(true)
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	w := newWorld()
+	tg := target{camera: "reolink:0", base: srv.URL}
+	w.set(tg, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go w.f.Run(ctx)
+
+	<-w.waits // the first try failed and Run is waiting
+	before := h.reqs.Load()
+	for range 50 {
+		w.f.Poke()
+		time.Sleep(4 * time.Millisecond)
+	}
+	if n := h.reqs.Load() - before; n != 0 {
+		t.Fatalf("%d requests during the wait, from pokes that changed nothing", n)
+	}
+
+	moved := tg
+	moved.channel = 1
+	w.set(moved, true)
+	w.f.Poke()
+	start := time.Now()
+	eventually(t, "a try with the new settings", func() bool { return h.reqs.Load() > before })
+	if d := time.Since(start); d > 300*time.Millisecond {
+		t.Errorf("a changed setting waited %v for the backoff", d)
 	}
 }
 
