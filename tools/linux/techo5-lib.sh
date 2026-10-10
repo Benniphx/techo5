@@ -465,7 +465,13 @@ t5_bt_up() {
 	else
 		# -p192-keys: a phone's link key reaches the kernel as the kind the controller's E0 encryption
 		# satisfies, so a phone can stay connected to play to the Show (#105; btbridge h4.go p192Key).
-		(while true; do btbridge -p192-keys ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1; sleep 2; done) &
+		# The class is set again after each restart of the bridge: a new hci0 comes up with bluetoothd's
+		# default, and the Show would no longer say it is a loudspeaker.
+		(while true; do
+			btbridge -p192-keys ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1
+			sleep 2
+			(sleep 15; timeout 5 btmgmt class 4 5 >/dev/null 2>&1) &
+		done) &
 	fi
 	n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
 	[ -d /sys/class/bluetooth/hci0 ] || { log "bt: bridge up but no hci0"; return 1; }

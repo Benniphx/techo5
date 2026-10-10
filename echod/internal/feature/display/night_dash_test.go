@@ -31,8 +31,17 @@ func TestATapAtNightOpensTheDashboardWhenChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.gesture(tap)
-	if !d.dash || !d.nightGlow {
-		t.Fatalf("with the clock's tap on Dashboard: dashboard %v, night light %v; want both", d.dash, d.nightGlow)
+	if !d.dash || !d.dashNight || !d.nightGlow {
+		t.Fatalf("with the clock's tap on Dashboard: dashboard %v (night %v), night light %v; want all", d.dash, d.dashNight, d.nightGlow)
+	}
+
+	// A dashboard opened by day, or by Home Assistant, is not the night one: it stays under the night
+	// clock, and its tiles don't work in the night light.
+	day := &Display{on: true, poke: make(chan struct{}, 1)}
+	day.openDashboard()
+	day.dashboardAsked(true)
+	if day.dashNight {
+		t.Error("a dashboard opened by day or by Home Assistant counts as the night one")
 	}
 
 	r := testRenderer()

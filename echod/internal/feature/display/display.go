@@ -152,6 +152,7 @@ type Display struct {
 	// touchscreen was put in follow mode for it, and a finger that started at its left edge.
 	dash          bool
 	dashHeld      bool // put up by Home Assistant: stays until it is taken down, not dashForgotten
+	dashNight     bool // opened by a tap on the night screen: the one shown, and used, over the night
 	dashTouched   time.Time
 	dashShowing   bool
 	dashFollow    bool
@@ -787,8 +788,8 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		if g.Kind == touch.Tap {
 			d.apply(true, d.ceilingOrDefault(), true)
-			if nightNow(time.Now()) && nightTapOpensDashboard() {
-				d.openDashboard() // a light to turn on in the night, say: as a tap on the clock would
+			if nightNow(time.Now()) && nightTapOpensDashboard() && !d.overNight() {
+				d.openNightDashboard() // a light to turn on in the night, say: as a tap on the clock would
 			}
 		}
 		return
@@ -802,8 +803,11 @@ func (d *Display) gesture(g touch.Gesture) {
 	// Not on the video page either: its controls work at night as by day (the night light's rule is
 	// the clock's, a hand in the dark more likely a knock than a request).
 	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting() && !asking && !d.videoOnScreen
-	// A dashboard a tap on the night light opened is used as by day, at the night light's level.
-	dashAtNight := glowing && d.dash
+	// A dashboard a tap on the night light opened is used as by day, at the night light's level. Only
+	// that one: a dashboard left up from the day, or put up by Home Assistant, stays under the night.
+	// And only while it is what is drawn: the settings or the drawer opened from it are not shown over
+	// the night clock, so a tap on what looks like the clock must not reach them either.
+	dashAtNight := glowing && d.dash && d.dashNight && d.dashShowing
 	d.mu.Unlock()
 	if glowing && !dashAtNight {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -813,7 +817,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.wake()
 			return
 		}
-		if g.Kind == touch.Tap && nightTapOpensDashboard() && d.openDashboard() {
+		if g.Kind == touch.Tap && nightTapOpensDashboard() && !d.overNight() && d.openNightDashboard() {
 			// A tap on the clock opens the dashboard by day, and so it does on the night light: to
 			// turn a light on in the night, say. It stays at the night light's level, and the night
 			// clock comes back when it closes.

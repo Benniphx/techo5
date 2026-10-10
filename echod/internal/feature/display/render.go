@@ -62,7 +62,7 @@ type scene struct {
 	// The dashboard page, drawn instead of the clock while showDash is set: how it is shown, and
 	// when streamed, what arrived.
 	showDash   bool
-	dashAsked  bool // the dashboard was opened (a tap, Home Assistant), not standing in for the clock
+	dashAsked  bool // the dashboard a tap on the night screen opened (dashNight): shown over the night clock
 	dashMode   config.DashboardMode
 	dash       dashboard.View
 	drawn      dashboard.Drawn

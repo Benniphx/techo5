@@ -196,7 +196,7 @@ func (f *Feature) open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := a.RegisterAgent(f.Pairing, f.pairedIncoming); err != nil {
+	if err := a.RegisterAgent(f.Pairing, f.pairedIncoming, f.pairingCode); err != nil {
 		a.Close()
 		return err
 	}
@@ -512,6 +512,14 @@ func (f *Feature) pairedIncoming(path string) {
 		f.incoming = path
 	}
 	f.mu.Unlock()
+	f.wake()
+}
+
+// pairingCode puts the code a pairing was confirmed with on the screen: the phone being paired shows
+// the same six digits, so whoever is pairing can see it is their phone that joined, and not one
+// nearby that asked first while pairing mode was on.
+func (f *Feature) pairingCode(_, code string) {
+	f.note("Pairing code " + code + ": the same as on your phone?")
 	f.wake()
 }
 

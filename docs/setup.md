@@ -212,7 +212,8 @@ the Spot too, in its settings.
 ### Night
 
 - **Night hours**: when the screen dims by itself. **At night** picks dark, a faint glow, or a clock
-  alone. During the night only a call wakes the screen.
+  alone. During the night only a call wakes the screen, or a tap when **Tap on the clock** is set to
+  *Dashboard*, which opens the dashboard ([docs/dashboards.md](dashboards.md)).
 - **Night mode** switch in Home Assistant: start or end the night now, from a bedtime automation for
   example. Set Night hours to **Controlled by Home Assistant** to leave the night to the switch alone.
   See [Turning the night on from an automation](actions.md#turning-the-night-on-from-an-automation).
