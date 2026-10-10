@@ -121,6 +121,9 @@ func build() *Mute {
 func (m *Mute) Name() string { return "microphone mute" }
 
 func (m *Mute) Entities() []esphome.Entity {
+	if !led.HasRing {
+		return []esphome.Entity{m.sw, m.brightness}
+	}
 	return []esphome.Entity{m.sw, m.ring, m.brightness}
 }
 

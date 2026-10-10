@@ -92,6 +92,9 @@ func build() *Light {
 func (l *Light) Name() string { return "ring light" }
 
 func (l *Light) Entities() []esphome.Entity {
+	if !led.HasRing {
+		return nil
+	}
 	out := []esphome.Entity{l.light}
 	for _, s := range l.segs {
 		out = append(out, s)
