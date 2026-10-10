@@ -163,6 +163,10 @@ func TestOnBaseKeepsTheHost(t *testing.T) {
 		"http://198.51.100.1:8000/onvif/PullSubManager?Idx=1": "http://192.0.2.5:8000/onvif/PullSubManager?Idx=1",
 		"https://evil.example/steal":                          "http://192.0.2.5:8000/steal",
 		"/relative?x=1":                                       "http://192.0.2.5:8000/relative?x=1",
+		"@evil.example/x":                                     "http://192.0.2.5:8000/@evil.example/x",
+		"@198.51.100.7/x":                                     "http://192.0.2.5:8000/@198.51.100.7/x",
+		"http://user:pw@evil.example/x?y=1":                   "http://192.0.2.5:8000/x?y=1",
+		"//evil.example/x":                                    "http://192.0.2.5:8000/x",
 	} {
 		if got := c.onBase(in); got != want {
 			t.Errorf("onBase(%q) = %q, want %q", in, got, want)

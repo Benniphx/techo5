@@ -24,6 +24,9 @@ var (
 	declineRed  = color.RGBA{0xc6, 0x3a, 0x32, 0xff}
 )
 
+// atDoorNote is what a call's page says when the doorbell is pressed during it.
+const atDoorNote = "Someone's at the door"
+
 func (r *renderer) callPage(s scene) {
 	st := s.call
 	title := "Calling"
@@ -65,7 +68,11 @@ func (r *renderer) callPage(s scene) {
 	}
 	r.text(face, who, (r.w-r.width(face, who))/2, 220, cream)
 
-	if st.Phase == phone.Talking && !st.Since.IsZero() {
+	// The doorbell, pressed during the call: said here instead of rung (feature/doorbell), in the
+	// call time's place, which is free on every panel and in every phase of a call.
+	if s.atDoor {
+		r.text(r.body, atDoorNote, (r.w-r.width(r.body, atDoorNote))/2, 290, amber)
+	} else if st.Phase == phone.Talking && !st.Since.IsZero() {
 		d := s.now.Sub(st.Since).Round(time.Second)
 		line := fmt.Sprintf("%d:%02d", int(d.Minutes()), int(d.Seconds())%60)
 		r.text(r.body, line, (r.w-r.width(r.body, line))/2, 290, dim)

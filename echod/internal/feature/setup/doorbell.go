@@ -25,9 +25,11 @@ func doorbellSection(w http.ResponseWriter, token string) {
 	}
 	fmt.Fprint(w, `<form method="post" action="/setup/save">`)
 	hidden(w, token, "doorbell", "connections")
-	if s := doorbell.Get().Status(); s.Camera != "" && s.Camera == c.Doorbell.Camera {
+	if c.Doorbell.Camera != "" {
+		s := doorbell.Get().Status()
 		state := "Starting."
 		switch {
+		case s.Camera != c.Doorbell.Camera: // just saved: the doorbell has not caught up yet
 		case s.Listening:
 			state = "Listening for the button."
 		case s.Problem != "":
@@ -68,7 +70,7 @@ func chimeDoorbell() {
 func saveDoorbell(r *http.Request) string {
 	camera := strings.TrimSpace(r.PostFormValue("camera"))
 	port := config.DefaultONVIFPort
-	if p := strings.TrimSpace(r.PostFormValue("port")); p != "" {
+	if p := strings.TrimSpace(r.PostFormValue("port")); p != "" && camera != "" {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 65535 {
 			return "the ONVIF port is a number from 1 to 65535"

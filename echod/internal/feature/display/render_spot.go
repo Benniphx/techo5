@@ -129,8 +129,10 @@ type roundScene struct {
 
 	btPairing bool
 
-	// call is the phone: while one rings, is placed or is up, its face is over everything.
-	call phone.State
+	// call is the phone: while one rings, is placed or is up, its face is over everything. atDoor is
+	// the doorbell pressed during it, which the call's face says rather than ringing (feature/doorbell).
+	call   phone.State
+	atDoor bool
 
 	// ringing is a timer or an alarm sounding: its face is over everything but a call.
 	ringing ringing

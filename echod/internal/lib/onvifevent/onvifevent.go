@@ -27,8 +27,12 @@ import (
 )
 
 // maxReply is the most of a reply read. A recorder's answers are a few kilobytes even with every
-// channel's events in them; anything far past that is not an answer to keep reading.
-const maxReply = 1 << 20
+// channel's events in them; anything far past that is not an answer to keep reading. maxEvents is
+// the most events taken from one, as many as a pull asks for.
+const (
+	maxReply  = 1 << 20
+	maxEvents = 32
+)
 
 // ErrAuth is a device that refused the login.
 var ErrAuth = errors.New("the login was refused")
@@ -40,6 +44,7 @@ type Client struct {
 	Pass string
 
 	// HTTP is the client asked with; nil is one with no timeout of its own, since a pull waits.
+	// Redirects are never followed, whichever: a redirected POST carries the digest with it.
 	HTTP *http.Client
 
 	offset time.Duration // the device's clock less ours, for the digest's timestamp
@@ -69,10 +74,12 @@ func (c *Client) clock() time.Time {
 }
 
 func (c *Client) http() *http.Client {
+	var hc http.Client
 	if c.HTTP != nil {
-		return c.HTTP
+		hc = *c.HTTP
 	}
-	return http.DefaultClient
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return &hc
 }
 
 // Subscribe sets the clock, finds the events service and opens a pull point that lasts for life
@@ -111,7 +118,7 @@ func (c *Client) Subscribe(ctx context.Context, life time.Duration) (*Subscripti
 func (s *Subscription) Pull(ctx context.Context, wait time.Duration) ([]Event, error) {
 	r, err := s.c.call(ctx, s.addr, "http://www.onvif.org/ver10/events/wsdl/PullPointSubscription/PullMessagesRequest",
 		`<PullMessages xmlns="http://www.onvif.org/ver10/events/wsdl"><Timeout>`+duration(wait)+
-			`</Timeout><MessageLimit>32</MessageLimit></PullMessages>`, true, s.to())
+			`</Timeout><MessageLimit>`+strconv.Itoa(maxEvents)+`</MessageLimit></PullMessages>`, true, s.to())
 	if err != nil {
 		return nil, err
 	}
@@ -139,20 +146,30 @@ func (s *Subscription) to() string {
 
 // onBase is an address the device gave, moved onto the host it is reached at. A device behind a
 // recorder or a NAT can name an address of its own that does not reach it from here, and a reply
-// has no business sending the login anywhere else.
+// has no business sending the login anywhere else. Only the path and query are taken from it, the
+// result is read back, and anything that does not land on Base's own host is the events service's
+// usual address instead: an address of "@elsewhere/x" pasted onto Base as text would put Base in the
+// userinfo and elsewhere in the host.
 func (c *Client) onBase(addr string) string {
+	base, err := url.Parse(c.Base)
+	fallback := strings.TrimRight(c.Base, "/") + "/onvif/event_service"
+	if err != nil || base.Host == "" {
+		return fallback
+	}
 	u, err := url.Parse(strings.TrimSpace(addr))
 	if err != nil {
-		return c.Base + "/onvif/event_service"
+		return fallback
 	}
-	p := u.EscapedPath()
-	if p == "" {
-		p = "/"
+	p := u.Path
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
 	}
-	if u.RawQuery != "" {
-		p += "?" + u.RawQuery
+	out := (&url.URL{Scheme: base.Scheme, Host: base.Host, Path: p, RawQuery: u.RawQuery}).String()
+	back, err := url.Parse(out)
+	if err != nil || back.Host != base.Host || back.User != nil || back.Scheme != base.Scheme {
+		return fallback
 	}
-	return strings.TrimRight(c.Base, "/") + p
+	return out
 }
 
 // syncClock reads the device's clock, which needs no login: the digest carries a timestamp the
@@ -373,6 +390,10 @@ func parseEvents(r []byte) ([]Event, error) {
 	err := walk(r, func(d *xml.Decoder, se xml.StartElement) error {
 		switch se.Name.Local {
 		case "NotificationMessage":
+			if len(out) >= maxEvents {
+				cur = nil // past what was asked for: not read
+				return nil
+			}
 			out = append(out, Event{Items: map[string]string{}})
 			cur = &out[len(out)-1]
 		case "Topic":

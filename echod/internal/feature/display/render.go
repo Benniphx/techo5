@@ -81,8 +81,10 @@ type scene struct {
 	// security feeds the settings screen's Privacy & Security card.
 	security security.State
 
-	// call is the phone: while one rings, is placed or is up, its page is over everything.
-	call phone.State
+	// call is the phone: while one rings, is placed or is up, its page is over everything. atDoor is
+	// the doorbell pressed during it, which the call's page says rather than ringing (feature/doorbell).
+	call   phone.State
+	atDoor bool
 
 	// ring is a timer or an alarm sounding: the ringing page is over everything. snooze is its length.
 	ring   ringState

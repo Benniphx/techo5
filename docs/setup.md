@@ -129,11 +129,23 @@ does not ring it.
 2. In the Reolink app, on the Hub or NVR (not the doorbell), turn on **ONVIF** under
    `Settings > Network > Advanced > Server Settings`, and note its port (8000 unless changed).
 3. On the device's setup page, under **Connections**, set up the Hub or NVR in **Reolink cameras**,
-   then choose the doorbell's camera under **Doorbell** and save.
+   then choose the doorbell's camera under **Doorbell**. If the Hub's ONVIF port is not 8000, enter
+   it there too. Save.
 
 The Doorbell section then says whether the device is listening, and when the button was last
-pressed. The chime is a mechanical door chime's three tones, played twice, at the alarm volume or
-the volume the device is at, whichever is louder.
+pressed. **Play the chime** plays it once, to hear it without going to the door. The chime is a
+mechanical door chime's three tones, played twice, at the alarm volume or the volume the device is
+at, whichever is louder. During a call there is no chime and no camera: the call's page says
+"Someone's at the door" instead (a Dot stays silent). Each press also puts an
+`esphome.techo5_doorbell` event on Home Assistant's bus, with `camera` and `device`, for an
+automation that wants to know too.
+
+> **Good to know**
+>
+> Reolink serves ONVIF over plain HTTP. The password itself is never sent, only a one-time digest
+> of it, but anybody on the network can see the traffic. A login of its own with as few rights as
+> the Hub allows is the tidy way. Whether a view-only user may follow the Hub's events has not been
+> tried: if the Doorbell section says the login was refused, use an administrator's.
 
 ## 5. Music
 
