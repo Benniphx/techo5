@@ -172,20 +172,38 @@ func TestDeafToBroadcastsItReassociatesOnceAndBacksOff(t *testing.T) {
 	}
 }
 
-// A reassociation that brings the sign back within settle cured it: the next deafness, however soon,
-// is cured after the first wait again, not the longest one.
-func TestACureStartsTheWaitOver(t *testing.T) {
+// Home Assistant that comes and goes by itself (a server restarting over and over) is not taken for a
+// run of cures: coming back right after a try looks the same either way, so the wait keeps growing
+// until it has stayed.
+func TestAFlappingHomeAssistantBacksOff(t *testing.T) {
+	wd := start()
+	w := wd.watch()
+	wd.run(w, time.Minute)
+	for range 12 { // an hour of 4 minutes gone, 1 back
+		wd.ha = false
+		wd.run(w, 4*time.Minute)
+		wd.ha = true
+		wd.run(w, time.Minute)
+	}
+	if wd.reassocs > 3 {
+		t.Errorf("reassociated %d times in an hour of flapping, want the backoff (at most 3)", wd.reassocs)
+	}
+}
+
+// Home Assistant that stays a quarter of an hour starts the wait over, so a router that rekeys more
+// often than hourly is cured after the first wait each time, not the longest.
+func TestHomeAssistantThatStaysStartsTheWaitOver(t *testing.T) {
 	wd := start()
 	w := wd.watch()
 	wd.run(w, time.Minute)
 	for range 3 {
 		wd.ha = false
-		wd.run(w, 5*time.Minute)
+		wd.run(w, 4*time.Minute)
 		wd.ha = true
-		wd.run(w, time.Minute)
+		wd.run(w, 25*time.Minute)
 	}
-	if wd.reassocs != 3 || wd.count("wifi: recovered") != 3 || w.wait != firstWait {
-		t.Errorf("%d tries, %d recoveries, wait %v; want 3, 3 and the first wait", wd.reassocs, wd.count("wifi: recovered"), w.wait)
+	if wd.reassocs != 3 || w.wait != firstWait {
+		t.Errorf("%d tries, wait %v; want 3 and the first wait", wd.reassocs, w.wait)
 	}
 }
 

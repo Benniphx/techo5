@@ -592,7 +592,7 @@ func (r *paint) picker(p pickerView, scroll int) int {
 		if scrolls {
 			zr = zr.Intersect(list)
 		}
-		r.addZone(zone{r: zr, kind: zoneOption, opt: i})
+		r.addZone(zone{r: zr, kind: zoneOption, opt: i, label: p.title})
 	}
 	if scrolls {
 		r.restore(under, image.Rect(card.Min.X, card.Min.Y-optH, card.Max.X, list.Min.Y))

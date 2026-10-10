@@ -817,7 +817,7 @@ func (d *Display) nextTap(x, y int) {
 		id := d.picker
 		d.picker = ""
 		d.mu.Unlock()
-		d.tapOption(id, z.opt)
+		d.tapOption(id, z.label, z.opt)
 	case zoneRow:
 		d.tapRow(z)
 	}
@@ -836,12 +836,12 @@ func (d *Display) tapRow(z zone) {
 // while locked only when the lock came back with it up, or when it was opened from afar; the PIN then
 // opens the lock and nothing more, since the list it was chosen from has gone and may read differently
 // when it is opened again.
-func (d *Display) tapOption(id string, opt int) {
+func (d *Display) tapOption(id, what string, opt int) {
 	if rowLocked(id) {
-		gate(id, "", d.sheetUp, nil)
+		gate(id, what, d.sheetUp, nil)
 		return
 	}
-	gate(id, "", d.sheetUp, func() { d.choose(id, opt) })
+	gate(id, what, d.sheetUp, func() { d.choose(id, opt) })
 }
 
 // rowTap is a tap on a row's control, past the settings lock: tapRow asks for the PIN first.

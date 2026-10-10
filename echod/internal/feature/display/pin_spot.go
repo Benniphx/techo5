@@ -30,7 +30,7 @@ func (r *roundRenderer) pinFace(p pinView) {
 	if p.what != "" {
 		title = p.what
 	}
-	r.centered(r.small, title, 112, colText)
+	r.centered(r.small, r.fit(r.small, title, 360), 112, colText)
 	n := max(p.digits, 4)
 	gap := 30
 	x0 := center - (n-1)*gap/2

@@ -379,7 +379,7 @@ func (r *roundRenderer) roundList(p pickerView, scroll int) int {
 			r.roundFill(b, 16, surface(5), surface(4))
 		}
 		r.paint.text(fc.value, r.fit(fc.value, o, b.Dx()-60), b.Min.X+20, b.Min.Y+b.Dy()/2+7, fg)
-		r.addZone(zone{r: image.Rect(left, y0, right, y0+optH).Intersect(list), kind: zoneOption, opt: i})
+		r.addZone(zone{r: image.Rect(left, y0, right, y0+optH).Intersect(list), kind: zoneOption, opt: i, label: p.title})
 	}
 	if maxScroll > 0 {
 		r.restore(under, image.Rect(list.Min.X, 0, list.Max.X, list.Min.Y))
@@ -444,7 +444,7 @@ func (d *Display) sheetGesture(g touch.Gesture) {
 			id := d.picker
 			d.picker = ""
 			d.mu.Unlock()
-			d.tapOption(id, z.opt)
+			d.tapOption(id, z.label, z.opt)
 		case zoneRow:
 			d.tapRow(z)
 		}

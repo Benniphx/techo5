@@ -57,8 +57,13 @@ const (
 	mostWait  = time.Hour
 
 	// steady is how long the sign has to stay before the wait starts over from firstWait. A sign that
-	// comes back for a moment between losses keeps the wait it had.
-	steady = time.Hour
+	// comes back for a moment between losses keeps the wait it had, since the watcher cannot tell a
+	// sign its reassociation brought back from one that came back by itself. Home Assistant earns it
+	// sooner: a server that stays a quarter of an hour is back, and a router that rekeys more often than
+	// hourly must not leave the device out of reach for an hour each time. Group traffic, which on a
+	// quiet network is heard only now and then, has to stay the hour.
+	steady   = time.Hour
+	steadyHA = 15 * time.Minute
 )
 
 // What the watcher goes by, as it is named in the log.
@@ -186,20 +191,16 @@ func (w *Watch) look(ctx context.Context) {
 			w.say("wifi: recovered: "+w.sign+" is back after reassociating",
 				"after", now.Sub(w.tried).Round(time.Second))
 			w.tried = time.Time{}
-			// Home Assistant back within settle of the try: the reassociation cured it, so the next
-			// deafness is a new one, cured as quickly. Group traffic is no such proof, since on a
-			// network heard only now and then it can come back within settle by chance, and taking
-			// that for a cure would be the loop the backoff is for: it waits out steady like any sign
-			// that comes back by itself.
-			if w.sign == signHA {
-				w.wait, w.notTill = firstWait, time.Time{}
-			}
 		}
 		w.lostAt = time.Time{}
 		if w.hereAt.IsZero() {
 			w.hereAt = now
 		}
-		if now.Sub(w.hereAt) >= steady {
+		stay := steady
+		if w.sign == signHA {
+			stay = steadyHA
+		}
+		if now.Sub(w.hereAt) >= stay {
 			w.wait = firstWait
 		}
 		return
