@@ -62,6 +62,7 @@ type scene struct {
 	// The dashboard page, drawn instead of the clock while showDash is set: how it is shown, and
 	// when streamed, what arrived.
 	showDash   bool
+	dashAsked  bool // the dashboard was opened (a tap, Home Assistant), not standing in for the clock
 	dashMode   config.DashboardMode
 	dash       dashboard.View
 	drawn      dashboard.Drawn
@@ -447,7 +448,8 @@ func (r *renderer) draw(s scene) {
 	// the night light and takes the screen; a turn, a camera, an announcement or a reminder is shown in
 	// its place at the night light's level.
 	if s.redClock && s.phase == "idle" && s.call.Phase == phone.Idle && !s.setupAsking && !s.showVideoAsk &&
-		!s.showWifi && !s.bt.Pairing && !s.showCamera && !s.showAnnouncement && !s.showReminder {
+		!s.showWifi && !s.bt.Pairing && !s.showCamera && !s.showAnnouncement && !s.showReminder &&
+		!(s.showDash && s.dashAsked) {
 		r.redClockPage(s)
 		return
 	}

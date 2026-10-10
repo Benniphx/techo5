@@ -107,7 +107,7 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer &&
 		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showDeck && !s.showWifi && !s.bt.Pairing &&
 		(asked || (f.Idle() && !away && !s.nowPlaying))
-	s.showDash, s.dashMode = want, mode
+	s.showDash, s.dashMode, s.dashAsked = want, mode, want && asked
 
 	streamed := want && mode == config.DashboardStreamed
 	if streamed && d.r != nil {

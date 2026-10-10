@@ -787,6 +787,9 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		if g.Kind == touch.Tap {
 			d.apply(true, d.ceilingOrDefault(), true)
+			if nightNow(time.Now()) && nightTapOpensDashboard() {
+				d.openDashboard() // a light to turn on in the night, say: as a tap on the clock would
+			}
 		}
 		return
 	}
@@ -799,13 +802,22 @@ func (d *Display) gesture(g touch.Gesture) {
 	// Not on the video page either: its controls work at night as by day (the night light's rule is
 	// the clock's, a hand in the dark more likely a knock than a request).
 	glowing := d.nightGlow && !d.wifiOpen && !setup.Get().Waiting() && !asking && !d.videoOnScreen
+	// A dashboard a tap on the night light opened is used as by day, at the night light's level.
+	dashAtNight := glowing && d.dash
 	d.mu.Unlock()
-	if glowing {
+	if glowing && !dashAtNight {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
 			// An alarm or a timer rings over the night clock; a tap anywhere stops it, as the ringing
 			// page's own button would.
 			d.stopRing()
 			d.wake()
+			return
+		}
+		if g.Kind == touch.Tap && nightTapOpensDashboard() && d.openDashboard() {
+			// A tap on the clock opens the dashboard by day, and so it does on the night light: to
+			// turn a light on in the night, say. It stays at the night light's level, and the night
+			// clock comes back when it closes.
+			slog.Info("screen: dashboard opened from the night light")
 			return
 		}
 		if g.Kind == touch.Hold {
