@@ -424,6 +424,11 @@ func (f *Feature) press(camera string) {
 	slog.Info("doorbell: pressed", "camera", camera, "during_call", calling)
 	if calling {
 		f.Changed.Emit(struct{}{})
+		if !f.calling() {
+			// The call ended between the look and the note: its end has been and gone, so the
+			// note is forgotten here rather than kept for the next call.
+			f.callOver()
+		}
 	} else {
 		safe.Go("doorbell ring", f.ring)
 		safe.Go("doorbell camera", func() { f.show(camera) })

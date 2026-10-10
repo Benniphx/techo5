@@ -375,6 +375,9 @@ func TestRunBacksOffAndResets(t *testing.T) {
 	for len(w.waits) > 0 {
 		<-w.waits
 	}
+	// Heard, not only subscribed: a pull answered before the recorder goes away again.
+	start := h.pulls.Load()
+	eventually(t, "a pull answered", func() bool { return h.pulls.Load() >= start+1 })
 	h.fail.Store(true) // and away again, after it worked
 	if d := <-w.waits; d != retryMin {
 		t.Errorf("first wait after a working session %v, want %v", d, retryMin)
