@@ -92,6 +92,14 @@ func (d *Driver) ClaimOver(name string, play func(ctx context.Context, p *Player
 	return d.claim(name, claimSpec{over: true, waits: true, deep: true}, play)
 }
 
+// ClaimTurn is Claim for a short sound that waits its turn rather than taking the speaker from what holds
+// it, for up to within, and is not made at all if its turn has not come by then: a notification's chime
+// must not cut a reply or an announcement off mid-word, and a chime heard a minute after its notification
+// came up is not one. Like Claim, the background stands aside while it plays.
+func (d *Driver) ClaimTurn(name string, within time.Duration, play func(ctx context.Context, p *Player) error) *Claim {
+	return d.claim(name, claimSpec{waits: true, within: within}, play)
+}
+
 // overDeeper is how much more a sound played over the music quietens the background than words do. A reply
 // is close and loud and is heard over a room's music at the ducking a turn gets; a camera's own sound is
 // what its microphone hears of a street, and at that level it is the room's music that comes through.
@@ -121,6 +129,8 @@ type claimSpec struct {
 	over  bool // sounds over the background rather than standing it down
 	waits bool // waits for whatever holds the speaker rather than displacing it
 	deep  bool // ducks deeper than words: a sound whose own level is low, heard over the room's music
+
+	within time.Duration // how long a claim that waits waits for its turn before giving up; 0 is for ever
 }
 
 func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Context, p *Player) error) *Claim {
@@ -169,8 +179,15 @@ func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Contex
 			// then: it is not what holds the speaker while it waits, and must not be, or a reply arriving
 			// meanwhile would preempt the wait rather than what is being said, and leave the announcement
 			// playing on under it.
+			var late *time.Timer
+			if spec.within > 0 {
+				late = time.AfterFunc(spec.within, cancel)
+			}
 			if !d.take(ctx, c) {
-				return // silenced, or passed over, before it started
+				return // silenced, or passed over, before it started, or its turn came too late
+			}
+			if late != nil && !late.Stop() {
+				return // its time ran out just as its turn came: given up all the same
 			}
 		}
 		if bg != nil {
