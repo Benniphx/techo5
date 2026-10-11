@@ -37,10 +37,24 @@ const (
 	// streamStall is how long a stream may go without a frame once it has started before it is given
 	// up for snapshots.
 	streamStall = 10 * time.Second
-	// shapeWait is how long the stream waits for the first snapshot to learn its shape from.
-	shapeWait = 5 * time.Second
 	// failedFor is how long a camera whose stream failed is shown from snapshots without trying again.
 	failedFor = 10 * time.Minute
+)
+
+// shapeWait is how long the stream waits for the first snapshot to learn its shape from; a variable for
+// the tests.
+var shapeWait = 5 * time.Second
+
+// viewPoll is how often a stream looks to see whether its view is still up.
+var viewPoll = 500 * time.Millisecond
+
+// cameraStreamURL is Home Assistant's HLS playlist for entity, and canStream whether it says it can
+// stream it; variables for the tests.
+var (
+	cameraStreamURL = func(ctx context.Context, entity string) (string, error) {
+		return hass.Get().CameraStream(ctx, entity)
+	}
+	canStream = haCanStream
 )
 
 // failedStreams is when each camera's stream last failed.
@@ -82,6 +96,14 @@ func (f *Feature) streamFrames(ctx context.Context, entity string, gen uint64) b
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// A view that runs out is not cancelled by anybody: it is noticed here, so that its decoder is ended
+	// within a poll rather than when a wait for its next frame (up to streamStart) runs out.
+	f.spawn(func() {
+		for f.viewUp(ctx, entity, gen) {
+			pause(ctx, viewPoll)
+		}
+		cancel()
+	})
 
 	// Snapshots until the stream's first frame, the first of them giving the stream its shape.
 	var streaming atomic.Bool
@@ -113,6 +135,9 @@ func (f *Feature) streamFrames(ctx context.Context, entity string, gen uint64) b
 	case <-ctx.Done():
 		return true
 	}
+	if !f.viewUp(ctx, entity, gen) {
+		return true // it ended while the stream waited for its shape: no decoder for a view that is gone
+	}
 	w, h = max(w&^1, 2), max(h&^1, 2)
 
 	// The camera's own address first, given for its picture: live, where Home Assistant's HLS of it is
@@ -136,8 +161,11 @@ func (f *Feature) streamFrames(ctx context.Context, entity string, gen uint64) b
 			streamFailed(ctx, entity)
 			return false
 		}
+		if !f.viewUp(ctx, entity, gen) {
+			return true
+		}
 	}
-	url, err := hass.Get().CameraStream(ctx, entity)
+	url, err := cameraStreamURL(ctx, entity)
 	if err != nil {
 		slog.Info("camera: no stream, showing snapshots", "entity", entity, "err", err)
 		streamFailed(ctx, entity)
@@ -161,6 +189,9 @@ func (f *Feature) streamFrames(ctx context.Context, entity string, gen uint64) b
 func (f *Feature) showStream(ctx context.Context, entity string, gen uint64, cam *video.Camera, w, h int, how string, streaming *atomic.Bool) (done, shown bool) {
 	defer cam.Close()
 	began, frames := time.Now(), 0
+	// The view's picture: each frame is copied into it from the decoder's (which the next frame is
+	// read into) while the screen is kept from reading it (ReadFrame), one picture for the whole stream.
+	pic := image.NewRGBA(image.Rect(0, 0, w, h))
 	wait := streamStart
 	for f.viewUp(ctx, entity, gen) {
 		frame, err := cam.Next(wait)
@@ -178,7 +209,13 @@ func (f *Feature) showStream(ctx context.Context, entity string, gen uint64, cam
 		}
 		frames++
 		wait = streamStall
-		f.showFrame(entity, gen, frame, nil)
+		if frame.Bounds() != pic.Bounds() {
+			pic = image.NewRGBA(frame.Bounds())
+		}
+		frameMu.Lock()
+		copy(pic.Pix, frame.Pix)
+		frameMu.Unlock()
+		f.showFrame(entity, gen, pic, nil)
 	}
 	slog.Info("camera: stream closed", "entity", entity, "frames", frames,
 		"for", time.Since(began).Round(time.Second))
@@ -202,7 +239,7 @@ var soundSources = func(entity string) []func(context.Context) (io.ReadCloser, e
 	}
 	if !streamFailedLately(entity) && canStream(entity) {
 		out = append(out, func(ctx context.Context) (io.ReadCloser, error) {
-			url, err := hass.Get().CameraStream(ctx, entity)
+			url, err := cameraStreamURL(ctx, entity)
 			if err != nil {
 				return nil, err
 			}
@@ -239,8 +276,8 @@ func pictureAddress(entity string) (addr, user, pass string, ok bool) {
 	return "", "", "", false
 }
 
-// canStream is whether Home Assistant says it can stream the camera.
-func canStream(entity string) bool {
+// haCanStream is whether Home Assistant says it can stream the camera.
+func haCanStream(entity string) bool {
 	st, err := hass.Get().State(entity)
 	if err != nil {
 		return false

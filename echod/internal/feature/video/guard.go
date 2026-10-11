@@ -44,10 +44,55 @@ var (
 func closeGuard() {
 	guardMu.Lock()
 	defer guardMu.Unlock()
+	closeGuardLocked()
+}
+
+func closeGuardLocked() {
 	if guardSrv != nil {
 		_ = guardSrv.Close()
 		guardSrv, guardURL = nil, ""
 	}
+}
+
+// cameraRuns is how many camera decoders are running, under guardMu. A camera view keeps what it has
+// when Live camera video is turned off (home.SetCameraLive): the proxy is not closed under its stream,
+// which would stall it and have the camera taken for one that cannot stream, but once the last of
+// them has ended (holdGuard).
+var cameraRuns int
+
+// closeGuardIdle closes the proxy once nothing may use it: neither videos nor live cameras may decode,
+// and no camera decoder is still running.
+func closeGuardIdle() {
+	guardMu.Lock()
+	defer guardMu.Unlock()
+	if !guardAllowed() && cameraRuns == 0 {
+		closeGuardLocked()
+	}
+}
+
+// holdGuard counts a camera decoder about to start, before it is given the proxy, so the proxy is not
+// closed under it; the release it returns is for when it has ended, or never started.
+func holdGuard() (release func()) {
+	guardMu.Lock()
+	cameraRuns++
+	guardMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			guardMu.Lock()
+			cameraRuns--
+			guardMu.Unlock()
+			closeGuardIdle()
+		})
+	}
+}
+
+// releaseWhenDone releases a decoder's hold on the proxy once it has ended, however it ends.
+func releaseWhenDone(d *decoder, release func()) {
+	go func() {
+		<-d.done
+		release()
+	}()
 }
 
 // guardProxy is the proxy's address for ffmpeg's -http_proxy, password and all, starting it the first

@@ -6,6 +6,7 @@ import (
 	_ "image/jpeg" // Home Assistant serves camera snapshots as JPEG
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -59,6 +60,19 @@ type CameraView struct {
 
 	span time.Duration // how long it was asked for; Until is restarted from the first frame
 	gen  uint64        // which camera view this is: frames fetched for an earlier one are not shown in it
+}
+
+// frameMu keeps a streamed camera's picture still while the screen draws it: a stream's frames are
+// copied into one picture for the whole stream (showStream) rather than each made anew, which at 24
+// frames a second of 896×672 is over fifty megabytes a second for the collector. A frame from anywhere
+// else is never written to once it is shown.
+var frameMu sync.RWMutex
+
+// ReadFrame runs draw with a CameraView's Frame kept still: the screen draws a frame inside it.
+func ReadFrame(draw func()) {
+	frameMu.RLock()
+	defer frameMu.RUnlock()
+	draw()
 }
 
 // LocalCamera is the entity name of the device's own camera on the list; it is not a Home

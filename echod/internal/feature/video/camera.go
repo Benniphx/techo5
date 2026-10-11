@@ -29,12 +29,17 @@ import (
 type Camera struct {
 	d    *decoder
 	w, h int
+	// frame is what Next reads each frame into: one picture for the whole stream, rather than one more
+	// for the collector each frame (at 24 frames of 896×672 a second, over fifty megabytes a second).
+	frame *image.RGBA
 }
 
 // cameraArgs runs the decoder on a camera's stream at its own pace (-re: a playlist's parts arrive
 // a few seconds at a time, and decoded as fast as they come they would play in a rush and then stop),
 // from the newest part of the playlist, fitted into w×h with its shape kept (the bars black, for a
-// stream whose shape the caller did not know) and made the page's pixels.
+// stream whose shape the caller did not know) and made the page's pixels. The playlist's address
+// carries the stream's token: it is an argument to the decoder, so the image mounts /proc so that only
+// root sees another user's arguments (boot.sh), and it is never logged (hideTokens).
 func cameraArgs(url string, w, h int, insecure bool, proxy string) []string {
 	a := []string{"-hide_banner", "-nostdin", "-loglevel", "error", "-max_pixels", maxPixels}
 	a = append(a, netArgs(url, caFileIf(), insecure, proxy)...)
@@ -60,20 +65,28 @@ func OpenCamera(ctx context.Context, url string, w, h int) (*Camera, error) {
 	if !Installed() {
 		return nil, errors.New("video: this image has no decoder")
 	}
+	release := holdGuard()
 	proxy, err := netGuard(ctx)
 	if err != nil {
+		release()
 		return nil, err
 	}
 	d, err := start(ctx, cameraArgs(url, w, h, config.Get().Diag.InsecureTLS, proxy), true, false)
 	if err != nil {
+		release()
 		return nil, err
 	}
+	releaseWhenDone(d, release)
 	return &Camera{d: d, w: w, h: h}, nil
 }
 
-// Next is the next frame, waiting up to wait for it. A stream that ended, or failed, says why.
+// Next is the next frame, waiting up to wait for it. A stream that ended, or failed, says why. The
+// frame is the Camera's own and is read over by the next call: a caller that keeps it copies it.
 func (c *Camera) Next(wait time.Duration) (*image.RGBA, error) {
-	img := image.NewRGBA(image.Rect(0, 0, c.w, c.h))
+	if c.frame == nil {
+		c.frame = image.NewRGBA(image.Rect(0, 0, c.w, c.h))
+	}
+	img := c.frame
 	_ = c.d.video.SetReadDeadline(time.Now().Add(wait))
 	if _, err := io.ReadFull(c.d.video, img.Pix); err != nil {
 		select {
@@ -126,14 +139,18 @@ func OpenCameraSound(ctx context.Context, url string) (io.ReadCloser, error) {
 	if !Installed() {
 		return nil, errors.New("video: this image has no decoder")
 	}
+	release := holdGuard()
 	proxy, err := netGuard(ctx)
 	if err != nil {
+		release()
 		return nil, err
 	}
 	d, err := start(ctx, cameraSoundArgs(url, config.Get().Diag.InsecureTLS, proxy), true, false)
 	if err != nil {
+		release()
 		return nil, err
 	}
+	releaseWhenDone(d, release)
 	return cameraSound{d}, nil
 }
 
@@ -150,28 +167,80 @@ func (c cameraSound) SetReadDeadline(t time.Time) error { return c.d.video.SetRe
 func (c cameraSound) Reason() string { return hideTokens(c.d.stderr.last()) }
 
 // CameraLiveChanged is the live camera switch having been turned: once neither videos nor live cameras
-// may decode, nothing is left listening for the decoder (closeGuard).
-func CameraLiveChanged() {
-	if !guardAllowed() {
-		closeGuard()
-	}
-}
+// may decode, nothing is left listening for the decoder (closeGuard), as soon as no camera's stream that
+// was already open is using it (closeGuardIdle).
+func CameraLiveChanged() { closeGuardIdle() }
 
-// CanRTSP is whether this image's decoder reads RTSP. An image built before it did has no RTSP demuxer,
-// and a camera asked of it over RTSP would be nothing at all. Read once from the decoder itself: the
-// RTSP demuxer's own option name is in it only when the demuxer is.
+// CanRTSP is whether this image's decoder reads RTSP, and may be given a camera's login to do it. An
+// image built before it did has no RTSP demuxer, and a camera asked of it over RTSP would be nothing at
+// all. The login is sent only protected (Digest), never as Basic, which is the password in the clear
+// (the setup page promises it, and the talk-back session holds to it too: lib/onvifback). ffmpeg would
+// answer a camera that offers only Basic with it, so the image's decoder is built to ignore a Basic
+// challenge (build-ffmpeg.sh), and one that is not built that way is not used for RTSP at all.
+//
+// Read once from the decoder itself, a piece at a time (it is megabytes): the RTSP demuxer's own
+// option name is in it only when the demuxer is, and the message the Basic change logs only with it.
 func CanRTSP() bool {
-	rtspOnce.Do(func() {
-		b, err := os.ReadFile(decoderPath())
-		rtspOK = err == nil && bytes.Contains(b, []byte("rtsp_transport"))
-	})
+	rtspOnce.Do(func() { rtspOK = readsRTSP(decoderPath()) })
 	return rtspOK
 }
+
+// readsRTSP is whether the decoder at path has the RTSP demuxer and ignores a Basic challenge.
+func readsRTSP(path string) bool {
+	ok, err := fileHas(path, rtspDemuxer, digestOnly)
+	return err == nil && ok
+}
+
+// What CanRTSP looks for in the decoder.
+var (
+	rtspDemuxer = []byte("rtsp_transport")
+	digestOnly  = []byte("techo5: the camera offers a Basic login, which is ignored")
+)
 
 var (
 	rtspOnce sync.Once
 	rtspOK   bool
 )
+
+// fileChunk is how much of a file fileHas reads at a time; a variable for the tests.
+var fileChunk = 64 << 10
+
+// fileHas is whether the file at path holds every one of needles, read through once in pieces with
+// enough of each piece carried into the next that a needle across the seam is found.
+func fileHas(path string, needles ...[]byte) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	carry := 0
+	for _, n := range needles {
+		carry = max(carry, len(n)-1)
+	}
+	found := make([]bool, len(needles))
+	left := len(needles)
+	buf := make([]byte, carry+fileChunk)
+	kept := 0
+	for left > 0 {
+		n, err := io.ReadFull(f, buf[kept:])
+		seen := buf[:kept+n]
+		for i, needle := range needles {
+			if !found[i] && bytes.Contains(seen, needle) {
+				found[i] = true
+				left--
+			}
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		if err != nil {
+			return false, err
+		}
+		kept = min(carry, len(seen))
+		copy(buf, seen[len(seen)-kept:])
+	}
+	return left == 0, nil
+}
 
 // rtspFence is whether a decoder reading RTSP can be kept off the device's own network. RTSP does not
 // go through the guard's HTTP proxy, so only the kernel's fence (fence.go) will do; where it cannot
@@ -208,7 +277,9 @@ func rtspURL(addr, user, pass string) (string, error) {
 
 // rtspInput is how a camera is read over RTSP: one track of it, over the RTSP connection itself,
 // nothing held back to look at first. A live camera sets its own pace, so there is no -re. The address
-// carries the login: it is an argument to the decoder, which runs as its own user, and is never logged.
+// carries the login: it is an argument to the decoder, which runs as its own user, so the image mounts
+// /proc so that only root sees another user's arguments (boot.sh); it is never logged (hideTokens),
+// and the decoder answers only a Digest challenge with it (CanRTSP).
 func rtspInput(track string) []string {
 	return []string{"-protocol_whitelist", "rtsp,rtp,tcp,udp",
 		"-rtsp_transport", "tcp", "-allowed_media_types", track, "-timeout", "15000000",

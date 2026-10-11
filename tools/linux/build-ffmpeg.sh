@@ -67,6 +67,17 @@ if [ ! -d "$SDK$SRC" ]; then
 	tar -xJf "$TARBALL" -C "$SDK$SRC" --strip-components=1
 fi
 
+# A camera's RTSP login is sent only protected (Digest), never as Basic, which is the password in the
+# clear: the setup page promises it, and the talk-back session (lib/onvifback) refuses Basic the same
+# way. ffmpeg answers a Basic challenge when a camera offers nothing else, so its RTSP client is made
+# to ignore one; the camera is then not logged in to at all, and says 401. The message is also how the
+# daemon knows the decoder has this (video.CanRTSP): one without it is not given a camera's login.
+RTSPC=$SDK$SRC/libavformat/rtsp.c
+if ! grep -q 'techo5: the camera offers a Basic login, which is ignored' "$RTSPC"; then
+	perl -0pi -e 's/(av_stristart\(p, "WWW-Authenticate:", &p\) && rt\) \{\n(\s*)p \+= strspn\(p, SPACE_CHARS\);\n)\s*(ff_http_auth_handle_header\(&rt->auth_state, "WWW-Authenticate", p\);)/$1$2if (av_stristart(p, "Basic", NULL))\n$2    av_log(NULL, AV_LOG_ERROR, "techo5: the camera offers a Basic login, which is ignored; only Digest is answered\\n");\n$2else\n$2    $3/' "$RTSPC"
+	grep -q 'techo5: the camera offers a Basic login, which is ignored' "$RTSPC" || { echo "the RTSP Basic patch did not apply to $RTSPC" >&2; exit 1; }
+fi
+
 FLAGS="--arch=arm --cpu=cortex-a53 --enable-neon \
 	--disable-autodetect --disable-everything --disable-doc --disable-debug \
 	--disable-avdevice --enable-ffmpeg --disable-ffprobe --disable-ffplay \
