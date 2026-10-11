@@ -73,6 +73,8 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 		f.save(w, r)
 	case "/setup/photo":
 		f.photo(w, r)
+	case "/setup/font":
+		f.font(w, r)
 	case "/setup/diagnostics.txt":
 		f.diagnostics(w, r)
 	default:
@@ -240,6 +242,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveListening(r)
 	case "photos-remove":
 		problem = removePhotos(r)
+	case "font-remove":
+		problem = removeFont(r)
 	case "reolink":
 		problem = saveReolink(r)
 	case "doorbell":
@@ -372,6 +376,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		dashboardSection(w, token)
 	case "photos":
 		screenSection(w, token)
+		ownFontsSection(w, token)
 		dashboardPanelSection(w, token)
 		deckSection(w, token)
 		videoSection(w, token)

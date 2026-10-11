@@ -7,15 +7,11 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
-	"log/slog"
 	"math"
 	"sync"
 	"time"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/goregular"
-	"golang.org/x/image/font/opentype"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
@@ -383,44 +379,43 @@ func newRenderer(dst *image.RGBA) *renderer {
 	// Built in place: paint carries a mutex, so it must never be assembled elsewhere and copied in.
 	r := &renderer{paint: paint{dst: dst, w: dst.Rect.Dx(), h: dst.Rect.Dy(), sNum: dst.Rect.Dx(), sDen: drawnFor}}
 	r.margin = r.s(40)
-	bold, err := opentype.Parse(gobold.TTF)
-	if err != nil {
-		slog.Error("parsing the bold font failed", "err", err)
-	}
-	regular, err := opentype.Parse(goregular.TTF)
-	if err != nil {
-		slog.Error("parsing the regular font failed", "err", err)
-	}
-	// Sizes are points at 72 DPI, which makes them pixels, so they scale with everything else.
-	face := func(f *opentype.Font, size int) font.Face {
-		if f == nil {
-			return nil
-		}
-		fc, err := opentype.NewFace(f, &opentype.FaceOptions{Size: float64(r.s(size)), DPI: 72, Hinting: font.HintingFull})
-		if err != nil {
-			slog.Error("making a font face failed", "size", size, "err", err)
-			return nil
-		}
-		return fc
-	}
-	r.clock = face(bold, 230)
-	r.big = face(bold, 100)
-	r.ampm = face(bold, 56)
-	r.title = face(bold, 48)
-	r.body = face(regular, 42)
-	r.small = face(regular, 34)
-	r.tiny = face(regular, 26)
-	r.micro = face(regular, 18)
+	k, _ := r.fontChanged()
+	r.makeFaces(k)
+	return r
+}
+
+// makeFaces makes the renderer's faces in the font named (font.go). Sizes are points at 72 DPI, which
+// makes them pixels, so they scale with everything else.
+func (r *renderer) makeFaces(k fontKey) {
+	name := k.name
+	face := func(bold bool, size int) font.Face { return fontFace(name, bold, float64(r.s(size))) }
+	r.font, r.fontGen, r.styleFaces = name, k.gen, nil
+	r.clock = face(true, 230)
+	r.big = face(true, 100)
+	r.ampm = face(true, 56)
+	r.title = face(true, 48)
+	r.body = face(false, 42)
+	r.small = face(false, 34)
+	r.tiny = face(false, 26)
+	r.micro = face(false, 18)
 	if r.scaled() {
-		fc := sheetFacesAt(r.s)
+		fc := sheetFacesAt(name, r.s)
 		r.fc = &fc
 	}
-	return r
+}
+
+// useFont makes the faces again when the screen font, or the owner's own fonts, have changed since
+// they were made, so a new choice is drawn from the next frame on.
+func (r *renderer) useFont() {
+	if k, changed := r.fontChanged(); changed {
+		r.makeFaces(k)
+	}
 }
 
 // draw composes a whole frame. Everything is repainted: the canvas is small and a full paint is
 // simpler than tracking what changed.
 func (r *renderer) draw(s scene) {
+	r.useFont()
 	if !s.showDeck {
 		// Where the deck's buttons were is nothing to tap once something else is drawn there.
 		r.zmu.Lock()

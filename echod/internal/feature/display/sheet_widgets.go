@@ -11,9 +11,6 @@ import (
 	"sync"
 
 	"golang.org/x/image/font"
-	"golang.org/x/image/font/gofont/gobold"
-	"golang.org/x/image/font/gofont/goregular"
-	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
 )
 
@@ -49,6 +46,11 @@ type paint struct {
 	// indicator follows the circle's edge.
 	fc    *sheetFaces
 	round bool
+
+	// font is the screen font the faces in use were made in (font.go), "" for Go, and fontGen the
+	// fonts of the owner's own when they were (lib/fonts.Generation).
+	font    string
+	fontGen uint64
 
 	// The drawn dashboard's tiles where they were last drawn, and how far it can scroll; bigTiles is
 	// the Dashboard tiles setting asking for them larger, for the frame being drawn.
@@ -131,7 +133,7 @@ func (r *paint) faces() sheetFaces {
 	if r.fc != nil {
 		return *r.fc
 	}
-	return faces()
+	return facesFor(fontKey{r.font, r.fontGen})
 }
 
 func (r *paint) text(face font.Face, s string, x, baseline int, c color.Color) {
@@ -354,32 +356,17 @@ const (
 	rowInBase   = 30 // text inset inside the card
 )
 
+// sheetFaces are the settings screen's own sizes of the font the rest of the screen uses.
 type sheetFaces struct{ header, label, labelBold, sub, value, nav, navBold, button font.Face }
 
-var (
-	facesOnce sync.Once
-	sheetFace sheetFaces
-)
-
-// faces are the settings screen's own sizes of the Go fonts the rest of the screen uses, at the size
-// the layout was drawn for.
-func faces() sheetFaces {
-	facesOnce.Do(func() { sheetFace = sheetFacesAt(func(n int) int { return n }) })
-	return sheetFace
-}
-
-// sheetFacesAt builds the same set through a scale, for a panel that is not the one these sizes were
-// chosen on. Not cached: a process draws on one screen, so this is built once per renderer.
-func sheetFacesAt(s func(int) int) sheetFaces {
-	bold, _ := opentype.Parse(gobold.TTF)
-	regular, _ := opentype.Parse(goregular.TTF)
-	f := func(fn *opentype.Font, size int) font.Face {
-		fc, _ := opentype.NewFace(fn, &opentype.FaceOptions{Size: float64(s(size)), DPI: 72, Hinting: font.HintingFull})
-		return fc
-	}
+// sheetFacesAt builds them in the font named through a scale: 1:1 for the panel these sizes were
+// chosen on (facesFor keeps those), or a renderer's own for another. Not cached: a renderer builds its
+// own once per font.
+func sheetFacesAt(name string, s func(int) int) sheetFaces {
+	f := func(bold bool, size int) font.Face { return fontFace(name, bold, float64(s(size))) }
 	return sheetFaces{
-		header: f(bold, 36), label: f(regular, 29), labelBold: f(bold, 29), sub: f(regular, 21),
-		value: f(regular, 25), nav: f(regular, 24), navBold: f(bold, 24), button: f(bold, 23),
+		header: f(true, 36), label: f(false, 29), labelBold: f(true, 29), sub: f(false, 21),
+		value: f(false, 25), nav: f(false, 24), navBold: f(true, 24), button: f(true, 23),
 	}
 }
 

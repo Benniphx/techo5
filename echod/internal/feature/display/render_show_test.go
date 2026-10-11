@@ -35,6 +35,7 @@ const (
 // as a PNG to look at. The Spot has had this since its screen was built (render_spot_test.go); the
 // Show never did, so a change to its layout was argued about in words.
 func TestShowScenesDraw(t *testing.T) {
+	previewFont(t)
 	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local)
 	sky := home.Weather{Condition: "partlycloudy", Temp: "72°"}
 	var week []hass.Day
@@ -56,6 +57,9 @@ func TestShowScenesDraw(t *testing.T) {
 		"drawer-call-empty": {now: at, phase: "idle", weather: sky, showDrawer: true, drawerTab: drawerCall},
 		"nowplaying": {now: at, phase: "idle", nowPlaying: true, playing: true, weather: sky,
 			radio: home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}},
+		// Words in a script none of the screen's fonts has: boxes, unless a font of one's own has it.
+		"nowplaying-korean": {now: at, phase: "idle", nowPlaying: true, playing: true, weather: sky,
+			radio: home.Radio{Now: "Music Assistant", Title: "밤편지", Artist: "아이유", Music: true}},
 		// Music Assistant's track, carried over Sendspin: named, with the three buttons.
 		"nowplaying-music-assistant": {now: at, phase: "idle", nowPlaying: true, playing: true, weather: sky,
 			radio: home.Radio{Playing: true, Now: "Music Assistant", Title: "Some Jazz", Artist: "The Quartet", Music: true}},

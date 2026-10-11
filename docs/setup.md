@@ -247,6 +247,12 @@ the Spot too, in its settings.
   across the clock for the next style or the one before; its name shows for a moment, and a swipe
   the other way puts the last style back. The night clock keeps its own look. Also in Home Assistant
   and on the setup page's Screen & Photos tab.
+- **Font**: the font of every word the screen draws: the clock, the date, the weather, the settings
+  and the rest (not the icons). *Go*, the screen's own and the default, *Inter*, *MuseoModerno*,
+  *Exo*, *Overpass*, *Saira*, *Comic Neue*, *Open Sans* or *Google Sans Flex*. Each is sized so a line
+  takes about the room it takes in Go, and a new choice shows at once. A character a font doesn't
+  have, like the ♪ in "♪ playing", is drawn in Go. Under Look, also **Screen font** in Home Assistant
+  and on the setup page's Screen & Photos tab.
 - **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
   switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
   **Tap on the clock** is *Nothing*, too.
@@ -273,6 +279,28 @@ the Spot too, in its settings.
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
   is drawn thin and in a dimmer red, so it doesn't light up a dark room.
+
+### Fonts of your own
+
+The screen's fonts draw Latin letters, and Go adds Greek and Cyrillic. Words in other scripts, such as
+a Korean song title or a Japanese calendar event, show as boxes. A font of your own fills that in: the
+screen draws any character its font and Go don't have from it. It's never the font for everything;
+that's **Font**, above.
+
+On the setup page's Screen & Photos tab, under **Fonts of your own**, choose a `.ttf`, `.otf` or
+`.ttc` file to send it to the device, and use **Remove** to delete one. Or put the file in the
+device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the-ssh-authorized-keys)):
+`/data/misc/techo5/fonts`. The Echo Dot has no screen and no fonts folder.
+
+- [Noto Sans CJK](https://github.com/notofonts/noto-cjk) has Korean, Chinese and Japanese. Use one of
+  its static fonts (`Sans/OTF/Korean/NotoSansCJKkr-Regular.otf` and the like, about 16 MB), not a
+  variable font: a variable font is drawn at its default weight, which is often the thinnest.
+- A file can be at most 32 MB, and the fonts together 96 MB. Up to 8 fonts are used, tried in the
+  order of their file names, so name them `1-korean.otf`, `2-japanese.otf` to choose.
+- From a collection (`.ttc`) the first font is used.
+- A font is read from the device's storage as letters are drawn, not loaded into memory whole.
+- A new or removed font shows within a few seconds, with no restart. A file that isn't a font the
+  device can draw is left unused; the setup page lists it and says why.
 
 ### Presence and gestures
 

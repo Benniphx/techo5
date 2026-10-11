@@ -138,6 +138,7 @@ var registered = []string{
 	"screen_dashboard_idle",
 	"screen_dashboard_kiosk",
 	"screen_dashboard_view",
+	"screen_font",
 	"screen_date_color",
 	"screen_language",
 	"screen_night_clock_style",

@@ -71,6 +71,7 @@ func testPicture() *image.RGBA {
 // Every scene draws without panicking; with SPOT_PREVIEW set to a directory, each is written there as
 // a PNG to look at.
 func TestRoundScenesDraw(t *testing.T) {
+	previewFont(t)
 	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local)
 	sky := home.Weather{Condition: "partlycloudy", Temp: "72°"}
 	var week []hass.Day
