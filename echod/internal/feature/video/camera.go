@@ -32,6 +32,8 @@ type Camera struct {
 	// frame is what Next reads each frame into: one picture for the whole stream, rather than one more
 	// for the collector each frame (at 24 frames of 896×672 a second, over fifty megabytes a second).
 	frame *image.RGBA
+	// release lets go of its hold on the decoder's proxy (holdGuard); nil for one read over RTSP.
+	release func()
 }
 
 // cameraArgs runs the decoder on a camera's stream at its own pace (-re: a playlist's parts arrive
@@ -77,7 +79,7 @@ func OpenCamera(ctx context.Context, url string, w, h int) (*Camera, error) {
 		return nil, err
 	}
 	releaseWhenDone(d, release)
-	return &Camera{d: d, w: w, h: h}, nil
+	return &Camera{d: d, w: w, h: h, release: release}, nil
 }
 
 // Next is the next frame, waiting up to wait for it. A stream that ended, or failed, says why. The
@@ -102,7 +104,12 @@ func (c *Camera) Next(wait time.Duration) (*image.RGBA, error) {
 }
 
 // Close ends the decoding and waits for it.
-func (c *Camera) Close() { c.d.stop() }
+func (c *Camera) Close() {
+	c.d.stop()
+	if c.release != nil {
+		c.release() // now, not when the watcher of its end gets to it
+	}
+}
 
 // hlsToken is the part of a Home Assistant stream's address that opens it, and urlLogin the login in
 // an address (a camera's RTSP one carries it: rtspURL).
@@ -151,14 +158,23 @@ func OpenCameraSound(ctx context.Context, url string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	releaseWhenDone(d, release)
-	return cameraSound{d}, nil
+	return cameraSound{d, release}, nil
 }
 
 // cameraSound is a camera's sound as it is decoded.
-type cameraSound struct{ d *decoder }
+type cameraSound struct {
+	d       *decoder
+	release func() // as Camera's
+}
 
 func (c cameraSound) Read(p []byte) (int, error) { return c.d.video.Read(p) }
-func (c cameraSound) Close() error               { c.d.stop(); return nil }
+func (c cameraSound) Close() error {
+	c.d.stop()
+	if c.release != nil {
+		c.release()
+	}
+	return nil
+}
 
 // SetReadDeadline bounds a read, for the first of the sound: a stream that brings none is given up on.
 func (c cameraSound) SetReadDeadline(t time.Time) error { return c.d.video.SetReadDeadline(t) }
@@ -355,5 +371,5 @@ func OpenCameraSoundRTSP(ctx context.Context, addr, user, pass string) (io.ReadC
 	if err != nil {
 		return nil, err
 	}
-	return cameraSound{d}, nil
+	return cameraSound{d: d}, nil
 }
