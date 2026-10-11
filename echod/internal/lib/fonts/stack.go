@@ -107,9 +107,12 @@ func (s *Stack) has(l Layer, r rune) bool {
 	if l.Font == nil {
 		return true
 	}
-	i, err := l.Font.GlyphIndex(&s.buf, r)
+	i, err := glyphIndex(l.Font, &s.buf, r)
 	return err == nil && i != 0
 }
+
+// glyphIndex is sfnt's GlyphIndex, a variable so a test can have a font break for one character.
+var glyphIndex = (*sfnt.Font).GlyphIndex
 
 // Has is whether any layer has a glyph for r: whether the stack draws it as itself.
 func (s *Stack) Has(r rune) bool {
@@ -143,7 +146,13 @@ func (s *Stack) GlyphAdvance(r rune) (advance fixed.Int26_6, ok bool) {
 func (s *Stack) Kern(r0, r1 rune) (k fixed.Int26_6) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	i0, i1 := s.pick(r0), s.pick(r1)
+	// Picked again until no layer is dropped on the way: a layer dropped while r1's is found shifts
+	// the places after it, and r0's place would then be another layer's.
+	var i0, i1 int
+	for n := -1; n != len(s.layers); {
+		n = len(s.layers)
+		i0, i1 = s.pick(r0), s.pick(r1)
+	}
 	if i0 < 0 || i0 != i1 {
 		return 0
 	}
