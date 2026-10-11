@@ -152,6 +152,10 @@ type Feature struct {
 	viewSeq uint64
 	// stillCancel gives up the fetch of the still on the view (picture.go), when there is one.
 	stillCancel context.CancelFunc
+	// camGen numbers the camera views whose frames are fetched (CameraView.gen), and camCancel ends what
+	// the one up fetches with.
+	camGen    uint64
+	camCancel context.CancelFunc
 
 	// camSound is the camera whose sound this view has, camOver the media player's token for the request
 	// it was asked with, and camMuted whether that sound was silenced from the screen. camSound stays for
@@ -171,6 +175,7 @@ type Feature struct {
 	camOver       media.OverToken
 	camMuted      bool
 	cameraSoundSw *esphome.Switch
+	cameraLiveSw  *esphome.Switch
 
 	// slideshowSel picks the display mode, slideshowOverlaySel the screensaver's clock/date size,
 	// slideshowIdleNum the screensaver's idle wait; slideshow is the fetch state. See slideshow.go.
@@ -257,6 +262,7 @@ func Get() *Feature {
 		shared.buildRadarSelect()
 		shared.buildAlertsSwitch()
 		shared.buildCameraSoundSwitch()
+		shared.buildCameraLiveSwitch()
 		shared.buildSlideshowSelect()
 		shared.buildRadioSensors()
 		shared.buildNowPlayingSensors()
@@ -390,6 +396,7 @@ func (f *Feature) Restore(c config.Config) {
 	// none of them starts out unknown in Home Assistant.
 	f.showNowPlaying(nil, nothingPlaying)
 	f.cameraSoundSw.Set(c.Home.CameraSound)
+	f.cameraLiveSw.Set(c.Home.CameraLive)
 	if hasScreen {
 		f.slideshowSel.Set(slideshowLabelFor(c.Home.Slideshow.Mode))
 		f.slideshowOverlaySel.Set(slideshowOverlayLabelFor(c.Home.Slideshow.Overlay))

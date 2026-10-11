@@ -95,6 +95,8 @@ func (f *Feature) ShowPicture(src string, c Caption, d time.Duration, sound stri
 	}
 	f.mu.Lock()
 	f.cancelStill() // the still this one replaces is not wanted any more
+	// Nor the camera, and its stream's decoder ends now.
+	f.stopCameraFetch()
 	ctx, cancel := context.WithCancel(context.Background())
 	f.stillCancel = cancel
 	f.cam = CameraView{Entity: src, Name: name, Until: time.Now().Add(d), Caption: &c, span: d, View: f.newView()}

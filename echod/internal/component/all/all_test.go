@@ -37,6 +37,7 @@ var registered = []string{
 	"calendar_popup_before",
 	"calendar_popup_chime",
 	"calendar_popups",
+	"camera_live",
 	"camera_sound",
 	"camera_web_access",
 	"check_for_updates",
