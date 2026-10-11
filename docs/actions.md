@@ -971,7 +971,8 @@ Emoji aren't drawn: none of the screen's fonts have them, so one shows as an emp
 - **Sound.** The chime plays as it comes up, then the words if `speak` is `"on"`, joined as one
   sentence: title `Doorbell` and message `Someone is here` are said as "Doorbell. Someone is here".
   A chime that comes while the device is answering or announcing waits for it to finish (up to ten
-  seconds, then it is left out) rather than cutting it off.
+  seconds, then it is left out) rather than cutting it off. A camera's sound does not hold it back:
+  the chime plays over it at once.
 - **Night and quiet hours.** No chime, no words and no camera sound, whatever `chime`, `speak` and
   `sound` say. At night a notification does not replace the night screen (on a Show, dark or the red clock; on a
   Spot, dark or dimmed to its night level): it
