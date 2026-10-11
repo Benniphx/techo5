@@ -196,7 +196,14 @@ func (f *Feature) askCameraSound(entity string, token media.OverToken, env sound
 	if env.player.Answer != nil {
 		ways := soundSources(entity)
 		for i, open := range ways {
-			src, why := startSound(open)
+			if !f.cameraSoundMine(entity, token) {
+				// The view ended, or gave its sound up, while an earlier way was tried: nothing more is
+				// started for it, not Home Assistant's stream nor its call.
+				env.player.Drop(token)
+				env.player.Settled(token)
+				return
+			}
+			src, why := startSound(open, func() bool { return f.cameraSoundMine(entity, token) }, env.poll)
 			if src == nil {
 				slog.Info("camera sound: none this way, trying the next", "entity", entity, "way", i+1, "why", why)
 				continue
@@ -207,7 +214,13 @@ func (f *Feature) askCameraSound(entity string, token media.OverToken, env sound
 				src.Close()
 				return
 			}
-			if env.player.Answer(token, func(context.Context) (io.ReadCloser, error) { return src, nil }) {
+			// The player's context ending is the sound being over: silenced, or a read that brought nothing
+			// for its stall time. Closing it then ends its decoder, which a read blocked on it waits for.
+			answer := func(ctx context.Context) (io.ReadCloser, error) {
+				context.AfterFunc(ctx, func() { src.Close() })
+				return src, nil
+			}
+			if env.player.Answer(token, answer) {
 				slog.Info("camera sound on, decoded here", "entity", entity, "way", i+1)
 				env.player.Settled(token)
 				f.spawn(func() { f.closeWhenOver(entity, token, src, env) })
@@ -437,9 +450,31 @@ func (f *Feature) closeWhenOver(entity string, token media.OverToken, src io.Clo
 // soundStart is how long a camera's stream may take to bring the first of its sound.
 var soundStart = 20 * time.Second
 
-// startSound opens a sound and waits for the first of it. Nil, with why, when none comes.
-func startSound(open func(context.Context) (io.ReadCloser, error)) (io.ReadCloser, string) {
+// startSound opens a sound and waits for the first of it. Nil, with why, when none comes. While it
+// waits, wanted is asked every poll, and a sound no longer wanted (its view ended) is ended there and
+// then rather than when the wait runs out.
+func startSound(open func(context.Context) (io.ReadCloser, error), wanted func() bool, poll time.Duration) (io.ReadCloser, string) {
 	ctx, cancel := context.WithCancel(context.Background())
+	if poll <= 0 {
+		poll = time.Second
+	}
+	started := make(chan struct{})
+	defer close(started)
+	go func() {
+		t := time.NewTicker(poll)
+		defer t.Stop()
+		for {
+			select {
+			case <-started:
+				return
+			case <-t.C:
+				if !wanted() {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
 	r, err := open(ctx)
 	if err != nil {
 		cancel()

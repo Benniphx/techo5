@@ -533,6 +533,9 @@ func pumpOver(stop, fetch context.Context, giveUp func(), body io.Reader, spk *s
 		watchdog := time.AfterFunc(overStall, giveUp)
 		n, err := io.ReadFull(body, buf)
 		watchdog.Stop()
+		if stop.Err() != nil {
+			return nil // silenced while the read waited: what it brought is not played
+		}
 
 		// A muted sound is read and thrown away rather than paused: what is coming is live, so keeping up
 		// with it is what makes bringing the sound back immediate, and nothing queues towards a burst of
