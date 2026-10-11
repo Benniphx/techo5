@@ -153,6 +153,11 @@ type Player struct {
 	// Home Assistant — so a screen can show it. A restore is silent, as it is on the ring.
 	OnVolume hook.Hook[int]
 
+	// OnLevel fires with the new step whenever the level is applied, for any reason: a restore and
+	// night volume too, which OnVolume leaves out. It is for what keeps its own copy of the level, such
+	// as the Spotify app's slider.
+	OnLevel hook.Hook[int]
+
 	// OnPlay fires with the URL whenever a track (not an announcement) is started, so a screen can
 	// find out what it is.
 	OnPlay hook.Hook[string]
@@ -1304,6 +1309,7 @@ func (p *Player) apply(step int, tell bool) int {
 	if !p.muted.Load() {
 		speaker.Get().SetVolume(step)
 	}
+	p.OnLevel.Emit(step)
 	if !tell {
 		return step
 	}

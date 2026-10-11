@@ -169,13 +169,13 @@ automation that wants to know too.
   speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
   **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under
   Settings → Sound, on the setup page (Sound & Voice), or in Home Assistant. What they play shows as
-  now playing, with the song's cover from Spotify. The Spotify app's volume slider turns the device's
-  volume up and down by as much as it moves; the device's own buttons do not move the app's slider. A
-  pause on the device stops the stream there; the phone keeps going until it is paused too. Anyone on
-  the same network can play to the device while one is on, as with any AirPlay or Spotify speaker, and
-  Spotify Connect keeps the login a phone hands it until it is turned off. Spotify Connect has been
-  tried on a Show; AirPlay has not been tried with an iPhone yet. If something does not work, open an
-  issue.
+  now playing, with the song's cover from Spotify. The Spotify app's volume slider and the device's
+  volume are one: the slider sets the device to where it is, and the device's buttons, Home Assistant
+  and night volume move the slider. A pause on the device stops the stream there; the phone keeps
+  going until it is paused too. Anyone on the same network can play to the device while one is on, as
+  with any AirPlay or Spotify speaker, and Spotify Connect keeps the login a phone hands it until it
+  is turned off. Spotify Connect has been tried on a Show; AirPlay has not been tried with an iPhone
+  yet. If something does not work, open an issue.
 - **DLNA (new).** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to
   this device box, or Home Assistant) makes the device a DLNA speaker, a "media renderer", under its
   own name. Music apps and servers on the network find it and play to it: BubbleUPnP on a phone,
@@ -309,8 +309,9 @@ On the setup page (Sound & Voice) or in Home Assistant, **Night volume** turns t
 level as quiet hours start, if it is louder, and back to where it was as they end. Turned up or down
 during the night, it stays where it was put. Changing Night volume during the night moves the device to
 the new level, and 0 (no night volume) puts it straight back. A muted device stays muted. Alarms and
-timers keep their own **Ring volume**. The Spotify and Music Assistant volume sliders do not move when
-night volume turns the device down.
+timers keep their own **Ring volume**. The Spotify app's volume slider moves down with the device when
+night volume turns it down, and during quiet hours it cannot turn the device up past the night volume.
+The Music Assistant volume slider does not move when night volume turns the device down.
 
 ### A wake word of your own
 
