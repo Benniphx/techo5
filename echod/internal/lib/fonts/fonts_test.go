@@ -100,7 +100,7 @@ func TestStackOrder(t *testing.T) {
 	b, _ := opentype.NewFace(goFont, &opentype.FaceOptions{Size: 30, DPI: 72})
 	last, _ := opentype.NewFace(goFont, &opentype.FaceOptions{Size: 60, DPI: 72})
 
-	s := NewStack(nil, Layer{a, inter}, Layer{b, goFont}, Layer{Face: last})
+	s := NewStack(nil, Layer{Face: a, Font: inter}, Layer{Face: b, Font: goFont}, Layer{Face: last})
 	if g, _ := s.GlyphAdvance('x'); g != adv(a, 'x') {
 		t.Error("x was not the first layer's")
 	}
@@ -116,7 +116,7 @@ func TestStackOrder(t *testing.T) {
 	}
 
 	// Without a catch-all, the first layer draws what nobody has, as it would alone.
-	s = NewStack(nil, Layer{a, inter}, Layer{b, goFont})
+	s = NewStack(nil, Layer{Face: a, Font: inter}, Layer{Face: b, Font: goFont})
 	if s.Has('\U0001F600') {
 		t.Error("says it has a character neither font has")
 	}
