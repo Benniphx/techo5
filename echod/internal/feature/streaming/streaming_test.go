@@ -257,13 +257,13 @@ func TestEveryStepGoesToTheAppAndBack(t *testing.T) {
 // fakeSpotify is a device and a librespot around a spotifySync: what librespot was handed, and the
 // device's level, set the way media.Player sets it, which tells the sync as OnLevel does.
 type fakeSpotify struct {
-	s     *spotifySync
-	step  int
-	told  []int // levels handed to librespot
-	sets  []int // levels the app set the device to
-	takes bool  // whether librespot takes what it is handed
-	night int   // the night volume in quiet hours, 0 for none
-	clock time.Time
+	s      *spotifySync
+	step   int
+	told   []int // levels handed to librespot
+	sets   []int // levels the app set the device to
+	takes  bool  // whether librespot takes what it is handed
+	night  int   // the night volume in quiet hours, 0 for none
+	clock  time.Time
 	settle func() // the settle to come, nil for none
 }
 
