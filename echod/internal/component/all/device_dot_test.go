@@ -16,3 +16,8 @@ var notOnThisDevice = []string{
 }
 
 var deviceSpecific = []string{"airplay", "audio_output", "spotify_connect"}
+
+// actionsNotOnThisDevice is what the Echo Dot must never offer, and which component would: the fixed
+// network address, since the Dot's image has a techo5-net of its own that joins Wi-Fi when run and
+// knows nothing of one (lib/wifi/address_dot.go).
+var actionsNotOnThisDevice = map[string]string{"network_address": "wifiwatch"}

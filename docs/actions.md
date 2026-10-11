@@ -96,10 +96,15 @@ Sets how the device gets its address on Wi-Fi: from the router (DHCP), or fixed.
 seconds later.
 
 A new fixed address is tried before it is kept: if another device answers for it, or the gateway does
-not answer from it, the device keeps the setting it had, and the setup page says why. Calling it with
-the setting already in use changes nothing. Home Assistant follows the device to its new address by
-itself, about two minutes after the change. The device's IP address sensor shows the address in use.
-The action is there only on an image that can set an address.
+not answer from it, the device keeps the setting it had, and the setup page (and the device's log) says
+why. Calling it with the setting already in use, and in place, changes nothing; called while the device
+uses DHCP in its place, it tries the address again. Home Assistant follows the device to its new
+address by itself, about two minutes after the change. The device's IP address sensor shows the address
+in use. The action is on the Echo Show and the Echo Spot, not on the Echo Dot.
+
+Whoever can use the device's ESPHome API can call it, and so can set the gateway and the DNS servers the
+device uses, and with them where its traffic and its name lookups go: keep the API key to the Home
+Assistant you trust.
 
 ### address (Required)
 

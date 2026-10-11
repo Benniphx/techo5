@@ -427,7 +427,8 @@ While the lock is on, the PIN is also asked for when **Allow** is pressed on the
 
 ## 9. A fixed address
 
-The device gets its address from the router (DHCP) unless told otherwise. To give it a fixed one, for
+On an Echo Show or an Echo Spot (not an Echo Dot), the device gets its address from the router (DHCP)
+unless told otherwise. To give it a fixed one, for
 example from a range the router does not hand out, open the setup page, go to **Connections →
 Network address**, choose **Fixed**, and type the address (`192.168.1.50`, or `192.168.1.50/24`
 with its prefix), the gateway, and DNS servers if they are not the gateway. On an Echo Show the
@@ -442,7 +443,10 @@ still starting up.
 
 The address belongs to the Wi-Fi it was set on. On another network, or when its gateway has not
 answered for five minutes (a router moved to another subnet, say), the device takes an address from
-the router instead until it restarts, so it can still be found; the setting itself is kept.
+the router instead, so it can still be found; the setting itself is kept. It goes back to the fixed
+address by itself once it is on that Wi-Fi again and the gateway answers, checked every minute (after
+an attempt that did not hold, half an hour later). Saving the same address again tries it again at
+once, and on another network makes it that network's address.
 
 After a change the setup page is at the new address, and the browser has to be let in there again.
 Home Assistant follows the device by itself, about two minutes after the change: it first has to notice
