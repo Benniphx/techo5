@@ -600,6 +600,8 @@ func TestTheLogIsNoListeningHistory(t *testing.T) {
 	if !waitFor(func() bool { return writes.shown().album == "Wild Album" }) {
 		t.Fatalf("the sensors say %+v", writes.shown())
 	}
+	// The line is logged just after the sensors are written: waited for, not read at once.
+	waitFor(func() bool { return strings.Contains(buf.String(), "now playing sensors") })
 	logged := buf.String()
 	if !strings.Contains(logged, "now playing sensors") {
 		t.Errorf("the change was not logged: %q", logged)
