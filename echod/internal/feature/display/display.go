@@ -42,6 +42,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/notify"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
@@ -338,6 +339,12 @@ type Display struct {
 	vp            videoPainter
 	vask          askLatch
 	videoLit      uint64 // the last video that lit the panel (frame)
+
+	// notifyLit is the last notification that lit the panel (frame), once per notification like
+	// videoLit. notifySeen is the notification the screen may show at night: the one that came up by
+	// day, or that a touch released. A notification at night waits for the touch (mu).
+	notifyLit  string
+	notifySeen string
 }
 
 var (
@@ -434,6 +441,8 @@ func build() *Display {
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	alarm.Get().Changed.Listen(func(struct{}) { d.wake() })
 	remind.Get().Changed.Listen(func(struct{}) { d.wake() })
+	notify.Get().Changed.Listen(func(struct{}) { d.wake() })
+	notify.SetNight(nightNow)
 	timer.Get().Changed.Listen(func(struct{}) { d.wake() })
 	onMissed(d.wake)
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
@@ -769,6 +778,30 @@ func (d *Display) volumeMoved(step int) {
 	d.wake()
 }
 
+// toggleTalk and toggleSound are what the camera page's Talk and sound controls do; variables only so
+// that a test can see a tap reach them.
+var (
+	toggleTalk  = func(entity string) { talkback.Get().Toggle(entity) }
+	toggleSound = func() { home.Get().ToggleCameraSound() }
+)
+
+// cameraTap is a tap on the camera page for view v: it takes the view down, unless it lands on the
+// sound's control — that silences what the camera is saying and leaves the view up, which is the whole
+// use of it at a doorbell — or on Talk, which starts or ends talking through the camera. By day and on
+// the night light both come here, so a hand reaching for Talk in the dark does not lose the view.
+func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
+	if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
+		go toggleTalk(v.Entity)
+	} else if d.r != nil && d.r.cameraSoundTapped(image.Pt(g.X, g.Y)) {
+		// Silence it, or ask for it again: the control is a toggle, and the view stays either way. Inline,
+		// as it always was: it only changes the player's own state, and two quick taps stay in order.
+		toggleSound()
+	} else {
+		// Off the touch goroutine: closing a notification's picture ends in a network write.
+		go closeCamera(v)
+	}
+}
+
 // gesture is a finger on the panel. A dark screen only lights up; otherwise a tap is the action
 // button and a vertical swipe the volume.
 func (d *Display) gesture(g touch.Gesture) {
@@ -779,6 +812,10 @@ func (d *Display) gesture(g touch.Gesture) {
 	d.mu.Lock()
 	d.touchedAt = time.Now()
 	d.mu.Unlock()
+	// A notification that came up at night waits for a touch (releaseNotice), but not for one that
+	// stops a ring: that one is for the alarm. The touch that releases it only releases: whoever
+	// touched the screen has not seen the card yet, so it is not a tap on anything.
+	held := d.noticeHeld()
 
 	if !on {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
@@ -786,6 +823,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.stopRing()
 			return
 		}
+		d.releaseNotice()
 		if g.Kind == touch.Tap {
 			d.apply(true, d.ceilingOrDefault(), true)
 			if nightNow(time.Now()) && nightTapOpensDashboard() && !d.overNight() {
@@ -817,12 +855,31 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.wake()
 			return
 		}
-		if g.Kind == touch.Tap && nightTapOpensDashboard() && !d.overNight() && d.openNightDashboard() {
-			// A tap on the clock opens the dashboard by day, and so it does on the night light: to
-			// turn a light on in the night, say. It stays at the night light's level, and the night
-			// clock comes back when it closes.
-			slog.Info("screen: dashboard opened from the night light")
-			return
+		if held {
+			d.releaseNotice()
+			d.wake()
+		} else if g.Kind == touch.Tap {
+			// What a touch released on the night light is tapped away like any other, and the red clock
+			// comes back; without this it stayed until the notification ended. A text card only by its
+			// own box; a camera view (a picture notification's, or one somebody asked for) as by day, where
+			// Talk and the sound's control keep the view up and anywhere else takes it down.
+			if n, up := notify.Get().Card(); up && d.r != nil && image.Pt(g.X, g.Y).In(d.r.notifyBox()) {
+				go notify.Get().DismissID(n.ID)
+				d.wake()
+				return
+			}
+			if v, up := home.Get().Camera(); up {
+				d.cameraTap(g, v) // Talk and Mute first, as by day
+				d.wake()
+				return
+			}
+			if nightTapOpensDashboard() && !d.overNight() && d.openNightDashboard() {
+				// A tap on the clock opens the dashboard by day, and so it does on the night light: to
+				// turn a light on in the night, say. It stays at the night light's level, and the night
+				// clock comes back when it closes.
+				slog.Info("screen: dashboard opened from the night light")
+				return
+			}
 		}
 		if g.Kind == touch.Hold {
 			d.mu.Lock()
@@ -913,6 +970,15 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
+	// On a lit night screen the touch that releases a held notification only releases it, rather than
+	// falling through to the deck, the drawer, the dashboard or a button under the finger. A ring, a
+	// call and the pages that take every tap have had their say above.
+	if held {
+		d.releaseNotice()
+		d.wake()
+		return
+	}
+
 	// A reminder: a tap on its card puts it away, here and on every device it went off on. Only the
 	// card, as with the strip, so a finger meant for the music behind it still reaches the music.
 	if g.Kind == touch.Tap && d.r != nil && d.r.popupTapped(image.Pt(g.X, g.Y)) {
@@ -924,6 +990,14 @@ func (d *Display) gesture(g touch.Gesture) {
 	if _, showing := remind.Get().Showing(); showing && g.Kind == touch.Tap &&
 		d.r != nil && image.Pt(g.X, g.Y).In(d.r.reminderBox()) {
 		go remind.Get().Stop()
+		d.wake()
+		return
+	}
+
+	// A notification's card, the same way: a tap on the card puts it away and tells Home Assistant;
+	// anywhere else is a tap on what is behind it. Under the reminder, which is drawn over it.
+	if n, up := notify.Get().Card(); up && g.Kind == touch.Tap && d.r != nil && image.Pt(g.X, g.Y).In(d.r.notifyBox()) {
+		go notify.Get().DismissID(n.ID)
 		d.wake()
 		return
 	}
@@ -984,20 +1058,11 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
-	// A live camera: a tap takes it down, unless it lands on the sound's control — that silences what
-	// the camera is saying and leaves the view up, which is the whole use of it at a doorbell — or on
-	// Talk, which starts or ends talking through the camera. Not while the settings are open: they are
-	// drawn over the camera, so the tap is for them, as on the Spot.
+	// A live camera: see cameraTap. Not while the settings are open: they are drawn over the camera, so
+	// the tap is for them, as on the Spot.
 	if v, up := home.Get().Camera(); up && !d.sheetUp() {
 		if g.Kind == touch.Tap {
-			if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
-				go talkback.Get().Toggle(v.Entity)
-			} else if d.r != nil && d.r.cameraSoundTapped(image.Pt(g.X, g.Y)) {
-				// Silence it, or ask for it again: the control is a toggle, and the view stays either way.
-				home.Get().ToggleCameraSound()
-			} else {
-				home.Get().HideCamera()
-			}
+			d.cameraTap(g, v)
 		}
 		d.wake()
 		return
@@ -1864,11 +1929,12 @@ func (d *Display) frame() time.Duration {
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
-	if !on && d.popupUp() != nil && !nightNow(now) {
+	if !on && d.popupUp() != nil && !night {
 		// A pop-up lights a dark panel by day. At night it waits there, dark, until the screen is woken.
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
+	on = d.noticeLights(on, night)
 	if vs := video.Get().State(); vs.Active() && vs.ID != d.videoLit && (vs.Phase != video.Asking || !nightNow(now)) {
 		// A video starting lights a dark panel, day or night: somebody asked for it to be watched. Once
 		// per video, so a screen turned off while one plays stays off. A DLNA video asking first lights it
@@ -2052,6 +2118,7 @@ func (d *Display) frame() time.Duration {
 		d.mu.Unlock()
 	}
 	s.camera, s.showCamera = home.Get().Camera()
+	s.camera, s.showCamera = d.gateCamera(s.camera, s.showCamera, nightNow(now))
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	if s.showCamera {
 		s.talkOffered, s.talk = talkback.Offered(s.camera.Entity), talkback.Get().State()
@@ -2142,6 +2209,8 @@ func (d *Display) frame() time.Duration {
 	s.announcePeers = len(announce.Peers())
 	s.announcement, s.showAnnouncement = announce.Get().Showing()
 	s.reminder, s.showReminder = remind.Get().Showing()
+	s.notification, s.showNotification = notify.Get().Card()
+	d.gateNotice(&s, nightNow(now))
 	s.popup = d.popupUp()
 	if s.reminder.From != config.Get().Device.Name {
 		s.reminderFrom = s.reminder.From

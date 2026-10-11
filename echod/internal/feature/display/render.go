@@ -24,6 +24,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/notify"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
@@ -159,6 +160,11 @@ type scene struct {
 	cameraSound     bool
 	cameraSoundLive bool
 	cameras         []config.Camera
+
+	// notification is a notification of words from Home Assistant (feature/notify), with
+	// showNotification saying one is up; a picture notification is the camera page instead.
+	notification     notify.Notification
+	showNotification bool
 
 	// talkOffered is whether that view has Talk (feature/talkback), and talk is where a talk is.
 	talkOffered bool
@@ -507,9 +513,12 @@ func (r *renderer) draw(s scene) {
 			r.announcementStrip(s)
 		}
 		// The card is in the middle and the strips along the bottom, so a reminder and an
-		// announcement can both be up at once.
+		// announcement can both be up at once. One card at a time: a reminder over a notification
+		// over an event's pop-up.
 		if s.showReminder {
 			r.reminderCard(s)
+		} else if s.showNotification {
+			r.notifyCard(s)
 		} else if s.popup != nil {
 			r.popupCard(s, *s.popup)
 		}

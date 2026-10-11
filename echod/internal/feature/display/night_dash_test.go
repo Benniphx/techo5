@@ -3,11 +3,13 @@
 package display
 
 import (
+	"image"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/notify"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/touch"
 )
 
@@ -59,5 +61,51 @@ func TestATapAtNightOpensTheDashboardWhenChosen(t *testing.T) {
 	r.draw(idle)
 	if !same(r.dst.Pix, clock) {
 		t.Error("a dashboard standing in for the clock took the night clock's place")
+	}
+}
+
+// A notification at night is what a tap there is for, not the dashboard: the touch that releases a
+// held one only releases it, on the night light and on a dark panel, and a tap off its card leaves the
+// dashboard closed while the card is up (#84 with #115).
+func TestATapAtNightIsForTheNotificationNotTheDashboard(t *testing.T) {
+	d := noticeDisplay(t, showWide, showHigh)
+	atNight(t)
+	if err := config.Set().Screen().AtNight(true, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set().Dashboard().Mode(config.DashboardDrawn); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set().Screen().ClockTap("dashboard"); err != nil {
+		t.Fatal(err)
+	}
+	d.nightGlow = true
+	if err := notify.Get().Notify("The washer is done", "Washer", "", "", "", "", 600); err != nil {
+		t.Fatal(err)
+	}
+	if !d.noticeHeld() {
+		t.Fatal("a notification at night is not held")
+	}
+	tapAt(d, image.Pt(5, 5)) // releases it
+	if d.dash {
+		t.Fatal("the touch that released a notification on the night light opened the dashboard")
+	}
+	tapAt(d, image.Pt(5, 5)) // off the card
+	if d.dash {
+		t.Fatal("a tap off a notification's card on the night light opened the dashboard")
+	}
+	if !noticeUp() {
+		t.Fatal("a tap off the card put the notification away")
+	}
+
+	// On a panel the night left dark, the same.
+	notify.Get().Dismiss()
+	if err := notify.Get().Notify("The dryer is done", "", "", "", "", "", 600); err != nil {
+		t.Fatal(err)
+	}
+	d.on = false
+	tapAt(d, image.Pt(5, 5))
+	if d.dash {
+		t.Fatal("the touch that released a notification on a dark panel opened the dashboard")
 	}
 }
