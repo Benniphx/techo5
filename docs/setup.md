@@ -311,7 +311,8 @@ during the night, it stays where it was put. Changing Night volume during the ni
 the new level, and 0 (no night volume) puts it straight back. A muted device stays muted. Alarms and
 timers keep their own **Ring volume**. The Spotify app's volume slider moves down with the device when
 night volume turns it down, and during quiet hours it cannot turn the device up past the night volume.
-The Music Assistant volume slider does not move when night volume turns the device down.
+The Music Assistant volume slider cannot turn the device up past the night volume during quiet hours
+either, but it does not move when night volume turns the device down.
 
 ### A wake word of your own
 
