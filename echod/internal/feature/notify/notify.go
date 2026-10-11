@@ -308,8 +308,10 @@ func (f *Feature) put(n Notification, h how) {
 	if h.aloud && !h.hushed {
 		words = spoken(n)
 	}
-	slog.Info("notification", "kind", n.Kind, "title", n.Title, "until", n.Until.Format(time.Kitchen),
+	// Its words only at Debug: logs go into diagnostics bundles, which get pasted into public issues.
+	slog.Info("notification", "id", n.ID, "kind", n.Kind, "until", n.Until.Format(time.Kitchen),
 		"chime", chime, "spoken", words != "", "hushed", h.hushed)
+	slog.Debug("notification words", "id", n.ID, "title", n.Title, "message", n.Message)
 	ends := h.untilDone && f.pics == nil
 	if chime || words != "" {
 		// One after the other in one goroutine: the chime has the speaker until it is done, and words
