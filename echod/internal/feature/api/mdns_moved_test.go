@@ -40,8 +40,8 @@ func TestOnlyANewIPv4AddressIsAMove(t *testing.T) {
 
 // The advertising loop's view of the addresses over time: what it holds, and when it calls a move.
 // Each step is the addresses seen, whether a setting is on trial then, and whether that is a move. The
-// loop is given the Wi-Fi's addresses alone (metrics.WiFiAddresses); here, the VPN's are the ones in
-// 100.64.0.0/10, left out the same way.
+// loop is given the Wi-Fi's addresses alone (metrics.WiFiAddresses); here, the VPN's (vpn, vpn2) are
+// left out the same way.
 func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 	ip := func(s ...string) []net.IP {
 		var out []net.IP
@@ -56,11 +56,12 @@ func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 		want     moveStep
 	}
 	const lan1, lan2, vpn, vpn2 = "192.0.2.61", "192.0.2.62", "100.64.0.10", "198.51.100.11"
-	_, tunnel, _ := net.ParseCIDR("100.64.0.0/10")
+	// The VPN's addresses are on another interface; the rest are the Wi-Fi's.
+	tunnel := func(a net.IP) bool { return a.Equal(net.ParseIP(vpn)) || a.Equal(net.ParseIP(vpn2)) }
 	onWiFi := func(ips []net.IP) []net.IP {
 		var out []net.IP
 		for _, a := range ips {
-			if !tunnel.Contains(a) {
+			if !tunnel(a) {
 				out = append(out, a)
 			}
 		}
