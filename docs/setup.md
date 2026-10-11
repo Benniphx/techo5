@@ -105,9 +105,12 @@ heard from that address instead: live, a word said at the device comes back out 
 doorbell's own microphone in two to three seconds, against eight from the stream. A camera's picture
 can be read from its own address too, beside the talking one on the setup page: give it a stream about
 the screen's size (for a Reolink, `rtsp://<address>:554/h264Preview_01_sub`). Both use the cameras'
-login, so both need **Talk through cameras** allowed. Where an address cannot be read, the device falls
+login, so both need **Talk through cameras** allowed, and both are used only with **Live camera
+video** on: with it off the camera page shows snapshots and the sound comes through Home Assistant,
+whatever addresses are set. The login is sent only protected (Digest): a camera that offers only Basic
+(the password in the clear) is not read this way. Where an address cannot be read, the device falls
 back to Home Assistant's stream, and on a device whose kernel cannot keep the decoder off its own
-network (the Spot) it uses that stream only.
+network (the Spot) it uses that stream only, and the setup page offers no picture address.
 
 ### Talking through a camera
 

@@ -180,7 +180,11 @@ func CameraLiveChanged() { closeGuardIdle() }
 //
 // Read once from the decoder itself, a piece at a time (it is megabytes): the RTSP demuxer's own
 // option name is in it only when the demuxer is, and the message the Basic change logs only with it.
+// Never where the kernel cannot fence the decoder (rtspFenced: the Spot), since RTSP would not work there.
 func CanRTSP() bool {
+	if !rtspFenced {
+		return false
+	}
 	rtspOnce.Do(func() { rtspOK = readsRTSP(decoderPath()) })
 	return rtspOK
 }

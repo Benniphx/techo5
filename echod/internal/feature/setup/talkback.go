@@ -72,7 +72,10 @@ func talkBackSection(w http.ResponseWriter, token string) {
 	if video.CanRTSP() {
 		fmt.Fprint(w, `<p class="note">A camera's picture, if given, is read from that address on the camera page
 		  instead of Home Assistant's stream, which is seconds behind: a stream about the screen's size, for a
-		  Reolink rtsp://<i>address</i>:554/h264Preview_01_sub. Its sound comes from the address above.</p>`)
+		  Reolink rtsp://<i>address</i>:554/h264Preview_01_sub. Its sound comes from the address above. Both
+		  only with Live camera video on (the device's switch in Home Assistant, under its configuration); with it off the
+		  camera page shows snapshots, and its sound comes through Home Assistant. A camera that only takes its
+		  login in the clear (Basic) is not read this way, and is shown through Home Assistant instead.</p>`)
 	}
 	fmt.Fprint(w, `<p><button type="submit">Save</button></p></form></fieldset>`)
 }
@@ -126,7 +129,7 @@ func saveTalkBack(r *http.Request) string {
 	}
 	for i, e := range ents {
 		if !known[e] {
-			if strings.TrimSpace(addrs[i]) != "" {
+			if strings.TrimSpace(addrs[i]) != "" || (len(pics) != 0 && strings.TrimSpace(pics[i]) != "") {
 				// Home Assistant's list is not to hand (it is offline, or the camera has left it):
 				// saying so beats dropping the address that was typed.
 				return "the camera list isn't available right now, so nothing was saved; try again in a minute"
