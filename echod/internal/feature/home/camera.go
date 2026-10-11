@@ -52,6 +52,10 @@ type CameraView struct {
 	Error  string      // why there is no frame, when there is none
 	// Caption is a notification's words over the view (feature/notify); nil for a plain camera.
 	Caption *Caption
+	// OverPlain is a notification's picture put over a camera somebody was already watching (a
+	// doorbell's): the screen does not hold it back at night (display's gateCamera), since the camera
+	// was up anyway.
+	OverPlain bool
 	// View numbers the view, so that a tap can close the view it was read from and not whichever is up
 	// when it gets around to it (HideView). Until cannot say which view it is: it moves when the first
 	// frame arrives. A camera asked for again while its view is up keeps its number, and a different
@@ -164,7 +168,8 @@ func (f *Feature) showCameraCaptioned(entity string, d time.Duration, sound bool
 		}
 	}
 	f.mu.Lock()
-	fresh := f.cam.Entity != entity || time.Now().After(f.cam.Until)
+	now := time.Now()
+	fresh := f.cam.Entity != entity || now.After(f.cam.Until)
 	if !listed && !fresh {
 		name = f.cam.Name // the same camera asked for again keeps the name it was given, looked up or not
 	}
@@ -174,8 +179,22 @@ func (f *Feature) showCameraCaptioned(entity string, d time.Duration, sound bool
 		// number, so a tap read before the re-show still closes it; anything else is a new view.
 		view = f.newView()
 	}
+	up := f.cam.Entity != "" && now.Before(f.cam.Until)
+	overPlain := c != nil && up && (f.cam.Caption == nil || f.cam.OverPlain)
+	if !sameCaption(f.cam.Caption, c) {
+		f.endCaption("replaced")
+	}
+	until := now.Add(d)
+	if !fresh && f.cam.Until.After(until) {
+		// The same camera asked for again for less time than it has left: a notification's picture of
+		// the doorbell's own camera does not cut the doorbell's view short.
+		until = f.cam.Until
+	}
 	f.cancelStill() // a camera in place of a still: the still's picture is not wanted
-	f.cam = CameraView{Entity: entity, Name: name, Until: time.Now().Add(d), Frame: f.cam.Frame, Caption: c, span: d, View: view, gen: f.cam.gen}
+	if c != nil {
+		f.waiting = nil // a newer notification's picture: one still waiting was replaced by it
+	}
+	f.cam = CameraView{Entity: entity, Name: name, Until: until, Frame: f.cam.Frame, Caption: c, OverPlain: overPlain, span: d, View: view, gen: f.cam.gen}
 	var ctx context.Context
 	if fresh {
 		f.cam.Frame = nil
@@ -246,6 +265,25 @@ func (f *Feature) HoldCamera(entity string, d time.Duration) {
 	}
 }
 
+// endCaption notes why the notification's view up now is going, if one is, for notify to report
+// (PictureEnded). The caller holds f.mu.
+func (f *Feature) endCaption(why string) {
+	if c := f.cam.Caption; c != nil && c.ID != "" && f.cam.Entity != "" && time.Now().Before(f.cam.Until) {
+		f.endedID, f.endedWhy = c.ID, why
+	}
+}
+
+// PictureEnded is why notification id's view went other than by running out: "replaced" by another
+// camera or picture, "dismissed" by a tap or the camera page closing; "" when it ran out, or is up.
+func (f *Feature) PictureEnded(id string) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if id == "" || f.endedID != id {
+		return ""
+	}
+	return f.endedWhy
+}
+
 // newView is the number for a view being put up. The caller holds f.mu.
 func (f *Feature) newView() uint64 {
 	f.viewSeq++
@@ -287,6 +325,7 @@ func (f *Feature) HideView(view uint64) bool {
 	f.mu.Lock()
 	ours := f.cam.View == view && f.cam.Entity != "" && time.Now().Before(f.cam.Until)
 	if ours {
+		f.endCaption("dismissed")
 		f.cancelStill()
 		f.stopCameraFetch()
 		f.cam.Until = time.Time{}
@@ -304,6 +343,7 @@ func (f *Feature) HideView(view uint64) bool {
 // tap on a notification that came after it.
 func (f *Feature) HideCamera() {
 	f.mu.Lock()
+	f.endCaption("dismissed")
 	f.cancelStill()
 	f.stopCameraFetch()
 	f.cam.Until = time.Time{}
@@ -317,8 +357,15 @@ func (f *Feature) HideCamera() {
 // takes the page cannot take the newer one's view down.
 func (f *Feature) HidePicture(id string) bool {
 	f.mu.Lock()
+	if f.waiting != nil && f.waiting.c.ID == id {
+		// Its picture never went up: it was waiting for the camera view to end.
+		f.waiting = nil
+		f.mu.Unlock()
+		return true
+	}
 	ours := f.cam.Caption != nil && f.cam.Caption.ID == id && time.Now().Before(f.cam.Until)
 	if ours {
+		f.endCaption("dismissed")
 		f.cancelStill()
 		f.stopCameraFetch()
 		f.cam.Until = time.Time{}

@@ -152,6 +152,11 @@ type Feature struct {
 	viewSeq uint64
 	// stillCancel gives up the fetch of the still on the view (picture.go), when there is one.
 	stillCancel context.CancelFunc
+	// waiting is a still that waits for the camera view up to end (picture.go), nil for none.
+	waiting *waitingStill
+	// endedID and endedWhy are the last notification's view that went other than by running out, and
+	// how (PictureEnded).
+	endedID, endedWhy string
 	// camGen numbers the camera views whose frames are fetched (CameraView.gen), and camCancel ends what
 	// the one up fetches with.
 	camGen    uint64

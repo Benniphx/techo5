@@ -212,20 +212,108 @@ func TestShowCameraClearsACaption(t *testing.T) {
 	}
 }
 
-// A picture notification takes the camera page from the camera on it, so a camera's sound (which
-// ends when the page's entity changes) ends with it.
-func TestAPictureReplacesACameraView(t *testing.T) {
+// A still does not take the camera page from a camera somebody is watching (a doorbell's): it waits for
+// that view to end, counted as up meanwhile, and then comes up in its place, the camera (and so its
+// sound, which ends when the page's entity changes) gone.
+func TestAStillWaitsForACameraView(t *testing.T) {
 	fakePictures(t)
+	saved := waitingPoll
+	t.Cleanup(func() { waitingPoll = saved })
+	waitingPoll = 5 * time.Millisecond
 	f := newFeature(t)
 	f.ShowCamera("camera.deck", time.Minute)
 	if err := f.ShowPicture("/local/door.png", Caption{ID: "1", Message: "x"}, time.Minute, ""); err != nil {
 		t.Fatal(err)
 	}
-	if v, _ := f.Camera(); v.Entity != "/local/door.png" || v.Caption == nil {
-		t.Errorf("view %+v, want the picture with its caption", v)
+	time.Sleep(50 * time.Millisecond)
+	if v, up := f.Camera(); !up || v.Entity != "camera.deck" || v.Caption != nil {
+		t.Fatalf("view %+v, want the deck camera still up, untouched", v)
 	}
+	if !f.PictureUp("1") {
+		t.Error("the waiting picture's notification is not counted as up, so it would be reported over")
+	}
+	v, _ := f.Camera()
+	f.HideView(v.View)
+	eventually(t, "the picture after the camera", func() bool {
+		v, up := f.Camera()
+		return up && v.Entity == "/local/door.png" && v.Caption != nil && v.Caption.ID == "1"
+	})
 	if f.cameraViewUp("camera.deck") {
 		t.Error("the deck camera still counts as up, so its sound would play on")
+	}
+}
+
+// A still that waits longer than it was to be up never comes up, and one taken down while it waits
+// does not either.
+func TestAWaitingStillCanEndBeforeItShows(t *testing.T) {
+	fakePictures(t)
+	saved := waitingPoll
+	t.Cleanup(func() { waitingPoll = saved })
+	waitingPoll = 5 * time.Millisecond
+	f := newFeature(t)
+	f.ShowCamera("camera.deck", time.Minute)
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "1"}, 30*time.Millisecond, "")
+	time.Sleep(60 * time.Millisecond)
+	if f.PictureUp("1") {
+		t.Error("a still whose time ran out while it waited is still counted as up")
+	}
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "2"}, time.Minute, "")
+	if !f.HidePicture("2") || f.PictureUp("2") {
+		t.Error("a waiting still was not taken down")
+	}
+	v, _ := f.Camera()
+	f.HideView(v.View)
+	time.Sleep(60 * time.Millisecond)
+	if v, up := f.Camera(); up {
+		t.Errorf("view %+v came up after the camera, from a still that had ended", v)
+	}
+}
+
+// A notification's picture of the camera already up (a doorbell's own) does not cut that view short,
+// and is not held back at night: the camera was up anyway.
+func TestAPictureOfTheCameraUpKeepsItsTime(t *testing.T) {
+	fakePictures(t)
+	f := newFeature(t)
+	f.ShowCamera("camera.front_door", 5*time.Minute)
+	before, _ := f.Camera()
+	if err := f.ShowPicture("camera.front_door", Caption{ID: "3", Title: "Doorbell"}, 30*time.Second, ""); err != nil {
+		t.Fatal(err)
+	}
+	v, up := f.Camera()
+	if !up || v.Caption == nil || v.Until.Before(before.Until) {
+		t.Errorf("view until %v (was %v), captioned %v: the doorbell's view was cut short", v.Until, before.Until, v.Caption != nil)
+	}
+	if !v.OverPlain {
+		t.Error("a picture over a camera that was up is not marked so")
+	}
+	// On its own, a camera notification is not over anything.
+	f.HideCamera()
+	_ = f.ShowPicture("camera.front_door", Caption{ID: "4"}, 30*time.Second, "")
+	if v, _ := f.Camera(); v.OverPlain {
+		t.Error("a picture put up on its own is marked as over a camera")
+	}
+}
+
+// How a notification's view went is kept for notify to report: replaced by a camera, dismissed by a
+// tap; nothing when it ran out.
+func TestHowAPictureWentIsKept(t *testing.T) {
+	fakePictures(t)
+	f := newFeature(t)
+	_ = f.ShowPicture("camera.front_door", Caption{ID: "5"}, time.Minute, "")
+	f.ShowCamera("camera.deck", time.Minute)
+	if got := f.PictureEnded("5"); got != "replaced" {
+		t.Errorf("a picture a camera took the page from ended %q, want replaced", got)
+	}
+	_ = f.ShowPicture("camera.front_door", Caption{ID: "6"}, time.Minute, "")
+	v, _ := f.Camera()
+	f.HideView(v.View)
+	if got := f.PictureEnded("6"); got != "dismissed" {
+		t.Errorf("a picture tapped away ended %q, want dismissed", got)
+	}
+	_ = f.ShowPicture("camera.front_door", Caption{ID: "7"}, 20*time.Millisecond, "")
+	time.Sleep(40 * time.Millisecond)
+	if got := f.PictureEnded("7"); got != "" {
+		t.Errorf("a picture that ran out ended %q, want nothing", got)
 	}
 }
 
