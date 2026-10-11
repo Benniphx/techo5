@@ -203,7 +203,10 @@ func (f *Feature) askCameraSound(entity string, token media.OverToken, env sound
 				env.player.Settled(token)
 				return
 			}
-			src, why := startSound(open, func() bool { return f.cameraSoundMine(entity, token) }, env.poll)
+			// The ask as it is now, copied: what watches it can still be looking as startSound returns,
+			// while token is given a fresh ask below.
+			asked := token
+			src, why := startSound(open, func() bool { return f.cameraSoundMine(entity, asked) }, env.poll)
 			if src == nil {
 				slog.Info("camera sound: none this way, trying the next", "entity", entity, "way", i+1, "why", why)
 				continue
