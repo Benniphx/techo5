@@ -317,6 +317,77 @@ func TestHowAPictureWentIsKept(t *testing.T) {
 	}
 }
 
+// A still waiting for a camera view that goes before it shows is reported the same way: dismissed when
+// taken down, replaced by a newer notification's picture, waiting or a camera; nothing when its time
+// ran out while it waited.
+func TestHowAWaitingStillWentIsKept(t *testing.T) {
+	fakePictures(t)
+	saved := waitingPoll
+	t.Cleanup(func() { waitingPoll = saved })
+	waitingPoll = time.Hour // nothing comes up from waiting during the test
+	f := newFeature(t)
+	f.ShowCamera("camera.deck", time.Minute)
+
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "11"}, time.Minute, "")
+	f.HidePicture("11")
+	if got := f.PictureEnded("11"); got != "dismissed" {
+		t.Errorf("a waiting still taken down ended %q, want dismissed", got)
+	}
+
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "12"}, time.Minute, "")
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "13"}, time.Minute, "")
+	if got := f.PictureEnded("12"); got != "replaced" {
+		t.Errorf("a waiting still another took the place of ended %q, want replaced", got)
+	}
+
+	_ = f.ShowPicture("camera.front_door", Caption{ID: "14"}, time.Minute, "")
+	if got := f.PictureEnded("13"); got != "replaced" {
+		t.Errorf("a waiting still a camera notification replaced ended %q, want replaced", got)
+	}
+
+	f.HideCamera()
+	f.ShowCamera("camera.deck", time.Minute)
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "15"}, 20*time.Millisecond, "")
+	time.Sleep(40 * time.Millisecond)
+	_ = f.ShowPicture("/local/door.png", Caption{ID: "16"}, time.Minute, "")
+	if got := f.PictureEnded("15"); got != "" {
+		t.Errorf("a waiting still whose time ran out ended %q, want nothing", got)
+	}
+	f.HidePicture("16")
+}
+
+// What waits with a still for the camera view ends as soon as the still is taken down, replaced by a
+// camera notification, or dropped as the device shuts down, not at its next look, an hour on here.
+func TestAWaitingStillStopsWaitingAtOnce(t *testing.T) {
+	fakePictures(t)
+	saved := waitingPoll
+	t.Cleanup(func() { waitingPoll = saved })
+	waitingPoll = time.Hour
+	for _, c := range []struct {
+		name string
+		end  func(f *Feature)
+	}{
+		{"taken down", func(f *Feature) { f.HidePicture("21") }},
+		{"replaced by a camera notification", func(f *Feature) {
+			_ = f.ShowPicture("camera.front_door", Caption{ID: "22"}, time.Minute, "")
+		}},
+		{"shutting down", func(f *Feature) { f.stopWaiting() }},
+	} {
+		f := &Feature{}
+		f.ShowCamera("camera.deck", time.Minute)
+		_ = f.ShowPicture("/local/door.png", Caption{ID: "21"}, time.Minute, "")
+		c.end(f)
+		f.HideCamera()
+		ended := make(chan struct{})
+		go func() { f.loops.Wait(); close(ended) }()
+		select {
+		case <-ended:
+		case <-time.After(2 * time.Second):
+			t.Fatalf("%s: the wait for the camera view went on", c.name)
+		}
+	}
+}
+
 // A camera named by a notification is live, with its caption.
 func TestACameraPictureIsLive(t *testing.T) {
 	fakePictures(t)

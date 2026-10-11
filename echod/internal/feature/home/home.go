@@ -219,6 +219,7 @@ func (f *Feature) Run(ctx context.Context) error {
 		f.refreshForecast()
 		select {
 		case <-ctx.Done():
+			f.stopWaiting()
 			return nil
 		case <-f.poke:
 		case <-time.After(forecastEvery):

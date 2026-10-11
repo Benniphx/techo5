@@ -192,7 +192,7 @@ func (f *Feature) showCameraCaptioned(entity string, d time.Duration, sound bool
 	}
 	f.cancelStill() // a camera in place of a still: the still's picture is not wanted
 	if c != nil {
-		f.waiting = nil // a newer notification's picture: one still waiting was replaced by it
+		f.dropWaiting("replaced") // a newer notification's picture: one still waiting was replaced by it
 	}
 	f.cam = CameraView{Entity: entity, Name: name, Until: until, Frame: f.cam.Frame, Caption: c, OverPlain: overPlain, span: d, View: view, gen: f.cam.gen}
 	var ctx context.Context
@@ -271,6 +271,21 @@ func (f *Feature) endCaption(why string) {
 	if c := f.cam.Caption; c != nil && c.ID != "" && f.cam.Entity != "" && time.Now().Before(f.cam.Until) {
 		f.endedID, f.endedWhy = c.ID, why
 	}
+}
+
+// dropWaiting forgets the still waiting for the camera view, if there is one, and wakes what waits with
+// it (showWaiting). why is how it went, as endCaption, noted unless its time had run out; "" for a still
+// that is coming up, or that nobody is to hear about. The caller holds f.mu.
+func (f *Feature) dropWaiting(why string) {
+	w := f.waiting
+	if w == nil {
+		return
+	}
+	if why != "" && w.c.ID != "" && time.Now().Before(w.until) {
+		f.endedID, f.endedWhy = w.c.ID, why
+	}
+	close(w.gone)
+	f.waiting = nil
 }
 
 // PictureEnded is why notification id's view went other than by running out: "replaced" by another
@@ -359,7 +374,7 @@ func (f *Feature) HidePicture(id string) bool {
 	f.mu.Lock()
 	if f.waiting != nil && f.waiting.c.ID == id {
 		// Its picture never went up: it was waiting for the camera view to end.
-		f.waiting = nil
+		f.dropWaiting("dismissed")
 		f.mu.Unlock()
 		return true
 	}

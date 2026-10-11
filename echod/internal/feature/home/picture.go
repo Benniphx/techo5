@@ -95,7 +95,8 @@ func (f *Feature) ShowPicture(src string, c Caption, d time.Duration, sound stri
 		// stream and sound ended, for a picture: the picture waits for the view to end, for as long as
 		// it was to be up, and replaces any picture already waiting.
 		first := f.waiting == nil
-		f.waiting = &waitingStill{src: src, path: path, c: c, until: time.Now().Add(d)}
+		f.dropWaiting("replaced")
+		f.waiting = &waitingStill{src: src, path: path, c: c, until: time.Now().Add(d), gone: make(chan struct{})}
 		camera := f.cam.Entity
 		f.mu.Unlock()
 		slog.Info("picture waits for the camera view up", "source", redactURL(src), "camera", camera)
@@ -114,7 +115,8 @@ func (f *Feature) ShowPicture(src string, c Caption, d time.Duration, sound stri
 type waitingStill struct {
 	src, path string
 	c         Caption
-	until     time.Time // when its notification would have ended, had it been shown when asked
+	until     time.Time     // when its notification would have ended, had it been shown when asked
+	gone      chan struct{} // closed once it is no longer the still waiting (dropWaiting)
 }
 
 // waitingPoll is how often a waiting still looks to see whether the camera view is over; a variable
@@ -128,18 +130,31 @@ func (f *Feature) plainCameraUp() bool {
 }
 
 // showWaiting shows the still waiting for the camera view once that view is over, unless it was taken
-// down or replaced meanwhile, or its time ran out while it waited.
+// down or replaced meanwhile, or its time ran out while it waited. A still taken down, replaced, or
+// dropped as the device shuts down wakes it at once rather than at its next look: it ends then, or
+// carries on for a still that took the waiting one's place.
 func (f *Feature) showWaiting() {
 	for {
-		time.Sleep(waitingPoll)
 		f.mu.Lock()
 		w := f.waiting
+		f.mu.Unlock()
+		if w == nil {
+			return
+		}
+		look := time.NewTimer(waitingPoll)
+		select {
+		case <-look.C:
+		case <-w.gone:
+			look.Stop()
+		}
+		f.mu.Lock()
+		w = f.waiting
 		switch {
 		case w == nil:
 			f.mu.Unlock()
 			return
 		case !time.Now().Before(w.until):
-			f.waiting = nil
+			f.dropWaiting("")
 			f.mu.Unlock()
 			return
 		case f.plainCameraUp():
@@ -153,6 +168,14 @@ func (f *Feature) showWaiting() {
 	}
 }
 
+// stopWaiting drops the still waiting for the camera view as the device shuts down: what waits with it
+// ends at once.
+func (f *Feature) stopWaiting() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dropWaiting("")
+}
+
 // stillLocked puts a still's view up in place of whatever is up. The caller holds f.mu, and runs what
 // it returns once it has let go of it.
 func (f *Feature) stillLocked(src, path string, c Caption, d time.Duration) func() {
@@ -161,7 +184,11 @@ func (f *Feature) stillLocked(src, path string, c Caption, d time.Duration) func
 		name = untitled
 	}
 	f.endCaption("replaced")
-	f.waiting = nil
+	if f.waiting != nil && f.waiting.c.ID != c.ID {
+		f.dropWaiting("replaced") // another still, not the waiting one coming up
+	} else {
+		f.dropWaiting("")
+	}
 	f.cancelStill() // the still this one replaces is not wanted any more
 	// Nor the camera, and its stream's decoder ends now.
 	f.stopCameraFetch()
