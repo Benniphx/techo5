@@ -416,6 +416,31 @@ func netScriptCases(t *testing.T, shell []string) {
 		}
 	})
 
+	t.Run("a fixed address another device has keeps DHCP, and says so once", func(t *testing.T) {
+		b := newNetBench(t, shell)
+		b.onDHCP()
+		b.set("conf", fixedConf)
+		b.set("run/techo5/network-dhcp-session", "the gateway 192.168.1.1 did not answer for five minutes\n")
+		b.set("answers", "192.168.1.1\n")
+		b.set("taken", "192.168.1.50\n")
+		b.run("check")
+		b.run("check")
+		if b.read("addrs") != "192.168.1.77/24" {
+			t.Fatalf("the fixed address went on while another device had it: %q", b.read("addrs"))
+		}
+		if s := b.read("run/techo5/network-dhcp-session"); !strings.Contains(s, "another device answers for the fixed address 192.168.1.50") {
+			t.Errorf("session %q does not say the address is in use", s)
+		}
+		if n := strings.Count(b.read("run/techo5/network.log"), "in use by another device"); n != 1 {
+			t.Errorf("logged %d times that the address is in use, want once", n)
+		}
+		b.set("taken", "")
+		b.run("check")
+		if b.exists("run/techo5/network-dhcp-session") || b.read("addrs") != "192.168.1.50/24" {
+			t.Errorf("not back on the fixed address once it was free: %q", b.read("addrs"))
+		}
+	})
+
 	t.Run("a fixed address shares the interface with nothing", func(t *testing.T) {
 		b := newNetBench(t, shell)
 		b.onFixed()

@@ -271,7 +271,8 @@ apply() {
 # network the address was set on and the gateway answers (asked from the DHCP address, which costs
 # nothing), the fixed address goes back on and has to reach the gateway; if it does not, DHCP again,
 # and the next attempt half an hour later, so a gateway that answers one address and not the other does
-# not cost a connection every minute.
+# not cost a connection every minute. While another device answers for the fixed address, DHCP stays,
+# and the session's reason says so; it is logged once, not every minute.
 recover() {
 	othernet && return 0
 	w=$(num $RETRY 0)
@@ -280,8 +281,16 @@ recover() {
 		return 0
 	fi
 	gateway || return 0
-	free || return 0
+	if ! free; then
+		taken="another device answers for the fixed address $ADDRESS"
+		if [ "$(cat $SESSION 2>/dev/null)" != "$taken" ]; then
+			echo "$taken" > $SESSION
+			log "fixed address $ADDRESS is in use by another device: DHCP until it is free"
+		fi
+		return 0
+	fi
 	why=$(cat $SESSION 2>/dev/null)
+	case "$why" in "another device answers"*) why= ;; esac # free now: no longer the reason
 	rm -f $SESSION
 	if fixed && gatewaywait; then
 		rm -f $RETRY
