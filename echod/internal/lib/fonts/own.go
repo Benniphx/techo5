@@ -305,7 +305,8 @@ func dropBad(listed []OwnFont, inUse []ownEntry) ([]OwnFont, []ownEntry) {
 
 // markBad stops using the font of one's own f after it panicked while a character was drawn from it
 // (a file broken in a way the checks before use did not find), so it is not tried again on the next
-// frame, nor after the next start, until its file is changed or put in again.
+// frame, until its file is changed or put in again. The list is kept in memory only: after a restart the
+// font is tried again, and dropped again should it break again.
 func markBad(f *sfnt.Font, why string) {
 	own.mu.Lock()
 	defer own.mu.Unlock()
