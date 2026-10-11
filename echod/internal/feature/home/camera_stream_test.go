@@ -28,34 +28,42 @@ func TestACameraWithAStreamIsHeardFromIt(t *testing.T) {
 	env := fake.env()
 	calls := 0
 	env.call = func(string, string) error { calls++; return nil }
-	prev := streamedSound
-	streamedSound = func(entity string) func(context.Context) (io.ReadCloser, error) {
+	type opener = func(context.Context) (io.ReadCloser, error)
+	sound := func(context.Context) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("pcm")), nil }
+	silent := func(context.Context) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("")), nil } // ffmpeg ends at once
+	refused := func(context.Context) (io.ReadCloser, error) { return nil, errors.New("refused") }
+	prev := soundSources
+	soundSources = func(entity string) []opener {
 		switch entity {
 		case "camera.porch":
-			return func(context.Context) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("pcm")), nil }
-		case "camera.yard": // a stream with no sound in it: ffmpeg ends at once
-			return func(context.Context) (io.ReadCloser, error) { return io.NopCloser(strings.NewReader("")), nil }
-		case "camera.gate": // one that cannot be opened
-			return func(context.Context) (io.ReadCloser, error) { return nil, errors.New("refused") }
+			return []opener{sound}
+		case "camera.door": // its RTSP address refuses the login; its HLS stream has sound
+			return []opener{refused, sound}
+		case "camera.yard": // a stream with no sound in it
+			return []opener{silent}
+		case "camera.gate": // neither way can be opened
+			return []opener{refused, refused}
 		}
 		return nil
 	}
-	t.Cleanup(func() { streamedSound = prev })
+	t.Cleanup(func() { soundSources = prev })
 
 	f := &Feature{}
 	t.Cleanup(func() { endView(f) })
-	streamed := viewWithSound(f, "camera.porch", env)
-	f.askCameraSound("camera.porch", streamed, env)
-	if len(answered) != 1 || answered[0] != soundToken(f) || calls != 0 {
-		t.Errorf("a camera with a stream: answered %v (the view's ask is %d), Home Assistant asked %d times", answered, soundToken(f), calls)
-	}
-	if !slices.Contains(fake.settledTokens, answered[0]) {
-		t.Error("the streamed ask was never settled")
+	for _, entity := range []string{"camera.porch", "camera.door"} {
+		f.askCameraSound(entity, viewWithSound(f, entity, env), env)
+		tk := soundToken(f)
+		if answered[len(answered)-1] != tk || calls != 0 {
+			t.Errorf("%s: answered %v (the view's ask is %d), Home Assistant asked %d times", entity, answered, tk, calls)
+		}
+		if !slices.Contains(fake.settledTokens, tk) {
+			t.Errorf("%s: the ask was never settled", entity)
+		}
 	}
 
 	for i, entity := range []string{"camera.garage", "camera.yard", "camera.gate"} {
 		f.askCameraSound(entity, viewWithSound(f, entity, env), env)
-		if len(answered) != 1 || calls != i+1 {
+		if len(answered) != 2 || calls != i+1 {
 			t.Errorf("%s: answered %v, Home Assistant asked %d times", entity, answered, calls)
 		}
 	}
@@ -111,10 +119,11 @@ func TestASlowStreamIsPlayedUnderAFreshAsk(t *testing.T) {
 	f := &Feature{}
 	t.Cleanup(func() { endView(f) })
 
+	type opener = func(context.Context) (io.ReadCloser, error)
 	var sound *closeCounter
-	prev := streamedSound
-	streamedSound = func(entity string) func(context.Context) (io.ReadCloser, error) {
-		return func(context.Context) (io.ReadCloser, error) {
+	prev := soundSources
+	soundSources = func(entity string) []opener {
+		return []opener{func(context.Context) (io.ReadCloser, error) {
 			if entity == "camera.gone" {
 				endView(f)                                   // the view is tapped away while the stream starts...
 				f.cameraSoundOff(entity, soundToken(f), env) // ...and its watcher gives the sound up
@@ -124,9 +133,9 @@ func TestASlowStreamIsPlayedUnderAFreshAsk(t *testing.T) {
 			}
 			sound = &closeCounter{Reader: strings.NewReader("pcm")}
 			return sound, nil
-		}
+		}}
 	}
-	t.Cleanup(func() { streamedSound = prev })
+	t.Cleanup(func() { soundSources = prev })
 
 	first := viewWithSound(f, "camera.porch", env)
 	f.askCameraSound("camera.porch", first, env)
@@ -166,11 +175,12 @@ func TestASoundNeverPlayedIsClosed(t *testing.T) {
 	env := fake.env()
 	env.call = func(string, string) error { return nil }
 	sound := &closeCounter{Reader: strings.NewReader("pcm")}
-	prev := streamedSound
-	streamedSound = func(string) func(context.Context) (io.ReadCloser, error) {
-		return func(context.Context) (io.ReadCloser, error) { return sound, nil }
+	type opener = func(context.Context) (io.ReadCloser, error)
+	prev := soundSources
+	soundSources = func(string) []opener {
+		return []opener{func(context.Context) (io.ReadCloser, error) { return sound, nil }}
 	}
-	t.Cleanup(func() { streamedSound = prev })
+	t.Cleanup(func() { soundSources = prev })
 
 	f := &Feature{}
 	f.askCameraSound("camera.porch", viewWithSound(f, "camera.porch", env), env)

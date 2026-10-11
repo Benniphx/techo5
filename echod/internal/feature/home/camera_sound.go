@@ -194,27 +194,31 @@ func (f *Feature) askCameraSound(entity string, token media.OverToken, env sound
 	// nothing: a stream with no sound in it, or one that cannot be read, would otherwise leave the view
 	// silent where camera.play_stream had sound.
 	if env.player.Answer != nil {
-		if open := streamedSound(entity); open != nil {
+		ways := soundSources(entity)
+		for i, open := range ways {
 			src, why := startSound(open)
 			if src == nil {
-				slog.Info("camera sound: none from its stream, asking Home Assistant", "entity", entity, "why", why)
-			} else {
-				// Starting it can take as long as an ask waits (media's overAskFor), and the view can end
-				// or give its sound up meanwhile: it is played under a fresh ask, or not at all.
-				if token = f.renewAsk(entity, token, env); token == 0 {
-					src.Close()
-					return
-				}
-				if env.player.Answer(token, func(context.Context) (io.ReadCloser, error) { return src, nil }) {
-					slog.Info("camera sound on, from its stream", "entity", entity)
-					env.player.Settled(token)
-					f.spawn(func() { f.closeWhenOver(entity, token, src, env) })
-					return
-				}
-				src.Close()
+				slog.Info("camera sound: none this way, trying the next", "entity", entity, "way", i+1, "why", why)
+				continue
 			}
-			// That took a while: Home Assistant's call gets an ask that stands for the whole of it, so
-			// that its url is not let through as a track.
+			// Starting it can take as long as an ask waits (media's overAskFor), and the view can end or
+			// give its sound up meanwhile: it is played under a fresh ask, or not at all.
+			if token = f.renewAsk(entity, token, env); token == 0 {
+				src.Close()
+				return
+			}
+			if env.player.Answer(token, func(context.Context) (io.ReadCloser, error) { return src, nil }) {
+				slog.Info("camera sound on, decoded here", "entity", entity, "way", i+1)
+				env.player.Settled(token)
+				f.spawn(func() { f.closeWhenOver(entity, token, src, env) })
+				return
+			}
+			src.Close()
+			break
+		}
+		if len(ways) > 0 {
+			// That took a while: Home Assistant's call gets an ask that stands for the whole of it, so that
+			// its url is not let through as a track.
 			if token = f.renewAsk(entity, token, env); token == 0 {
 				return
 			}
