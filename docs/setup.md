@@ -111,6 +111,9 @@ whatever addresses are set. The login is sent only protected (Digest): a camera 
 (the password in the clear) is not read this way. Where an address cannot be read, the device falls
 back to Home Assistant's stream, and on a device whose kernel cannot keep the decoder off its own
 network (the Spot) it uses that stream only, and the setup page offers no picture address.
+Each of these is a connection of its own to the camera: with Talk in use as well, a view can hold three
+(picture, sound, Talk) on top of Home Assistant's own. A camera that allows fewer
+refuses the last to ask: a picture or a sound then falls back as above, and Talk does not connect.
 
 ### Talking through a camera
 
