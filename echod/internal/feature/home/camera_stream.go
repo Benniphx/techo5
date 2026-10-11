@@ -96,7 +96,7 @@ func (f *Feature) streamFrames(ctx context.Context, entity string, gen uint64) b
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// A view that runs out is not cancelled by anybody: it is noticed here, so that its decoder is ended
+	// A view that runs out is not canceled by anybody: it is noticed here, so that its decoder is ended
 	// within a poll rather than when a wait for its next frame (up to streamStart) runs out.
 	f.spawn(func() {
 		for f.viewUp(ctx, entity, gen) {
