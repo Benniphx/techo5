@@ -39,7 +39,9 @@ func TestOnlyANewIPv4AddressIsAMove(t *testing.T) {
 }
 
 // The advertising loop's view of the addresses over time: what it holds, and when it calls a move.
-// Each step is the addresses seen, whether a setting is on trial then, and whether that is a move.
+// Each step is the addresses seen, whether a setting is on trial then, and whether that is a move. The
+// loop is given the Wi-Fi's addresses alone (metrics.WiFiAddresses); here, the VPN's are the ones in
+// 100.64.0.0/10, left out the same way.
 func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 	ip := func(s ...string) []net.IP {
 		var out []net.IP
@@ -53,7 +55,17 @@ func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 		trialing bool
 		want     moveStep
 	}
-	const lan1, lan2, vpn = "192.0.2.61", "192.0.2.62", "100.64.0.10"
+	const lan1, lan2, vpn, vpn2 = "192.0.2.61", "192.0.2.62", "100.64.0.10", "198.51.100.11"
+	_, tunnel, _ := net.ParseCIDR("100.64.0.0/10")
+	onWiFi := func(ips []net.IP) []net.IP {
+		var out []net.IP
+		for _, a := range ips {
+			if !tunnel.Contains(a) {
+				out = append(out, a)
+			}
+		}
+		return out
+	}
 	for _, c := range []struct {
 		name  string
 		steps []seen
@@ -63,6 +75,32 @@ func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 			{ip(vpn), false, stepAdvertise}, // the fixed address flushed for DHCP
 			{ip(lan2, vpn), false, stepMoved},
 			{ip(lan2, vpn), false, stepAdvertise},
+		}},
+		{"the VPN back with a new address is no move", []seen{
+			{ip(lan1, vpn), false, stepAdvertise},
+			{ip(lan1), false, stepAdvertise}, // the VPN down
+			{ip(lan1, vpn2), false, stepAdvertise},
+			{ip(lan1, vpn), false, stepAdvertise},
+		}},
+		{"the VPN's address changing is no move", []seen{
+			{ip(lan1, vpn), false, stepAdvertise},
+			{ip(lan1, vpn2), false, stepAdvertise},
+		}},
+		{"the LAN address replaced through no address at all", []seen{
+			{ip(lan1), false, stepAdvertise},
+			{ip(), false, stepAdvertise},
+			{ip(lan2), false, stepMoved},
+		}},
+		{"the LAN address replaced while the VPN also moves", []seen{
+			{ip(lan1, vpn), false, stepAdvertise},
+			{ip(vpn2), false, stepAdvertise},
+			{ip(lan2, vpn2), false, stepMoved},
+		}},
+		{"a trial beside a VPN that fails is no move", []seen{
+			{ip(lan1, vpn), false, stepAdvertise},
+			{ip(lan2, vpn), true, stepWait},
+			{ip(lan1, vpn), true, stepAdvertise},
+			{ip(lan1, vpn), false, stepAdvertise},
 		}},
 		{"a VPN coming up and going is no move", []seen{
 			{ip(lan1), false, stepAdvertise},
@@ -92,7 +130,7 @@ func TestTheLoopHoldsWhatHomeAssistantKnows(t *testing.T) {
 		var held []net.IP
 		for i, s := range c.steps {
 			var got moveStep
-			held, got = nextHeld(held, s.ips, s.trialing)
+			held, got = nextHeld(held, onWiFi(s.ips), s.trialing)
 			if got != s.want {
 				t.Errorf("%s, step %d (%s): %d, want %d", c.name, i, v4Key(s.ips), got, s.want)
 			}
