@@ -434,11 +434,10 @@ While the lock is on, the PIN is also asked for when **Allow** is pressed on the
 
 ## 9. A fixed address
 
-On an Echo Show or an Echo Spot (not an Echo Dot), the device gets its address from the router (DHCP)
-unless told otherwise. To give it a fixed one, for
-example from a range the router does not hand out, open the setup page, go to **Connections →
-Network address**, choose **Fixed**, and type the address (`192.168.1.50`, or `192.168.1.50/24`
-with its prefix), the gateway, and DNS servers if they are not the gateway. On an Echo Show the
+The device gets its address from the router (DHCP). On an Echo Show or an Echo Spot (not an Echo
+Dot) it can be given a fixed one instead: for example from a range the router does not hand out,
+open the setup page, go to **Connections → Network address**, choose **Fixed**, and type the
+address (`192.168.1.50`, or `192.168.1.50/24` with its prefix), the gateway, and DNS servers if they are not the gateway. On an Echo Show the
 same is on the screen, under Settings → Connections → **Network address**, with a keypad; the
 [network_address action](actions.md#set-the-network-address) does it from Home Assistant.
 
