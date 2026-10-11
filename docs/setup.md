@@ -321,8 +321,9 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   order of their file names, so name them `1-korean.otf`, `2-japanese.otf` to choose.
 - From a collection (`.ttc`) the first font is used.
 - A font is read from the device's storage as letters are drawn, not loaded into memory whole.
-- A new or removed font shows within a few seconds, with no restart. A file that isn't a font the
-  device can draw is left unused; the setup page lists it and says why.
+- A new, replaced or removed font shows within a few seconds, with no restart. A file that isn't a
+  font the device can draw is left unused, and so is one that goes wrong while drawing; the setup page
+  lists it and says why.
 
 ### Presence and gestures
 
