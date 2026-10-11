@@ -990,6 +990,32 @@ func TestTheSliderSettlesOnTheDevicesLevel(t *testing.T) {
 	}
 }
 
+// A settle that hands librespot the level it said last is not said back (librespot says a volume only
+// when it changes), so it is not waited for as an echo: the slider dragged away and back to its end
+// within moments moves the device back there.
+func TestASettleLibrespotHasAlreadyIsNotWaitedFor(t *testing.T) {
+	f := newFakeSpotify(20)
+	f.s.session(true)
+	f.later(5 * time.Second)
+	f.s.heard(spotifyFull, false) // the slider to the top
+	if f.step != 30 || f.settle == nil {
+		t.Fatalf("the device is at %d, settle %v", f.step, f.settle != nil)
+	}
+	f.settle()
+	f.later(time.Second)
+	f.s.heard(spotifyValue(20), false)
+	f.s.heard(spotifyFull, false) // and back to the top
+	if !slices.Equal(f.sets, []int{30, 20, 30}) || f.step != 30 {
+		t.Errorf("set %v and at %d: the slider's return to the top was taken for the settle's echo", f.sets, f.step)
+	}
+	// Should librespot say the settle's level after all, it is the device's own and moves nothing.
+	f.settle = nil
+	f.s.heard(spotifyFull, false)
+	if !slices.Equal(f.sets, []int{30, 20, 30}) {
+		t.Errorf("an unexpected echo moved the device: set %v", f.sets)
+	}
+}
+
 // With an older librespot the slider moves the device by steps: a restart, or a phone connecting or
 // going, starts it afresh, and a move heard just before a connect is taken back.
 func TestTheFallbackSliderAcrossSessions(t *testing.T) {

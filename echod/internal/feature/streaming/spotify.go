@@ -167,6 +167,7 @@ type spotifySync struct {
 	active bool              // a phone is connected: librespot takes a volume only then
 	shown  int               // the step the app's slider is at, as far as is known; -1 for not known
 	sent   map[int]time.Time // levels handed to librespot and not yet heard back, and when
+	said   int               // the level librespot said last, 0..spotifyFull; -1 for none yet
 	moved  spotifyMove       // the last move of the device the slider made
 	settle func() bool       // stops the settle to come (settleLocked), nil for none
 }
@@ -182,7 +183,7 @@ type spotifyMove struct {
 const settleAfter = time.Second
 
 func newSpotifySync() *spotifySync {
-	return &spotifySync{shown: -1, sent: map[int]time.Time{}, now: time.Now,
+	return &spotifySync{shown: -1, said: -1, sent: map[int]time.Time{}, now: time.Now,
 		after: func(d time.Duration, f func()) func() bool { return time.AfterFunc(d, f).Stop }}
 }
 
@@ -192,7 +193,7 @@ func newSpotifySync() *spotifySync {
 func (s *spotifySync) started() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.active, s.shown, s.moved = false, -1, spotifyMove{}
+	s.active, s.shown, s.said, s.moved = false, -1, -1, spotifyMove{}
 	clear(s.sent)
 	if s.settle != nil {
 		s.settle()
@@ -211,7 +212,7 @@ func (s *spotifySync) session(connected bool) {
 	if m := s.moved; connected && !m.at.IsZero() && s.now().Sub(m.at) <= connectQuiet && s.device() == m.to {
 		undo = m.from
 	}
-	s.active, s.shown, s.moved = connected, -1, spotifyMove{}
+	s.active, s.shown, s.said, s.moved = connected, -1, -1, spotifyMove{}
 	clear(s.sent)
 	s.mu.Unlock()
 	if undo >= 0 {
@@ -225,6 +226,7 @@ func (s *spotifySync) session(connected bool) {
 // phone connected.
 func (s *spotifySync) heard(v int, connecting bool) {
 	s.mu.Lock()
+	s.said = v
 	if at, ok := s.sent[v]; ok && s.now().Sub(at) <= echoWait {
 		// Heard back once: librespot says each level it is handed once, so the same level heard
 		// again is the slider's.
@@ -275,8 +277,14 @@ func (s *spotifySync) levelChanged(step int) {
 // settleLocked has the device's level handed to librespot settleAfter from now, unless the slider
 // moves again first. librespot says each level as it takes it, but the programs that say them finish
 // in no set order: a level the device handed it and a move of the slider can come back the other way
-// round, the device at the slider's and the app at the device's last. Handing librespot the level it
-// has already changes nothing and is not said back. Called with mu held.
+// round, the device at the slider's and the app at the device's last. Called with mu held.
+//
+// Handing librespot the level it has already changes nothing and is not said back (librespot 0.8 says
+// a volume only when it changes), so the settle's level is counted as handed to it only when it is not
+// the level librespot said last. Counted all the same, it stayed in sent for echoWait, and the slider
+// dragged back to that level in the meantime (an end of the slider, often) was taken for the echo
+// and left the device where it was. Should the lines have crossed and librespot say the level after
+// all, it is the device's own and moves nothing.
 func (s *spotifySync) settleLocked() {
 	if s.settle != nil {
 		s.settle()
@@ -285,7 +293,8 @@ func (s *spotifySync) settleLocked() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		s.settle = nil
-		s.tellLocked(s.device())
+		step := s.device()
+		s.handLocked(step, spotifyValue(step) != s.said)
 	})
 }
 
@@ -297,7 +306,11 @@ func (s *spotifySync) tell(step int) {
 
 // tellLocked hands librespot the device's step while a phone is connected. Called with mu held: write
 // never waits.
-func (s *spotifySync) tellLocked(step int) {
+func (s *spotifySync) tellLocked(step int) { s.handLocked(step, true) }
+
+// handLocked is tellLocked, with the level counted in sent only when librespot is to say it back
+// (echoed).
+func (s *spotifySync) handLocked(step int, echoed bool) {
 	if !s.active {
 		return
 	}
@@ -311,7 +324,10 @@ func (s *spotifySync) tellLocked(step int) {
 	if !s.write(v) {
 		return
 	}
-	s.sent[v], s.shown = now, step
+	if echoed {
+		s.sent[v] = now
+	}
+	s.shown = step
 }
 
 // writeSpotifyVolume hands librespot a level through its volume pipe, and says whether it took it.
