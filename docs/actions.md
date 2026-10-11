@@ -1565,6 +1565,45 @@ data:
   speaker: media_player.office
 ```
 
+## Play rain sounds by voice
+
+The device has no sounds of its own to fall asleep to. What it does is leave "play the sounds of
+rain" alone, so the sentence isn't taken as a weather question, and name a sound file on the
+now-playing page. The sound itself comes from Home Assistant. This automation plays a free online
+rain stream on the TECHO5 device that heard the sentence, so there is no file to host. Add it in
+Settings > Automations & scenes > Create automation > Edit in YAML.
+
+```yaml
+alias: TECHO5 - rain sounds by voice
+triggers:
+  - trigger: conversation
+    command:
+      - "play [the] sound[s] of rain"
+      - "play rain [sounds]"
+actions:
+  - variables:
+      speaker: >-
+        {{ device_entities(trigger.device_id) | select('match', 'media_player\.') | first
+           if trigger.device_id is not none else '' }}
+  - if: "{{ not speaker }}"
+    then:
+      - set_conversation_response: "Say that to the speaker you want the rain on."
+      - stop: No speaker heard it
+  - action: media_player.play_media
+    target:
+      entity_id: "{{ speaker }}"
+    data:
+      media_content_type: music
+      media_content_id: https://maggie.torontocast.com:2020/stream/natureradiorain
+  - set_conversation_response: "Playing rain."
+mode: single
+```
+
+"Stop" ends it like any other music. To play a recording of your own instead, put the file in
+Home Assistant's `www` folder (inside its config folder) and use
+`http://<home-assistant-address>:8123/local/<file>.mp3` as `media_content_id`; the now-playing
+page shows the file's name. A long recording works best, since a file stops when it ends.
+
 ## Center the rain map and weather alerts somewhere else
 
 In YAML, refer to this action as `esphome.<node>_home_location`.
