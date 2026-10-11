@@ -81,12 +81,31 @@ func netShells(t *testing.T) [][]string {
 		shells = append(shells, []string{sh})
 	}
 	if bb, err := exec.LookPath("busybox"); err == nil {
-		shells = append(shells, []string{bb, "sh"})
+		if busyboxUsesPath(t, bb) {
+			shells = append(shells, []string{bb, "sh"})
+		} else {
+			t.Logf("%s runs its own applets before PATH (a static build); left out, as the stubs would not be used", bb)
+		}
 	}
 	if len(shells) == 0 {
 		t.Skip("no sh to run techo5-net under")
 	}
 	return shells
+}
+
+// busyboxUsesPath is whether busybox's shell runs a command from PATH rather than its own applet of the
+// same name. A build that prefers its applets (busybox-static) would run its own ip and arping, not the
+// stubs, and the script's tests mean nothing under it.
+func busyboxUsesPath(t *testing.T, bb string) bool {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "ip"), []byte("#!/bin/sh\necho stub\n"), 0o755); err != nil {
+		return false
+	}
+	cmd := exec.Command(bb, "sh", "-c", "ip")
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, _ := cmd.Output()
+	return strings.TrimSpace(string(out)) == "stub"
 }
 
 // netBench is one device's worth of state for techo5-net.
