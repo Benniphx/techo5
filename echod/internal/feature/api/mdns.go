@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/ygelfand/go-esphome-device/mdns"
@@ -152,12 +153,25 @@ func (a *API) afterMove(ctx context.Context, movedAt *time.Time) bool {
 	return true
 }
 
-// movedIPv4 is whether the device's IPv4 addresses changed from one set to another: the address Home
-// Assistant connected to is gone. A first address, an address lost with nothing in its place, and any
-// change to the IPv6 addresses alone are not a move.
+// movedIPv4 is whether an IPv4 address the device had is gone with another in its place: the address
+// Home Assistant connected to may be the one gone. A first address, an address lost with nothing in its
+// place, a second address arriving beside the first (a VPN coming up) or going again, and any change to
+// the IPv6 addresses alone are not a move.
 func movedIPv4(was, now []net.IP) bool {
-	before, after := v4Key(was), v4Key(now)
-	return before != "" && after != "" && before != after
+	return v4Missing(was, now) && v4Missing(now, was)
+}
+
+// v4Missing is whether ips has an IPv4 address that others does not.
+func v4Missing(ips, others []net.IP) bool {
+	for _, ip := range ips {
+		if ip.To4() == nil {
+			continue
+		}
+		if !slices.ContainsFunc(others, ip.Equal) {
+			return true
+		}
+	}
+	return false
 }
 
 func v4Key(ips []net.IP) string {

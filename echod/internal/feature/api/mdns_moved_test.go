@@ -28,6 +28,9 @@ func TestOnlyANewIPv4AddressIsAMove(t *testing.T) {
 		{"SLAAC after the lease", ip("192.0.2.61"), ip("192.0.2.61", "2001:db8::5"), false},
 		{"a temporary address rotating", ip("192.0.2.61", "2001:db8::5"), ip("192.0.2.61", "2001:db8::9"), false},
 		{"moved with IPv6 beside it", ip("192.0.2.61", "2001:db8::5"), ip("192.0.2.62", "2001:db8::5"), true},
+		{"a second address beside it (a VPN coming up)", ip("192.0.2.61"), ip("100.64.0.10", "192.0.2.61"), false},
+		{"the second address going", ip("100.64.0.10", "192.0.2.61"), ip("192.0.2.61"), false},
+		{"the LAN address gone, the VPN's kept", ip("100.64.0.10", "192.0.2.61"), ip("100.64.0.10", "192.0.2.62"), true},
 	} {
 		if got := movedIPv4(c.was, c.now); got != c.want {
 			t.Errorf("%s: moved %v, want %v", c.name, got, c.want)
