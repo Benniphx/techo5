@@ -11,6 +11,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/metrics"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
 )
 
 // mdnsRetry is how long to wait between attempts. There is no attempt limit: wifi can come back long
@@ -30,9 +31,7 @@ const mdnsRetry = 3 * time.Second
 // convenience and a device reachable by address works without it, so this only logs.
 func (a *API) advertise(ctx context.Context, port int) {
 	var movedAt time.Time // the last IPv4 move, which the announcements after it follow up
-	// held is the IPv4 address last advertised, kept through a moment without one: a switch from a
-	// fixed address to DHCP flushes the interface before the lease arrives, and the old address, then
-	// none, then the new one is still a move.
+	// held is the IPv4 addresses last advertised (nextHeld).
 	var held []net.IP
 	for attempt := 1; ; attempt++ {
 		ips := metrics.Addresses()
@@ -45,16 +44,24 @@ func (a *API) advertise(ctx context.Context, port int) {
 			}
 			continue
 		}
-		if movedIPv4(held, ips) {
-			slog.Info("ipv4 address moved; unannounced while Home Assistant lets the old one go", "was", v4Key(held), "now", v4Key(ips))
+		var step moveStep
+		was := held
+		held, step = nextHeld(held, ips, wifi.Trialing())
+		switch step {
+		case stepWait:
+			// An address on trial (lib/wifi ChangeAddress) is no move yet: a trial that fails puts the
+			// address Home Assistant knows back within the minute, and treating the trial as a move cost
+			// two minutes unannounced for an address that never changed.
+			if !pause(ctx, mdnsRetry) {
+				return
+			}
+			continue
+		case stepMoved:
+			slog.Info("ipv4 address moved; unannounced while Home Assistant lets the old one go", "was", v4Key(was), "now", v4Key(ips))
 			if !a.afterMove(ctx, &movedAt) {
 				return
 			}
-			held = nil
 			continue
-		}
-		if v4Key(ips) != "" {
-			held = ips
 		}
 
 		keyed := a.keyed.Load()
@@ -151,6 +158,39 @@ func (a *API) afterMove(ctx context.Context, movedAt *time.Time) bool {
 		}
 	}
 	return true
+}
+
+// moveStep is what the advertising loop does with the addresses it finds (nextHeld).
+type moveStep int
+
+const (
+	stepAdvertise moveStep = iota // advertise them
+	stepMoved                     // an IPv4 move: drop Home Assistant's connections and wait (afterMove)
+	stepWait                      // a setting on trial: look again in a moment, advertising nothing
+)
+
+// nextHeld is the IPv4 addresses to hold after seeing ips, and what to do. held is what the device was
+// last advertised with, kept through a moment without an address and through an address lost while
+// another stays, so that the old address, then less, then a new one is still a move:
+//
+//   - lan1 → (none) → lan2: a switch from a fixed address to DHCP, which flushes the interface before
+//     the lease arrives.
+//   - {lan1, vpn} → {vpn} → {lan2, vpn}: the same with a VPN's address beside it. Taking {vpn} as
+//     held there made lan2 look like a second address arriving, and Home Assistant kept a connection
+//     to an address the device no longer had.
+//
+// A move seen while a setting is on trial (trialing) waits for the trial's outcome instead.
+func nextHeld(held, ips []net.IP, trialing bool) ([]net.IP, moveStep) {
+	if movedIPv4(held, ips) {
+		if trialing {
+			return held, stepWait
+		}
+		return nil, stepMoved
+	}
+	if v4Key(ips) == "" || (v4Missing(held, ips) && !v4Missing(ips, held)) {
+		return held, stepAdvertise // nothing, or only less: what was held still counts
+	}
+	return ips, stepAdvertise
 }
 
 // movedIPv4 is whether an IPv4 address the device had is gone with another in its place: the address
