@@ -191,6 +191,23 @@ automation that wants to know too.
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's
   service reports them), for an automation or a dashboard to use.
+- **Now playing.** What the device is playing has sensors of its own, for an automation or a dashboard
+  to use, since the media player itself cannot carry a song's name: **Now playing source** (AirPlay,
+  Spotify, DLNA, Music Assistant, Bluetooth or Radio), **Now playing title**, **Now playing artist**,
+  **Now playing album** and **Now playing state** (playing, paused or idle). The names are as the app
+  or the station's service sent them. A phone over Bluetooth sends none the device reads, so only the
+  source is filled in for it; Radio is whatever the **Radio station** sensor names, with its title and
+  artist. While the device holds a track the state says whether it is playing or paused; once it lets
+  the track go the others are empty and the state reads idle. When an app is paused on the phone, the
+  device keeps the track paused or lets it go a few seconds after the phone stops sending, depending
+  on the app, so an automation should go by the state rather than by how long a pause takes. A Music
+  Assistant track paused or stopped while it played here stays named, with the state paused, for up to
+  half an hour from the pause, as Now Playing keeps it with play on it until **Done**, though the media
+  player reads idle meanwhile. Something else played to the device in that time is named while it
+  plays, and the paused track comes back once it ends. A video, and a followed player's song (below),
+  are not named here. The Spot has no AirPlay or Spotify Connect, so those never show there. Anyone
+  who can play to the device can put a title there, and the titles go into Home Assistant's history
+  and logbook like any sensor's.
 - **Now playing follows** (also the **Now Playing follows** select in Home Assistant): another of Home
   Assistant's media players, a Sonos in the same room for example. While this device plays nothing of
   its own, Now Playing shows that player's song and cover, and its buttons control it. **Done** puts it

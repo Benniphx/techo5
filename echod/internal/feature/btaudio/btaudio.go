@@ -488,7 +488,7 @@ func (f *Feature) refresh() {
 // receive plays what a remote is sending through the speaker, as a media track, and reports whether it
 // is: a remote that paused and resumed before its track went quiet is still playing on that track.
 func (f *Feature) receive(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) bool {
-	item := "Bluetooth: " + displayName(d)
+	item := media.BluetoothPrefix + displayName(d)
 	if media.Get().Receiving() == item {
 		return true
 	}
