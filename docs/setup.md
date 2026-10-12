@@ -366,6 +366,9 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
   mistake less often; lower hears you more easily. If it wakes by mistake, raise it a step at a time
   (0.90, 0.93, 0.95) and watch **Last wake score** on the device in Home Assistant: a false wake that
   scored 0.91 is gone at 0.93. Called Wake word sensitivity before v1.2.8.
+- **Wake word on Home Assistant** and **Confirm wake with Home Assistant** (both off by default):
+  let Home Assistant's own wake word engine listen instead of the device, or check a wake the device
+  wasn't sure of. See [Wake word on Home Assistant](#wake-word-on-home-assistant) below.
 - **Quiet hours** and **Do not disturb**.
 
 On the setup page (Sound & Voice) or in Home Assistant, **Night volume** turns the device down to that
@@ -390,6 +393,46 @@ yourself. Each comes as two files, a `.json` and a `.tflite` with the same name 
    only shows up after a restart; reloading the device's ESPHome entry is not enough.
 3. Pick the new wake word in the device's **Wake word** list, on the Assist satellite in Home
    Assistant. The device downloads it from Home Assistant and keeps it.
+
+### Wake word on Home Assistant
+
+The device listens for the wake word itself. Two switches on the device in Home Assistant let Home
+Assistant's own wake word engine help. Both are off by default. Use them when the device's models
+don't hear you well, for example when they were trained on voices that don't sound like yours, or
+when you want a model the device can't run.
+
+Home Assistant needs a wake word engine first: add one, such as the openWakeWord add-on or its
+Wyoming integration, and pick it and the wake word in the voice assistant the device uses (Settings →
+Voice assistants). Home Assistant listens for one wake word per voice assistant.
+
+- **Wake word on Home Assistant**: while the device is idle, it sends its microphone audio to Home
+  Assistant all the time, and Home Assistant's engine listens for the wake word instead of the device.
+  It uses the first voice assistant's wake word. When Home Assistant hears it, the device chimes and
+  the request goes on as usual, with no extra delay.
+- **Confirm wake with Home Assistant**: the device keeps listening, and only asks Home Assistant
+  about a wake it wasn't sure of. A wake that scores at least **Confirm threshold** (0.70 to start
+  with) but under the **Wake word threshold** sends the last two seconds of audio to Home Assistant.
+  If its engine hears the wake word in them, the request goes on. If not, nothing happens: no chime
+  and nothing on the screen. A wake over the Wake word threshold works as before and sends nothing
+  extra. On a Raspberry Pi 5 with openWakeWord, Home Assistant answered in about half a second, so a
+  confirmed wake chimes about that much later. **Last wake score** shows a confirmed wake's score,
+  which helps when setting the thresholds.
+
+What to know before turning them on:
+
+- **Privacy.** With Wake word on Home Assistant, everything said in the room goes to Home Assistant
+  while the device is idle, not just what follows the wake word. Confirm sends two seconds at a time,
+  and only for a wake the device wasn't sure of.
+- **Network.** Wake word on Home Assistant sends about 32 KB a second from each device, all day.
+  Home Assistant runs its engine once for every device streaming to it.
+- **What stays on the device.** The stop word, a ringing alarm or timer, announcements, calls and
+  talking through a camera are always handled on the device. A second wake word (the second voice
+  assistant) is also still heard by the device. Nothing is sent during a call, a talk through a
+  camera, or while the microphones are muted.
+- **If Home Assistant can't listen** (it's restarting, or its voice assistant has no wake word
+  engine), the device goes back to listening for itself and tries Home Assistant again later.
+- Confirm does nothing while Wake word on Home Assistant is on, since Home Assistant is already
+  listening.
 
 ### Sounds of your own
 
