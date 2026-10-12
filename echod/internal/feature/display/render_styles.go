@@ -80,7 +80,6 @@ func (r *renderer) styledClock(s scene, style string) {
 	if align, foot := clockAlign(); foot && cornerStyle(style) {
 		box, r.cornered = r.cornerBox(s, style, align, bottom), true
 	}
-	mid := box.Min.X + box.Dx()/2
 
 	corner := true
 	switch style {
@@ -89,7 +88,7 @@ func (r *renderer) styledClock(s scene, style string) {
 	case styleFlip:
 		r.ink = r.dayInk()
 		r.flipClock(s.now, image.Rect(box.Min.X, box.Min.Y, box.Max.X, box.Max.Y-r.s(56)))
-		r.styleDate(s, mid, box.Max.Y-r.s(8), 0)
+		r.styleDateUnder(s, box, box.Max.Y-r.s(8))
 	case styleLED:
 		r.ink = r.dayInk()
 		if r.cornered {
@@ -98,7 +97,7 @@ func (r *renderer) styledClock(s scene, style string) {
 		}
 		digits := image.Rect(box.Min.X, box.Min.Y+r.s(16), box.Max.X, box.Max.Y-r.s(76))
 		r.ledClock(s.now, digits, r.ampm)
-		r.styleDate(s, mid, box.Max.Y-r.s(8), 0)
+		r.styleDateUnder(s, box, box.Max.Y-r.s(8))
 	case styleAnalog:
 		r.analogStyle(s, box)
 		corner = r.cornered // in a corner it leaves the weather to the weather corner
@@ -137,14 +136,21 @@ func (r *renderer) dayInk() clockInk {
 	}
 }
 
-// styleDate is the date line, with the next alarm after it when it is within a day, at x (centered
-// on x, or starting there with align -1), and makes it the tap that opens the calendar.
-func (r *renderer) styleDate(s scene, x, baseline, align int) {
-	r.styleDateIn(r.small, s, x, baseline, align, 0)
+// styleDateUnder is the date line centered under a style drawn in box (styleDateIn). In a corner the box is narrower than
+// a long date, with the next alarm after it, would be: there it is cut to the box, so it neither starts
+// off the screen's edge nor runs on over the middle.
+func (r *renderer) styleDateUnder(s scene, box image.Rectangle, baseline int) {
+	width := 0
+	if r.cornered {
+		width = box.Dx()
+	}
+	r.styleDateIn(r.small, s, box.Min.X+box.Dx()/2, baseline, 0, width)
 }
 
-// styleDateIn is styleDate in face, cut to room when that is more than nothing: the next alarm can
-// make the line longer than the space a style has for it.
+// styleDateIn is the date line, with the next alarm after it when it is within a day, at x (centered
+// on x, or starting there with align -1), and makes it the tap that opens the calendar. It is cut to
+// room when that is more than nothing: the next alarm can make the line longer than the space a style
+// has for it.
 func (r *renderer) styleDateIn(face font.Face, s scene, x, baseline, align, room int) {
 	date := locale.LongDate(s.now, screenLang()) + alarmSuffix(s)
 	if room > 0 && r.width(face, date) > room {
@@ -378,7 +384,7 @@ func (r *renderer) sunStyle(s scene, box image.Rectangle) bool {
 	if ampm != "" {
 		r.text(r.title, ampm, x+r.width(tf, hm)+gap, base, dateColor(amber))
 	}
-	r.styleDate(s, box.Min.X+box.Dx()/2, base+r.s(46), 0)
+	r.styleDateUnder(s, box, base+r.s(46))
 	line := weatherText(s)
 	light := sunWords(s.now, rise, set)
 	if line != "" && light != "" {
@@ -529,11 +535,14 @@ func cornerStyle(style string) bool {
 	return style != styleDashboard && style != styleAgenda && style != styleWorld
 }
 
+// cornerPct is the share of the width a style gets in a corner, the most of it the date may take.
+const cornerPct = 44
+
 // cornerBox is the box a style is drawn in at the foot, in the corner align says: the left (clear of
 // the Call button) or the right, its foot where the whole screen's box ends. The dial and the binary
 // lights are wide for their height, so theirs is narrower, to keep them clear of the middle.
 func (r *renderer) cornerBox(s scene, style string, align, bottom int) image.Rectangle {
-	pct := 44
+	pct := cornerPct
 	switch style {
 	case styleAnalog:
 		pct = 40

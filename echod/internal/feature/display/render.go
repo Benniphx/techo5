@@ -695,6 +695,11 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 	r.text(ampmFace, ampm, x+hw+gap, base, dateColor(amber)) // a chosen date color takes the AM/PM with it
 
 	date := locale.LongDate(now, screenLang()) + dateSuffix
+	if room := r.w * cornerPct / 100; align != 0 && r.width(r.small, date) > room {
+		// In a corner, as wide as the other styles' corner box at most (styleDateIn): the day and month
+		// short first, so the alarm still fits, and cut only if that is not enough.
+		date = r.clipTo(r.small, locale.ShortDate(now, screenLang())+dateSuffix, room)
+	}
 	x = across(r.width(r.small, date))
 	r.text(r.small, date, x, base+dateGap, dateColor(dim))
 	return image.Rect(x, base+dateGap-r.s(30), x+r.width(r.small, date), base+dateGap+r.s(10))
