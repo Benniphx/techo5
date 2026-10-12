@@ -125,8 +125,9 @@ func newDetect() *Detect {
 	d.stop = newStopEntity(d)
 	d.score = newScoreEntity()
 	e.OnScored = func(slot int, peak, _ float64) {
-		// The stop word has its own threshold and says nothing about the wake word's.
-		if slot != StopSlot {
+		// Only Home Assistant's wake words: the stop word, and any other word listened for past them,
+		// has its own threshold and says nothing about theirs.
+		if slot < wakeword.Slots {
 			d.score.Set(float32(peak))
 		}
 	}
