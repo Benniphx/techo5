@@ -53,6 +53,7 @@ func newWatcher(t *testing.T, on config.OnHA) *watcher {
 		c.handle(event{kind: evCancel})
 		c.dropWatch()
 		c.claim.Release()
+		streams.Wait()
 	})
 	return w
 }
@@ -198,6 +199,14 @@ func TestACandidateIsConfirmedOrDropped(t *testing.T) {
 	default:
 	}
 
+	// One not heard holds the next back for longer than the first wait.
+	w.at = w.at.Add(confirmGapMin + time.Second)
+	w.handle(event{kind: evCandidate, slot: 0, peak: 0.8})
+	if w.watch != nil {
+		t.Fatal("asked again before the longer wait after one Home Assistant did not hear")
+	}
+	w.at = w.at.Add(confirmGapMin)
+
 	w.handle(event{kind: evCandidate, slot: 0, peak: 0.81})
 	w.handle(event{kind: evWakeEnd})
 	if w.phase != phaseListening || !w.woke {
@@ -284,5 +293,136 @@ func TestFallingBackAndATurnFromTheDevice(t *testing.T) {
 	w.handle(event{kind: evRunEnd})
 	if w.phase != phaseListening || w.watch != nil || !w.conversation.opened.Equal(asked) {
 		t.Fatalf("after the run closed: phase %s, watch %+v, opened %v", w.phase, w.watch, w.conversation.opened)
+	}
+}
+
+// Only the first slot is asked about, in a run that carries no phrase: Home Assistant would refuse the
+// phrase its engine just heard as a second device hearing it. A turn from the device that waited on a
+// stream's run reports none either, for the same reason; one that did not keeps its phrase.
+func TestRunsAtTheWakeWordStageCarryNoPhrase(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Confirm: true})
+	w.vs.ActiveWakeWords = []string{"hey_jarvis", "alexa"}
+	var started []string
+	w.ha.start = func(phrase string) error { started = append(started, phrase); return nil }
+
+	w.handle(event{kind: evCandidate, slot: 1, peak: 0.8})
+	if w.watch != nil {
+		t.Fatal("the second slot was asked about")
+	}
+	w.handle(event{kind: evCandidate, slot: 0, peak: 0.8})
+	if w.watch == nil || w.opened() != 1 || w.watches[0] != "" {
+		t.Fatalf("the first slot: watch %+v, runs %q", w.watch, w.watches)
+	}
+	w.handle(event{kind: evUnconfirmed})
+	w.handle(event{kind: evRunEnd})
+
+	// A wake on the device with nothing open keeps its phrase.
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	w.flush()
+	w.handle(event{kind: evCancel})
+	w.handle(event{kind: evRunEnd})
+
+	// Streaming: the device hears the word too, and its turn waits for the run to close.
+	if err := config.Set().OnHA().Stream(true); err != nil {
+		t.Fatal(err)
+	}
+	w.later(time.Minute)
+	w.handle(event{kind: evWakeStart})
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	w.handle(event{kind: evRunEnd})
+	w.flush()
+	if w.phase != phaseListening || len(started) != 2 || started[0] == "" || started[1] != "" {
+		t.Fatalf("phase %s, turns started with %q; want a phrase, then none after the stream", w.phase, started)
+	}
+}
+
+// A run let go of before it closed can still send its end after the turn that waited on it has opened:
+// that must not end the turn, and an error from it must not sound like a failure.
+func TestALateEndFromALetGoRunDoesNotEndTheTurn(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Stream: true})
+	w.ha.start = func(string) error { return nil }
+	w.handle(event{kind: evWatch})
+	w.handle(event{kind: evWakeStart})
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	w.handle(event{kind: evPending}) // Home Assistant took longer than graceStart to close it
+	if w.phase != phaseListening {
+		t.Fatalf("the turn did not open after the wait: %s", w.phase)
+	}
+	w.handle(event{kind: evError, code: "wake_word_detection_aborted"})
+	w.handle(event{kind: evError, code: "stt-stream-failed"})
+	w.handle(event{kind: evRunEnd})
+	if w.phase != phaseListening {
+		t.Fatalf("the old run's last events ended the new turn: %s", w.phase)
+	}
+	// The new run starts: from now on its events are its own.
+	w.handle(event{kind: evRunStart})
+	w.handle(event{kind: evRunEnd})
+	if w.phase == phaseListening {
+		t.Fatal("the turn's own run ending was swallowed")
+	}
+}
+
+// A run told to stop that ends with an error has not failed; one Home Assistant itself ends at once
+// with an ordinary error is not reopened straight away.
+func TestAStoppedRunIsNoFailureAndABriefOneWaits(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Stream: true})
+	w.ha.start = func(string) error { return nil }
+	w.handle(event{kind: evWatch})
+	w.handle(event{kind: evWakeStart})
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	w.handle(event{kind: evError, code: "stt-no-text-recognized"})
+	if w.fallback || w.failures != 0 {
+		t.Fatalf("a run we stopped counted as failing: fallback %v, failures %d", w.fallback, w.failures)
+	}
+	w.handle(event{kind: evRunEnd})
+	w.handle(event{kind: evCancel})
+	w.handle(event{kind: evRunEnd})
+
+	// The turn's run closed and streaming opened again at once; this time Home Assistant ends it.
+	if w.watch == nil {
+		t.Fatal("streaming did not open again after the turn")
+	}
+	runs := w.opened()
+	w.handle(event{kind: evWakeStart})
+	w.handle(event{kind: evError, code: "no_wake_word"})
+	w.handle(event{kind: evRunEnd})
+	if w.watch != nil || w.opened() != runs {
+		t.Fatal("a run Home Assistant ended at once was opened again straight away")
+	}
+	w.later(briefRun + time.Millisecond)
+	if w.watch == nil {
+		t.Fatal("not opened again after the short wait")
+	}
+}
+
+// A streaming run Home Assistant never says it is listening on is given up, and tried again later.
+func TestAStreamThatNeverStartsIsGivenUp(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Stream: true})
+	w.handle(event{kind: evWatch})
+	w.later(startFor - time.Second)
+	if w.watch == nil || w.watch.closing {
+		t.Fatal("given up too soon")
+	}
+	w.later(2 * time.Second)
+	if w.watch == nil || !w.watch.closing || !w.fallback {
+		t.Fatalf("after the wait: watch %+v, fallback %v", w.watch, w.fallback)
+	}
+}
+
+// What is asked about starts two seconds back: not while those were a call's.
+func TestNoConfirmJustAfterACall(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Confirm: true})
+	w.busyMic = true
+	w.handle(event{kind: evWatch})
+	w.busyMic = false
+	w.at = w.at.Add(time.Second)
+	w.handle(event{kind: evCandidate, slot: 0, peak: 0.8})
+	if w.watch != nil {
+		t.Fatal("asked about a wake whose history was the call's")
+	}
+	w.at = w.at.Add(3 * time.Second)
+	w.handle(event{kind: evCandidate, slot: 0, peak: 0.8})
+	if w.watch == nil {
+		t.Fatal("not asked about once the call was well behind")
 	}
 }

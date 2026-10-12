@@ -123,7 +123,15 @@ type slot struct {
 	candidate     bool
 	candidateAt   time.Time
 	candidatePeak float64
+
+	// askedUntil keeps one utterance from being asked about twice. It is the candidates' own pause, not
+	// quiet: a clear repeat of the word straight after one that was asked about still wakes.
+	askedUntil time.Time
 }
+
+// MinCandidate is the lowest Candidate can be (the Confirm threshold's minimum). A score under it is
+// no candidate whatever the setting, so the setting is not looked at for it: that is nearly every frame.
+const MinCandidate = 0.5
 
 // CandidateFor is the longest an utterance stays a candidate before it is asked about anyway. A word
 // over the line falls back within a few frames; one that stays there is a sound that goes on, and
@@ -485,6 +493,9 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 // candidate follows an utterance between Candidate and the threshold, and reports it once it falls
 // away, or has stayed there for CandidateFor. Held with mu.
 func (e *Engine) candidate(n int, s *slot, score, cutoff float64, now time.Time) {
+	if !s.candidate && (score < MinCandidate || now.Before(s.askedUntil)) {
+		return
+	}
 	bound := 0.0
 	if e.Candidate != nil {
 		bound = e.Candidate(n)
@@ -507,7 +518,7 @@ func (e *Engine) candidate(n int, s *slot, score, cutoff float64, now time.Time)
 
 	peak := s.candidatePeak
 	s.candidate = false
-	s.quiet = now.Add(Refractory)
+	s.askedUntil = now.Add(Refractory)
 	slog.Info("wake candidate", "slot", n+1, "id", s.model.ID, "peak", peak, "asked_from", bound, "cutoff", cutoff)
 	if e.OnCandidate != nil {
 		safe.Go("wake candidate", func() { e.OnCandidate(n, peak) })

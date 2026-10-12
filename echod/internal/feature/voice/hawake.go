@@ -10,6 +10,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/led"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
@@ -19,13 +20,15 @@ import (
 // Home Assistant's own wake word engine (config.OnHA), two ways:
 //
 //   - Streaming: while the device is idle its microphones go up to Home Assistant in a run that starts
-//     at the wake word stage, and the pipeline's engine listens for the word in place of the device's
-//     first slot. Whatever engine and model the pipeline has is the one that listens: one the device
-//     cannot run, or one trained on the household's own language.
-//   - Confirming: a wake the device's own engine was not sure of, one that scored between the confirm
-//     threshold and the wake word threshold, is asked about. The last two seconds go up in a run that
-//     starts at the wake word stage, and the turn opens only if Home Assistant's engine hears the word
-//     in them. Nothing is sent until then, and nothing at all for a wake the device was sure of.
+//     at the wake word stage, and the pipeline's engine listens for the word as well as the device.
+//     Whatever engine and model the pipeline has is the one that listens: one the device cannot run,
+//     or one trained on the household's own language.
+//   - Confirming: a wake of the first slot's word the device's own engine was not sure of, one that
+//     scored between the confirm threshold and the wake word threshold, is asked about. The last two
+//     seconds go up in a run that starts at the wake word stage, then what follows until Home
+//     Assistant answers or confirmFor runs out, and the turn opens only if its engine heard the word.
+//     Nothing is sent until then, nothing at all for a wake the device was sure of, and the questions
+//     are spaced out (confirmGapMin) so a steady sound near the word is not asked about over and over.
 //
 // Either way the run is ESPHome's own: the satellite's request with the wake word flag set, which Home
 // Assistant answers with WAKE_WORD_START, then WAKE_WORD_END once its engine hears the word, and from
@@ -67,6 +70,25 @@ const (
 // briefRun is a run so short that starting the next one at once would be a loop.
 const briefRun = time.Second
 
+// startFor is how long a streaming run has for Home Assistant to say its engine is listening. One that
+// never does (Home Assistant takes the satellite's audio for something else, such as setting up a wake
+// word) would otherwise take the room's audio for as long as nothing else closed it.
+const startFor = 5 * time.Second
+
+// The wait between asking about one wake and the next: the first, and the most it grows to.
+const (
+	confirmGapMin = 5 * time.Second
+	confirmGapMax = time.Minute
+)
+
+// later is the later of two times.
+func later(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
 // Errors Home Assistant ends a wake word run with that say nothing is wrong: the run is over, and
 // streaming starts another.
 var ordinaryWakeErrors = map[string]bool{
@@ -98,6 +120,9 @@ type watching struct {
 
 	// closing is a run told to stop, or ended with an error, whose RUN_END is still to come.
 	closing bool
+
+	// byHA is a run Home Assistant ended (with an error) rather than one told to stop.
+	byHA bool
 }
 
 // Confirmation is a wake the device was not sure of that Home Assistant heard too.
@@ -130,6 +155,14 @@ func (c *conversation) startWatch(phrase string) error {
 func (c *conversation) watchEvent(e event) bool {
 	switch e.kind {
 	case evWatch:
+		if config.Get().Wake.OnHA.Confirm && c.micBusy() {
+			c.busyAt = c.now()
+		}
+		return true
+
+	case evRunStart:
+		// Whatever comes now is this run's: a run let go of before it closed has nothing more to say.
+		c.staleRun = false
 		return true
 
 	case evWakeStart:
@@ -149,7 +182,10 @@ func (c *conversation) watchEvent(e event) bool {
 
 	case evUnconfirmed:
 		if w := c.watch; w != nil && !w.closing && w.mode == watchConfirm {
-			slog.Info("home assistant did not hear the wake word", "slot", w.slot+1, "peak", w.peak)
+			c.confirmGap = min(2*c.confirmGap, confirmGapMax)
+			c.nextConfirm = c.now().Add(c.confirmGap)
+			slog.Info("home assistant did not hear the wake word", "slot", w.slot+1, "peak", w.peak,
+				"next_ask_after", c.confirmGap)
 			c.closeWatch()
 		}
 		return true
@@ -162,6 +198,14 @@ func (c *conversation) watchEvent(e event) bool {
 		c.runOpen = false
 		w := c.watch
 		if w == nil {
+			if c.staleRun {
+				// The run let go of has closed. A turn opened since is still waiting on its own.
+				c.staleRun = false
+				if c.phase != phaseIdle {
+					slog.Debug("the wake word run let go of has closed")
+					return true
+				}
+			}
 			return false
 		}
 		c.dropWatch()
@@ -169,8 +213,10 @@ func (c *conversation) watchEvent(e event) bool {
 		case !w.closing && !w.started:
 			// Ended before its engine was ever listening, and without saying why.
 			c.failed("the run ended before listening", false)
-		case !w.closing && c.now().Sub(w.at) < briefRun:
-			c.retryAt = c.now().Add(briefRun)
+		case (!w.closing || w.byHA) && c.now().Sub(w.at) < briefRun:
+			// Ended by Home Assistant almost as soon as it began: the next waits, or a pipeline that ends
+			// every run at once would have them opened back to back.
+			c.retryAt = later(c.retryAt, c.now().Add(briefRun))
 		}
 		// What was held back for the run to close: a turn asked for meanwhile.
 		c.startPending()
@@ -179,9 +225,21 @@ func (c *conversation) watchEvent(e event) bool {
 	case evError:
 		w := c.watch
 		if w == nil {
-			// The end of a run at the wake word stage that was let go of before it closed: nothing failed.
-			return c.phase == phaseIdle && ordinaryWakeErrors[e.code]
+			// The end of a run at the wake word stage that was let go of before it closed: nothing failed,
+			// and a turn opened since must not end for it. A run a turn opens never reaches the wake word
+			// stage, so these codes cannot be its own.
+			if c.staleRun || ordinaryWakeErrors[e.code] {
+				slog.Debug("an earlier wake word run's error", "code", e.code, "phase", c.phase)
+				return true
+			}
+			return false
 		}
+		if w.closing {
+			// Told to stop: whatever it ends with is how it took that, not a failure of Home Assistant's.
+			slog.Debug("a stopped wake word run ended", "code", e.code)
+			return true
+		}
+		w.byHA = true
 		switch {
 		case ordinaryWakeErrors[e.code]:
 			slog.Debug("wake word run ended", "code", e.code)
@@ -199,10 +257,12 @@ func (c *conversation) watchEvent(e event) bool {
 		return true
 
 	case evPending:
-		// Waited long enough for a run told to stop: it is taken as closed.
+		// Waited long enough for a run told to stop: it is taken as closed, and what it still sends is
+		// stale.
 		if w := c.watch; w != nil && w.closing {
 			c.dropWatch()
 			c.runOpen = false
+			c.staleRun = true
 		}
 		return false
 	}
@@ -248,6 +308,14 @@ func (c *conversation) heardOnHA() {
 		return
 	}
 	slog.Info("home assistant heard the wake word", "slot", w.slot+1, "mode", w.mode, "local_peak", w.peak)
+	// As the device's own wake word does (Voice.open): a word said over a ringing alarm or timer
+	// silences it first.
+	if ring.IsSounding() && ring.Silence() {
+		slog.Info("wake word over a ring, silencing it")
+	}
+	if w.mode == watchConfirm {
+		c.confirmGap = 0
+	}
 	if !c.start(nextTurn{slot: w.slot, woke: true, at: c.now(), continued: true}) {
 		c.closeRun()
 		return
@@ -267,11 +335,12 @@ func (c *conversation) closeRun() {
 	}
 }
 
-// confirm asks Home Assistant about a wake the device was not sure of.
+// confirm asks Home Assistant about a wake the device was not sure of. Only the first slot's: a run at
+// the wake word stage carries no phrase (openWatch), which reaches the first pipeline.
 func (c *conversation) confirm(slot int, peak float64) {
 	on := config.Get().Wake.OnHA
 	switch {
-	case !on.Confirm:
+	case !on.Confirm || slot != 0:
 		return
 	case c.phase != phaseIdle || c.watch != nil || c.pending != nil || c.draining || c.grace != nil:
 		slog.Debug("wake candidate not asked about, busy", "slot", slot+1, "phase", c.phase)
@@ -281,10 +350,18 @@ func (c *conversation) confirm(slot int, peak float64) {
 	case c.now().Before(c.retryAt):
 		slog.Debug("wake candidate not asked about, home assistant unavailable", "slot", slot+1)
 		return
-	}
-	if _, ok := c.phraseFor(slot); slot > 0 && !ok {
+	case !c.busyAt.IsZero() && c.now().Sub(c.busyAt) < mic.Confirming+time.Second:
+		// What would go up starts two seconds back, and the microphones were a call's or a camera's then.
+		slog.Debug("wake candidate not asked about, the microphones were busy just now", "slot", slot+1)
+		return
+	case c.now().Before(c.nextConfirm):
+		slog.Debug("wake candidate not asked about, asked too recently", "slot", slot+1)
 		return
 	}
+	if c.confirmGap == 0 {
+		c.confirmGap = confirmGapMin
+	}
+	c.nextConfirm = c.now().Add(c.confirmGap)
 	c.openWatch(watchConfirm, slot, peak)
 }
 
@@ -327,9 +404,13 @@ func (c *conversation) consider() {
 		c.dropWatch()
 		c.runOpen, c.proven = false, false
 	case w.closing && c.now().Sub(c.stoppedAt) > drainFor:
-		// Its RUN_END never came.
+		// Its RUN_END never came. If it still does, it is stale.
 		c.dropWatch()
 		c.runOpen = false
+		c.staleRun = true
+	case w.mode == watchStream && !w.closing && !w.started && c.now().Sub(w.at) > startFor:
+		c.failed("home assistant never said it was listening", false)
+		c.closeWatch()
 	case !w.closing && (c.micBusy() || w.mode == watchStream && !c.mayStream()):
 		c.closeWatch()
 	}
@@ -355,10 +436,13 @@ func (c *conversation) micBusy() bool {
 
 // openWatch starts a run at the wake word stage and the audio that goes with it: from now on when
 // streaming, the last two seconds and then from now on when confirming.
+//
+// The run carries no wake word phrase, as ESPHome's own satellites send none for one. Home Assistant
+// notes the phrase its engine heard and, given the same one again in the run, refuses it as a second
+// device hearing the word: no phrase means the first pipeline, and nothing to refuse.
 func (c *conversation) openWatch(mode watchMode, slot int, peak float64) {
-	phrase, _ := c.phraseFor(slot)
 	watch := c.ha.watch
-	c.send("wake word run", func() error { return watch(phrase) })
+	c.send("wake word run", func() error { return watch("") })
 	c.runOpen = true
 
 	w := &watching{mode: mode, slot: slot, peak: peak, at: c.now()}
@@ -469,6 +553,10 @@ func (v *Voice) Candidate(slot int, peak float64) {
 	}
 	v.turn.post(event{kind: evCandidate, slot: slot, peak: peak})
 }
+
+// WakeOnHAChanged says a Home Assistant wake word setting changed, so a stream starts or stops now
+// rather than at the next look a second later.
+func (v *Voice) WakeOnHAChanged() { v.turn.post(event{kind: evWatch}) }
 
 // HomeAssistantHears is whether Home Assistant is listening for a slot's wake word, so a wake the
 // device was not sure of is not asked about as well.

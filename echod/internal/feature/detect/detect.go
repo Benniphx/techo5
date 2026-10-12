@@ -125,11 +125,15 @@ func newDetect() *Detect {
 		voice.Get().Woke(slot)
 	}
 
-	// A wake the device was not sure of, asked about when confirming is on: only Home Assistant's slots,
-	// never the stop word, and never while the microphones are somebody else's.
+	// A wake the device was not sure of, asked about when confirming is on: only the first wake word,
+	// whose pipeline is the one a run with no phrase reaches (voice's openWatch), never the stop word,
+	// and never while the microphones are somebody else's.
 	e.Candidate = func(slot int) float64 {
+		if slot != 0 {
+			return 0
+		}
 		on := config.Get().Wake.OnHA
-		if !on.Confirm || slot >= wakeword.Slots {
+		if !on.Confirm {
 			return 0
 		}
 		return on.ConfirmAt()

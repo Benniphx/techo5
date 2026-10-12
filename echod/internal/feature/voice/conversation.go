@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"math"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -97,6 +98,7 @@ const (
 	evUnconfirmed                  // a wake asked about was not heard in time
 	evCandidate                    // a wake the device was not sure of (event.slot, event.peak)
 	evWatch                        // something a stream to Home Assistant depends on may have changed
+	evRunStart                     // Home Assistant opened a run
 )
 
 type event struct {
@@ -244,6 +246,21 @@ type conversation struct {
 	// proven is Home Assistant's engine having said it is listening (WAKE_WORD_START) since the last
 	// failure or connection: until it has, the device goes on listening for itself as well.
 	proven bool
+
+	// staleRun is a run at the wake word stage that was let go of before its RUN_END came. Its last
+	// events can still arrive, after a turn has opened, and would end that turn: until the next run
+	// starts, a RUN_END or an error is the old run's.
+	staleRun bool
+
+	// nextConfirm is the soonest another wake may be asked about, and confirmGap the wait after this
+	// one: it grows with every wake Home Assistant did not hear, so a steady sound near the word is
+	// not asked about every couple of seconds, and starts again from a wake that was real.
+	nextConfirm time.Time
+	confirmGap  time.Duration
+
+	// busyAt is the last time the microphones were seen to be somebody else's, while confirming is on.
+	// What is asked about includes the two seconds before the wake, which must not be a call's.
+	busyAt time.Time
 }
 
 // graceStart is how long to wait for a stopped run to close before starting the next one anyway.
@@ -265,6 +282,12 @@ type nextTurn struct {
 
 	// at is when it was asked for, which a turn held back in pending opens later than.
 	at time.Time
+
+	// afterWatch is a turn that waited for a run at the wake word stage to close. Home Assistant's engine
+	// may have heard the same word in it just before, and refuses that phrase again for a moment as a
+	// second device hearing it: so the first slot's turn reports no phrase, which reaches the same
+	// first pipeline (hawake.go).
+	afterWatch bool
 
 	// continued is a turn on a run that is already open: Home Assistant's wake word engine heard the
 	// word, and the run went on to listening by itself (hawake.go).
@@ -684,6 +707,12 @@ func (c *conversation) muted() (bool, error) { return mute.Get().Muted() }
 func (c *conversation) start(n nextTurn) bool {
 	slot := n.slot
 
+	// A wake the device's own engine was sure of: the word is being said the way it hears it, so what
+	// is asked about next is not held back by the ones Home Assistant did not hear before.
+	if n.woke && !n.continued {
+		c.confirmGap = 0
+	}
+
 	// A cut microphone hears nothing, so a turn started from a button would stream silence until it
 	// gave up — and worse, would look like the device is listening while it is muted.
 	if muted, err := c.muted(); err == nil && muted {
@@ -707,6 +736,7 @@ func (c *conversation) start(n nextTurn) bool {
 			c.closeWatch()
 		}
 		slog.Info("waiting for the wake word run to close", "slot", slot+1)
+		n.afterWatch = true
 		c.pending = &n
 		if c.grace == nil {
 			c.grace = time.NewTimer(graceStart)
@@ -801,7 +831,11 @@ func (c *conversation) start(n nextTurn) bool {
 	recording.Get().Opens(c.turn.ID(), slot)
 	be := c.be
 	if !n.continued {
-		c.send("start", func() error { return be.Start(phrase) })
+		asked := phrase
+		if n.afterWatch && slot == 0 {
+			asked = ""
+		}
+		c.send("start", func() error { return be.Start(asked) })
 	}
 	if _, here := be.(*direct); !here {
 		c.runOpen = true
@@ -1068,6 +1102,8 @@ func (c *conversation) pipeline(e esphome.PipelineEvent) {
 		c.post(event{kind: evStreamStart})
 	case api.VoiceAssistantEvent_VOICE_ASSISTANT_TTS_STREAM_END:
 		c.post(event{kind: evStreamEnd})
+	case api.VoiceAssistantEvent_VOICE_ASSISTANT_RUN_START:
+		c.post(event{kind: evRunStart})
 	case api.VoiceAssistantEvent_VOICE_ASSISTANT_RUN_END:
 		c.post(event{kind: evRunEnd})
 	case api.VoiceAssistantEvent_VOICE_ASSISTANT_WAKE_WORD_START:
@@ -1133,8 +1169,16 @@ func (c *conversation) startAudio(slot int, followUp, continued bool) {
 	// be kept out of the microphone.
 	id := c.turn.ID()
 	be := c.be
-	safe.Go("turn audio", func() { c.stream(ctx, be, slot, followUp, continued, id) })
+	streams.Add(1)
+	safe.Go("turn audio", func() {
+		defer streams.Done()
+		c.stream(ctx, be, slot, followUp, continued, id)
+	})
 }
+
+// streams counts the turns' audio goroutines still running, so a test can wait for the last to stop
+// before it changes the settings they read.
+var streams sync.WaitGroup
 
 func (c *conversation) stopStreaming() {
 	if c.stopAudio == nil {

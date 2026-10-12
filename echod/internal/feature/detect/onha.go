@@ -7,6 +7,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 )
 
 // onHAEntities are the settings for Home Assistant's own wake word engine (config.OnHA): streaming to
@@ -57,6 +58,7 @@ func newOnHAEntities() onHAEntities {
 			slog.Error("saving the wake word on home assistant failed", "err", err)
 		}
 		slog.Info("wake word on home assistant", "on", on)
+		voice.Get().WakeOnHAChanged()
 	}
 	o.confirm.OnCommand = func(on bool) {
 		o.confirm.Set(on)
@@ -64,6 +66,7 @@ func newOnHAEntities() onHAEntities {
 			slog.Error("saving confirm wake with home assistant failed", "err", err)
 		}
 		slog.Info("confirm wake with home assistant", "on", on)
+		voice.Get().WakeOnHAChanged()
 	}
 	o.threshold.OnCommand = func(v float32) {
 		o.threshold.Set(v)
