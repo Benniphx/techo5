@@ -2,6 +2,7 @@ package voice
 
 import (
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
@@ -17,6 +18,9 @@ type Mistake struct {
 
 	// Heard is what speech-to-text wrote, empty when it wrote nothing.
 	Heard string
+
+	// Opened is when the turn opened, which tells its wake from an earlier one of the same slot.
+	Opened time.Time
 }
 
 // Mistaken is told of every wake taken as a mistake, after the turn has ended.

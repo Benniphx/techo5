@@ -122,11 +122,21 @@ func TestRussianLookalikes(t *testing.T) {
 	for _, heard := range []string{
 		"Погоди минутку", "Это угроза?", "Рецепт жаркого", "Сохрани в облачное хранилище",
 		"Кто сыграл главную роль в Титанике?", "Покажи часы работы аптеки", "Включи дождь",
+		"Кого назначили на главную роль?", "Напомни, когда приду домой",
 	} {
 		for _, lang := range []string{"ru", MatchAll} {
 			if AboutWeather(heard, lang) || AboutGoingHome(heard, lang) {
 				t.Errorf("%q (%s) was taken as weather or going home", heard, lang)
 			}
+		}
+	}
+}
+
+// The weather's other forms still bring it up.
+func TestRussianWeatherForms(t *testing.T) {
+	for _, heard := range []string{"Что с погодой?", "Какая погодка завтра?", "Погодные условия на выходные"} {
+		if !AboutWeather(heard, "ru") {
+			t.Errorf("%q was not taken as the weather", heard)
 		}
 	}
 }

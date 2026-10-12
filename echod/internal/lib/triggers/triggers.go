@@ -82,13 +82,14 @@ var Languages = map[string]Set{
 		Camera: []string{"laat", "toon", "camera"},
 	},
 	"ru": {
-		// Whole words where a stem is inside another: "погод" is in "погоди" (wait), "облачн" in cloud
-		// storage. Thunderstorm is left out: every form of "гроза" is inside one of "угроза" (threat).
-		Weather: []string{"погода", "погоду", "погоде", "погоды", "прогноз", "температур", "дожд", "снег", "снеж",
+		// Matched inside what was heard, so each form is listed where the stem is inside another word:
+		// "погод" is in "погоди" (wait), "облачн" in cloud storage. Thunderstorm is left out: every
+		// form of "гроза" is inside one of "угроза" (threat).
+		Weather: []string{"погода", "погоду", "погоде", "погоды", "погодой", "погодк", "погодн", "прогноз", "температур", "дожд", "снег", "снеж",
 			"шторм", "буря", "бури", "бурю", "ураган", "осадк", "сколько градус", "радар"},
 		Radar:      []string{"радар", "карта дождя", "карту дождя", "карта осадков", "карту осадков", "карта погоды", "карту погоды"},
 		NotWeather: []string{"звук", "шум", "включи дождь"},
-		GoHome:     []string{"главный экран", "главном экран", "на главную", "домашний экран", "домашнем экран", "верни часы", "вернись к часам", "домой"},
+		GoHome:     []string{"главный экран", "главном экран", "вернись на главную", "на главную страниц", "домашний экран", "домашнем экран", "верни часы", "вернись к часам", "вернись домой"},
 		Camera:     []string{"покажи", "показать", "камер"},
 	},
 }

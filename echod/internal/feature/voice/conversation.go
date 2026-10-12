@@ -171,8 +171,9 @@ type conversation struct {
 	followUp  bool
 	followUps int
 
-	// woke is the open turn's nextTurn.woke.
-	woke bool
+	// woke is the open turn's nextTurn.woke, and opened when it opened.
+	woke   bool
+	opened time.Time
 
 	// lookHere says this turn's answer put a page on the screen (the rain map, the forecast), so it is
 	// not followed by listening again: the listening screen would cover the page asked for.
@@ -207,6 +208,11 @@ type conversation struct {
 
 // graceStart is how long to wait for a stopped run to close before starting the next one anyway.
 const graceStart = 750 * time.Millisecond
+
+// drainFor is the same for a run stopped as a mistake, which Home Assistant goes on with: long enough
+// for a quick answer to arrive and be dropped, short enough that a wake held behind it still feels
+// like an answer to the word.
+const drainFor = 3 * time.Second
 
 // nextTurn is a turn to open: which slot, and whether it follows a reply rather than a wake word.
 type nextTurn struct {
@@ -413,12 +419,15 @@ func (c *conversation) handle(e event) {
 		// come: a wake in the meantime waits for them (draining), or they would land in its turn.
 		if c.woke && c.phase != phaseIdle && onlyNoise(e.text) {
 			slog.Info("heard only what noise is written as; the wake was a mistake", "slot", c.slot+1)
-			slot := c.slot
+			slot, opened := c.slot, c.opened
 			c.clearPending()
 			c.idle("woken by mistake", activity.Canceled)
-			c.draining = true
-			c.grace = time.NewTimer(wakeword.MaxThink(slot))
-			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text})
+			// The built-in brain stops at once and sends nothing more.
+			if _, here := c.be.(*direct); !here {
+				c.draining = true
+				c.grace = time.NewTimer(drainFor)
+			}
+			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text, Opened: opened})
 			return
 		}
 		if c.phase == phaseListening {
@@ -551,11 +560,11 @@ func (c *conversation) handle(e event) {
 		// the red ring are for something failing, and nothing has: the turn ends quietly.
 		if e.code == errNoText {
 			slog.Info("nothing was said", "slot", c.slot+1, "follow-up", c.followUp)
-			slot, mistaken := c.slot, c.woke && c.phase != phaseIdle
+			slot, opened, mistaken := c.slot, c.opened, c.woke && c.phase != phaseIdle
 			c.clearPending()
 			c.idle("nothing said", activity.Canceled)
 			if mistaken {
-				Mistaken.Emit(Mistake{Slot: slot})
+				Mistaken.Emit(Mistake{Slot: slot, Opened: opened})
 			}
 			return
 		}
@@ -680,6 +689,7 @@ func (c *conversation) start(n nextTurn) {
 	c.slot = slot
 	c.followUp = n.followUp
 	c.woke = n.woke
+	c.opened = time.Now()
 	c.lookHere = false
 	// Counted from the wake word: a turn it opens starts again, a follow-up is one more in a row.
 	if n.followUp {
