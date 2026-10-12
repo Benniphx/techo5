@@ -119,11 +119,9 @@ func newDetect() *Detect {
 			voice.Get().Interrupt()
 			return
 		}
-		// Home Assistant's engine is listening for this one in the device's place (config.OnHA).
-		if voice.Get().HomeAssistantHears(slot) {
-			slog.Debug("wake word heard here, left to home assistant", "slot", slot+1)
-			return
-		}
+		// Heard here while Home Assistant's engine is listening too (config.OnHA), it still wakes: the
+		// run there is closed and the turn opens here. The same word heard by both opens one turn, since
+		// a wake word while listening is ignored.
 		voice.Get().Woke(slot)
 	}
 

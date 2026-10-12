@@ -156,7 +156,7 @@ type conversation struct {
 	// that starts at the wake word stage (hawake.go).
 	conn atomic.Pointer[esphome.Conn]
 
-	// hears is Home Assistant listening for the first slot's wake word in the device's place.
+	// hears is Home Assistant listening for the first slot's wake word, so a candidate is not asked about.
 	hears atomic.Bool
 
 	// now is the clock, for tests.
@@ -1159,8 +1159,9 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 	//
 	// A slot that chimes does not send it: whoever is talking waits for the tone, so the history holds
 	// the wake word rather than the request, and the tone itself is louder at the array than they are.
+	// That is as true of a wake Home Assistant's engine heard.
 	pre := c.source.Recent(mic.History)
-	if wakeword.Tones(slot, followUp) && !continued {
+	if wakeword.Tones(slot, followUp) {
 		pre = nil
 	}
 
@@ -1196,8 +1197,8 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 	see(pre)
 
 	// A run Home Assistant's engine heard the word in has had all of it, and is already listening to
-	// what follows: the history is only the end-of-speech detector's, which measures the speaker by the
-	// word, and nothing is held back for the tone, because whoever said the word ran straight on.
+	// what follows: without a tone the history is only the end-of-speech detector's, which measures the
+	// speaker by the word.
 	if continued {
 		pre = nil
 	}
@@ -1218,7 +1219,7 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 	// nothing is sent while it is sounding. What the speaker still has queued says when that is, and
 	// hardwareTail is what the driver holds after the queue runs out.
 	var sounding time.Time
-	if wakeword.Tones(slot, followUp) && !continued {
+	if wakeword.Tones(slot, followUp) {
 		sounding = time.Now().Add(wakeword.ChimeLength(slot, followUp) + speaker.HardwareTail)
 	}
 	var held int

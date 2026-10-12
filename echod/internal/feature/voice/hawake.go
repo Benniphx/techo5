@@ -289,7 +289,7 @@ func (c *conversation) confirm(slot int, peak float64) {
 }
 
 // consider opens a streaming run when one should be open and none is, closes one that should not be,
-// and says whether the device's own first slot can stand down. It runs after every event and once a
+// and says whether Home Assistant is listening for the first slot's word. It runs after every event and once a
 // second, so a mute, a call or a change of setting reaches the stream without needing an event of its
 // own.
 func (c *conversation) consider() {
@@ -470,6 +470,6 @@ func (v *Voice) Candidate(slot int, peak float64) {
 	v.turn.post(event{kind: evCandidate, slot: slot, peak: peak})
 }
 
-// HomeAssistantHears is whether Home Assistant is listening for a slot's wake word in the device's
-// place, so the device's own detection of it is not acted on.
+// HomeAssistantHears is whether Home Assistant is listening for a slot's wake word, so a wake the
+// device was not sure of is not asked about as well.
 func (v *Voice) HomeAssistantHears(slot int) bool { return slot == 0 && v.turn.hears.Load() }

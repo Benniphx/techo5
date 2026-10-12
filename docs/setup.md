@@ -406,9 +406,10 @@ Wyoming integration, and pick it and the wake word in the voice assistant the de
 Voice assistants). Home Assistant listens for one wake word per voice assistant.
 
 - **Wake word on Home Assistant**: while the device is idle, it sends its microphone audio to Home
-  Assistant all the time, and Home Assistant's engine listens for the wake word instead of the device.
-  It uses the first voice assistant's wake word. When Home Assistant hears it, the device chimes and
-  the request goes on as usual, with no extra delay.
+  Assistant all the time, and Home Assistant's engine listens for the wake word too. It uses the first
+  voice assistant's wake word. When Home Assistant hears it, the device chimes and the request goes on
+  as usual, with no extra delay. Wait for the chime before you speak, as with the device's own wake
+  word. The device's own wake words still work alongside.
 - **Confirm wake with Home Assistant**: the device keeps listening, and only asks Home Assistant
   about a wake it wasn't sure of. A wake that scores at least **Confirm threshold** (0.70 to start
   with) but under the **Wake word threshold** sends the last two seconds of audio to Home Assistant.
@@ -426,8 +427,7 @@ What to know before turning them on:
 - **Network.** Wake word on Home Assistant sends about 32 KB a second from each device, all day.
   Home Assistant runs its engine once for every device streaming to it.
 - **What stays on the device.** The stop word, a ringing alarm or timer, announcements, calls and
-  talking through a camera are always handled on the device. A second wake word (the second voice
-  assistant) is also still heard by the device. Nothing is sent during a call, a talk through a
+  talking through a camera are always handled on the device. Nothing is sent during a call, a talk through a
   camera, or while the microphones are muted.
 - **If Home Assistant can't listen** (it's restarting, or its voice assistant has no wake word
   engine), the device goes back to listening for itself and tries Home Assistant again later.

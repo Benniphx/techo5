@@ -82,8 +82,8 @@ func (w *watcher) later(d time.Duration) {
 }
 
 // Streaming opens a run at the wake word stage while the device is idle, and Home Assistant hearing
-// the word opens the turn on that same run: no second run, and the device's own first slot stands down
-// only once Home Assistant's engine has said it is listening.
+// the word opens the turn on that same run: no second run, and Home Assistant counts as listening only
+// once its engine has said so.
 func TestStreamingOpensTheTurnOnTheSameRun(t *testing.T) {
 	w := newWatcher(t, config.OnHA{Stream: true})
 	w.handle(event{kind: evWatch})
@@ -91,11 +91,11 @@ func TestStreamingOpensTheTurnOnTheSameRun(t *testing.T) {
 		t.Fatalf("streaming on and idle: watch %+v, runs %d", w.watch, w.opened())
 	}
 	if w.hears.Load() {
-		t.Error("the device stood down before home assistant said it was listening")
+		t.Error("counted as listening before home assistant said it was")
 	}
 	w.handle(event{kind: evWakeStart})
 	if !w.hears.Load() {
-		t.Error("home assistant is listening and the device has not stood down")
+		t.Error("home assistant is listening and is not counted as such")
 	}
 
 	w.handle(event{kind: evWakeEnd})
@@ -133,7 +133,7 @@ func TestARunIsRestartedOrBackedOffFrom(t *testing.T) {
 
 	w.handle(event{kind: evError, code: "wake-engine-missing", msg: "no engine"})
 	if !w.fallback || w.hears.Load() {
-		t.Fatalf("no engine: fallback %v, standing down %v", w.fallback, w.hears.Load())
+		t.Fatalf("no engine: fallback %v, listening %v", w.fallback, w.hears.Load())
 	}
 	w.handle(event{kind: evRunEnd})
 	if w.watch != nil {
@@ -161,7 +161,7 @@ func TestARunIsRestartedOrBackedOffFrom(t *testing.T) {
 	}
 	w.handle(event{kind: evWakeStart})
 	if w.fallback || w.failures != 0 || !w.hears.Load() {
-		t.Errorf("listening again: fallback %v, failures %d, standing down %v", w.fallback, w.failures, w.hears.Load())
+		t.Errorf("listening again: fallback %v, failures %d, listening %v", w.fallback, w.failures, w.hears.Load())
 	}
 }
 
@@ -238,7 +238,7 @@ func TestAMuteOrACallStopsTheStream(t *testing.T) {
 	w.busyMic = true
 	w.handle(event{kind: evWatch})
 	if w.watch == nil || !w.watch.closing || w.hears.Load() {
-		t.Fatalf("muted: watch %+v, standing down %v", w.watch, w.hears.Load())
+		t.Fatalf("muted: watch %+v, listening %v", w.watch, w.hears.Load())
 	}
 	w.handle(event{kind: evWakeEnd})
 	if w.phase != phaseIdle {
@@ -267,7 +267,7 @@ func TestFallingBackAndATurnFromTheDevice(t *testing.T) {
 	w.ready = false
 	w.handle(event{kind: evWatch})
 	if w.watch != nil || w.hears.Load() {
-		t.Fatalf("home assistant gone: watch %+v, standing down %v", w.watch, w.hears.Load())
+		t.Fatalf("home assistant gone: watch %+v, listening %v", w.watch, w.hears.Load())
 	}
 
 	w.ready = true
