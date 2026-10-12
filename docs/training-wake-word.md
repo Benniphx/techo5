@@ -5,7 +5,7 @@ can pick in Home Assistant were trained on English voices. If you speak another 
 you want isn't in any collection, you can train a model yourself and load it like any other
 ([A wake word of your own](setup.md#a-wake-word-of-your-own)).
 
-This is how we trained Hey Alfred. The tools are microWakeWord by Kevin Ahrendt and
+This is how we trained a two-word English wake word of our own. The tools are microWakeWord by Kevin Ahrendt and
 [Piper](https://github.com/OHF-Voice/piper1-gpl) with
 [piper-sample-generator](https://github.com/rhasspy/piper-sample-generator) by the Rhasspy and Open
 Home Foundation projects. Their documentation is the reference; this page is the path that worked for
@@ -26,12 +26,17 @@ us. Where a step is something we haven't done ourselves (a non-English voice, fo
 ```sh
 mkdir ~/wakeword && cd ~/wakeword
 git clone https://github.com/kahrendt/microWakeWord
+git -C microWakeWord checkout 4665173cd3
 git clone https://github.com/rhasspy/piper-sample-generator
+git -C piper-sample-generator checkout 2971426a55
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e ./microWakeWord
 pip install -e ./piper-sample-generator
 pip install piper-phonemize-cross==1.2.1 scipy tqdm
 ```
+
+The two `checkout` lines pin the versions this page was written against (piper-sample-generator
+v3.2.0). Newer ones may work too, but their options can change.
 
 For a GPU, install the CUDA builds of PyTorch and TensorFlow first, as their sites describe. Without
 them, everything still runs on the CPU.
@@ -45,7 +50,7 @@ sound like real rooms.
 ```sh
 mkdir -p negative_datasets
 for f in dinner_party.zip dinner_party_eval.zip no_speech.zip speech.zip; do
-  curl -sSL -o negative_datasets/$f https://huggingface.co/datasets/kahrendt/microwakeword/resolve/main/$f
+  curl -sSL -o negative_datasets/$f https://huggingface.co/datasets/kahrendt/microwakeword/resolve/0da95f94302ca2f4aae3b18fc6560fa6d2bba3d1/$f
   unzip -q -o negative_datasets/$f -d negative_datasets
 done
 ```
@@ -59,27 +64,31 @@ You also need three folders of 16 kHz mono WAV files for the augmentation:
 
 microWakeWord's training notebook downloads and converts all three; that's how we got ours.
 
+Some of this audio is licensed for non-commercial use only (the Free Music Archive's tracks, for
+one), so a model trained on it is for your own use. Check each dataset's license before sharing one.
+
 ## 3. Generate wake word samples
 
-Piper speaks your phrase in thousands of voices. We made 22,000 samples of "hey alfred" with the
-multi-speaker English generator, at several speeds and with varied speaker mixes:
+Piper speaks your phrase in thousands of voices. We made 22,000 samples of our phrase with the
+multi-speaker English generator, at several speeds and with varied speaker mixes. Here "hey marvin"
+stands in for your phrase:
 
 ```sh
 curl -sSL -o piper-sample-generator/models/en_US-libritts_r-medium.pt \
   https://github.com/rhasspy/piper-sample-generator/releases/download/v2.0.0/en_US-libritts_r-medium.pt
 M=piper-sample-generator/models/en_US-libritts_r-medium.pt
-python -m piper_sample_generator "hey alfred" --model $M --max-samples 8000 --batch-size 100 \
+python -m piper_sample_generator "hey marvin" --model $M --max-samples 8000 --batch-size 100 \
   --max-speakers 800 --length-scales 0.85 1.0 1.15 --output-dir generated_samples/a
-python -m piper_sample_generator "hey, alfred" --model $M --max-samples 4000 --batch-size 100 \
+python -m piper_sample_generator "hey, marvin" --model $M --max-samples 4000 --batch-size 100 \
   --max-speakers 800 --length-scales 0.9 1.0 1.2 --output-dir generated_samples/b
-python -m piper_sample_generator "hey alfred" --model $M --max-samples 10000 --batch-size 100 \
+python -m piper_sample_generator "hey marvin" --model $M --max-samples 10000 --batch-size 100 \
   --max-speakers 800 --length-scales 0.8 1.0 1.25 --noise-scales 0.5 0.667 0.9 \
   --noise-scale-ws 0.6 0.8 1.0 --slerp-weights 0.3 0.5 0.7 --output-dir generated_samples/c
 ```
 
 A few things helped:
 
-- **Write the phrase more than one way.** "hey alfred" and "hey, alfred" come out with different
+- **Write the phrase more than one way.** "hey marvin" and "hey, marvin" come out with different
   timing.
 - **Vary the speed** (`--length-scales`) and the voice (`--noise-scales`, `--noise-scale-ws`,
   `--slerp-weights`), so the model doesn't learn one way of saying it.
@@ -122,10 +131,9 @@ is not an English speaker's.
 Synthetic voices get you most of the way. Real recordings of the people who will use the device close
 the gap, and this is the part that most helps an accent the generator doesn't have.
 
-We recorded about 130 takes for Hey Alfred:
+We recorded about 130 takes:
 
-- **Through the device's own microphones**, so the takes sound like what the model will really hear.
-  A phone or a laptop also works.
+- **With a phone or a laptop next to the device**, so the takes sound close to what the device hears.
 - **Across the room:** close, normal and far, facing the device and facing away, quiet and loud, slow
   and quick.
 - **As 16 kHz mono 16-bit WAV**, one take per file, with a little silence before and after.
@@ -143,10 +151,10 @@ augmentation each time (step 5) and weighted higher in training (step 6). Keep a
 training to test with.
 
 **Music the device plays** is worth recording too: a few minutes of the device playing music,
-recorded through its own microphones. Mixed behind the samples it teaches the model to hear you over
+recorded the same way, next to it. Mixed behind the samples it teaches the model to hear you over
 its own speaker, and on its own it is a negative set, so music alone doesn't wake it.
 
-These recordings are your household's voices. Keep them on your own machine.
+These recordings are your own voices. Keep them on your own machine.
 
 ## 5. Make training features
 
@@ -224,7 +232,7 @@ Our later models:
 
 - trained in two stages, `training_steps: [30000, 10000]` with `learning_rates: [0.001, 0.0002]` (each
   of the other lists then needs two values too);
-- added the household's takes at weight 2.0;
+- added our own takes at weight 2.0;
 - added the device's music as a negative set at weight 5.0.
 
 If a phrase that sounds close to yours keeps waking it, record that phrase and add it as a negative
@@ -244,7 +252,7 @@ python -m microwakeword.model_train_eval --training_config=training_parameters.y
 
 At the end it tests the finished model and prints, for each cutoff, the false rejects (`frr`, the
 share of wake words it missed) and the false accepts per hour (`faph`, wakes on the dinner party
-recording). The Hey Alfred we use printed:
+recording). The model we use printed:
 
 ```
 Cutoff 0.98: frr=0.0673; faph=0.000
