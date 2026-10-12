@@ -171,7 +171,7 @@ type conversation struct {
 	followUp  bool
 	followUps int
 
-	// woke is the open turn's nextTurn.woke, and opened when it opened.
+	// woke is the open turn's nextTurn.woke, and opened when it was asked for (nextTurn.at).
 	woke   bool
 	opened time.Time
 
@@ -222,6 +222,9 @@ type nextTurn struct {
 	// woke is a turn the wake word opened, rather than a button, Home Assistant or a follow-up: the
 	// only kind that can have been opened by mistake.
 	woke bool
+
+	// at is when it was asked for, which a turn held back in pending opens later than.
+	at time.Time
 }
 
 // reply is which answer is being spoken, and how. Only one of them is set: a url means it is being
@@ -358,7 +361,7 @@ func (c *conversation) Run(ctx context.Context) {
 func (c *conversation) handle(e event) {
 	switch e.kind {
 	case evStart:
-		c.start(nextTurn{slot: e.slot, woke: e.woke})
+		c.start(nextTurn{slot: e.slot, woke: e.woke, at: e.at})
 
 	case evSpeaking:
 		if c.followUp && c.phase == phaseListening {
@@ -651,7 +654,7 @@ func (c *conversation) start(n nextTurn) {
 
 		// Held back before the turn ends, so that ending it does not hand the speaker back to a track
 		// for the moment it takes the next turn to open.
-		c.pending = &nextTurn{slot: slot, woke: n.woke}
+		c.pending = &nextTurn{slot: slot, woke: n.woke, at: n.at}
 		c.idle("interrupted", activity.Canceled)
 
 		// The stopped run has yet to close, and its last events are still on their way.
@@ -689,7 +692,10 @@ func (c *conversation) start(n nextTurn) {
 	c.slot = slot
 	c.followUp = n.followUp
 	c.woke = n.woke
-	c.opened = time.Now()
+	c.opened = n.at
+	if c.opened.IsZero() {
+		c.opened = time.Now()
+	}
 	c.lookHere = false
 	// Counted from the wake word: a turn it opens starts again, a follow-up is one more in a row.
 	if n.followUp {
@@ -999,10 +1005,12 @@ func (c *conversation) tts(data []byte, end bool) {
 func (c *conversation) LookHere() { c.post(event{kind: evLookHere}) }
 
 // Start asks for a turn on a slot's pipeline. Wake detection and the buttons both use it.
-func (c *conversation) Start(slot int) { c.post(event{kind: evStart, slot: slot}) }
+func (c *conversation) Start(slot int) { c.post(event{kind: evStart, slot: slot, at: time.Now()}) }
 
 // Woke opens a turn for the wake word in slot.
-func (c *conversation) Woke(slot int) { c.post(event{kind: evStart, slot: slot, woke: true}) }
+func (c *conversation) Woke(slot int) {
+	c.post(event{kind: evStart, slot: slot, woke: true, at: time.Now()})
+}
 
 // Cancel gives up on whatever is happening.
 func (c *conversation) Cancel() { c.post(event{kind: evCancel}) }

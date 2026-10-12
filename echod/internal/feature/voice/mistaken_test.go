@@ -122,8 +122,9 @@ func TestAWakeWaitsForAMistakenRunToClose(t *testing.T) {
 	if !c.draining || c.grace == nil {
 		t.Fatalf("after a mistaken turn: draining %v, grace %v", c.draining, c.grace != nil)
 	}
-	c.handle(event{kind: evStart, slot: 0, woke: true})
-	if c.phase != phaseIdle || c.pending == nil || !c.pending.woke {
+	asked := time.Now().Add(-time.Second)
+	c.handle(event{kind: evStart, slot: 0, woke: true, at: asked})
+	if c.phase != phaseIdle || c.pending == nil || !c.pending.woke || !c.pending.at.Equal(asked) {
 		t.Fatalf("a wake while draining: phase %s, pending %+v", c.phase, c.pending)
 	}
 
