@@ -115,3 +115,18 @@ func TestRainSoundsAreNotTheForecast(t *testing.T) {
 		}
 	}
 }
+
+// Russian sentences that only look like the triggers: a stem inside another word, or the clock's word
+// in another sense.
+func TestRussianLookalikes(t *testing.T) {
+	for _, heard := range []string{
+		"Погоди минутку", "Это угроза?", "Рецепт жаркого", "Сохрани в облачное хранилище",
+		"Кто сыграл главную роль в Титанике?", "Покажи часы работы аптеки", "Включи дождь",
+	} {
+		for _, lang := range []string{"ru", MatchAll} {
+			if AboutWeather(heard, lang) || AboutGoingHome(heard, lang) {
+				t.Errorf("%q (%s) was taken as weather or going home", heard, lang)
+			}
+		}
+	}
+}

@@ -30,6 +30,9 @@ var noise = map[string]bool{
 	"thank you for watching": true, "you": true, "so": true, "yeah": true, "bye": true, "oh": true,
 	"okay": true, "ok": true, "hmm": true, "um": true, "uh": true, "huh": true, "what": true, "the": true,
 	"i": true, "a": true,
+	// The same in the other languages the screen offers.
+	"danke": true, "gracias": true, "merci": true, "grazie": true, "bedankt": true, "спасибо": true,
+	"спасибо за просмотр": true, "продолжение следует": true,
 }
 
 // onlyNoise is whether text is nothing but what speech-to-text writes for noise: case, spacing and
