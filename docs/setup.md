@@ -265,8 +265,11 @@ the Spot too, in its settings.
 
 ### Clock and home screen
 
-- **Clock format**, **Clock position** (center, or a smaller clock in a bottom corner so a photo
-  stays in view) and **Date color**.
+- **Clock format**, **Clock position** and **Date color** (Show only). Clock position puts a smaller
+  clock in a bottom corner, so a photo stays in view. Every style goes there except *Dashboard*,
+  *Agenda* and *World*, which keep the whole screen. On the Spot, Clock position is *Center* or
+  *Bottom*: the *Classic*, *Flip*, *LED*, *Sun* and *Glow* styles go small at the foot of the circle,
+  and the others stay in the middle. Also in Home Assistant.
 - **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
