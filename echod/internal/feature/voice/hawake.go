@@ -179,7 +179,8 @@ func (c *conversation) watchEvent(e event) bool {
 	case evError:
 		w := c.watch
 		if w == nil {
-			return false
+			// The end of a run at the wake word stage that was let go of before it closed: nothing failed.
+			return c.phase == phaseIdle && ordinaryWakeErrors[e.code]
 		}
 		switch {
 		case ordinaryWakeErrors[e.code]:
