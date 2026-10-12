@@ -300,9 +300,9 @@ the Spot too, in its settings.
   [Video](video.md).
 - **Screen language** (Settings → General): the clock's day and date, the forecast's days, the
   weather's words and the alarm after the date are written in it: German, Spanish, French, Italian,
-  Dutch or Russian, and English for *Match all* or *English*. It also picks which words the screen listens for.
-  It doesn't change what the assistant understands or says, and the rest of the screen stays in
-  English.
+  Dutch or Russian, and English for *Match all* or *English*. It also picks which words the screen
+  listens for. It doesn't change what the assistant understands or says, and the rest of the screen
+  stays in English.
 - **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines and
   **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
