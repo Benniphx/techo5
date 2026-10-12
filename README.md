@@ -346,6 +346,8 @@ v1.0.1 needs the new boot image so a quick tap to unmute no longer leaves the ca
 - [docs/building.md](docs/building.md): building it yourself: where every input comes from
   (`tools/fetch-inputs.py`), and the daemon, kernel, boot image and root filesystem builds, for each OS.
 - [tools/linux/README.md](tools/linux/README.md): the image tooling in detail.
+- [docs/training-wake-word.md](docs/training-wake-word.md): training a wake word of your own, in any language.
+- [CONTRIBUTING.md](CONTRIBUTING.md): reporting problems, trying a build on your device, and pull requests.
 
 ## Sister projects
 

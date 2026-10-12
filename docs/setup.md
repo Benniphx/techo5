@@ -384,7 +384,7 @@ either, but it does not move when night volume turns the device down.
 
 Any microWakeWord model works, from a collection like
 [TaterTotterson/microWakeWords](https://github.com/TaterTotterson/microWakeWords) or one you train
-yourself. Each comes as two files, a `.json` and a `.tflite` with the same name (for example
+yourself ([training-wake-word.md](training-wake-word.md) covers how, other languages too). Each comes as two files, a `.json` and a `.tflite` with the same name (for example
 `echo.json` and `echo.tflite`).
 
 1. Put both files in Home Assistant's `custom_wake_words` folder, inside its config folder (next
