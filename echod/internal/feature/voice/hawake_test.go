@@ -362,6 +362,24 @@ func TestALateEndFromALetGoRunDoesNotEndTheTurn(t *testing.T) {
 	}
 }
 
+// While a let-go run is still to close, the device's own refusal of the new turn's start is the new
+// turn's, and ends it: it is not taken for the old run's.
+func TestTheNewTurnsOwnRefusalIsNotTheOldRuns(t *testing.T) {
+	w := newWatcher(t, config.OnHA{Stream: true})
+	w.ha.start = func(string) error { return nil }
+	w.handle(event{kind: evWatch})
+	w.handle(event{kind: evWakeStart})
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	w.handle(event{kind: evPending})
+	if w.phase != phaseListening || !w.staleRun {
+		t.Fatalf("the turn did not open on a let-go run: %s, stale %v", w.phase, w.staleRun)
+	}
+	w.handle(event{kind: evError, code: "refused"})
+	if w.phase == phaseListening {
+		t.Fatal("the new turn's own refusal was swallowed as the old run's")
+	}
+}
+
 // A run told to stop that ends with an error has not failed; one Home Assistant itself ends at once
 // with an ordinary error is not reopened straight away.
 func TestAStoppedRunIsNoFailureAndABriefOneWaits(t *testing.T) {

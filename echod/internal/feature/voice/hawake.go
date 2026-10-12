@@ -89,6 +89,16 @@ func later(a, b time.Time) time.Time {
 	return b
 }
 
+// localErrors are the device's own, posted for the run it is opening now: never an earlier run's.
+var localErrors = map[string]bool{"refused": true, "send": true}
+
+// staleApplies is whether an error may be the let-go run's: only while one is still to close, and only
+// on Home Assistant's pipeline, whose runs say when they start. The direct brain's never do.
+func (c *conversation) staleApplies() bool {
+	_, direct := c.be.(*direct)
+	return c.staleRun && !direct
+}
+
 // Errors Home Assistant ends a wake word run with that say nothing is wrong: the run is over, and
 // streaming starts another.
 var ordinaryWakeErrors = map[string]bool{
@@ -228,7 +238,7 @@ func (c *conversation) watchEvent(e event) bool {
 			// The end of a run at the wake word stage that was let go of before it closed: nothing failed,
 			// and a turn opened since must not end for it. A run a turn opens never reaches the wake word
 			// stage, so these codes cannot be its own.
-			if c.staleRun || ordinaryWakeErrors[e.code] {
+			if c.staleApplies() && !localErrors[e.code] || ordinaryWakeErrors[e.code] {
 				slog.Debug("an earlier wake word run's error", "code", e.code, "phase", c.phase)
 				return true
 			}

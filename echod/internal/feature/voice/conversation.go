@@ -710,7 +710,7 @@ func (c *conversation) start(n nextTurn) bool {
 	// A wake the device's own engine was sure of: the word is being said the way it hears it, so what
 	// is asked about next is not held back by the ones Home Assistant did not hear before.
 	if n.woke && !n.continued {
-		c.confirmGap = 0
+		c.confirmGap, c.nextConfirm = 0, time.Time{}
 	}
 
 	// A cut microphone hears nothing, so a turn started from a button would stream silence until it
