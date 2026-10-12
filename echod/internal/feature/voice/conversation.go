@@ -390,11 +390,28 @@ func (c *conversation) handle(e event) {
 			}
 		}
 		c.turn.Heard(e.text)
+
+		// A wake word followed by only what speech-to-text writes for noise was a wake by mistake. It
+		// ends here, before the answer to "Thank you." is spoken to an empty room. A follow-up is left
+		// alone: "yeah" and "okay" are answers there.
+		if !c.followUp && c.phase != phaseIdle && onlyNoise(e.text) {
+			slog.Info("heard only what noise is written as; the wake was a mistake", "slot", c.slot+1)
+			slot := c.slot
+			c.clearPending()
+			c.idle("woken by mistake", activity.Canceled)
+			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text})
+			return
+		}
 		if c.phase == phaseListening {
 			c.think()
 		}
 
 	case evReplyText:
+		// The reply to a turn that has ended, one taken as a mistake say: its run is being stopped, and
+		// marking the player as sounding now would hold the music down with nothing to give it back.
+		if c.phase == phaseIdle {
+			return
+		}
 		slog.Info("replying", "slot", c.slot+1, "text", e.text)
 		c.log.Replied(e.text)
 		c.turn.Replying(e.text)
@@ -508,6 +525,19 @@ func (c *conversation) handle(e event) {
 			c.clearPending()
 			c.idle("answered elsewhere", activity.Canceled)
 			c.leds.Busy().Flash(led.WorkElsewhere, yieldFlash)
+			return
+		}
+
+		// Nothing to write down: nobody spoke after the wake word, or not to this device. The chime and
+		// the red ring are for something failing, and nothing has: the turn ends quietly.
+		if e.code == errNoText {
+			slog.Info("nothing was said", "slot", c.slot+1, "follow-up", c.followUp)
+			slot, mistaken := c.slot, !c.followUp && c.phase != phaseIdle
+			c.clearPending()
+			c.idle("nothing said", activity.Canceled)
+			if mistaken {
+				Mistaken.Emit(Mistake{Slot: slot})
+			}
 			return
 		}
 

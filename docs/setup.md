@@ -359,7 +359,10 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
 
 - **Wake word**: Okay Nabu, Hey Jarvis, Alexa and others. Choosing none is fine if you only want
   the screen and music.
-- **Wake word sensitivity**: raise it if the device wakes by mistake.
+- **Wake word threshold** (0.5 to 0.99): the score the wake word has to reach. Higher wakes by
+  mistake less often; lower hears you more easily. If it wakes by mistake, raise it a step at a time
+  (0.90, 0.93, 0.95) and watch **Last wake score** on the device in Home Assistant: a false wake that
+  scored 0.91 is gone at 0.93. Called Wake word sensitivity before v1.2.8.
 - **Quiet hours** and **Do not disturb**.
 
 On the setup page (Sound & Voice) or in Home Assistant, **Night volume** turns the device down to that

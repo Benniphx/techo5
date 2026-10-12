@@ -159,7 +159,7 @@ func adaptRows(rows []settingRow, sv sheetView) []settingRow {
 		case row.id == "lyrics":
 			continue // the words need the Show's page; the round face has room for the song alone
 		case row.id == "wakesens":
-			row.label = "Sensitivity"
+			row.label = "Threshold"
 		case row.id == "output":
 			row.sub = "With headphones in"
 		case row.id == "sendspin":
