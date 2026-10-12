@@ -117,6 +117,9 @@ func (w Writer) Wake(slot int) WakeWriter { return WakeWriter{st: w.st, slot: sl
 // Stop is the stop word, which is not a slot.
 func (w Writer) Stop() StopWriter { return StopWriter(w) }
 
+// OnHA is Home Assistant's wake word engine.
+func (w Writer) OnHA() OnHAWriter { return OnHAWriter(w) }
+
 // NoneChosen records whether "No wake word" was chosen on purpose.
 func (w Writer) NoneChosen(v bool) error {
 	return w.st.Update(func(c *Config) { c.Wake.NoneChosen = v })

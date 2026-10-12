@@ -95,7 +95,9 @@ func newStopEntity(d *Detect) *esphome.Number {
 	return n
 }
 
-func (d *Detect) Entities() []esphome.Entity { return []esphome.Entity{d.stop, d.score} }
+func (d *Detect) Entities() []esphome.Entity {
+	return []esphome.Entity{d.stop, d.score, d.onHA.stream, d.onHA.confirm, d.onHA.threshold}
+}
 
 // newScoreEntity is the highest score the last wake reached. Set beside what was heard, it is how a
 // threshold is set by evidence rather than by guessing: a wake by mistake that scored 0.91 is gone at
@@ -117,4 +119,5 @@ func newScoreEntity() *esphome.Sensor {
 func (d *Detect) Restore(c config.Config) {
 	d.stop.Set(float32(c.Wake.Stop.Threshold))
 	slog.Info("restored", "what", d.stop.ObjectID, "using", c.Wake.Stop.Threshold)
+	d.onHA.restore(c.Wake.OnHA)
 }

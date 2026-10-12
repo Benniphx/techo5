@@ -77,6 +77,14 @@ type Engine struct {
 	// threshold has to go up to be rid of it.
 	OnScored func(slot int, peak, cutoff float64)
 
+	// Candidate is the lowest score worth asking Home Assistant about, per slot; zero, or nil, asks
+	// about nothing. OnCandidate runs, off the audio path, when an utterance went over it and fell
+	// away again without reaching the slot's threshold, with the peak it reached: a wake that is
+	// either a word said unlike the voices the model learned from or a sound like it, which Home
+	// Assistant's engine can tell apart (see voice's confirm).
+	Candidate   func(slot int) float64
+	OnCandidate func(slot int, peak float64)
+
 	// OnReady runs once per slot, the first time its model produces a score. That is the first moment
 	// the wake word could be detected at all: these are streaming models with a window to fill, and
 	// openWakeWord gives nothing until it has about two seconds of audio. Loading is not hearing, and
@@ -109,7 +117,18 @@ type slot struct {
 	holding  bool
 	holdEnds time.Time
 	crossing float64
+
+	// candidate is an utterance over Candidate and under the threshold so far: when it went over, and
+	// the highest it has reached.
+	candidate     bool
+	candidateAt   time.Time
+	candidatePeak float64
 }
+
+// CandidateFor is the longest an utterance stays a candidate before it is asked about anyway. A word
+// over the line falls back within a few frames; one that stays there is a sound that goes on, and
+// waiting on it would hold the question back for as long as it lasts.
+const CandidateFor = 600 * time.Millisecond
 
 // New describes an engine. Nothing is built until Start.
 func New(slots int, source *mic.Source) *Engine {
@@ -434,6 +453,7 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 	}
 
 	if score < cutoff {
+		e.candidate(n, s, score, cutoff, now)
 		if score > s.peak {
 			s.peak, s.peakAt = score, now
 		}
@@ -450,12 +470,47 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 		return
 	}
 
+	// The word reached the threshold on its own: nothing to ask about.
+	s.candidate = false
+
 	// Feedback fires now; the peak is only for the log, and the slot settles when the hold ends.
 	s.holding, s.holdEnds = true, now.Add(Hold)
 	s.crossing, s.peak = score, score
 
 	if e.OnDetect != nil {
 		safe.Go("wake detected", func() { e.OnDetect(n) })
+	}
+}
+
+// candidate follows an utterance between Candidate and the threshold, and reports it once it falls
+// away, or has stayed there for CandidateFor. Held with mu.
+func (e *Engine) candidate(n int, s *slot, score, cutoff float64, now time.Time) {
+	bound := 0.0
+	if e.Candidate != nil {
+		bound = e.Candidate(n)
+	}
+	if bound <= 0 || bound >= cutoff {
+		s.candidate = false
+		return
+	}
+	if score >= bound {
+		if !s.candidate {
+			s.candidate, s.candidateAt, s.candidatePeak = true, now, score
+		}
+		s.candidatePeak = max(s.candidatePeak, score)
+		if now.Sub(s.candidateAt) < CandidateFor {
+			return
+		}
+	} else if !s.candidate {
+		return
+	}
+
+	peak := s.candidatePeak
+	s.candidate = false
+	s.quiet = now.Add(Refractory)
+	slog.Info("wake candidate", "slot", n+1, "id", s.model.ID, "peak", peak, "asked_from", bound, "cutoff", cutoff)
+	if e.OnCandidate != nil {
+		safe.Go("wake candidate", func() { e.OnCandidate(n, peak) })
 	}
 }
 
@@ -482,6 +537,10 @@ func (e *Engine) Quiet(on bool) {
 		for k, b := range e.backends {
 			b.close()
 			delete(e.backends, k)
+		}
+		// An utterance cut off by the mute is not asked about after it.
+		for i := range e.slots {
+			e.slots[i].candidate = false
 		}
 		slog.Info("wake words stopped: the microphones are cut")
 		return
