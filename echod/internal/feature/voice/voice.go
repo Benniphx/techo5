@@ -180,22 +180,32 @@ func (v *Voice) Start(slot int) {
 		slog.Info("wake word while the microphones are talking through a camera, ignored")
 		return
 	}
+	if v.nativeRealtimeStart() {
+		return
+	}
 	if ring.IsSounding() && ring.Silence() {
 		slog.Info("wake word over a ring, silencing it")
 	}
-	if v.realtime.busy.Load() {
-		return
-	}
-	if realtimeChosen() && v.turn.Busy() {
-		return
-	}
-	if realtimeChosen() {
-		if !v.realtime.backingOff() {
-			v.realtime.start()
-		}
-		return
-	}
 	v.turn.Start(slot)
+}
+
+// nativeRealtimeStart owns an existing or selected Realtime session before
+// the stock wake/button dispatch. It keeps ringing and busy-turn priorities.
+func (v *Voice) nativeRealtimeStart() bool {
+	chosen := realtimeChosen()
+	if !v.realtime.busy.Load() && !chosen {
+		return false
+	}
+	if ring.IsSounding() && ring.Silence() {
+		slog.Info("wake word over a ring, silencing it")
+	}
+	if v.realtime.busy.Load() || (chosen && v.turn.Busy()) {
+		return true
+	}
+	if chosen && !v.realtime.backingOff() {
+		v.realtime.start()
+	}
+	return true
 }
 
 // Busy reports whether a turn is running, for anything that has to leave the speaker alone while one

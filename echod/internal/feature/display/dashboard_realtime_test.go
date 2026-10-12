@@ -32,6 +32,9 @@ func TestRealtimeDashboardPreservesVoicePhaseAndPagePriority(t *testing.T) {
 			s := scene{phase: phase, realtime: test.realtime, nowPlaying: true, showCamera: test.camera}
 			d := &Display{}
 			d.dashScene(&s, test.drawer)
+			if d.dashFollow != (test.want && phase == "idle") {
+				t.Fatalf("dashboard touch follow=%v, phase=%s", d.dashFollow, phase)
+			}
 			if s.showDash != test.want || s.phase != phase || !s.nowPlaying {
 				t.Fatalf("dashboard=%v phase=%s playing=%v", s.showDash, s.phase, s.nowPlaying)
 			}

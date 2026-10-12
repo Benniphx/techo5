@@ -94,6 +94,19 @@ func (d *Display) dashboardAsked(up bool) {
 // that takes the screen - a sheet, the drawer, a camera, the weather, a turn - comes first; music
 // comes first only when the dashboard is standing in for the clock rather than asked for.
 func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
+	// Realtime evaluates every stock dashboard gate on an idle scene copy.
+	// Copy all resulting scene fields back while retaining the caller's phase.
+	original := s
+	if s.realtime {
+		idleView := *s
+		idleView.phase = "idle"
+		s = &idleView
+		defer func() {
+			s.phase = original.phase
+			*original = *s
+		}()
+	}
+
 	f := dashboard.Get()
 	mode := f.Mode()
 	d.mu.Lock()
@@ -102,25 +115,16 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	}
 	asked := d.dash
 	away := time.Now().Before(d.dashAwayUntil)
+	asked = asked || s.realtime
 	d.mu.Unlock()
-
-	// Realtime keeps the dashboard under the voice overlay. Evaluate the stock
-	// page priorities on an idle copy so stable updates retain their own gates.
-	voiceScene := s
-	if s.realtime {
-		idle := *s
-		idle.phase = "idle"
-		s = &idle
-		asked = true
-	}
 
 	want := mode != config.DashboardOff && s.phase == "idle" && !sheetOrDrawer &&
 		!s.showCamera && !s.showWeather && !s.showRadar && !s.showCalendar && !s.showDeck && !s.showWifi && !s.bt.Pairing &&
 		(asked || (f.Idle() && !away && !s.nowPlaying))
-	s = voiceScene
 	s.showDash, s.dashMode = want, mode
 
 	streamed := want && mode == config.DashboardStreamed
+	s.phase = original.phase
 	if streamed && d.r != nil {
 		s.dash = f.Stream(d.r.w, d.r.h)
 	}
