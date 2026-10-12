@@ -265,11 +265,11 @@ the Spot too, in its settings.
 
 ### Clock and home screen
 
-- **Clock format**, **Clock position** and **Date color** (Show only). Clock position puts a smaller
-  clock in a bottom corner, so a photo stays in view. Every style goes there except *Dashboard*,
-  *Agenda* and *World*, which keep the whole screen. On the Spot, Clock position is *Center* or
-  *Bottom*: the *Classic*, *Flip*, *LED*, *Sun* and *Glow* styles go small at the foot of the circle,
-  and the others stay in the middle. Also in Home Assistant.
+- **Clock format**, **Clock position** and **Date color** (Date color on the Show only). Clock
+  position puts a smaller clock in a bottom corner, so a photo stays in view. Every style goes there
+  except *Dashboard*, *Agenda* and *World*, which keep the whole screen. On the Spot, Clock position is
+  *Center* or *Bottom*: the *Classic*, *Flip*, *LED*, *Sun* and *Glow* styles go small at the foot of
+  the circle, and the others stay in the middle. Also in Home Assistant.
 - **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
@@ -367,7 +367,7 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
   (0.90, 0.93, 0.95) and watch **Last wake score** on the device in Home Assistant: a false wake that
   scored 0.91 is gone at 0.93. Called Wake word sensitivity before v1.2.8.
 - **Wake word on Home Assistant** and **Confirm wake with Home Assistant** (both off by default):
-  let Home Assistant's own wake word engine listen instead of the device, or check a wake the device
+  let Home Assistant's own wake word engine listen as well as the device, or check a wake the device
   wasn't sure of. See [Wake word on Home Assistant](#wake-word-on-home-assistant) below.
 - **Quiet hours** and **Do not disturb**.
 
@@ -409,26 +409,36 @@ Voice assistants). Home Assistant listens for one wake word per voice assistant.
   Assistant all the time, and Home Assistant's engine listens for the wake word too. It uses the first
   voice assistant's wake word. When Home Assistant hears it, the device chimes and the request goes on
   as usual, with no extra delay. Wait for the chime before you speak, as with the device's own wake
-  word. The device's own wake words still work alongside.
+  word. The device's own wake words still work alongside: a wake the device hears itself first closes
+  the stream, which can add up to about a second before the chime, and a word both hear opens one
+  request. After a request, an announcement or a question from Home Assistant, the stream starts again
+  on its own.
 - **Confirm wake with Home Assistant**: the device keeps listening, and only asks Home Assistant
-  about a wake it wasn't sure of. A wake that scores at least **Confirm threshold** (0.70 to start
-  with) but under the **Wake word threshold** sends the last two seconds of audio to Home Assistant.
-  If its engine hears the wake word in them, the request goes on. If not, nothing happens: no chime
-  and nothing on the screen. A wake over the Wake word threshold works as before and sends nothing
-  extra. On a Raspberry Pi 5 with openWakeWord, Home Assistant answered in about half a second, so a
-  confirmed wake chimes about that much later. **Last wake score** shows a confirmed wake's score,
-  which helps when setting the thresholds.
+  about a wake of the first wake word that it wasn't sure of. A wake that scores at least **Confirm
+  threshold** (0.70 to start with) but under the **Wake word threshold** sends Home Assistant about two
+  to three and a half seconds of audio: the two seconds before the wake, and up to one and a half after
+  while Home Assistant listens. If its engine hears the wake word, the request goes on. If not, nothing
+  happens: no chime and nothing on the screen. A wake over the Wake word threshold works as before and
+  sends nothing extra. On a Raspberry Pi 5 with openWakeWord, Home Assistant answered in about half a
+  second, so a confirmed wake chimes about that much later. **Last wake score** shows a confirmed
+  wake's score, which helps when setting the thresholds.
+
+  A steady sound that scores close to the wake word, like the TV, could be asked about over and over,
+  so checks are spaced out: at least 5 seconds apart, and longer after each one Home Assistant doesn't
+  hear, up to a minute. A wake the device or Home Assistant does hear starts that over. Nothing is asked
+  about for a few seconds after a call or a talk through a camera, so none of it is sent.
 
 What to know before turning them on:
 
 - **Privacy.** With Wake word on Home Assistant, everything said in the room goes to Home Assistant
-  while the device is idle, not just what follows the wake word. Confirm sends two seconds at a time,
-  and only for a wake the device wasn't sure of.
+  while the device is idle, not just what follows the wake word. Confirm sends about two to three and a
+  half seconds at a time, only for a wake the device wasn't sure of, and spaced out as above.
 - **Network.** Wake word on Home Assistant sends about 32 KB a second from each device, all day.
   Home Assistant runs its engine once for every device streaming to it.
 - **What stays on the device.** The stop word, a ringing alarm or timer, announcements, calls and
-  talking through a camera are always handled on the device. Nothing is sent during a call, a talk through a
-  camera, or while the microphones are muted.
+  talking through a camera are always handled on the device. A wake word Home Assistant hears over a
+  ringing alarm or timer silences it, as the device's own does. Nothing is sent during a call, a talk
+  through a camera, or while the microphones are muted, and turning a switch off stops sending at once.
 - **If Home Assistant can't listen** (it's restarting, or its voice assistant has no wake word
   engine), the device goes back to listening for itself and tries Home Assistant again later.
 - Confirm does nothing while Wake word on Home Assistant is on, since Home Assistant is already
