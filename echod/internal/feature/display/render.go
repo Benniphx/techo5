@@ -256,6 +256,9 @@ type renderer struct {
 	// way; ink is what the LED and flip clocks are drawn in for the frame in hand.
 	flip flipState
 	ink  clockInk
+	// cornered is whether the day style in hand is drawn small in a corner at the foot (Clock
+	// position), for the frame in hand.
+	cornered bool
 
 	// deckZones are the deck's buttons where they were last drawn, in order, read by the touch
 	// goroutine under zmu (render_deck.go).
