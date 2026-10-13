@@ -33,11 +33,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/godbus/dbus/v5"
 	esphome "github.com/ygelfand/go-esphome-device"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
-	"github.com/godbus/dbus/v5"
-
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
@@ -160,10 +159,11 @@ type Feature struct {
 	// which is the device's volume while it plays here (phoneSlider, tellPhone).
 	levels    map[string]int
 	levelOnce sync.Once
-	// ours is each received stream whose level was last set from here and not yet heard back: the
-	// phone rounds a level to its own steps and says the rounded one, which is not its slider moving
-	// (sliderMove).
-	ours map[string]bool
+	// ours is, for each received stream whose level was set from here, until when a level read from it
+	// may be the phone saying that one back rounded to its own steps rather than its slider moving
+	// (sliderMove): a short while, since most phones say nothing back, and a press after it always
+	// counts.
+	ours map[string]time.Time
 	// levelTo hands the device's volume step to the one goroutine that tells the phone (tellPhone), the
 	// latest only, so two steps in quick succession reach the phone in order.
 	levelTo chan int
@@ -228,7 +228,7 @@ func build() *Feature {
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
 		levels:     map[string]int{},
-		ours:       map[string]bool{},
+		ours:       map[string]time.Time{},
 		hushed:     map[string]time.Time{},
 		levelTo:    make(chan int, 1),
 		linked:     map[string]bool{},
@@ -525,7 +525,7 @@ func (f *Feature) refresh() {
 	external := m.ExternalPlaying()
 	playing, paused := m.Playing()
 	f.mu.Lock()
-	if external {
+	if othersHadIt(m.Receiving(), external) {
 		clear(f.displaced)
 	}
 	back := takeBack(f.displaced, sending, speakerFree(playing, paused, external))
@@ -739,8 +739,23 @@ func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 	}
 	f.mu.Lock()
 	f.levels[string(p.Path)] = level
-	f.ours[string(p.Path)] = true
+	f.ours[string(p.Path)] = time.Now().Add(echoFor)
 	f.mu.Unlock()
+}
+
+// echoing is whether a level read from the stream at path at now may be the phone saying back the
+// level handed to it from here, rounded: within echoFor of handing it. Called with mu held.
+func (f *Feature) echoing(path string, now time.Time) bool { return now.Before(f.ours[path]) }
+
+// echoFor is how long after a level is handed to a phone a level read from it may be that one said
+// back, rounded.
+const echoFor = 2 * time.Second
+
+// othersHadIt is whether something other than a phone has the speaker: a remote such as Music
+// Assistant, or a receiver of the device's own (AirPlay, Spotify Connect, DLNA), named by what it is
+// receiving. Then no phone is owed the speaker afterward.
+func othersHadIt(receiving string, external bool) bool {
+	return external || (receiving != "" && !strings.HasPrefix(receiving, media.BluetoothPrefix))
 }
 
 // speakerFree is whether a phone another took the speaker from may take it back: nothing of the
@@ -794,11 +809,8 @@ func (f *Feature) phoneSlider(p bluealsa.PCM) {
 	level := p.Level()
 	f.mu.Lock()
 	last, known := f.levels[string(p.Path)]
-	ours := f.ours[string(p.Path)]
+	ours := f.echoing(string(p.Path), time.Now())
 	f.levels[string(p.Path)] = level
-	if level != last {
-		delete(f.ours, string(p.Path)) // heard back, or moved: either way no longer ours alone
-	}
 	f.mu.Unlock()
 	if !sliderMove(level, last, known, ours) {
 		return
@@ -842,7 +854,7 @@ func (f *Feature) tellPhone(step int) {
 		level := levelFor(step)
 		f.mu.Lock()
 		f.levels[string(p.Path)] = level
-		f.ours[string(p.Path)] = true
+		f.ours[string(p.Path)] = time.Now().Add(echoFor)
 		f.mu.Unlock()
 		if err := al.SetLevel(p, level); err != nil {
 			slog.Warn("bluetooth: handing a phone the volume", "err", err)

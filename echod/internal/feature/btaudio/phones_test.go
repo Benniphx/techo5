@@ -5,6 +5,7 @@ package btaudio
 import (
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
@@ -242,5 +243,45 @@ func TestPairedNames(t *testing.T) {
 	}, "Earbuds")
 	if !slices.Equal(got, []string{"Earbuds", "Phone A"}) {
 		t.Errorf("names %q", got)
+	}
+}
+
+// AirPlay, Spotify Connect, DLNA or a remote playing leaves no phone owed the speaker; another phone
+// playing, or nothing, does not clear what is owed.
+func TestOthersHadIt(t *testing.T) {
+	for name, c := range map[string]struct {
+		receiving string
+		external  bool
+		want      bool
+	}{
+		"nothing":            {"", false, false},
+		"another phone":      {media.BluetoothPrefix + "Phone B", false, false},
+		"AirPlay":            {"AirPlay", false, true},
+		"Spotify Connect":    {"Spotify", false, true},
+		"Music Assistant":    {"", true, true},
+		"a phone and remote": {media.BluetoothPrefix + "Phone B", true, true},
+	} {
+		if got := othersHadIt(c.receiving, c.external); got != c.want {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+// A level read just after one was handed to the phone may be it said back; a press after that, even
+// one step, is the slider moving, though the phone never said the handed level back.
+func TestEchoWindow(t *testing.T) {
+	f := &Feature{ours: map[string]time.Time{}}
+	handed := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	f.ours["/p"] = handed.Add(echoFor)
+	last := levelFor(8)
+	if sliderMove(last+3, last, true, f.echoing("/p", handed.Add(time.Second))) {
+		t.Error("the handed level said back rounded, a second later, taken for the slider")
+	}
+	later := handed.Add(echoFor + time.Second)
+	if !sliderMove(levelFor(9), last, true, f.echoing("/p", later)) {
+		t.Error("a one-step press after the window not taken for the slider")
+	}
+	if f.echoing("/other", handed) {
+		t.Error("a stream nothing was handed to is echoing")
 	}
 }
