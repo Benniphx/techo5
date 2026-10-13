@@ -243,7 +243,8 @@ automation that wants to know too.
 - **Bluetooth, the rest of it (new).** A phone playing to the device has one volume, the device's: its
   volume slider moves the device's volume, and the device's buttons and Home Assistant move the
   slider (night volume still caps a raise from the phone). With two phones, the last to start playing
-  has the speaker, and the first takes it back when the second stops, if it is still playing. While
+  has the speaker, and the first takes it back when the second stops, if it is still playing; not
+  after AirPlay, Spotify Connect or Music Assistant played, or after a stop on the device. While
   earbuds or a speaker are connected, a phone's audio goes on to them. A short rising tone says a
   Bluetooth device connected and a falling one that it went, except in quiet hours and during a
   call. **Forget**, under the earbuds or speaker in **Settings > Connections** (it asks twice), or the
