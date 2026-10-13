@@ -352,10 +352,12 @@ func (f *Feature) nameImmichAlbumSoon(id string) {
 
 // keepGathered keeps photos gathered for the slideshow, unless its source has changed since the
 // gathering began (gen): a gathering takes as long as five minutes.
-func (f *Feature) keepGathered(gen uint64, photos []hass.Media) bool {
+func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.slideshowGen != gen {
+	// The source as well as the generation: the source is read before the generation is, and a change
+	// in between would have the old source's photos kept under the new generation.
+	if f.slideshowGen != gen || config.Get().Home.Slideshow.Source != source {
 		return false
 	}
 	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = photos, time.Now(), 0
@@ -615,7 +617,7 @@ func (f *Feature) nextSlideshowChild(h config.Slideshow) (string, bool) {
 		if !h.InOrder {
 			rand.Shuffle(len(photos), func(i, j int) { photos[i], photos[j] = photos[j], photos[i] })
 		}
-		if !f.keepGathered(gen, photos) {
+		if !f.keepGathered(gen, h.Source, photos) {
 			return "", false // the source changed while it was gathered: the next look gathers the new one
 		}
 		slog.Info("home: slideshow photos", "count", len(photos), "subfolders", !h.TopOnly, "shuffled", !h.InOrder)
