@@ -106,7 +106,7 @@ func saveImmich(r *http.Request) string {
 	}
 	next := config.Immich{Server: server, Key: key}
 	if server == cur.Server {
-		next.Album = cur.Album
+		next.Album, next.AlbumID = cur.Album, cur.AlbumID
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), immichAsk)
 	defer cancel()

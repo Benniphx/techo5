@@ -325,14 +325,42 @@ func (f *Feature) nameImmichAlbum(id string) {
 	}
 	name, ok := immichNames.name(id)
 	i := config.Get().Home.Immich
-	if !ok || i.AlbumID != id || i.Server != srv.Server {
+	source, _, _ := f.SlideshowSettings()
+	if !ok || source != ImmichAlbumPrefix+id || i.Server != srv.Server {
 		return // since chosen otherwise, or another server
 	}
-	i.Album = name
+	i.Album, i.AlbumID = name, id
 	if err := config.Set().Home().Immich(i); err != nil {
 		slog.Warn("home: saving the Immich album's name failed", "err", err)
 	}
 	f.Changed.Emit(struct{}{})
+}
+
+// nameImmichAlbumSoon is nameImmichAlbum at start, tried a few times while the network comes up.
+func (f *Feature) nameImmichAlbumSoon(id string) {
+	for try := 0; try < 5; try++ {
+		time.Sleep(time.Duration(try) * time.Minute)
+		if i := config.Get().Home.Immich; i.AlbumID == id && i.Album != "" {
+			return
+		}
+		if source, _, _ := f.SlideshowSettings(); source != ImmichAlbumPrefix+id {
+			return // since chosen otherwise
+		}
+		f.nameImmichAlbum(id)
+	}
+}
+
+// keepGathered keeps photos gathered for the slideshow, unless its source has changed since the
+// gathering began (gen): a gathering takes as long as five minutes.
+func (f *Feature) keepGathered(gen uint64, photos []hass.Media) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.slideshowGen != gen {
+		return false
+	}
+	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = photos, time.Now(), 0
+	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
+	return true
 }
 
 // ResetImmich is the Immich server changed: photos listed from the one before are not this one's, so
@@ -340,6 +368,7 @@ func (f *Feature) nameImmichAlbum(id string) {
 // shows the whole library instead.
 func (f *Feature) ResetImmich() {
 	f.mu.Lock()
+	f.slideshowGen++
 	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = nil, time.Time{}, 0
 	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
 	f.mu.Unlock()
@@ -430,6 +459,7 @@ func (f *Feature) changeSlideshow(change func(*config.Slideshow)) {
 		return
 	}
 	f.mu.Lock()
+	f.slideshowGen++
 	if next.Source == "" {
 		f.slideshow = slideshowState{} // nothing to show: the last photo goes too
 	} else {
@@ -568,6 +598,9 @@ func (f *Feature) nextSlideshowChild(h config.Slideshow) (string, bool) {
 		return "", false // given up for now; the screen is saying why
 	}
 	if stale {
+		f.mu.Lock()
+		gen := f.slideshowGen
+		f.mu.Unlock()
 		photos, err := gatherSlideshow(h)
 		if err != nil {
 			slog.Warn("home: browsing the slideshow source", "source", h.Source, "err", err)
@@ -582,11 +615,10 @@ func (f *Feature) nextSlideshowChild(h config.Slideshow) (string, bool) {
 		if !h.InOrder {
 			rand.Shuffle(len(photos), func(i, j int) { photos[i], photos[j] = photos[j], photos[i] })
 		}
+		if !f.keepGathered(gen, photos) {
+			return "", false // the source changed while it was gathered: the next look gathers the new one
+		}
 		slog.Info("home: slideshow photos", "count", len(photos), "subfolders", !h.TopOnly, "shuffled", !h.InOrder)
-		f.mu.Lock()
-		f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = photos, time.Now(), 0
-		f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
-		f.mu.Unlock()
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

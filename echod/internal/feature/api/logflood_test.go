@@ -22,10 +22,10 @@ func TestFloodGuard(t *testing.T) {
 	base := slog.NewTextHandler(&buf, nil)
 	log := slog.New(floodGuard{Handler: base, root: base, st: st})
 	for i := range 50 {
-		log.With("peer", "192.168.1.20:"+string(rune('a'+i%26))).Info("connection closed", "err", "broken pipe")
+		log.With("peer", "192.0.2.20:"+string(rune('a'+i%26))).Info("connection closed", "err", "broken pipe")
 		now = now.Add(50 * time.Millisecond)
 	}
-	log.With("peer", "192.168.1.30:4000").Info("connection closed", "err", "handshake")
+	log.With("peer", "192.0.2.30:4000").Info("connection closed", "err", "handshake")
 	log.Info("something else")
 	out := buf.String()
 	if got := strings.Count(out, "msg=\"connection closed\""); got != closedSeen+1 {

@@ -201,6 +201,9 @@ type Feature struct {
 	// slideshowWholeSw shows photos whole, with blurred sides, instead of cropped to fill.
 	slideshowWholeSw *esphome.Switch
 	slideshow        slideshowState
+	// slideshowGen counts the slideshow's changes of source (changeSlideshow, ResetImmich), so a list
+	// gathered for the source before is not kept for the one after.
+	slideshowGen uint64
 }
 
 // forecastEvery is how often the forecast is refreshed while there is a weather entity.
@@ -385,6 +388,10 @@ func (f *Feature) Name() string { return "home" }
 
 // Restore registers what to follow from the saved configuration, before Home Assistant connects.
 func (f *Feature) Restore(c config.Config) {
+	if id, ok := strings.CutPrefix(c.Home.Slideshow.Source, ImmichAlbumPrefix); ok && c.Home.Immich.Set() && c.Home.Immich.AlbumID != id {
+		// Kept before the album's id was kept with its name: asked for once the network is up.
+		safe.Go("immich album name at start", func() { f.nameImmichAlbumSoon(id) })
+	}
 	f.weatherSel.Options = weatherOptions(c.Home)
 	f.weatherSel.Set(chosenOption(c.Home))
 	f.mu.Lock()

@@ -109,3 +109,18 @@ func TestTheImmichSection(t *testing.T) {
 		t.Errorf("after forgetting: source %q, key kept %v", source, config.Get().Home.Immich.Key != "")
 	}
 }
+
+// Saving the same server again keeps the album's name with its id, so the album is still named after
+// a restart.
+func TestSavingAgainKeepsTheAlbumsName(t *testing.T) {
+	addr := pageImmich(t)
+	if err := config.Set().Home().Immich(config.Immich{Server: addr, Key: pageKey, Album: "Garden", AlbumID: pageAlbum}); err != nil {
+		t.Fatal(err)
+	}
+	if got := saveImmich(immichForm(url.Values{"server": {addr}})); got != "" {
+		t.Fatalf("refused: %q", got)
+	}
+	if i := config.Get().Home.Immich; i.Album != "Garden" || i.AlbumID != pageAlbum {
+		t.Errorf("kept %+v", i)
+	}
+}

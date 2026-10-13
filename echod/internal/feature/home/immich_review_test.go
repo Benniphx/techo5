@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
 
 // A server that keeps saying there is another page, of nothing the slideshow can show, is not asked
@@ -91,4 +93,45 @@ func TestResetImmichLeavesTheOldAlbum(t *testing.T) {
 	if source, _, _ := f.SlideshowSettings(); source != LocalPhotos {
 		t.Errorf("a source not Immich's changed: %q", source)
 	}
+}
+
+// A list gathered for the source before a change is not kept for the source after it.
+func TestGatheredForAnotherSourceIsDropped(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	f := Get()
+	f.mu.Lock()
+	gen := f.slideshowGen
+	f.mu.Unlock()
+	f.ResetImmich()
+	if f.keepGathered(gen, []hass.Media{{ID: "old"}}) {
+		t.Error("a list gathered before the change was kept")
+	}
+	f.mu.Lock()
+	gen = f.slideshowGen
+	f.mu.Unlock()
+	if !f.keepGathered(gen, []hass.Media{{ID: "new"}}) {
+		t.Error("a list gathered after the change was dropped")
+	}
+}
+
+// An album chosen before the album's id was kept with its name is named at start, from Immich.
+func TestAnAlbumIsNamedAtStart(t *testing.T) {
+	letLoopback(t)
+	srv, _ := fakeImmich(t)
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Immich(config.Immich{Server: srv.URL, Key: testKey, Album: "Old name"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set().Home().Slideshow(config.Slideshow{Source: ImmichAlbumPrefix + albumA}); err != nil {
+		t.Fatal(err)
+	}
+	Get().Restore(config.Get())
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if i := config.Get().Home.Immich; i.AlbumID == albumA && i.Album == "Trip" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Errorf("not named at start: %+v", config.Get().Home.Immich)
 }

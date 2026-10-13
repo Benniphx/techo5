@@ -60,7 +60,7 @@ func Bundle() string {
 	for _, name := range btaudio.Get().PairedNames() {
 		r.Known("bluetooth", name)
 	}
-	if from := strings.TrimPrefix(media.Get().Receiving(), media.BluetoothPrefix); from != "" {
+	if from, ok := phonePlaying(media.Get().Receiving()); ok {
 		r.Known("bluetooth", from)
 	}
 
@@ -258,4 +258,11 @@ func serial() string {
 		}
 	}
 	return ""
+}
+
+// phonePlaying is the name of the phone playing over Bluetooth, from the name of what is being
+// received: not AirPlay's, Spotify's or the like, which are the apps' names and would be replaced
+// wherever the bundle says them.
+func phonePlaying(receiving string) (string, bool) {
+	return strings.CutPrefix(receiving, media.BluetoothPrefix)
 }
