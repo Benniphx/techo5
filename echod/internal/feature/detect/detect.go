@@ -40,6 +40,9 @@ type Detect struct {
 	// score is the last wake's peak, for setting the threshold by: see newScoreEntity.
 	score *esphome.Sensor
 
+	// onHA is Home Assistant's wake word engine: see onha.go.
+	onHA onHAEntities
+
 	// ducker gets the music out of the way after an utterance that nearly fired; see nearmiss.go.
 	ducker *ducker
 }
@@ -119,7 +122,30 @@ func newDetect() *Detect {
 			voice.Get().Interrupt()
 			return
 		}
+		// Heard here while Home Assistant's engine is listening too (config.OnHA), it still wakes: the
+		// run there is closed and the turn opens here. The same word heard by both opens one turn, since
+		// a wake word while listening is ignored.
 		voice.Get().Woke(slot)
+	}
+
+	// A wake the device was not sure of, asked about when confirming is on: only the first wake word,
+	// whose pipeline is the one a run with no phrase reaches (voice's openWatch), never the stop word,
+	// and never while the microphones are somebody else's.
+	e.Candidate = func(slot int) float64 {
+		if slot != 0 {
+			return 0
+		}
+		on := config.Get().Wake.OnHA
+		if !on.Confirm {
+			return 0
+		}
+		return on.ConfirmAt()
+	}
+	e.OnCandidate = func(slot int, peak float64) {
+		if phone.Get().Busy() || talkback.Get().Busy() || voice.Get().HomeAssistantHears(slot) {
+			return
+		}
+		voice.Get().Candidate(slot, peak)
 	}
 
 	d := &Detect{engine: e, busy: newWakeBusy(led.Get().Busy(), e.Ready)}
@@ -127,6 +153,7 @@ func newDetect() *Detect {
 	d.ducker.watch(e)
 	d.stop = newStopEntity(d)
 	d.score = newScoreEntity()
+	d.onHA = newOnHAEntities()
 	e.OnScored = func(slot int, peak, _ float64) {
 		// Only Home Assistant's wake words: the stop word, and any other word listened for past them,
 		// has its own threshold and says nothing about theirs.
@@ -134,6 +161,9 @@ func newDetect() *Detect {
 			d.score.Set(float32(peak))
 		}
 	}
+	// A wake Home Assistant confirmed is a wake, and its score is what says how far under the threshold
+	// the word is landing. One it did not confirm is not shown: it opened nothing.
+	voice.Confirmed.Listen(func(c voice.Confirmation) { d.score.Set(float32(c.Peak)) })
 
 	// A cut microphone hands on silence, and running the models over it is work that cannot find
 	// anything. The engines go down with the microphones and come back with them.

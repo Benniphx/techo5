@@ -476,6 +476,10 @@ func (r *roundRenderer) rim(s roundScene) {
 
 func (r *roundRenderer) clockFace(s roundScene) {
 	defer r.styleNameTag(s)
+	if style := s.style.style(); clockAtFoot() && footStyle(style) {
+		r.footClockFace(s, style)
+		return
+	}
 	if style := s.style.style(); style != styleClassic {
 		r.styledClockFace(s, style)
 		return
