@@ -50,6 +50,14 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
    Home Assistant's media folder, and the photos will not show up.
 
    Anything else the Media page can browse works too, such as an Immich album or a network share.
+
+   **Immich without Home Assistant.** The device can read an Immich server itself. On the setup page,
+   **Screen & Photos**, **Photos from Immich**: the server's address (like `http://192.168.1.20:2283`)
+   and an API key made in Immich under **Account Settings > API Keys**, then **Save**. Pick **The whole
+   library** or an album under **Photos to show**, then **Show these photos**. The key stays on the
+   device and the page never shows it again; **Forget this server** removes it. Once set up, Immich and
+   its albums are in the device's own **Photo folder** list too. Photos only, no videos; each is shown
+   as Immich's preview of it.
 2. **Check** that the photos show in Home Assistant under **Media → My media**. If Home Assistant
    can see them, the device can too.
 3. **On the device**, swipe down for Settings, then **Display**:
