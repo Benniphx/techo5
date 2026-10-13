@@ -35,7 +35,7 @@ func init() {
 		}
 		safe.Go("bluetooth pairing button", func() {
 			f := Get()
-			// With either mode on, a long press ends it: someone cancelling phone pairing must not get
+			// With either mode on, a long press ends it: someone canceling phone pairing must not get
 			// pairing mode, with its scan and its pick.
 			pairing, phone := f.Pairing(), f.PhonePairing()
 			on := !pairing && !phone

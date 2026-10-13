@@ -506,24 +506,13 @@ func (f *Feature) refresh() {
 	// Phone pairing has done its job once a phone can play to the device: its audio has come up (its
 	// A2DP transport, which comes up before anything plays). Every connected phone is looked at, so a
 	// second one can join while the first stays connected.
-	phoneJoined, linked, phoneName := "", false, ""
-	speaker := config.Get().Bluetooth.Audio
-	phoneAudio := map[string]bool{}
-	for _, d := range devices {
-		if !d.Connected || !isPhone(d, speaker) {
-			continue
-		}
-		if !linked {
-			linked, phoneName = true, displayName(d)
-		}
-		path := string(d.Path)
-		phoneAudio[path] = audioUp[path]
-		if f.phone && phoneJoined == "" && audioUp[path] && !f.phoneAudio[path] {
-			phoneJoined = d.Address
-			f.phone = false // once: another look before phone pairing ends must not join again
-		}
+	pl := lookAtPhones(devices, config.Get().Bluetooth.Audio, audioUp, f.phoneAudio, f.phone)
+	phoneJoined, linked, phoneName := pl.joined, pl.linked, pl.name
+	phoneGen := f.phoneGen
+	if phoneJoined != "" {
+		f.phone = false // once: another look before phone pairing ends must not join again
 	}
-	f.phoneAudio = phoneAudio
+	f.phoneAudio = pl.audio
 	f.phoneLinked = linked
 	if !linked {
 		f.hangingUp = false // the phones turned off have gone
@@ -580,7 +569,10 @@ func (f *Feature) refresh() {
 			slog.Warn("bluetooth trust", "address", phoneJoined, "err", err)
 		}
 		safe.Go("bluetooth phone pairing done", func() {
-			f.SetPhonePairing(false)
+			// The window the phone joined in, not one opened since.
+			f.modes.Lock()
+			f.setPhonePairing(false, phoneGen)
+			f.modes.Unlock()
 			onPaired()
 		})
 	}
@@ -750,7 +742,7 @@ func (f *Feature) setPairing(on bool) {
 	f.mu.Unlock()
 	f.pairing.Set(on && a != nil)
 	if endPhone {
-		f.phonePair.Set(false)
+		f.showPhone() // on still if a phone is connected; through showPhone, so it never flicks
 	}
 	if a == nil {
 		slog.Warn("bluetooth pairing asked for, no adapter")
@@ -938,6 +930,36 @@ func (f *Feature) ForgetPhones() {
 		f.mu.Unlock()
 	}
 	f.wake()
+}
+
+// phoneLook is what lookAtPhones finds: the phone that joined (its address, or ""), whether any phone
+// is connected and the first one's name, and the phones whose audio is up, by D-Bus path.
+type phoneLook struct {
+	joined string
+	linked bool
+	name   string
+	audio  map[string]bool
+}
+
+// lookAtPhones looks at the connected phones. While phone pairing is open, the first whose audio has
+// come up since the last look (was) has joined; a phone whose audio was already up has not, so one
+// connected before the window opened does not end it.
+func lookAtPhones(devices []bluez.Device, speaker string, audioUp, was map[string]bool, open bool) phoneLook {
+	l := phoneLook{audio: map[string]bool{}}
+	for _, d := range devices {
+		if !d.Connected || !isPhone(d, speaker) {
+			continue
+		}
+		if !l.linked {
+			l.linked, l.name = true, displayName(d)
+		}
+		path := string(d.Path)
+		l.audio[path] = audioUp[path]
+		if open && l.joined == "" && audioUp[path] && !was[path] {
+			l.joined = d.Address
+		}
+	}
+	return l
 }
 
 // isPhone is whether a paired device is a phone, or anything else that plays to the device, rather
