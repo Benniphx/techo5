@@ -154,3 +154,79 @@ func TestLinkTone(t *testing.T) {
 		}
 	}
 }
+
+// A level read just after one was handed to the phone, rounded by the phone to its own steps, is not
+// the slider moving; a real move is, and so is any change once the phone has said its level back.
+func TestSliderMove(t *testing.T) {
+	for name, c := range map[string]struct {
+		level, last int
+		known, ours bool
+		want        bool
+	}{
+		"nothing known":             {80, 0, false, false, false},
+		"no change":                 {80, 80, true, false, false},
+		"the slider moved":          {60, 80, true, false, true},
+		"ours, rounded by a step":   {levelFor(8) + 3, levelFor(8), true, true, false},
+		"ours, but moved far":       {levelFor(20), levelFor(8), true, true, true},
+		"not ours, moved by a step": {levelFor(9), levelFor(8), true, false, true},
+	} {
+		if got := sliderMove(c.level, c.last, c.known, c.ours); got != c.want {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+// Forget forgets what the device plays to when it plays to something, else the remembered device.
+func TestForgetTarget(t *testing.T) {
+	devices := []bluez.Device{{Path: "/a", Address: "AA:00:00:00:00:01"}, {Path: "/b", Address: "AA:00:00:00:00:02"}}
+	if got := forgetTarget(devices, "/a", "AA:00:00:00:00:02"); got != "AA:00:00:00:00:01" {
+		t.Errorf("playing to A, B remembered: forgets %q", got)
+	}
+	if got := forgetTarget(devices, "", "AA:00:00:00:00:02"); got != "AA:00:00:00:00:02" {
+		t.Errorf("playing to nothing: forgets %q", got)
+	}
+	if got := forgetTarget(devices, "/gone", "AA:00:00:00:00:02"); got != "AA:00:00:00:00:02" {
+		t.Errorf("playing to a device no longer listed: forgets %q", got)
+	}
+}
+
+// Steps handed on faster than the phone is told keep only the latest, and handing one never waits.
+func TestHandLevelKeepsTheLatest(t *testing.T) {
+	f := &Feature{levelTo: make(chan int, 1)}
+	for _, step := range []int{6, 7, 8, 9} {
+		f.handLevel(step)
+	}
+	if got := <-f.levelTo; got != 9 {
+		t.Errorf("handed on %d, want the latest, 9", got)
+	}
+	select {
+	case got := <-f.levelTo:
+		t.Errorf("another step waiting: %d", got)
+	default:
+	}
+}
+
+// A phone takes the speaker back only when nothing else has it.
+func TestSpeakerFree(t *testing.T) {
+	if !speakerFree(false, false, false) {
+		t.Error("nothing playing: not free")
+	}
+	for name, c := range map[string][3]bool{"playing": {true, false, false}, "paused": {false, true, false}, "a remote playing": {false, false, true}} {
+		if speakerFree(c[0], c[1], c[2]) {
+			t.Errorf("%s: free", name)
+		}
+	}
+}
+
+// A phone joining phone pairing is chimed for by the pairing, not by the connect tone as well.
+func TestHoldForJoin(t *testing.T) {
+	if holdForJoin(speaker.ToneBTConnect, "AA:00:00:00:00:01") != nil {
+		t.Error("connect tone for a phone that just joined")
+	}
+	if !slices.Equal(holdForJoin(speaker.ToneBTConnect, ""), speaker.ToneBTConnect) {
+		t.Error("connect tone held with no phone joining")
+	}
+	if !slices.Equal(holdForJoin(speaker.ToneBTDisconnect, "AA:00:00:00:00:01"), speaker.ToneBTDisconnect) {
+		t.Error("disconnect tone held for a join")
+	}
+}

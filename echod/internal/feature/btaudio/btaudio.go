@@ -36,6 +36,8 @@ import (
 	esphome "github.com/ygelfand/go-esphome-device"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
+	"github.com/godbus/dbus/v5"
+
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
@@ -159,6 +161,16 @@ type Feature struct {
 	// which is the device's volume while it plays here (phoneSlider, tellPhone).
 	levels    map[string]int
 	levelOnce sync.Once
+	// ours is each received stream whose level was last set from here and not yet heard back: the
+	// phone rounds a level to its own steps and says the rounded one, which is not its slider moving
+	// (sliderMove).
+	ours map[string]bool
+	// levelTo hands the device's volume step to the one goroutine that tells the phone (tellPhone), the
+	// latest only, so two steps in quick succession reach the phone in order.
+	levelTo chan int
+	// hushed is the devices this side is dropping and connecting again (the remake attach does), by
+	// lower-case address, and until when: no tone for either (linkTones).
+	hushed map[string]time.Time
 	// linked is the audio devices connected at the last look, by D-Bus path: earbuds, speakers and
 	// phones, for the tones a connect and a disconnect play (linkTones). linkSeen is whether there has
 	// been a look since bluetooth came up, before which there is nothing to compare with.
@@ -217,6 +229,9 @@ func build() *Feature {
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
 		levels:     map[string]int{},
+		ours:       map[string]bool{},
+		hushed:     map[string]time.Time{},
+		levelTo:    make(chan int, 1),
 		linked:     map[string]bool{},
 		phoneAudio: map[string]bool{},
 		poke:       make(chan struct{}, 1),
@@ -467,6 +482,7 @@ func (f *Feature) refresh() {
 	// takes the speaker. Only on that edge, so Home Assistant media started afterwards is not taken
 	// back while the phone keeps its transport open.
 	var sending []received
+	taken := map[string]bool{} // streams taken this look: their level is the one handed to them, not one read
 	for _, p := range al.PCMs() {
 		if !p.Receivable() {
 			continue
@@ -486,6 +502,7 @@ func (f *Feature) refresh() {
 			continue
 		}
 		holder := media.Get().Receiving()
+		taken[string(p.Path)] = true
 		if !f.receive(al, p, d) {
 			// Tried again at the next look rather than never: the stream a remote paused and resumed
 			// quickly can still be held by the track that was playing it until that track lets go.
@@ -503,17 +520,25 @@ func (f *Feature) refresh() {
 	// A remote another took the speaker from, still sending once that one has finished and nothing is
 	// playing, takes it back, as a speaker goes on playing the phone that is still playing to it. A
 	// remote that went quiet, or was stopped here, was not displaced and stays let go.
-	playing, paused := media.Get().Playing()
+	// Music Assistant (or any remote) taking the speaker is the room going its own way: no phone is owed
+	// it afterward, as none is after a stop here (OnStop).
+	m := media.Get()
+	external := m.ExternalPlaying()
+	playing, paused := m.Playing()
 	f.mu.Lock()
-	back := takeBack(f.displaced, sending, !playing && !paused)
+	if external {
+		clear(f.displaced)
+	}
+	back := takeBack(f.displaced, sending, speakerFree(playing, paused, external))
 	f.mu.Unlock()
 	if back != nil {
 		slog.Info("bluetooth: a device still sending takes the speaker back", "device", displayName(back.dev))
+		taken[string(back.pcm.Path)] = true
 		f.receive(al, back.pcm, back.dev)
 	}
-	if cur := media.Get().Receiving(); cur != "" {
+	if cur := m.Receiving(); cur != "" {
 		for _, r := range sending {
-			if r.item == cur {
+			if r.item == cur && !taken[string(r.pcm.Path)] {
 				f.phoneSlider(r.pcm)
 			}
 		}
@@ -573,6 +598,7 @@ func (f *Feature) refresh() {
 	f.phoneAudio = pl.audio
 	f.phoneLinked = linked
 	tone := f.linkTones(devices, config.Get().Bluetooth.Audio)
+	tone = holdForJoin(tone, phoneJoined)
 	if !linked {
 		f.hangingUp = false // the phones turned off have gone
 	}
@@ -693,7 +719,17 @@ func stepFor(level int) int {
 // device's level.
 func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 	f.levelOnce.Do(func() {
-		media.Get().OnLevel.Listen(func(step int) { safe.Go("bluetooth phone volume", func() { f.tellPhone(step) }) })
+		media.Get().OnLevel.Listen(f.handLevel)
+		media.Get().OnStop.Listen(func(struct{}) {
+			f.mu.Lock()
+			clear(f.displaced) // stopped here: no phone takes the speaker back after that
+			f.mu.Unlock()
+		})
+		safe.Go("bluetooth phone volume", func() {
+			for step := range f.levelTo {
+				f.tellPhone(step)
+			}
+		})
 	})
 	if err := al.SetSoftVolume(p, false); err != nil {
 		slog.Warn("bluetooth: leaving a phone's audio unscaled", "err", err)
@@ -704,7 +740,51 @@ func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 	}
 	f.mu.Lock()
 	f.levels[string(p.Path)] = level
+	f.ours[string(p.Path)] = true
 	f.mu.Unlock()
+}
+
+// speakerFree is whether a phone another took the speaker from may take it back: nothing of the
+// device's own loaded, playing or paused, and no remote such as Music Assistant playing to it.
+func speakerFree(playing, paused, external bool) bool { return !playing && !paused && !external }
+
+// holdForJoin is tone with the connect tone held back when a phone has just joined phone pairing in
+// the same look: the pairing has its own chime (onPaired).
+func holdForJoin(tone []speaker.Note, joined string) []speaker.Note {
+	if joined != "" && slices.Equal(tone, speaker.ToneBTConnect) {
+		return nil
+	}
+	return tone
+}
+
+// handLevel passes the device's new volume step to the goroutine that tells the phone, replacing one
+// still waiting: only the latest matters, and one goroutine keeps them in order. Never blocks.
+func (f *Feature) handLevel(step int) {
+	for {
+		select {
+		case f.levelTo <- step:
+			return
+		default:
+		}
+		select {
+		case <-f.levelTo:
+		default:
+		}
+	}
+}
+
+// sliderMove is whether a received stream's level, read now, is the phone's slider moved: not when
+// nothing was known before or nothing changed, nor when the last level was handed to the phone from
+// here and this is the phone saying it back rounded to its own steps (within one of the device's).
+func sliderMove(level, last int, known, ours bool) bool {
+	if !known || level == last {
+		return false
+	}
+	if ours {
+		d := stepFor(level) - stepFor(last)
+		return d > 1 || d < -1
+	}
+	return true
 }
 
 // phoneSlider is a look at the stream playing here: its level other than last seen or set is the
@@ -715,9 +795,13 @@ func (f *Feature) phoneSlider(p bluealsa.PCM) {
 	level := p.Level()
 	f.mu.Lock()
 	last, known := f.levels[string(p.Path)]
+	ours := f.ours[string(p.Path)]
 	f.levels[string(p.Path)] = level
+	if level != last {
+		delete(f.ours, string(p.Path)) // heard back, or moved: either way no longer ours alone
+	}
 	f.mu.Unlock()
-	if !known || level == last {
+	if !sliderMove(level, last, known, ours) {
 		return
 	}
 	m := media.Get()
@@ -759,6 +843,7 @@ func (f *Feature) tellPhone(step int) {
 		level := levelFor(step)
 		f.mu.Lock()
 		f.levels[string(p.Path)] = level
+		f.ours[string(p.Path)] = true
 		f.mu.Unlock()
 		if err := al.SetLevel(p, level); err != nil {
 			slog.Warn("bluetooth: handing a phone the volume", "err", err)
@@ -769,13 +854,16 @@ func (f *Feature) tellPhone(step int) {
 // linkTones is the tone the last look's change of connected audio devices plays: rising for one that
 // connected, falling for one that went, nil for none. Not on the first look, which has nothing to
 // compare with; not for a connect that ends a pairing, which has its own chime; and not for a device
-// this side is connecting or dropping itself (busy: the remake attach does, a pick, a reconnect asked
-// for), which would chime for the device's own work. Called with mu held.
+// this side is connecting (busy: a pick, Reconnect) or dropping and connecting again on its own
+// (hushed: the remake attach does), which would chime for the device's own work. What somebody asked
+// for - Disconnect, Forget, forgetting or dropping the phones, Reconnect phone - keeps its tone, which
+// says it was done. Called with mu held.
 func (f *Feature) linkTones(devices []bluez.Device, speakerAddr string) []speaker.Note {
 	now := map[string]bool{}
 	busy := map[string]bool{}
 	for _, d := range devices {
-		if f.busy[strings.ToLower(d.Address)] {
+		addr := strings.ToLower(d.Address)
+		if f.busy[addr] || time.Now().Before(f.hushed[addr]) {
 			busy[string(d.Path)] = true
 		}
 		if d.Connected && (d.AudioSink || isPhone(d, speakerAddr)) {
@@ -886,6 +974,10 @@ func (f *Feature) attach(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) {
 		f.mu.Unlock()
 		if n == 2 {
 			slog.Info("bluetooth: remaking the connection ourselves", "device", displayName(d))
+			f.mu.Lock()
+			// Dropped and made again here: neither half is a device going or coming (linkTones).
+			f.hushed[strings.ToLower(d.Address)] = time.Now().Add(2*connectTimeout + 10*time.Second)
+			f.mu.Unlock()
 			safe.Go("bluetooth remake", func() {
 				ctx, cancel := context.WithTimeout(context.Background(), 2*connectTimeout)
 				defer cancel()
@@ -1348,16 +1440,40 @@ func (f *Feature) Disconnect() {
 func (f *Feature) Forget() {
 	f.mu.Lock()
 	a := f.adapter
+	var playing dbus.ObjectPath
+	if f.stream != nil {
+		playing = f.stream.Device
+	}
 	f.mu.Unlock()
-	addr := config.Get().Bluetooth.Audio
+	remembered := config.Get().Bluetooth.Audio
+	var devices []bluez.Device
+	if a != nil {
+		devices = a.Devices()
+	}
+	addr := forgetTarget(devices, playing, remembered)
 	if a != nil && addr != "" {
 		if err := a.Remove(addr); err != nil {
 			slog.Warn("bluetooth forget", "err", err)
 		}
 	}
-	_ = config.Set().Bluetooth().Audio("", "")
-	f.mu.Lock()
-	f.state.Remembered = ""
-	f.mu.Unlock()
+	if strings.EqualFold(addr, remembered) {
+		_ = config.Set().Bluetooth().Audio("", "")
+		f.mu.Lock()
+		f.state.Remembered = ""
+		f.mu.Unlock()
+	}
 	f.wake()
+}
+
+// forgetTarget is the device Forget forgets: the one the device is playing to when it plays to one,
+// which is the one the screen's row names (Connected), else the remembered one.
+func forgetTarget(devices []bluez.Device, playing dbus.ObjectPath, remembered string) string {
+	if playing != "" {
+		for _, d := range devices {
+			if d.Path == playing {
+				return d.Address
+			}
+		}
+	}
+	return remembered
 }

@@ -180,6 +180,10 @@ type Player struct {
 	// it is a hook, like OnResumeRemote.
 	OnTakeOver hook.Hook[struct{}]
 
+	// OnStop fires when the track is stopped here (Stop: the screen, Home Assistant, the sleep timer), so
+	// what would otherwise pick something up again once the speaker is free knows somebody stopped it.
+	OnStop hook.Hook[struct{}]
+
 	// OnTransport fires when a track's own controls are asked for — the screen's buttons, or Home
 	// Assistant — so that whoever is playing the track hears. It is not an instruction to this player:
 	// see Transport.
@@ -1341,6 +1345,7 @@ func (p *Player) Stop() {
 		}
 	}
 	p.stream.Stop()
+	p.OnStop.Emit(struct{}{})
 }
 
 // Sleep is the sleep timer: what is playing stops after a while.
