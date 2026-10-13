@@ -2,6 +2,7 @@ package home
 
 import (
 	"context"
+	"errors"
 	"image"
 	"image/draw"
 	"log/slog"
@@ -23,9 +24,10 @@ import (
 // behind the ordinary idle page — the clock, date and weather stay exactly as they are, in front.
 // Screensaver mode takes the whole screen after an idle wait, with its own, simpler clock/date
 // overlay (off, small, or normal size) — no weather, no timers; those belong to the ordinary idle
-// page, not the photo-frame look. The device only ever asks Home Assistant for the next photo: it
-// neither knows nor cares which backend (Immich, a network share, anything else Home Assistant can
-// browse) a source came from. See docs/slideshow-plan.md; Show and Spot only (see screen.go).
+// page, not the photo-frame look. Photos come from Home Assistant's media library, which does not say
+// which backend (Immich, a network share, anything else it can browse) a source came from; from the
+// device's own photos (photos.go); or straight from an Immich server with no Home Assistant at all
+// (immich.go). See docs/slideshow-plan.md; Show and Spot only (see screen.go).
 
 // slideshowEvery is how long one photo stays up before the next is fetched when nothing is set, and
 // slideshowEveryMin/Max bound what may be.
@@ -294,6 +296,16 @@ func (f *Feature) ChooseSlideshowOverlay(overlay string) {
 // SetSlideshowSource sets which media source to show photos from, from the home_slideshow action or
 // the screen's folder list.
 func (f *Feature) SetSlideshowSource(source string) {
+	if id, ok := strings.CutPrefix(source, ImmichAlbumPrefix); ok {
+		// The album's name is kept, to name it without asking the server.
+		if name, ok := immichNames.name(id); ok {
+			i := config.Get().Home.Immich
+			i.Album = name
+			if err := config.Set().Home().Immich(i); err != nil {
+				slog.Warn("home: saving the Immich album's name failed", "err", err)
+			}
+		}
+	}
 	f.changeSlideshow(func(s *config.Slideshow) { s.Source = source })
 	slog.Info("home: slideshow source", "source", source)
 }
@@ -409,9 +421,26 @@ func (f *Feature) SetSlideshowEvery(d time.Duration) {
 	f.slideshowEveryNum.Set(float32(d / time.Second))
 }
 
-// BrowseFolder lists one media source folder, for the screen's folder list.
+// mediaRoot is the top of Home Assistant's media library, where the screen's folder list starts.
+const mediaRoot = "media-source://media_source"
+
+// BrowseFolder lists one media source folder, for the screen's folder list. With an Immich server set
+// up, the top of the list has an Immich folder of its own, holding its albums; with no Home Assistant
+// to ask, it is all the list has.
 func (f *Feature) BrowseFolder(ctx context.Context, id string) (hass.Media, error) {
-	return hass.Get().Browse(ctx, id)
+	if IsImmich(id) {
+		return browseImmich(ctx, id)
+	}
+	immich := id == mediaRoot && config.Get().Home.Immich.Set()
+	if immich && !hass.Get().Ready() {
+		return hass.Media{ID: mediaRoot, Title: "Photos", CanExpand: true,
+			Children: []hass.Media{{ID: ImmichAll, Title: "Immich", CanExpand: true}}}, nil
+	}
+	m, err := hass.Get().Browse(ctx, id)
+	if err == nil && immich {
+		m.Children = append([]hass.Media{{ID: ImmichAll, Title: "Immich", CanExpand: true}}, m.Children...)
+	}
+	return m, err
 }
 
 // slideshowLoop advances the slideshow while Background mode is on. Run from Feature.Run.
@@ -434,7 +463,7 @@ func (f *Feature) slideshowLoop(ctx context.Context) {
 func (f *Feature) advanceSlideshow() {
 	h := config.Get().Home.Slideshow
 	if (h.Mode != config.SlideshowBackground && h.Mode != config.SlideshowScreensaver) || h.Source == "" || h.Art ||
-		(h.Source != LocalPhotos && !hass.Get().Ready()) {
+		(h.Source != LocalPhotos && !IsImmich(h.Source) && !hass.Get().Ready()) {
 		return
 	}
 	f.mu.Lock()
@@ -560,6 +589,9 @@ func slideshowFolderName(id string) string {
 	if id == LocalPhotos {
 		return "On this device"
 	}
+	if IsImmich(id) {
+		return ImmichSourceName(id)
+	}
 	rest := strings.TrimRight(strings.TrimPrefix(id, "media-source://"), "/")
 	name := rest[strings.LastIndex(rest, "/")+1:]
 	if u, err := url.PathUnescape(name); err == nil {
@@ -579,6 +611,13 @@ func gatherSlideshow(h config.Slideshow) ([]hass.Media, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
+	if IsImmich(h.Source) {
+		srv := config.Get().Home.Immich
+		if !srv.Set() {
+			return nil, errors.New("immich: not set up")
+		}
+		return immichPhotos(ctx, srv, h.Source, slideshowMaxPhotos)
+	}
 	folders := slideshowMaxFolders
 	if h.TopOnly {
 		folders = 1
@@ -622,9 +661,14 @@ func isPhoto(m hass.Media) bool {
 func fetchSlideshowImage(id string, whole bool) (*image.RGBA, error) {
 	var b []byte
 	var err error
-	if strings.HasPrefix(id, localPhotoPrefix) {
+	switch {
+	case strings.HasPrefix(id, localPhotoPrefix):
 		b, err = localPhoto(id)
-	} else {
+	case strings.HasPrefix(id, immichAssetPrefix):
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		b, err = immichPhoto(ctx, config.Get().Home.Immich, id)
+		cancel()
+	default:
 		var r hass.Resolved
 		r, err = hass.Get().ResolveMedia(context.Background(), id)
 		if err == nil {
