@@ -474,7 +474,7 @@ t5_bt_up() {
 		(while true; do
 			btbridge -p192-keys ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1
 			sleep 2
-			(sleep 15; timeout 5 btmgmt class 4 5 >/dev/null 2>&1) &
+			(sleep 15; timeout 5 btmgmt class 4 20 >/dev/null 2>&1) &
 		done) &
 	fi
 	n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
@@ -515,9 +515,11 @@ t5_bt_up() {
 	# bluez-alsa registers its A2DP endpoints with bluetoothd, so it must come after it. A source, to
 	# play to earbuds and speakers; on the Shows (MediaTek, no BT_UART) a sink too, so a phone can play
 	# to the Show, which then says it is a loudspeaker (major 4, audio/video; minor 5, loudspeaker).
+	# btmgmt takes the minor as the class byte, shifted left two bits: 5 is 20. Given 5 it refused
+	# (Invalid Parameters), and the Shows went out as miscellaneous devices.
 	if [ -z "${BT_UART:-}" ]; then
 		command -v bluealsa >/dev/null && bluealsa -p a2dp-source -p a2dp-sink >> "$logdir/bluealsa.log" 2>&1 &
-		timeout 5 btmgmt class 4 5 >/dev/null 2>&1
+		timeout 5 btmgmt class 4 20 >/dev/null 2>&1
 	else
 		command -v bluealsa >/dev/null && bluealsa -p a2dp-source >> "$logdir/bluealsa.log" 2>&1 &
 	fi
