@@ -8,6 +8,7 @@ import (
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
+	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
@@ -20,12 +21,12 @@ var pickerBoards = []config.DashboardChoice{
 // The picker has dashboards to offer with the dashboard off, which is the state somebody choosing one
 // is in, and the only state a device that has never shown a dashboard is in.
 func TestThePickerIsPopulatedWithTheDashboardOff(t *testing.T) {
-	f := &Feature{board: &esphome.Select{}}
+	f := pickerFeature()
 	f.listBoards(config.Dashboard{Known: pickerBoards})
 
 	want := []string{automatic, "Overview", "Kitchen · Lights"}
-	if !slices.Equal(f.board.Options, want) {
-		t.Errorf("options = %q, want %q", f.board.Options, want)
+	if got := f.boardOpts.Get(); !slices.Equal(got, want) {
+		t.Errorf("options = %q, want %q", got, want)
 	}
 	if got := f.board.Get(); got != automatic {
 		t.Errorf("settled on %q with nothing chosen, want %q", got, automatic)
@@ -35,12 +36,12 @@ func TestThePickerIsPopulatedWithTheDashboardOff(t *testing.T) {
 // A chosen path Home Assistant no longer lists stays a choice of its own, and is still what the picker
 // says it is showing: the list never claims a different dashboard than the one on the screen.
 func TestThePickerKeepsAChosenDashboardHomeAssistantNoLongerLists(t *testing.T) {
-	f := &Feature{board: &esphome.Select{}}
+	f := pickerFeature()
 	f.listBoards(config.Dashboard{Path: "dashboard-kitchen/lights", Known: pickerBoards[:1]})
 
 	want := []string{automatic, "Overview", "dashboard-kitchen/lights"}
-	if !slices.Equal(f.board.Options, want) {
-		t.Errorf("options = %q, want %q", f.board.Options, want)
+	if got := f.boardOpts.Get(); !slices.Equal(got, want) {
+		t.Errorf("options = %q, want %q", got, want)
 	}
 	if got := f.board.Get(); got != "dashboard-kitchen/lights" {
 		t.Errorf("settled on %q, want the chosen path", got)
@@ -66,4 +67,11 @@ func TestTheListIsAskedForWhileThereIsNothingCached(t *testing.T) {
 			t.Errorf("%s: wantsList = %v, want %v", c.what, got, c.want)
 		}
 	}
+}
+
+// pickerFeature is a Feature with just the picker.
+func pickerFeature() *Feature {
+	f := &Feature{board: &esphome.Select{}}
+	f.boardOpts = component.NewOptions(f.board)
+	return f
 }

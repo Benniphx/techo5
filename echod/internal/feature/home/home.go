@@ -92,8 +92,9 @@ type Feature struct {
 
 	// weatherSel picks the weather entity; weathers is Home Assistant's list of them, fetched at
 	// weathersAt.
-	weatherSel *esphome.Select
-	radarSel   *esphome.Select // where the rain map's radar comes from (radar_setting.go)
+	weatherSel  *esphome.Select
+	weatherOpts *component.Options // weatherSel's options, changed between serves
+	radarSel    *esphome.Select    // where the rain map's radar comes from (radar_setting.go)
 
 	// alerts are the NWS's weather alerts at home and nearby (alerts.go); alertsSw turns them on and off.
 	alerts     alertState
@@ -103,9 +104,10 @@ type Feature struct {
 
 	// followSel picks another media player for Now Playing to follow; players is Home Assistant's list of
 	// them, fetched at playersAt (follow.go).
-	followSel *esphome.Select
-	players   []hass.Entity
-	playersAt time.Time
+	followSel  *esphome.Select
+	followOpts *component.Options // followSel's options, changed between serves
+	players    []hass.Entity
+	playersAt  time.Time
 
 	lyricsSw *esphome.Switch // the words on Now Playing (lyrics.go)
 
@@ -392,11 +394,9 @@ func (f *Feature) Restore(c config.Config) {
 		// Kept before the album's id was kept with its name: asked for once the network is up.
 		safe.Go("immich album name at start", func() { f.nameImmichAlbumSoon(id) })
 	}
-	f.weatherSel.Options = weatherOptions(c.Home)
+	f.weatherOpts.Restore(weatherOptions(c.Home))
 	f.weatherSel.Set(chosenOption(c.Home))
-	f.mu.Lock()
-	f.followSel.Options = followOptions(c.Home)
-	f.mu.Unlock()
+	f.followOpts.Restore(followOptions(c.Home))
 	f.followSel.Set(followOption(c.Home))
 	f.lyricsSw.Set(c.Home.Lyrics)
 	if hasScreen {

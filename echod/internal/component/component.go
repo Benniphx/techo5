@@ -111,6 +111,11 @@ type Restorer interface {
 // server is a component like any other and may not exist.
 var Reconnect hook.Hook[struct{}]
 
+// BetweenServes fires between one spell of serving and the next, once every connection has ended and
+// before any new one is taken: the one moment what the device describes to Home Assistant (a select's
+// options) can change without a connection reading it as it does. Listeners must not block.
+var BetweenServes hook.Hook[struct{}]
+
 // Event is something to put on Home Assistant's bus. A hook for the same reason as Reconnect: the server
 // imports the features whose handlers it serves, so they cannot import it back.
 type Event struct {

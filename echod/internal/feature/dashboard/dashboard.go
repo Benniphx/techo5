@@ -61,6 +61,8 @@ type Feature struct {
 	idle  *esphome.Switch
 	kiosk *esphome.Switch
 	board *esphome.Select
+	// boardOpts keeps board's options, changed between serves.
+	boardOpts *component.Options
 
 	// back and tiles are how long a dashboard opened by hand stays up, and on the Show how big a drawn
 	// one's tiles are (more.go).
@@ -130,6 +132,7 @@ func Get() *Feature {
 		}
 		f.back, f.tiles = backSelect(f), tilesSelect(f)
 		f.board.OnCommand = f.chooseBoard
+		f.boardOpts = component.NewOptions(f.board)
 		component.Bind(f.mode, config.DashboardModes(), f.setMode, config.Set().Dashboard().Mode)
 		f.idle.OnCommand = func(on bool) {
 			f.idle.Set(on)
@@ -167,7 +170,9 @@ func (f *Feature) Restore(c config.Config) {
 	f.idle.Set(c.Dashboard.Idle)
 	slog.Info("restored", "what", f.idle.ObjectID, "using", c.Dashboard.Idle)
 	f.kiosk.Set(c.Dashboard.Kiosk)
-	f.listBoards(c.Dashboard)
+	opts, chosen := boardOptions(c.Dashboard)
+	f.boardOpts.Restore(opts)
+	f.board.Set(chosen)
 	f.back.Set(backLabel(c.Dashboard.ReturnAfter))
 	f.tiles.Set(tilesLabel(c.Dashboard.Tiles))
 }
@@ -178,12 +183,19 @@ const (
 	boardBytes = 8 << 10
 )
 
-// listBoards puts the known dashboards in the list, with the one chosen selected. A chosen path
-// Home Assistant no longer lists is kept as a choice of its own, so the list never claims a
-// different one is showing.
+// listBoards puts the known dashboards in the list, with the one chosen selected. Home Assistant is
+// offered a changed list from its next connection on.
 func (f *Feature) listBoards(d config.Dashboard) {
-	opts := []string{automatic}
-	chosen := automatic
+	opts, chosen := boardOptions(d)
+	f.boardOpts.Set(opts)
+	f.board.Set(chosen)
+}
+
+// boardOptions is the list of dashboards to offer, and the one chosen. A chosen path Home Assistant
+// no longer lists is kept as a choice of its own, so the list never claims a different one is
+// showing.
+func boardOptions(d config.Dashboard) (opts []string, chosen string) {
+	opts, chosen = []string{automatic}, automatic
 	size := len(automatic)
 	for _, b := range d.Known {
 		mine := b.Path == d.Path
@@ -202,8 +214,7 @@ func (f *Feature) listBoards(d config.Dashboard) {
 		opts = append(opts, d.Path)
 		chosen = d.Path
 	}
-	f.board.Options = opts
-	f.board.Set(chosen)
+	return opts, chosen
 }
 
 // chooseBoard is a dashboard picked from the list.
