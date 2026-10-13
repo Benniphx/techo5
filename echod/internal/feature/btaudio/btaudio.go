@@ -38,6 +38,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluealsa"
@@ -157,7 +158,12 @@ type Feature struct {
 	// which is the device's volume while it plays here (phoneSlider, tellPhone).
 	levels    map[string]int
 	levelOnce sync.Once
-	poke      chan struct{}
+	// linked is the audio devices connected at the last look, by D-Bus path: earbuds, speakers and
+	// phones, for the tones a connect and a disconnect play (linkTones). linkSeen is whether there has
+	// been a look since bluetooth came up, before which there is nothing to compare with.
+	linked   map[string]bool
+	linkSeen bool
+	poke     chan struct{}
 
 	// refusals counts stream opens bluetoothd refused for the current connection; see attach.
 	refusals int
@@ -206,6 +212,7 @@ func build() *Feature {
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
 		levels:     map[string]int{},
+		linked:     map[string]bool{},
 		phoneAudio: map[string]bool{},
 		poke:       make(chan struct{}, 1),
 		state:      State{Status: notConnected},
@@ -294,6 +301,7 @@ func (f *Feature) open(ctx context.Context) error {
 	f.mu.Lock()
 	f.adapter, f.alsa = a, al
 	f.state.Available = true
+	f.linkSeen = false // the devices already connected as bluetooth comes up connected before this
 	f.state.Remembered = config.Get().Bluetooth.AudioName
 	f.mu.Unlock()
 	a.Changed.Listen(func(struct{}) { f.wake() })
@@ -558,6 +566,7 @@ func (f *Feature) refresh() {
 	}
 	f.phoneAudio = pl.audio
 	f.phoneLinked = linked
+	tone := f.linkTones(devices, config.Get().Bluetooth.Audio)
 	if !linked {
 		f.hangingUp = false // the phones turned off have gone
 	}
@@ -591,6 +600,9 @@ func (f *Feature) refresh() {
 
 	if f.status.Get() != text {
 		f.status.Set(text)
+	}
+	if tone != nil && !config.Get().Speaker.Quiet(time.Now()) && !inCall() {
+		speaker.Sound().Chime(tone)
 	}
 	f.showPhone()
 	if fresh {
@@ -747,6 +759,53 @@ func (f *Feature) tellPhone(step int) {
 		}
 	}
 }
+
+// linkTones is the tone the last look's change of connected audio devices plays: rising for one that
+// connected, falling for one that went, nil for none. Not on the first look, which has nothing to
+// compare with; not for a connect that ends a pairing, which has its own chime; and not for a device
+// this side is connecting or dropping itself (busy: the remake attach does, a pick, a reconnect asked
+// for), which would chime for the device's own work. Called with mu held.
+func (f *Feature) linkTones(devices []bluez.Device, speakerAddr string) []speaker.Note {
+	now := map[string]bool{}
+	busy := map[string]bool{}
+	for _, d := range devices {
+		if f.busy[strings.ToLower(d.Address)] {
+			busy[string(d.Path)] = true
+		}
+		if d.Connected && (d.AudioSink || isPhone(d, speakerAddr)) {
+			now[string(d.Path)] = true
+		}
+	}
+	was, seen := f.linked, f.linkSeen
+	f.linked, f.linkSeen = now, true
+	if !seen {
+		return nil
+	}
+	tone := linkTone(was, now, busy)
+	if slices.Equal(tone, speaker.ToneBTConnect) && (f.state.Pairing || f.phone) {
+		return nil // a pairing that worked has its own chime (onPaired) and its own words on the screen
+	}
+	return tone
+}
+
+// linkTone is the tone for the audio devices connected going from was to now: rising when one
+// connected, else falling when one went, nil when nothing changed but devices in busy.
+func linkTone(was, now, busy map[string]bool) []speaker.Note {
+	for p := range now {
+		if !was[p] && !busy[p] {
+			return speaker.ToneBTConnect
+		}
+	}
+	for p := range was {
+		if !now[p] && !busy[p] {
+			return speaker.ToneBTDisconnect
+		}
+	}
+	return nil
+}
+
+// inCall is whether a call has the device, when a tone would be in the way.
+func inCall() bool { return phone.Get().State().Phase != phone.Idle }
 
 // received is a remote's stream that is running: what it sends, under the name it plays as.
 type received struct {

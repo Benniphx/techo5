@@ -3,9 +3,11 @@
 package btaudio
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluealsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluez"
 	"github.com/godbus/dbus/v5"
@@ -122,5 +124,33 @@ func TestPhoneLevelsAndSteps(t *testing.T) {
 	}
 	if stepFor(bluealsa.VolumeMax) != media.VolumeSteps || stepFor(1) != 0 {
 		t.Errorf("phone ends: %d, %d", stepFor(bluealsa.VolumeMax), stepFor(1))
+	}
+}
+
+// A device connecting rises, one going falls, a device this side is busy with is not chimed for, and
+// nothing changing is silent.
+func TestLinkTone(t *testing.T) {
+	set := func(paths ...string) map[string]bool {
+		m := map[string]bool{}
+		for _, p := range paths {
+			m[p] = true
+		}
+		return m
+	}
+	for name, c := range map[string]struct {
+		was, now, busy map[string]bool
+		want           []speaker.Note
+	}{
+		"earbuds connect":        {set(), set("/buds"), set(), speaker.ToneBTConnect},
+		"a phone joins":          {set("/buds"), set("/buds", "/phone"), set(), speaker.ToneBTConnect},
+		"earbuds go":             {set("/buds"), set(), set(), speaker.ToneBTDisconnect},
+		"nothing changes":        {set("/buds"), set("/buds"), set(), nil},
+		"remade by this side":    {set("/buds"), set(), set("/buds"), nil},
+		"one in, one out":        {set("/a"), set("/b"), set(), speaker.ToneBTConnect},
+		"busy one in, other out": {set("/a"), set("/b"), set("/b"), speaker.ToneBTDisconnect},
+	} {
+		if got := linkTone(c.was, c.now, c.busy); !slices.Equal(got, c.want) {
+			t.Errorf("%s: %v, want %v", name, got, c.want)
+		}
 	}
 }
