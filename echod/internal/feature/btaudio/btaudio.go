@@ -9,8 +9,19 @@
 // finds is listed on the screen; a tap pairs, trusts and connects it. A trusted device reconnects
 // on its own when it is switched on, and the daemon tries the last one once at start-up.
 //
-// To Home Assistant: a switch for pairing mode, a sensor saying what is connected, and buttons to
-// reconnect or disconnect the remembered device.
+// Phone pairing is the other way round: a phone plays to the device. It makes the device findable
+// and pairable for a while with no scan and no pick, so a phone (a new one, or one paired before)
+// connects from its own Bluetooth settings, and it ends once a phone's audio is up. Its switch
+// stays on while a phone is connected, and turning it off disconnects the phone, so one switch
+// connects and disconnects. A button calls the paired phones back, for a phone that left and came
+// home, since a phone may not look for the device on its own. Anyone nearby can pair while phone
+// pairing is on, so another button forgets every phone (and drops it), leaving the speakers and
+// earbuds the device plays to. Not on the Spot, which takes no audio from a phone (phones_spot.go).
+//
+// To Home Assistant: a switch for pairing mode, a "Bluetooth phone" switch (on while phone pairing
+// is on or a phone is connected; off disconnects it), a sensor saying what is connected (a phone
+// too), buttons to reconnect or disconnect the remembered device, and buttons to call the phones
+// back or forget them.
 package btaudio
 
 import (
@@ -48,6 +59,9 @@ const (
 	// pairingFor is how long pairing mode stays on by itself.
 	pairingFor = 3 * time.Minute
 
+	// phoneFor is how long phone pairing stays on by itself.
+	phoneFor = 2 * time.Minute
+
 	// connectTimeout bounds one attempt; earbuds that are in their case never answer.
 	connectTimeout = 20 * time.Second
 
@@ -72,6 +86,7 @@ type Device struct {
 type State struct {
 	Available  bool // bluetoothd is there
 	Pairing    bool
+	Phone      bool     // phone pairing is on
 	Devices    []Device // while pairing: what the scan found that could play audio
 	Connected  string   // the connected audio device's name, empty for none
 	Remembered string   // the last device's name, for "waiting for …"
@@ -79,15 +94,19 @@ type State struct {
 }
 
 func sameState(a, b State) bool {
-	return a.Available == b.Available && a.Pairing == b.Pairing && a.Connected == b.Connected &&
-		a.Remembered == b.Remembered && a.Status == b.Status && slices.Equal(a.Devices, b.Devices)
+	return a.Available == b.Available && a.Pairing == b.Pairing && a.Phone == b.Phone &&
+		a.Connected == b.Connected && a.Remembered == b.Remembered && a.Status == b.Status &&
+		slices.Equal(a.Devices, b.Devices)
 }
 
 type Feature struct {
 	pairing    *esphome.Switch
+	phonePair  *esphome.Switch
 	status     *esphome.TextSensor
 	reconnect  *esphome.Button
 	disconnect *esphome.Button
+	callPhone  *esphome.Button
+	forget     *esphome.Button
 
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
@@ -100,6 +119,24 @@ type Feature struct {
 	shown   State // the last State sent on Changed
 	busy    map[string]bool
 	pairOff *time.Timer
+	// modes serializes turning pairing mode or phone pairing on and off, so both are never on.
+	modes sync.Mutex
+	// phone is phone pairing: findable and pairable like pairing mode, with no scan and no pick.
+	phone    bool
+	phoneOff *time.Timer
+	// phoneGen counts phone pairing windows, so a phoneOff already waiting when it was stopped
+	// cannot close the window opened after it.
+	phoneGen int
+	// phoneAudio is the phones whose audio was up at the last look, by D-Bus path: a phone joins
+	// phone pairing when its audio comes up, not because it was already playing when it began.
+	phoneAudio map[string]bool
+	// phoneLinked is whether a phone was connected at the last look; the phone switch shows it too,
+	// except while hangingUp: turned off, the switch shows off at once, not when the phone has gone.
+	phoneLinked bool
+	hangingUp   bool
+	// phoneShow serializes working out and publishing the phone switch, so a stale look never lands
+	// after a newer one.
+	phoneShow sync.Mutex
 	// On a device with no screen to choose on (autoPick), pairing mode connects the strongest audio
 	// device it hears once it has listened a while; tried keeps a refusal from being picked again.
 	pairingSince time.Time
@@ -134,6 +171,10 @@ func build() *Feature {
 			ObjectID: "bluetooth_pairing", Name: "Bluetooth pairing", Icon: "mdi:bluetooth-settings",
 			Category: esphome.CategoryConfig,
 		}},
+		phonePair: &esphome.Switch{Base: esphome.Base{
+			ObjectID: "bluetooth_phone_pairing", Name: "Bluetooth phone", Icon: "mdi:cellphone-sound",
+			Category: esphome.CategoryConfig,
+		}},
 		status: &esphome.TextSensor{Base: esphome.Base{
 			ObjectID: "bluetooth_audio", Name: "Bluetooth audio", Icon: "mdi:headphones",
 		}},
@@ -145,14 +186,34 @@ func build() *Feature {
 			ObjectID: "bluetooth_disconnect", Name: "Bluetooth disconnect", Icon: "mdi:bluetooth-off",
 			Category: esphome.CategoryConfig,
 		}},
-		busy:     map[string]bool{},
-		received: map[string]bool{},
-		poke:     make(chan struct{}, 1),
-		state:    State{Status: notConnected},
+		callPhone: &esphome.Button{Base: esphome.Base{
+			ObjectID: "bluetooth_reconnect_phone", Name: "Bluetooth reconnect phone", Icon: "mdi:cellphone-link",
+			Category: esphome.CategoryConfig,
+		}},
+		forget: &esphome.Button{Base: esphome.Base{
+			ObjectID: "bluetooth_forget_phones", Name: "Bluetooth forget phones", Icon: "mdi:cellphone-remove",
+			Category: esphome.CategoryConfig,
+		}},
+		busy:       map[string]bool{},
+		received:   map[string]bool{},
+		phoneAudio: map[string]bool{},
+		poke:       make(chan struct{}, 1),
+		state:      State{Status: notConnected},
 	}
 	f.pairing.OnCommand = func(on bool) { f.SetPairing(on) }
+	f.phonePair.OnCommand = func(on bool) {
+		f.mu.Lock()
+		f.hangingUp = !on
+		f.mu.Unlock()
+		f.SetPhonePairing(on)
+		if !on {
+			safe.Go("bluetooth phone disconnect", f.disconnectPhones)
+		}
+	}
 	f.reconnect.OnPress = func() { safe.Go("bluetooth reconnect", f.Reconnect) }
 	f.disconnect.OnPress = func() { safe.Go("bluetooth disconnect", f.Disconnect) }
+	f.callPhone.OnPress = func() { safe.Go("bluetooth reconnect phone", f.ReconnectPhone) }
+	f.forget.OnPress = func() { safe.Go("bluetooth forget phones", f.ForgetPhones) }
 	f.status.Set(notConnected)
 	return f
 }
@@ -160,7 +221,12 @@ func build() *Feature {
 func (f *Feature) Name() string { return "bluetooth audio" }
 
 func (f *Feature) Entities() []esphome.Entity {
-	return []esphome.Entity{f.pairing, f.status, f.reconnect, f.disconnect}
+	if !takesPhones {
+		return []esphome.Entity{f.pairing, f.status, f.reconnect, f.disconnect}
+	}
+	return []esphome.Entity{
+		f.pairing, f.phonePair, f.status, f.reconnect, f.disconnect, f.callPhone, f.forget,
+	}
 }
 
 // State is a copy of what the screen shows.
@@ -196,7 +262,7 @@ func (f *Feature) open(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := a.RegisterAgent(f.Pairing, f.pairedIncoming, f.pairingCode); err != nil {
+	if err := a.RegisterAgent(f.acceptsPairing, f.pairedIncoming, f.pairingCode); err != nil {
 		a.Close()
 		return err
 	}
@@ -395,6 +461,14 @@ func (f *Feature) refresh() {
 		}
 	}
 
+	// Devices whose audio is up: they have a stream to receive, playing or not.
+	audioUp := map[string]bool{}
+	for _, p := range al.PCMs() {
+		if p.Receivable() {
+			audioUp[string(p.Device)] = true
+		}
+	}
+
 	// The screen and Home Assistant.
 	f.mu.Lock()
 	st := &f.state
@@ -429,6 +503,31 @@ func (f *Feature) refresh() {
 			f.incoming = ""
 		}
 	}
+	// Phone pairing has done its job once a phone can play to the device: its audio has come up (its
+	// A2DP transport, which comes up before anything plays). Every connected phone is looked at, so a
+	// second one can join while the first stays connected.
+	phoneJoined, linked, phoneName := "", false, ""
+	speaker := config.Get().Bluetooth.Audio
+	phoneAudio := map[string]bool{}
+	for _, d := range devices {
+		if !d.Connected || !isPhone(d, speaker) {
+			continue
+		}
+		if !linked {
+			linked, phoneName = true, displayName(d)
+		}
+		path := string(d.Path)
+		phoneAudio[path] = audioUp[path]
+		if f.phone && phoneJoined == "" && audioUp[path] && !f.phoneAudio[path] {
+			phoneJoined = d.Address
+			f.phone = false // once: another look before phone pairing ends must not join again
+		}
+	}
+	f.phoneAudio = phoneAudio
+	f.phoneLinked = linked
+	if !linked {
+		f.hangingUp = false // the phones turned off have gone
+	}
 	pick := ""
 	if autoPick && st.Pairing && f.incoming == "" && joined == "" && st.Connected == "" && !f.picking && time.Since(f.pairingSince) >= pickAfter {
 		for _, d := range st.Devices {
@@ -441,8 +540,11 @@ func (f *Feature) refresh() {
 		}
 	}
 	text := notConnected
-	if st.Connected != "" {
+	switch {
+	case st.Connected != "":
 		text = st.Connected
+	case phoneName != "":
+		text = "Phone: " + phoneName
 	}
 	snapshot := *st
 	snapshot.Devices = append([]Device(nil), st.Devices...)
@@ -457,6 +559,7 @@ func (f *Feature) refresh() {
 	if f.status.Get() != text {
 		f.status.Set(text)
 	}
+	f.showPhone()
 	if fresh {
 		f.Changed.Emit(snapshot)
 	}
@@ -468,6 +571,16 @@ func (f *Feature) refresh() {
 		}
 		safe.Go("bluetooth pairing done", func() {
 			f.SetPairing(false)
+			onPaired()
+		})
+	}
+	if phoneJoined != "" {
+		slog.Info("bluetooth phone pairing: a phone connected; phone pairing ends", "address", phoneJoined)
+		if err := a.Trust(phoneJoined, true); err != nil {
+			slog.Warn("bluetooth trust", "address", phoneJoined, "err", err)
+		}
+		safe.Go("bluetooth phone pairing done", func() {
+			f.SetPhonePairing(false)
 			onPaired()
 		})
 	}
@@ -603,6 +716,13 @@ func (f *Feature) note(s string) {
 // SetPairing turns pairing mode on or off: discoverable, pairable and scanning while on, and off
 // again on its own after a while.
 func (f *Feature) SetPairing(on bool) {
+	f.modes.Lock()
+	defer f.modes.Unlock()
+	f.setPairing(on)
+}
+
+// setPairing is SetPairing, with modes held.
+func (f *Feature) setPairing(on bool) {
 	f.mu.Lock()
 	a := f.adapter
 	if f.pairOff != nil {
@@ -611,6 +731,16 @@ func (f *Feature) SetPairing(on bool) {
 	}
 	f.state.Pairing = on && a != nil
 	f.pairingSince, f.tried, f.incoming = time.Now(), map[string]bool{}, ""
+	endPhone := on && f.phone
+	if endPhone {
+		f.phone, f.state.Phone = false, false
+		f.phoneGen++
+		if f.phoneOff != nil {
+			f.phoneOff.Stop()
+			f.phoneOff = nil
+		}
+	}
+	phone := f.phone
 	if on && a != nil {
 		f.pairOff = time.AfterFunc(pairingFor, func() { f.SetPairing(false) })
 		f.state.Status = "Put your earbuds in pairing mode"
@@ -619,18 +749,226 @@ func (f *Feature) SetPairing(on bool) {
 	}
 	f.mu.Unlock()
 	f.pairing.Set(on && a != nil)
+	if endPhone {
+		f.phonePair.Set(false)
+	}
 	if a == nil {
 		slog.Warn("bluetooth pairing asked for, no adapter")
 		return
 	}
-	if err := a.Pairing(on); err != nil {
-		slog.Warn("bluetooth pairing mode", "on", on, "err", err)
+	if on || !phone { // phone pairing still wants the adapter findable
+		if err := a.Pairing(on); err != nil {
+			slog.Warn("bluetooth pairing mode", "on", on, "err", err)
+		}
 	}
 	if err := a.Discover(on); err != nil {
 		slog.Warn("bluetooth discovery", "on", on, "err", err)
 	}
 	slog.Info("bluetooth pairing mode", "on", on)
 	f.wake()
+}
+
+// SetPhonePairing turns phone pairing on or off: findable, pairable and connectable, with no scan
+// and no pick, so a phone (a new one or one already paired) can connect. Pairing mode, if on, ends
+// first: it would connect the strongest speaker it hears.
+func (f *Feature) SetPhonePairing(on bool) {
+	f.modes.Lock()
+	defer f.modes.Unlock()
+	f.setPhonePairing(on, -1)
+}
+
+// setPhonePairing is SetPhonePairing, with modes held. A gen of 0 or more is the window a phoneOff
+// was set for: if another has been opened or closed since, it does nothing.
+func (f *Feature) setPhonePairing(on bool, gen int) {
+	f.mu.Lock()
+	stale := gen >= 0 && gen != f.phoneGen
+	pairing := f.state.Pairing
+	f.mu.Unlock()
+	if stale {
+		return
+	}
+	if on && pairing {
+		f.setPairing(false)
+	}
+	f.mu.Lock()
+	a := f.adapter
+	if f.phoneOff != nil {
+		f.phoneOff.Stop()
+		f.phoneOff = nil
+	}
+	f.phoneGen++
+	f.phone = on && a != nil
+	f.state.Phone = f.phone
+	if f.phone {
+		gen := f.phoneGen
+		f.phoneOff = time.AfterFunc(phoneFor, func() {
+			f.modes.Lock()
+			defer f.modes.Unlock()
+			f.setPhonePairing(false, gen)
+		})
+	} else if strings.HasPrefix(f.state.Status, "Pairing code") && !f.state.Pairing {
+		f.state.Status = "" // as when pairing mode ends
+	}
+	pairing = f.state.Pairing
+	f.mu.Unlock()
+	f.showPhone()
+	if a == nil {
+		slog.Warn("bluetooth phone pairing asked for, no adapter")
+		return
+	}
+	if !on && pairing {
+		return // pairing mode still wants the adapter findable
+	}
+	if err := a.Pairing(on); err != nil {
+		slog.Warn("bluetooth phone pairing", "on", on, "err", err)
+	}
+	slog.Info("bluetooth phone pairing", "on", on)
+	f.wake()
+}
+
+// showPhone publishes the phone switch: on while phone pairing is on or a phone is connected.
+func (f *Feature) showPhone() {
+	f.phoneShow.Lock()
+	defer f.phoneShow.Unlock()
+	f.mu.Lock()
+	on := f.phone || (f.phoneLinked && !f.hangingUp)
+	f.mu.Unlock()
+	if f.phonePair.Get() != on {
+		f.phonePair.Set(on)
+	}
+}
+
+// disconnectPhones drops the connected phones; they stay paired and trusted, so each can connect
+// again, from its own Bluetooth settings or called back with Reconnect phone. The switch shows off
+// until the look that finds them gone (refresh), or at once if one would not go.
+func (f *Feature) disconnectPhones() {
+	f.mu.Lock()
+	a := f.adapter
+	f.mu.Unlock()
+	failed := a == nil
+	if a != nil {
+		speaker := config.Get().Bluetooth.Audio
+		for _, d := range a.Devices() {
+			if !d.Connected || !isPhone(d, speaker) {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+			err := a.Disconnect(ctx, d.Address)
+			cancel()
+			if err != nil {
+				failed = true
+				slog.Warn("bluetooth phone disconnect", "device", displayName(d), "err", err)
+			} else {
+				slog.Info("bluetooth phone disconnected", "device", displayName(d))
+			}
+		}
+	}
+	if failed {
+		f.mu.Lock()
+		f.hangingUp = false
+		f.mu.Unlock()
+	}
+	f.wake()
+}
+
+// ReconnectPhone calls the paired, trusted phones one after the other until one answers: a phone
+// that left and came back does not look for the device by itself. Nothing is called while a phone
+// is connected.
+func (f *Feature) ReconnectPhone() {
+	f.mu.Lock()
+	a := f.adapter
+	f.mu.Unlock()
+	if a == nil {
+		return
+	}
+	devices := a.Devices()
+	speaker := config.Get().Bluetooth.Audio
+	for _, d := range devices {
+		if d.Connected && isPhone(d, speaker) {
+			return
+		}
+	}
+	for _, d := range devices {
+		if !d.Trusted || !isPhone(d, speaker) {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
+		err := a.Connect(ctx, d.Address)
+		cancel()
+		if err == nil {
+			slog.Info("bluetooth phone reconnected", "device", displayName(d))
+			f.wake()
+			return
+		}
+		slog.Info("bluetooth phone did not answer", "device", displayName(d), "err", err)
+	}
+	f.note("No phone answered")
+	f.wake()
+}
+
+// ForgetPhones ends phone pairing and forgets every paired device that is not a speaker, which also
+// drops it: whoever paired during phone pairing has to pair again in a window opened on purpose.
+// The speakers and earbuds the device plays to are kept.
+func (f *Feature) ForgetPhones() {
+	f.mu.Lock()
+	f.hangingUp = true
+	f.mu.Unlock()
+	f.SetPhonePairing(false)
+	f.mu.Lock()
+	a := f.adapter
+	f.mu.Unlock()
+	failed := a == nil
+	if a != nil {
+		speaker := config.Get().Bluetooth.Audio
+		for _, d := range a.Devices() {
+			if !isPhone(d, speaker) {
+				continue
+			}
+			if err := a.Remove(d.Address); err != nil {
+				failed = true
+				slog.Warn("bluetooth forget", "device", displayName(d), "err", err)
+			} else {
+				slog.Info("bluetooth phone forgotten", "device", displayName(d))
+			}
+		}
+	}
+	if failed {
+		f.mu.Lock()
+		f.hangingUp = false
+		f.mu.Unlock()
+	}
+	f.wake()
+}
+
+// isPhone is whether a paired device is a phone, or anything else that plays to the device, rather
+// than earbuds or a speaker it plays to: it sends audio (A2DP source) or says it is a phone, and is
+// neither the remembered speaker nor one pairing mode lists for its icon without an A2DP sink.
+func isPhone(d bluez.Device, speaker string) bool {
+	if !d.Paired || d.AudioSink || strings.EqualFold(d.Address, speaker) {
+		return false
+	}
+	switch d.Icon {
+	case "audio-headset", "audio-headphones", "audio-card":
+		return false
+	case "phone":
+		return true
+	}
+	return slices.ContainsFunc(d.UUIDs, func(u string) bool { return strings.EqualFold(u, bluez.AudioSource) })
+}
+
+// PhonePairing reports whether phone pairing is on.
+func (f *Feature) PhonePairing() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.phone
+}
+
+// acceptsPairing is what the pairing agent asks: a pairing coming in is answered yes in pairing
+// mode and in phone pairing, and refused the rest of the time.
+func (f *Feature) acceptsPairing() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.state.Pairing || f.phone
 }
 
 // Pairing reports whether pairing mode is on.
