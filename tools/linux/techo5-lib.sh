@@ -505,7 +505,9 @@ t5_bt_up() {
 		fi
 	fi
 	bd=$(command -v bluetoothd || echo /usr/lib/bluetooth/bluetoothd)
-	[ -x "$bd" ] && "$bd" -n >> "$logdir/bluetoothd.log" 2>&1 &
+	# Only what audio needs, as on the Dot: no HID or HID over GATT (a paired device could otherwise
+	# present itself as a keyboard), no PAN networking, no SIM access.
+	[ -x "$bd" ] && "$bd" -n --noplugin=input,hog,network,sap >> "$logdir/bluetoothd.log" 2>&1 &
 	# Seen on the bench: after the first power-on the controller answers commands but never
 	# reports an inquiry result or an advertisement until it has been powered off and on once.
 	n=0; while [ $n -lt 10 ] && ! timeout 3 btmgmt info 2>/dev/null | grep -q "current settings: powered"; do sleep 1; n=$((n+1)); done
