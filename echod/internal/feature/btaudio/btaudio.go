@@ -40,7 +40,6 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluealsa"
@@ -898,8 +897,12 @@ func linkTone(was, now, busy map[string]bool) []speaker.Note {
 	return nil
 }
 
-// inCall is whether a call has the device, when a tone would be in the way.
-func inCall() bool { return phone.Get().State().Phase != phone.Idle }
+// InCall is whether a call has the device, when a tone would be in the way. Set by the phone feature
+// (phone.go's init), which knows: btaudio cannot import it, since what it imports comes back to
+// btaudio (the diagnostics redact the paired devices' names).
+var InCall = func() bool { return false }
+
+func inCall() bool { return InCall() }
 
 // received is a remote's stream that is running: what it sends, under the name it plays as.
 type received struct {
