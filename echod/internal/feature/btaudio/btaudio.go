@@ -149,7 +149,11 @@ type Feature struct {
 	// received is whether each receivable stream was running at the last look, so a remote that starts
 	// playing takes the speaker once, and whatever is started after it is not taken back.
 	received map[string]bool
-	poke     chan struct{}
+	// displaced is the remotes, by the name their audio plays under, that another remote took the
+	// speaker from while they were still sending: once nothing is playing, one still sending takes it
+	// back (refresh).
+	displaced map[string]bool
+	poke      chan struct{}
 
 	// refusals counts stream opens bluetoothd refused for the current connection; see attach.
 	refusals int
@@ -196,6 +200,7 @@ func build() *Feature {
 		}},
 		busy:       map[string]bool{},
 		received:   map[string]bool{},
+		displaced:  map[string]bool{},
 		phoneAudio: map[string]bool{},
 		poke:       make(chan struct{}, 1),
 		state:      State{Status: notConnected},
@@ -442,6 +447,7 @@ func (f *Feature) refresh() {
 	// A remote playing to the device (a phone using it as a speaker): the moment its stream starts, it
 	// takes the speaker. Only on that edge, so Home Assistant media started afterwards is not taken
 	// back while the phone keeps its transport open.
+	var sending []received
 	for _, p := range al.PCMs() {
 		if !p.Receivable() {
 			continue
@@ -452,13 +458,39 @@ func (f *Feature) refresh() {
 		was := f.received[string(p.Path)]
 		f.received[string(p.Path)] = running
 		f.mu.Unlock()
-		if running && !was && !f.receive(al, p, d) {
+		if !running {
+			continue
+		}
+		r := received{pcm: p, dev: d, item: media.BluetoothPrefix + displayName(d)}
+		sending = append(sending, r)
+		if was {
+			continue
+		}
+		holder := media.Get().Receiving()
+		if !f.receive(al, p, d) {
 			// Tried again at the next look rather than never: the stream a remote paused and resumed
 			// quickly can still be held by the track that was playing it until that track lets go.
 			f.mu.Lock()
 			f.received[string(p.Path)] = false
 			f.mu.Unlock()
+			continue
 		}
+		if holder != "" && holder != r.item {
+			f.mu.Lock()
+			f.displaced[holder] = true
+			f.mu.Unlock()
+		}
+	}
+	// A remote another took the speaker from, still sending once that one has finished and nothing is
+	// playing, takes it back, as a speaker goes on playing the phone that is still playing to it. A
+	// remote that went quiet, or was stopped here, was not displaced and stays let go.
+	playing, paused := media.Get().Playing()
+	f.mu.Lock()
+	back := takeBack(f.displaced, sending, !playing && !paused)
+	f.mu.Unlock()
+	if back != nil {
+		slog.Info("bluetooth: a device still sending takes the speaker back", "device", displayName(back.dev))
+		f.receive(al, back.pcm, back.dev)
 	}
 
 	// Devices whose audio is up: they have a stream to receive, playing or not.
@@ -605,6 +637,35 @@ func (f *Feature) receive(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) b
 	slog.Info("bluetooth: playing what a device sends", "device", displayName(d), "codec", p.Codec, "rate", p.Rate, "channels", p.Channels)
 	media.Get().PlayReceived(item, s, p.Rate, p.Channels)
 	return true
+}
+
+// received is a remote's stream that is running: what it sends, under the name it plays as.
+type received struct {
+	pcm  bluealsa.PCM
+	dev  bluez.Device
+	item string
+}
+
+// takeBack picks the displaced remote that takes the speaker back, if the speaker is free, and keeps
+// displaced to the remotes still sending: one that stopped sending is no longer owed the speaker. The
+// one picked is no longer displaced either, so a phone paused since is tried once, goes quiet and is
+// let go. Called with mu held.
+func takeBack(displaced map[string]bool, sending []received, free bool) *received {
+	for item := range displaced {
+		if !slices.ContainsFunc(sending, func(r received) bool { return r.item == item }) {
+			delete(displaced, item)
+		}
+	}
+	if !free {
+		return nil
+	}
+	for i := range sending {
+		if displaced[sending[i].item] {
+			delete(displaced, sending[i].item)
+			return &sending[i]
+		}
+	}
+	return nil
 }
 
 // pairedIncoming is the agent telling us a remote paired with the device (rather than the device

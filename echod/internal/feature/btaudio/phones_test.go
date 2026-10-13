@@ -76,3 +76,33 @@ func TestWhichPhoneJoins(t *testing.T) {
 		t.Errorf("remembered audio %v, want only /a", l.audio)
 	}
 }
+
+// A phone another took the speaker from takes it back once the speaker is free, if it is still
+// sending; one that stopped sending is forgotten, and one taken back is not owed it again.
+func TestADisplacedPhoneTakesTheSpeakerBack(t *testing.T) {
+	pixel := received{item: "Bluetooth: Pixel"}
+	g5 := received{item: "Bluetooth: G5"}
+	displaced := map[string]bool{"Bluetooth: Pixel": true}
+
+	if got := takeBack(displaced, []received{pixel, g5}, false); got != nil {
+		t.Fatalf("speaker busy: took back %q", got.item)
+	}
+	if !displaced["Bluetooth: Pixel"] {
+		t.Fatal("still sending, yet no longer owed the speaker")
+	}
+	got := takeBack(displaced, []received{g5, pixel}, true)
+	if got == nil || got.item != pixel.item {
+		t.Fatalf("speaker free: took back %v, want the Pixel", got)
+	}
+	if len(displaced) != 0 {
+		t.Errorf("taken back, still displaced: %v", displaced)
+	}
+	if got := takeBack(displaced, []received{pixel}, true); got != nil {
+		t.Errorf("taken back twice: %q", got.item)
+	}
+
+	displaced["Bluetooth: Pixel"] = true
+	if got := takeBack(displaced, []received{g5}, true); got != nil || len(displaced) != 0 {
+		t.Errorf("stopped sending: took %v, displaced %v", got, displaced)
+	}
+}
