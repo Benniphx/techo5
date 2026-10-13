@@ -41,6 +41,9 @@ func letLoopback(t *testing.T) {
 }
 
 // fakeImmich is an Immich that answers as v3 does: albums, two pages of search, a preview.
+// noPreview is a photo the fake Immich has no preview of.
+const noPreview = "0f0f0f0f-0000-4000-8000-000000000000"
+
 func fakeImmich(t *testing.T) (*httptest.Server, *[]map[string]any) {
 	t.Helper()
 	var searches []map[string]any
@@ -62,6 +65,8 @@ func fakeImmich(t *testing.T) (*httptest.Server, *[]map[string]any) {
 				return
 			}
 			fmt.Fprintf(w, `{"assets":{"total":3,"count":2,"items":[{"id":%q,"type":"IMAGE"},{"id":%q,"type":"IMAGE"}],"nextPage":null}}`, photo2, photo3)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/assets/"+noPreview+"/thumbnail":
+			http.NotFound(w, r) // a photo Immich has not made a preview of yet
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/assets/") && r.URL.Query().Get("size") == "preview":
 			w.Header().Set("Content-Type", "image/jpeg")
 			_, _ = w.Write(pic)
@@ -170,6 +175,11 @@ func TestImmichPhoto(t *testing.T) {
 	}
 	if _, err := immichPhoto(context.Background(), s, immichAssetPrefix+"x/../../albums"); err == nil {
 		t.Error("a photo id with a path in it was fetched")
+	}
+	// A photo Immich has no preview of yet (a library just added) is said as that, not as an album gone.
+	_, err = immichPhoto(context.Background(), s, immichAssetPrefix+noPreview)
+	if !errors.Is(err, errImmichGone) || !strings.Contains(err.Error(), "no preview yet") || strings.Contains(err.Error(), "album") {
+		t.Errorf("a photo with no preview: %v", err)
 	}
 }
 

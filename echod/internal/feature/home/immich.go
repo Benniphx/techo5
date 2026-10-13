@@ -136,7 +136,7 @@ func immichDo(ctx context.Context, srv config.Immich, method, path string, body 
 	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
 		return nil, ErrImmichKey
 	case resp.StatusCode == http.StatusNotFound:
-		return nil, fmt.Errorf("immich at %s: not found (an album since deleted?)", base.Host)
+		return nil, fmt.Errorf("immich at %s: %w", base.Host, errImmichGone)
 	case resp.StatusCode < 200 || resp.StatusCode > 299:
 		return nil, fmt.Errorf("immich at %s answered %d", base.Host, resp.StatusCode)
 	}
@@ -193,6 +193,9 @@ func immichPhotos(ctx context.Context, srv config.Immich, source string, max int
 	for page := 1; len(out) < max; page++ {
 		query["page"] = page
 		b, err := immichDo(ctx, srv, http.MethodPost, "/api/search/metadata", query, immichListMax)
+		if errors.Is(err, errImmichGone) {
+			return nil, fmt.Errorf("%w (an album since deleted?)", err)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -217,13 +220,22 @@ func immichPhotos(ctx context.Context, srv config.Immich, source string, max int
 	return out, nil
 }
 
+// errImmichGone is Immich answering that what was asked for is not there.
+var errImmichGone = errors.New("not found")
+
 // immichPhoto fetches one photo by its slideshow id: Immich's preview of it.
 func immichPhoto(ctx context.Context, srv config.Immich, id string) ([]byte, error) {
 	asset := strings.TrimPrefix(id, immichAssetPrefix)
 	if !immichID.MatchString(asset) {
 		return nil, errors.New("immich: that is not a photo")
 	}
-	return immichDo(ctx, srv, http.MethodGet, "/api/assets/"+asset+"/thumbnail?size=preview", nil, immichPhotoMax)
+	b, err := immichDo(ctx, srv, http.MethodGet, "/api/assets/"+asset+"/thumbnail?size=preview", nil, immichPhotoMax)
+	if errors.Is(err, errImmichGone) {
+		// Immich makes a preview of each photo after it finds it, which for a library just added takes
+		// hours: until then there is none to show, and the slideshow goes on to the next photo.
+		return nil, fmt.Errorf("%w (no preview yet, or the photo was removed)", err)
+	}
+	return b, err
 }
 
 // immichNames keeps the albums' names as last listed, to name the one chosen.
