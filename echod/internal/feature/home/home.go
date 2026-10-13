@@ -665,6 +665,20 @@ func (f *Feature) Radio() Radio {
 func carried(r Radio) Radio {
 	s := snapshotOf(media.Get())
 	switch whosePlaying(s, false) {
+	case playingOwn:
+		if !bluetoothFrom(s.recvFrom) {
+			break
+		}
+		// A phone playing over Bluetooth is a stream of this player's own, but not the radio's: the page
+		// names the phone, not the station last chosen here or Home Assistant's "last station" text,
+		// which went on naming a station while a phone played (and after the strip was closed and the
+		// phone played again). The song only if the device was told one; nothing reads one from a phone
+		// yet.
+		r.Chosen = ""
+		r.Playing, r.Paused = s.ownPlaying, s.ownPaused
+		r.Now, r.Title, r.Artist, r.Album = s.recvFrom, s.recvTitle, s.recvArtist, s.recvAlbum
+		r.Art, r.Thumb = nil, nil
+		r.Logo, r.Music = false, true
 	case playingReceived:
 		// A receiver this device runs (AirPlay, Spotify Connect: feature/streaming) is playing to it: the
 		// page names the app, and the song and its cover where it gave them.
