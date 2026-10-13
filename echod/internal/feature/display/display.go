@@ -188,6 +188,7 @@ type Display struct {
 	// sheet is the settings sheet being shown; restartArm is the first of the two taps Restart wants.
 	sheet      bool
 	restartArm time.Time
+	forgetArm  time.Time // the first of the two taps Forget wants (forgetRow)
 
 	// sheetCtl is where the settings screen is: the open category, a list open over it, how far each
 	// is scrolled, and the editors.

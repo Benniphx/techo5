@@ -25,6 +25,7 @@ var registered = []string{
 	"ble_advertisements",
 	"bluetooth_audio",
 	"bluetooth_disconnect",
+	"bluetooth_forget",
 	"bluetooth_forget_phones",
 	"bluetooth_pairing",
 	"bluetooth_phone_pairing",

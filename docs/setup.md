@@ -231,7 +231,16 @@ automation that wants to know too.
   remembered phones until one answers. Anyone nearby can pair while the switch is on, as in pairing
   mode, and a phone that joined stays remembered, so **Bluetooth forget phones** forgets every phone
   and keeps the speakers and earbuds. On the Dot a phone may not get in while the Dot is connected to
-  a Bluetooth speaker. Tried on a Dot; not yet on a Show.
+  a Bluetooth speaker. Tried on a Dot and a Show.
+- **Bluetooth, the rest of it (new).** A phone playing to the device has one volume, the device's: its
+  volume slider moves the device's volume, and the device's buttons and Home Assistant move the
+  slider (night volume still caps a raise from the phone). With two phones, the last to start playing
+  has the speaker, and the first takes it back when the second stops, if it is still playing. While
+  earbuds or a speaker are connected, a phone's audio goes on to them. A short rising tone says a
+  Bluetooth device connected and a falling one that it went, except in quiet hours and during a
+  call. **Forget**, under the earbuds or speaker in **Settings > Connections** (it asks twice), or the
+  **Bluetooth forget** button in Home Assistant on any device, forgets them, so new ones can be
+  paired.
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's

@@ -108,6 +108,7 @@ type Feature struct {
 	disconnect *esphome.Button
 	callPhone  *esphome.Button
 	forget     *esphome.Button
+	forgetOne  *esphome.Button // the earbuds or speaker the device plays to (Forget)
 
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
@@ -208,6 +209,10 @@ func build() *Feature {
 			ObjectID: "bluetooth_forget_phones", Name: "Bluetooth forget phones", Icon: "mdi:cellphone-remove",
 			Category: esphome.CategoryConfig,
 		}},
+		forgetOne: &esphome.Button{Base: esphome.Base{
+			ObjectID: "bluetooth_forget", Name: "Bluetooth forget", Icon: "mdi:headphones-off",
+			Category: esphome.CategoryConfig,
+		}},
 		busy:       map[string]bool{},
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
@@ -231,6 +236,7 @@ func build() *Feature {
 	f.disconnect.OnPress = func() { safe.Go("bluetooth disconnect", f.Disconnect) }
 	f.callPhone.OnPress = func() { safe.Go("bluetooth reconnect phone", f.ReconnectPhone) }
 	f.forget.OnPress = func() { safe.Go("bluetooth forget phones", f.ForgetPhones) }
+	f.forgetOne.OnPress = func() { safe.Go("bluetooth forget", f.Forget) }
 	f.status.Set(notConnected)
 	return f
 }
@@ -239,10 +245,10 @@ func (f *Feature) Name() string { return "bluetooth audio" }
 
 func (f *Feature) Entities() []esphome.Entity {
 	if !takesPhones {
-		return []esphome.Entity{f.pairing, f.status, f.reconnect, f.disconnect}
+		return []esphome.Entity{f.pairing, f.status, f.reconnect, f.disconnect, f.forgetOne}
 	}
 	return []esphome.Entity{
-		f.pairing, f.phonePair, f.status, f.reconnect, f.disconnect, f.callPhone, f.forget,
+		f.pairing, f.phonePair, f.status, f.reconnect, f.disconnect, f.forgetOne, f.callPhone, f.forget,
 	}
 }
 
