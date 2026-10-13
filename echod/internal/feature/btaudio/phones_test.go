@@ -5,6 +5,8 @@ package btaudio
 import (
 	"testing"
 
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/bluealsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluez"
 	"github.com/godbus/dbus/v5"
 )
@@ -104,5 +106,21 @@ func TestADisplacedPhoneTakesTheSpeakerBack(t *testing.T) {
 	displaced["Bluetooth: Pixel"] = true
 	if got := takeBack(displaced, []received{g5}, true); got != nil || len(displaced) != 0 {
 		t.Errorf("stopped sending: took %v, displaced %v", got, displaced)
+	}
+}
+
+// Every volume step handed to a phone comes back from it as the same step, so the device's own level
+// echoed back by the phone moves nothing; and the ends meet the ends.
+func TestPhoneLevelsAndSteps(t *testing.T) {
+	for step := 0; step <= media.VolumeSteps; step++ {
+		if got := stepFor(levelFor(step)); got != step {
+			t.Errorf("step %d -> level %d -> step %d", step, levelFor(step), got)
+		}
+	}
+	if levelFor(0) != 0 || levelFor(media.VolumeSteps) != bluealsa.VolumeMax {
+		t.Errorf("ends: %d, %d", levelFor(0), levelFor(media.VolumeSteps))
+	}
+	if stepFor(bluealsa.VolumeMax) != media.VolumeSteps || stepFor(1) != 0 {
+		t.Errorf("phone ends: %d, %d", stepFor(bluealsa.VolumeMax), stepFor(1))
 	}
 }

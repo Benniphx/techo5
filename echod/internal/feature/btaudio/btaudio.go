@@ -153,6 +153,10 @@ type Feature struct {
 	// speaker from while they were still sending: once nothing is playing, one still sending takes it
 	// back (refresh).
 	displaced map[string]bool
+	// levels is each received stream's level as last seen or set, by PCM path: a phone's volume slider,
+	// which is the device's volume while it plays here (phoneSlider, tellPhone).
+	levels    map[string]int
+	levelOnce sync.Once
 	poke      chan struct{}
 
 	// refusals counts stream opens bluetoothd refused for the current connection; see attach.
@@ -201,6 +205,7 @@ func build() *Feature {
 		busy:       map[string]bool{},
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
+		levels:     map[string]int{},
 		phoneAudio: map[string]bool{},
 		poke:       make(chan struct{}, 1),
 		state:      State{Status: notConnected},
@@ -492,6 +497,13 @@ func (f *Feature) refresh() {
 		slog.Info("bluetooth: a device still sending takes the speaker back", "device", displayName(back.dev))
 		f.receive(al, back.pcm, back.dev)
 	}
+	if cur := media.Get().Receiving(); cur != "" {
+		for _, r := range sending {
+			if r.item == cur {
+				f.phoneSlider(r.pcm)
+			}
+		}
+	}
 
 	// Devices whose audio is up: they have a stream to receive, playing or not.
 	audioUp := map[string]bool{}
@@ -636,7 +648,104 @@ func (f *Feature) receive(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) b
 	}
 	slog.Info("bluetooth: playing what a device sends", "device", displayName(d), "codec", p.Codec, "rate", p.Rate, "channels", p.Channels)
 	media.Get().PlayReceived(item, s, p.Rate, p.Channels)
+	f.oneVolume(al, p)
 	return true
+}
+
+// A phone playing here has one volume, the device's: its slider is the device's volume, as on any
+// Bluetooth speaker. The phone sends its slider over AVRCP and leaves its audio unscaled; bluez-alsa
+// scaling it by the slider as well put the two volumes on top of each other (half on the phone and
+// 40% here came out much quieter than either). So bluez-alsa leaves the audio as it comes, the phone
+// is handed the device's level as it starts playing here, a move of its slider sets the device's
+// volume (phoneSlider), and the device's volume changing, by the buttons, Home Assistant or night
+// volume, moves the slider (tellPhone). A phone that does not do AVRCP volume scales its own audio, and
+// the level handed to it goes nowhere.
+
+// levelFor is a phone's level, 0..bluealsa.VolumeMax, for the device's volume step.
+func levelFor(step int) int {
+	return (step*bluealsa.VolumeMax + media.VolumeSteps/2) / media.VolumeSteps
+}
+
+// stepFor is the device's volume step for a phone's level: the one levelFor takes back to it.
+func stepFor(level int) int {
+	return (level*media.VolumeSteps + bluealsa.VolumeMax/2) / bluealsa.VolumeMax
+}
+
+// oneVolume makes p's volume the device's: bluez-alsa stops scaling it, and the phone is handed the
+// device's level.
+func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
+	f.levelOnce.Do(func() {
+		media.Get().OnLevel.Listen(func(step int) { safe.Go("bluetooth phone volume", func() { f.tellPhone(step) }) })
+	})
+	if err := al.SetSoftVolume(p, false); err != nil {
+		slog.Warn("bluetooth: leaving a phone's audio unscaled", "err", err)
+	}
+	level := levelFor(media.Get().Volume())
+	if err := al.SetLevel(p, level); err != nil {
+		slog.Warn("bluetooth: handing a phone the volume", "err", err)
+	}
+	f.mu.Lock()
+	f.levels[string(p.Path)] = level
+	f.mu.Unlock()
+}
+
+// phoneSlider is a look at the stream playing here: its level other than last seen or set is the
+// phone's slider moved, and sets the device's volume. A raise stops where night volume says
+// (media.CapRaise); the slider is then moved back to where the device ended up (tellPhone, by way of
+// OnLevel).
+func (f *Feature) phoneSlider(p bluealsa.PCM) {
+	level := p.Level()
+	f.mu.Lock()
+	last, known := f.levels[string(p.Path)]
+	f.levels[string(p.Path)] = level
+	f.mu.Unlock()
+	if !known || level == last {
+		return
+	}
+	m := media.Get()
+	from, to := m.Volume(), stepFor(level)
+	if to > from {
+		to = m.CapRaise(to)
+	}
+	if to != from {
+		slog.Info("bluetooth: a phone's volume slider sets the volume", "level", level, "step", to)
+		m.Set(to)
+	}
+}
+
+// tellPhone moves the slider of the phone playing here to the device's volume step, unless it is at
+// that step already: a slider being dragged is left alone, and the level it was dragged to is not
+// handed back to it.
+func (f *Feature) tellPhone(step int) {
+	f.mu.Lock()
+	al := f.alsa
+	f.mu.Unlock()
+	cur := media.Get().Receiving()
+	if al == nil || cur == "" {
+		return
+	}
+	f.mu.Lock()
+	a := f.adapter
+	f.mu.Unlock()
+	if a == nil {
+		return
+	}
+	names := map[string]string{}
+	for _, d := range a.Devices() {
+		names[string(d.Path)] = media.BluetoothPrefix + displayName(d)
+	}
+	for _, p := range al.PCMs() {
+		if !p.Receivable() || !p.Running || names[string(p.Device)] != cur || stepFor(p.Level()) == step {
+			continue
+		}
+		level := levelFor(step)
+		f.mu.Lock()
+		f.levels[string(p.Path)] = level
+		f.mu.Unlock()
+		if err := al.SetLevel(p, level); err != nil {
+			slog.Warn("bluetooth: handing a phone the volume", "err", err)
+		}
+	}
 }
 
 // received is a remote's stream that is running: what it sends, under the name it plays as.
