@@ -86,16 +86,38 @@ func (f *Feature) buildFollowSelect() {
 	}
 }
 
+// optionsMax and optionBytes cap a select whose options come from Home Assistant's lists. All of a
+// select's options go to Home Assistant in one message, and the ESPHome library cuts the length of a
+// message over 64 KiB short without a word: Home Assistant then cannot decrypt the connection, drops
+// it, and connects again at once, over and over, every entity of the device unknown (#136). No one
+// picks from more than this many anyway.
+const (
+	optionsMax  = 100
+	optionBytes = 8 << 10
+)
+
+// roomFor is whether opts has room for one more option, o.
+func roomFor(opts []string, o string) bool {
+	if len(opts) >= optionsMax {
+		return false
+	}
+	n := len(o)
+	for _, x := range opts {
+		n += len(x)
+	}
+	return n <= optionBytes
+}
+
 // followOptions is what the select offers: none, the one chosen, and every media player Home
 // Assistant listed when it was last asked, this device's own left out.
 func followOptions(h config.Home) []string {
 	opts := []string{followNone}
 	add := func(id string) {
-		if id != "" && !slices.Contains(opts, id) {
+		if id != "" && roomFor(opts, id) && !slices.Contains(opts, id) {
 			opts = append(opts, id)
 		}
 	}
-	add(h.FollowPlayer)
+	add(h.FollowPlayer) // first, so the cap never leaves it out
 	for _, id := range h.PlayerSources {
 		add(id)
 	}
