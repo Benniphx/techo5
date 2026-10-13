@@ -1465,6 +1465,33 @@ func (f *Feature) Forget() {
 	f.wake()
 }
 
+// PairedNames is the names of the devices paired with this one and of the remembered one: earbuds,
+// speakers and phones, which are often named after whoever owns them (the diagnostics leave them out).
+func (f *Feature) PairedNames() []string {
+	f.mu.Lock()
+	a := f.adapter
+	f.mu.Unlock()
+	var devices []bluez.Device
+	if a != nil {
+		devices = a.Devices()
+	}
+	return pairedNames(devices, config.Get().Bluetooth.AudioName)
+}
+
+// pairedNames is the names of the paired devices among devices, and remembered's.
+func pairedNames(devices []bluez.Device, remembered string) []string {
+	var out []string
+	if remembered != "" {
+		out = append(out, remembered)
+	}
+	for _, d := range devices {
+		if d.Paired && d.Name != "" && !slices.Contains(out, d.Name) {
+			out = append(out, d.Name)
+		}
+	}
+	return out
+}
+
 // forgetTarget is the device Forget forgets: the one the device is playing to when it plays to one,
 // which is the one the screen's row names (Connected), else the remembered one.
 func forgetTarget(devices []bluez.Device, playing dbus.ObjectPath, remembered string) string {

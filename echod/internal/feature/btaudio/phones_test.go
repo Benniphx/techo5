@@ -230,3 +230,17 @@ func TestHoldForJoin(t *testing.T) {
 		t.Error("disconnect tone held for a join")
 	}
 }
+
+// The names the diagnostics leave out are the paired devices' and the remembered one's, each once.
+func TestPairedNames(t *testing.T) {
+	got := pairedNames([]bluez.Device{
+		{Name: "Phone A", Paired: true},
+		{Name: "Earbuds", Paired: true},
+		{Name: "A neighbor's speaker"},
+		{Name: "Earbuds", Paired: true},
+		{Paired: true},
+	}, "Earbuds")
+	if !slices.Equal(got, []string{"Earbuds", "Phone A"}) {
+		t.Errorf("names %q", got)
+	}
+}

@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/redact"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
@@ -52,6 +54,14 @@ func Bundle() string {
 	defer cancel()
 	if st := wifi.Current(ctx); st.SSID != "" {
 		r.Known("wifi", st.SSID)
+	}
+	// Bluetooth devices and the phones playing here are often named after whoever owns them, and the
+	// log names them.
+	for _, name := range btaudio.Get().PairedNames() {
+		r.Known("bluetooth", name)
+	}
+	if from := strings.TrimPrefix(media.Get().Receiving(), media.BluetoothPrefix); from != "" {
+		r.Known("bluetooth", from)
 	}
 
 	var b strings.Builder
