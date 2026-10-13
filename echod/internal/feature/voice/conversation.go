@@ -93,6 +93,7 @@ const (
 	evSpokeEnd                     // the device heard the speaker finish; text is the turn's id
 	evLookHere                     // the answer put something on the screen: no listening again after it
 	evCutOff                       // another sound took the speaker from the reply (event.reply)
+	evEffect                       // an effect asked for the step the turn is in (event.text, ShowEffect)
 	evWakeStart                    // Home Assistant's wake word engine is listening (hawake.go)
 	evWakeEnd                      // and has heard the word
 	evUnconfirmed                  // a wake asked about was not heard in time
@@ -471,6 +472,9 @@ func (c *conversation) turnEvent(e event) {
 		if c.phase != phaseIdle {
 			c.lookHere = true
 		}
+
+	case evEffect:
+		c.showEffect(e.text)
 
 	case evContinue:
 		// The pipeline asked a question. Its answer is owed after the reply has been spoken, so this
@@ -986,6 +990,36 @@ func (c *conversation) idle(why string, how activity.Ending) {
 
 	if was != phaseIdle {
 		slog.Info("turn ended", "was", was, "slot", c.slot+1, "why", why)
+	}
+}
+
+// showEffect puts name on the ring for the step the turn is in (Voice.ShowEffect): Default, or no
+// name, draws the step as entering it did, and None clears it. A turn that has ended shows nothing.
+func (c *conversation) showEffect(name string) {
+	switch {
+	case c.phase == phaseIdle:
+	case name == "", name == component.EffectDefault:
+		c.restyle()
+	case name == component.EffectNone:
+		c.claim.Clear()
+	default:
+		c.claim.Play(name, c.ring.Base())
+	}
+}
+
+// restyle draws the turn's phase again, as entering it did.
+func (c *conversation) restyle() {
+	switch c.phase {
+	case phaseListening:
+		if effect := wakeword.Effect(c.slot); effect != "" {
+			c.claim.Play(effect, c.ring.Base())
+		} else {
+			c.claim.Clear()
+		}
+	case phaseThinking:
+		c.showPhase(wakeword.ThinkingEffect(c.slot))
+	case phaseReplying:
+		c.showPhase(wakeword.ReplyingEffect(c.slot))
 	}
 }
 
