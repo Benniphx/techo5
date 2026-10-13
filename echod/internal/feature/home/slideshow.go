@@ -18,6 +18,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
 // The idle photo slideshow. Background mode shows photos from a Home Assistant media source
@@ -297,17 +298,55 @@ func (f *Feature) ChooseSlideshowOverlay(overlay string) {
 // the screen's folder list.
 func (f *Feature) SetSlideshowSource(source string) {
 	if id, ok := strings.CutPrefix(source, ImmichAlbumPrefix); ok {
-		// The album's name is kept, to name it without asking the server.
-		if name, ok := immichNames.name(id); ok {
-			i := config.Get().Home.Immich
-			i.Album = name
-			if err := config.Set().Home().Immich(i); err != nil {
-				slog.Warn("home: saving the Immich album's name failed", "err", err)
-			}
+		// The album's name is kept with its id, to name it without asking the server. Not known yet (the
+		// list not fetched since a restart, or the album set from Home Assistant), the name of the album
+		// before is not kept for this one: it is asked for, and the album is "Immich album" meanwhile.
+		name, known := immichNames.name(id)
+		i := config.Get().Home.Immich
+		i.Album, i.AlbumID = name, id
+		if err := config.Set().Home().Immich(i); err != nil {
+			slog.Warn("home: saving the Immich album's name failed", "err", err)
+		}
+		if !known && i.Set() {
+			safe.Go("immich album name", func() { f.nameImmichAlbum(id) })
 		}
 	}
 	f.changeSlideshow(func(s *config.Slideshow) { s.Source = source })
 	slog.Info("home: slideshow source", "source", source)
+}
+
+// nameImmichAlbum asks Immich for its albums, to name the album id chosen without its name known.
+func (f *Feature) nameImmichAlbum(id string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	srv := config.Get().Home.Immich
+	if _, err := ImmichAlbums(ctx, srv); err != nil {
+		return
+	}
+	name, ok := immichNames.name(id)
+	i := config.Get().Home.Immich
+	if !ok || i.AlbumID != id || i.Server != srv.Server {
+		return // since chosen otherwise, or another server
+	}
+	i.Album = name
+	if err := config.Set().Home().Immich(i); err != nil {
+		slog.Warn("home: saving the Immich album's name failed", "err", err)
+	}
+	f.Changed.Emit(struct{}{})
+}
+
+// ResetImmich is the Immich server changed: photos listed from the one before are not this one's, so
+// the list is gathered again, and an album of the one before is not this one's either, so the slideshow
+// shows the whole library instead.
+func (f *Feature) ResetImmich() {
+	f.mu.Lock()
+	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = nil, time.Time{}, 0
+	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
+	f.mu.Unlock()
+	if source, _, _ := f.SlideshowSettings(); strings.HasPrefix(source, ImmichAlbumPrefix) {
+		f.SetSlideshowSource(ImmichAll)
+	}
+	f.Changed.Emit(struct{}{})
 }
 
 // SetSlideshowShuffle shows the photos shuffled, or in the source's own order.
@@ -472,6 +511,7 @@ func (f *Feature) advanceSlideshow() {
 	if !due {
 		return
 	}
+	var last error
 	for try := 0; try < slideshowRetries; try++ {
 		id, ok := f.nextSlideshowChild(h)
 		if !ok {
@@ -484,6 +524,7 @@ func (f *Feature) advanceSlideshow() {
 			img, err := fetchSlideshowImage(id, whole)
 			if err != nil {
 				slog.Warn("home: slideshow photo", "id", id, "err", err)
+				last = err
 				break
 			}
 			f.mu.Lock()
@@ -494,13 +535,27 @@ func (f *Feature) advanceSlideshow() {
 			}
 			f.slideshow.prev, f.slideshow.image, f.slideshow.at = f.slideshow.image, img, time.Now()
 			f.slideshow.shown = id
+			f.slideshow.fails, f.slideshow.trouble = 0, ""
 			f.mu.Unlock()
 			f.Changed.Emit(struct{}{})
 			return
 		}
 	}
 	slog.Warn("home: slideshow", "err", "no photo fetched after retries")
+	if fetchCounts(last) {
+		// None of a look's photos could be fetched: the source is down or refusing, which the screen says
+		// after a few such looks, as for one that cannot be listed. The list is gathered again then.
+		f.mu.Lock()
+		f.slideshow.browsed = time.Time{}
+		f.mu.Unlock()
+		f.slideshowNothing(slideshowUnreadable)
+	}
 }
+
+// fetchCounts is whether a look whose photos all failed, the last with err, says the source is in
+// trouble: not when Immich has merely no preview of them yet, which a library just added is short of
+// for hours while it makes them.
+func fetchCounts(err error) bool { return err != nil && !errors.Is(err, errImmichGone) }
 
 // nextSlideshowChild is the next photo's id to try, gathering the source again when the list is
 // stale or empty. A shuffled list is shuffled afresh each time round.

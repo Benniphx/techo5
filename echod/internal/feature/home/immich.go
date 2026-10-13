@@ -190,7 +190,11 @@ func immichPhotos(ctx context.Context, srv config.Immich, source string, max int
 		return nil, errors.New("immich: that is not an Immich source")
 	}
 	var out []hass.Media
-	for page := 1; len(out) < max; page++ {
+	// A page that adds nothing ends it, and so do pages enough for max and a few over: a server that
+	// kept saying there was another page of nothing would otherwise be asked until the gathering's time
+	// ran out.
+	pages := max/immichPage + 5
+	for page := 1; len(out) < max && page <= pages; page++ {
 		query["page"] = page
 		b, err := immichDo(ctx, srv, http.MethodPost, "/api/search/metadata", query, immichListMax)
 		if errors.Is(err, errImmichGone) {
@@ -208,12 +212,13 @@ func immichPhotos(ctx context.Context, srv config.Immich, source string, max int
 		if err := json.Unmarshal(b, &r); err != nil {
 			return nil, errors.New("immich: the photo list was not what Immich sends")
 		}
+		before := len(out)
 		for _, a := range r.Assets.Items {
 			if a.Type == "IMAGE" && immichID.MatchString(a.ID) && len(out) < max {
 				out = append(out, hass.Media{ID: immichAssetPrefix + a.ID, Kind: "image/jpeg", CanPlay: true})
 			}
 		}
-		if r.Assets.NextPage == nil || *r.Assets.NextPage == "" || len(r.Assets.Items) == 0 {
+		if r.Assets.NextPage == nil || *r.Assets.NextPage == "" || len(r.Assets.Items) == 0 || len(out) == before {
 			break
 		}
 	}
@@ -275,10 +280,20 @@ func ImmichSourceName(source string) string {
 	if name, ok := immichNames.name(id); ok && name != "" {
 		return name
 	}
-	if a := config.Get().Home.Immich.Album; a != "" {
-		return a
+	if i := config.Get().Home.Immich; i.Album != "" && i.AlbumID == id {
+		return i.Album
 	}
 	return "Immich album"
+}
+
+// ImmichSourceOK is whether source is an Immich source the device can ask for: the whole library, or
+// an album by an id of the form Immich gives.
+func ImmichSourceOK(source string) bool {
+	if source == ImmichAll {
+		return true
+	}
+	id, ok := strings.CutPrefix(source, ImmichAlbumPrefix)
+	return ok && immichID.MatchString(id)
 }
 
 // browseImmich is the Immich folder of the screen's photo folder list (ImmichAll, the whole library,

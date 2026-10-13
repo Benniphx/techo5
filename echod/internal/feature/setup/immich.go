@@ -20,8 +20,11 @@ import (
 // secret - it opens the owner's whole library - so the page only ever says one is kept, as it does for
 // a calendar's address.
 
-// immichAsk is how long the page waits for Immich's album list.
+// immichAsk is how long saving a server waits for Immich to answer with its albums.
 const immichAsk = 8 * time.Second
+
+// immichListAsk is how long the setup page waits for Immich's album list as it is drawn.
+const immichListAsk = 3 * time.Second
 
 func immichSection(w http.ResponseWriter, token string) {
 	srv := config.Get().Home.Immich
@@ -54,7 +57,8 @@ func immichSection(w http.ResponseWriter, token string) {
 // immichAlbumForm offers the whole library and each album as the slideshow's photos, with the one
 // showing now chosen.
 func immichAlbumForm(w http.ResponseWriter, token string, srv config.Immich) {
-	ctx, cancel := context.WithTimeout(context.Background(), immichAsk)
+	// Short: the whole page waits for it, and an Immich that is down should not hold the page up.
+	ctx, cancel := context.WithTimeout(context.Background(), immichListAsk)
 	defer cancel()
 	albums, err := home.ImmichAlbums(ctx, srv)
 	if err != nil {
@@ -116,6 +120,9 @@ func saveImmich(r *http.Request) string {
 	if err := config.Set().Home().Immich(next); err != nil {
 		return "could not keep it: " + err.Error()
 	}
+	if cur.Server != "" && server != cur.Server {
+		home.Get().ResetImmich() // the photos listed, and an album chosen, were the other server's
+	}
 	host := ""
 	if u, err := url.Parse(server); err == nil {
 		host = u.Host
@@ -130,10 +137,10 @@ func chooseImmichAlbum(r *http.Request) string {
 		return "save an Immich server first"
 	}
 	source := r.PostFormValue("source")
-	id, album := strings.CutPrefix(source, home.ImmichAlbumPrefix)
-	if source != home.ImmichAll && (!album || id == "" || strings.ContainsAny(id, "/?#% ")) {
+	if !home.ImmichSourceOK(source) {
 		return "that is not one of Immich's albums"
 	}
+	_, album := strings.CutPrefix(source, home.ImmichAlbumPrefix)
 	home.Get().SetSlideshowSource(source)
 	slog.Info("setup page: the slideshow shows Immich's photos", "album", album)
 	return ""

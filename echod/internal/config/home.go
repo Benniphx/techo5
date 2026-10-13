@@ -339,6 +339,8 @@ type Immich struct {
 	Server string `json:"server,omitempty"`
 	Key    string `json:"key,omitempty"`
 	Album  string `json:"album,omitempty"`
+	// AlbumID is the album Album names: a name is only shown for the album it is the name of.
+	AlbumID string `json:"album_id,omitempty"`
 }
 
 // Set is whether there is a server to read from.
