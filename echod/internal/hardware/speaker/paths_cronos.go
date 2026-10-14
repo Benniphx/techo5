@@ -122,13 +122,15 @@ var hwRate = onAthena(96000, Rate)
 // block the DL1 driver took for it on the unit (dma_bytes 24576, "MaxSramSize = 24576").
 const athenaRingMax = 24576
 
-// hwTrimDB is taken off everything the card is sent, after the volume and the tuning. Zero on the
-// boards that have been listened to. athena has not been yet, behind an amplifier stage of its own
-// (see initSequence), so it starts athenaTrimDB under the levels crown plays at, until it has been
-// heard.
+// hwTrimDB is taken off everything the card is sent, after the volume and the tuning. Zero on every
+// Show. athena started 10 dB under crown (M4 to M8) until its speaker had been heard; on the unit
+// (2026-10-14) a 30% test tone played loud and clean, and a reply at the media volume crown would use
+// was barely audible, so athena now plays at crown's level: the same volume curves in front of the
+// same Crown tuning set, nothing trimmed. The amplifier's own protection (its -9.5 dB analog gain and
+// the DSP limiter Amazon's driver loads) is untouched, and athenaTrimDB stays a cut, never a boost.
 var hwTrimDB = onAthena(athenaTrimDB, 0)
 
-const athenaTrimDB = -10.0
+const athenaTrimDB = 0.0
 
 // onAthena picks athena's value over every other Show's.
 func onAthena[T any](athena, other T) T {

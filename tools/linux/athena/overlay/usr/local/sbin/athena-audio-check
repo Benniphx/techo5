@@ -17,12 +17,19 @@
 #   athena-audio-check                    tone at 7% of full scale, the speaker at 96 kHz
 #   LEVEL=0.03 athena-audio-check         quieter
 #   PLAY_RATE=48000 athena-audio-check    the speaker (and the reference) at 48 kHz instead
+#   NOPLAY=1 athena-audio-check           record only: nothing is played, so the amplifier is left
+#                                         idle, for the microphones' floor without it switching
+#   PMIC=0 athena-audio-check             turn the PMIC microphone path off instead of on
+#   GAIN=30 athena-audio-check            the converter's analog gain in dB (default 20, Fire OS's)
 #   OLDREF=1 athena-audio-check           also record hw:0,16 (I2S0AWB, M4/M5's reference guess)
 #   VUL2=1 athena-audio-check             also record hw:0,33 (I2S0VUL2)
 #   ADCBIAS=1 athena-audio-check          also turn on the converter's own MICBIAS (PWR_CFG 0x75
 #                                         bit 7) while recording; Fire OS never does this
 set -u
 LEVEL=${LEVEL:-0.07}
+NOPLAY=${NOPLAY:-0}
+PMIC=${PMIC:-1}
+GAIN=${GAIN:-20}
 PLAY_RATE=${PLAY_RATE:-96000}
 OLDREF=${OLDREF:-0}
 VUL2=${VUL2:-0}
@@ -32,6 +39,7 @@ DIR=/tmp/athena-audio-check
 rm -rf "$DIR" && mkdir -p "$DIR" || exit 1
 
 case "$LEVEL" in 0.0[0-9]|0.0[0-9]*|0.1|0.10) ;; *) echo "LEVEL $LEVEL is above 0.1; refusing" >&2; exit 1 ;; esac
+case "$GAIN" in [0-9]|[1-3][0-9]|4[0-2]) ;; *) echo "GAIN is 0 to 42 dB" >&2; exit 1 ;; esac
 case "$PLAY_RATE" in 48000|96000) ;; *) echo "PLAY_RATE is 48000 or 96000" >&2; exit 1 ;; esac
 
 restart() {
@@ -58,7 +66,7 @@ amixer -c 0 cget name='Master TAS5805m Playback Volume' 2>&1 | sed -n 's/^ *: *v
 # (its driver writes SLEEP_CFG = 0x81); the kernel log says "adc5140_reset" when it happens.
 for kv in "ADC Reset A=1" "Ch1 Output A=0" "Ch1 Slot Offset A=0" "Ch2 Output A=0" \
 	"Ch2 Slot Offset A=32" "Ch3 Output A=1" "Ch3 Slot Offset A=0" "Ch4 Output A=1" \
-	"Ch4 Slot Offset A=32" "Ch1 Gain A=20" "Ch2 Gain A=20" "Ch3 Gain A=20" "Ch4 Gain A=20" \
+	"Ch4 Slot Offset A=32" "Ch1 Gain A=$GAIN" "Ch2 Gain A=$GAIN" "Ch3 Gain A=$GAIN" "Ch4 Gain A=$GAIN" \
 	"Ch1 Digital Capture Vol A=201" "Ch2 Digital Capture Vol A=201" "Ch3 Digital Capture Vol A=201" \
 	"Ch4 Digital Capture Vol A=201" "DRE Trigger Level A=4" "DRE Max Gain A=11" \
 	"Ch1 DRE Enable A=0" "Ch2 DRE Enable A=0" "Ch3 DRE Enable A=0" "Ch4 DRE Enable A=0"; do
@@ -69,7 +77,11 @@ dmesg 2>/dev/null | grep -i "adc5140_reset" | tail -2 | sed 's/^/kernel: /'
 # The PMIC's microphone path, which Fire OS's HAL turns on once its capture runs (startInputDevice:
 # the mic type, then "builtin_Mic_SingleMic" from the same file). The likely source of the analog
 # microphones' bias. Enumerated controls, set by item name.
-for kv in "Audio_MIC1_Mode_Select=ACCMODE" "Audio_MicSource1_Setting=ADC1" "Audio_ADC_1_Switch=On" 	"Audio_ADC_2_Switch=On" "Audio_Preamp1_Switch=IN_ADC1" "Audio_Preamp2_Switch=IN_ADC3"; do
+PMIC_ON="Audio_MIC1_Mode_Select=ACCMODE Audio_MicSource1_Setting=ADC1 Audio_ADC_1_Switch=On Audio_ADC_2_Switch=On Audio_Preamp1_Switch=IN_ADC1 Audio_Preamp2_Switch=IN_ADC3"
+PMIC_OFF="Audio_Preamp1_Switch=OPEN Audio_ADC_1_Switch=Off Audio_ADC_2_Switch=Off"
+[ "$PMIC" = 1 ] && PMIC_SET=$PMIC_ON || PMIC_SET=$PMIC_OFF
+echo "PMIC microphone path: $([ "$PMIC" = 1 ] && echo on || echo off)"
+for kv in $PMIC_SET; do
 	amixer -q -c 0 cset name="${kv%=*}" "${kv##*=}" >/dev/null 2>&1 || echo "mixer: could not set ${kv%=*}"
 done
 
@@ -100,10 +112,18 @@ while [ $i -lt 12 ]; do cat "$DIR/tone.raw" "$DIR/tone.raw" > "$DIR/t2" && mv "$
 # 96 kHz), hw:0,16 8 x 10 ms (15360 bytes).
 PLAY_PERIOD=$((PLAY_RATE / 1000 * 16))
 REF_PERIOD=$((PLAY_RATE / 100))
+# The amplifier's power state (TAS5805M 0x68: 0 deep sleep, 1 sleep, 2 Hi-Z, 3 play), read alone.
+amp() { techo5 tools i2c get -b 4 2d 68 2>/dev/null | awk '{print $NF}'; }
+echo "amplifier before: POWER_STATE 0x68=$(amp)"
+PLAY=
+if [ "$NOPLAY" = 1 ]; then
+	echo "playing nothing"
+else
 echo "playing 1 kHz at $LEVEL of full scale, $PLAY_RATE Hz, on hw:0,7"
 aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" \
 	--period-size=$PLAY_PERIOD --buffer-size=$((PLAY_PERIOD * 4)) "$DIR/tone.raw" 2> "$DIR/aplay.err" &
 PLAY=$!
+fi
 sleep 0.5
 arecord -q -D hw:0,9 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" \
 	--period-size=$REF_PERIOD --buffer-size=$((REF_PERIOD * 4)) -d $SECS "$DIR/ref.raw" 2> "$DIR/ref.err" &
@@ -133,8 +153,11 @@ if [ "$ADCBIAS" = 1 ]; then
 	fi
 fi
 wait $R1 $R2 $R3 $R4 2>/dev/null
-kill $PLAY 2>/dev/null
-wait $PLAY 2>/dev/null
+echo "amplifier during: POWER_STATE 0x68=$(amp)"
+if [ -n "$PLAY" ]; then
+	kill $PLAY 2>/dev/null
+	wait $PLAY 2>/dev/null
+fi
 for f in aplay ref mic awb vul2; do
 	[ -s "$DIR/$f.err" ] && { echo "--- $f:"; cat "$DIR/$f.err"; }
 done
@@ -160,12 +183,22 @@ report() { # file label rate channels bytes fullscale
 			sq[c] += x * x; sm[c] += x; cnt[c]++
 			if (x > pk[c]) pk[c] = x
 			if (-x > pk[c]) pk[c] = -x
+			fr[c] = x
+			if (nch == 4 && c == 3) {
+				xy01 += fr[0] * fr[1]; xy23 += fr[2] * fr[3]; xy02 += fr[0] * fr[2]; xy13 += fr[1] * fr[3]
+			}
 			for (k = 1; k <= nf; k++) {
 				s = x + co[k] * s1[c, k] - s2[c, k]
 				s2[c, k] = s1[c, k]; s1[c, k] = s
 			}
 			i++
 		}
+	}
+	function r(xy, a, b,   n) {
+		n = cnt[a]
+		va = sq[a] / n - (sm[a] / n) ^ 2; vb = sq[b] / n - (sm[b] / n) ^ 2
+		if (va <= 0 || vb <= 0) return 0
+		return (xy / n - sm[a] / n * sm[b] / n) / sqrt(va * vb)
 	}
 	function db(v) { return v > 1e-15 ? sprintf("%6.1f", 10 * log(v) / log(10)) : "  -inf" }
 	END {
@@ -182,6 +215,11 @@ report() { # file label rate channels bytes fullscale
 			}
 			fl = sq[c] / n - (sm[c] / n) ^ 2 - t[1]
 			print line sprintf("  floor %s  peak %s", db(fl), db(pk[c] ^ 2))
+		}
+		# How alike the channels are: 1.00 means two channels carry the same microphone.
+		if (nch == 4) {
+			printf "  correlation ch0-ch1 %.2f  ch2-ch3 %.2f  ch0-ch2 %.2f  ch1-ch3 %.2f\n",
+				r(xy01, 0, 1), r(xy23, 2, 3), r(xy02, 0, 2), r(xy13, 1, 3)
 		}
 	}'
 }
