@@ -1319,8 +1319,10 @@ In YAML, refer to this action as `esphome.<node>_calendar_show`.
 
 Opens the calendar page on a Show, on this month, as a tap on the date under the clock does. The page
 shows the month with each day's events on it; a tap on a day lists its events, and a tap on an event
-opens its details. It closes after two minutes untouched, or with Done. Fails on a device that shows
-no calendar (choose one with `calendar_sources`, or Settings, General, Calendars). No arguments.
+opens its details. It closes after two minutes untouched, or with Done. At night it lights a screen
+the night has put out, at the night light's level (or at half brightness with no night light), and
+shows over the red night clock; the night comes back once the page closes. Fails on a device that
+shows no calendar (choose one with `calendar_sources`, or Settings, General, Calendars). No arguments.
 
 ```yaml
 action: esphome.office_calendar_show
@@ -1332,9 +1334,12 @@ In YAML, refer to these actions as `esphome.<node>_weather_show` and `esphome.<n
 
 `weather_show` opens the forecast page on a Show, as a tap on the weather on the home screen does;
 `radar_show` opens the rain map, as the page's Radar button does. The button turns between the two,
-a tap anywhere else puts the page away, and it closes on its own after 30 seconds. Fails on a device
-set to no weather (choose a source with `home_weather`, the "Weather source" select, or Settings,
-General, Weather). No arguments.
+a tap anywhere else puts the page away, and it closes on its own after 30 seconds. Either one takes
+the place of an open weather alert page, and of the calendar. At night it lights a screen the night
+has put out, at the night light's level (or at half brightness with no night light), and shows over
+the red night clock; the night comes back once the page closes. Fails on a device set to no weather
+(choose a source with `home_weather`, the "Weather source" select, or Settings, General, Weather). No
+arguments.
 
 ```yaml
 action: esphome.office_weather_show
