@@ -465,7 +465,12 @@ t5_bt_up() {
 	# The factory address from IDME; the firmware otherwise comes up with a random one.
 	addr=$(tr -d '\n\0' < /proc/idme/bt_mac_addr 2>/dev/null)
 	if [ -n "${BT_UART:-}" ]; then
-		(while true; do btbridge -uart "$BT_UART" ${BT_HCD:+-hcd "$BT_HCD"} ${BT_BAUD:+-baud "$BT_BAUD"} ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1; sleep 2; done) &
+		# The class is set again after each restart of the bridge, as on the Shows below.
+		(while true; do
+			btbridge -uart "$BT_UART" ${BT_HCD:+-hcd "$BT_HCD"} ${BT_BAUD:+-baud "$BT_BAUD"} ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1
+			sleep 2
+			(sleep 15; timeout 5 btmgmt class 4 20 >/dev/null 2>&1) &
+		done) &
 	else
 		# -p192-keys: a phone's link key reaches the kernel as the kind the controller's E0 encryption
 		# satisfies, so a phone can stay connected to play to the Show (#105; btbridge h4.go p192Key).
@@ -513,16 +518,13 @@ t5_bt_up() {
 	n=0; while [ $n -lt 10 ] && ! timeout 3 btmgmt info 2>/dev/null | grep -q "current settings: powered"; do sleep 1; n=$((n+1)); done
 	timeout 5 btmgmt power off >/dev/null 2>&1; sleep 1; timeout 5 btmgmt power on >/dev/null 2>&1
 	# bluez-alsa registers its A2DP endpoints with bluetoothd, so it must come after it. A source, to
-	# play to earbuds and speakers; on the Shows (MediaTek, no BT_UART) a sink too, so a phone can play
-	# to the Show, which then says it is a loudspeaker (major 4, audio/video; minor 5, loudspeaker).
-	# btmgmt takes the minor as the class byte, shifted left two bits: 5 is 20. Given 5 it refused
-	# (Invalid Parameters), and the Shows went out as miscellaneous devices.
-	if [ -z "${BT_UART:-}" ]; then
-		command -v bluealsa >/dev/null && bluealsa -p a2dp-source -p a2dp-sink >> "$logdir/bluealsa.log" 2>&1 &
-		timeout 5 btmgmt class 4 20 >/dev/null 2>&1
-	else
-		command -v bluealsa >/dev/null && bluealsa -p a2dp-source >> "$logdir/bluealsa.log" 2>&1 &
-	fi
+	# play to earbuds and speakers, and a sink, so a phone can play to the device, which then says it
+	# is a loudspeaker (major 4, audio/video; minor 5, loudspeaker). btmgmt takes the minor as the
+	# class byte, shifted left two bits: 5 is 20. Given 5 it refused (Invalid Parameters), and the
+	# Shows went out as miscellaneous devices. The Spot's Broadcom took a phone the same way, without
+	# the Shows' -p192-keys (a Pixel played to it on a unit 2026-10-14).
+	command -v bluealsa >/dev/null && bluealsa -p a2dp-source -p a2dp-sink >> "$logdir/bluealsa.log" 2>&1 &
+	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
 	log "bt: hci0 up; bluetoothd and bluealsa started"
 	return 0
 }

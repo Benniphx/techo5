@@ -227,7 +227,7 @@ automation that wants to know too.
   playing, including the song's address (some servers put a login token in it, as with any DLNA
   speaker). With **Video** and **DLNA video** on as well (Show and Spot), it takes videos too
   ([Video](video.md)).
-- **A phone over Bluetooth (new).** On the Show and the Dot, the **Bluetooth phone** switch, in Home
+- **A phone over Bluetooth (new).** On the Show, the Spot and the Dot, the **Bluetooth phone** switch, in Home
   Assistant, lets a phone play to the device as to any Bluetooth speaker. For two minutes the device
   can be found and paired with, with no scan for speakers, and a phone connects from its own
   Bluetooth settings, a new one or one paired before; on the Dot the ring pulses blue meanwhile. Once

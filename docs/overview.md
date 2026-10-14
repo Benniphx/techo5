@@ -58,7 +58,7 @@ Android, with one Go daemon, `echod`, doing everything the device does:
   by voice through an automation, answered on the call page, device to device calls, an
   `esphome.techo5_phone` event per step. Off until `phone_account` signs the device in. See
   [phone.md](phone.md).
-- **Bluetooth audio** to earbuds or a speaker, and from a phone on the Show and the Dot; a Bluetooth
+- **Bluetooth audio** to earbuds or a speaker, and from a phone on the Show, the Spot and the Dot; a Bluetooth
   proxy for Home Assistant (scanning through BlueZ on the Show), off by default.
 - **Security**: nothing is open to the network by default except Home Assistant's encrypted link
   and the Sendspin player. SSH (keys only), the camera page and the screen page each have a switch
