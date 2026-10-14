@@ -2,7 +2,7 @@
 # mkstore.sh — the system partition image for the Echo Show 8 2nd gen (athena): a slot store whose
 # root is also the boot environment, because Amazon's kernel boots straight from it (no initramfs).
 #
-#   mkstore.sh -r <rootfs.tar.gz> -k <authorized_keys> -o <system.img> [-i <inputs>] [-w <workdir>]
+#   mkstore.sh -r <rootfs.tar.gz> -k <authorized_keys>|none -o <system.img> [-i <inputs>] [-w <workdir>]
 #              [-f <fbprobe>] [-s <slot a state>] [-L <label>]
 #
 # Linux (WSL) with qemu-user-static + binfmt for arm, Alpine's static apk at ~/apk/apk.static, a user
@@ -13,12 +13,16 @@
 #                         the rescue environment, which never changes with an update
 #   /bin/busybox.static   PID 1's interpreter
 #   /root/.ssh/authorized_keys   <authorized_keys>: the rescue's SSH keys, and the slot's bench keys
-#                         (BENCH_SSH_KEYS in device.conf)
-#   /.techo5-store, /active, /slots/a (<rootfs.tar.gz>), /slots/a.state   the store, as slotctl has it
+#                         (BENCH_SSH_KEYS in device.conf); `-k none` leaves it empty, as an image
+#                         meant for anyone must (rescue is then USB serial only)
+#   /.techo5-store        the store marker, naming the board (board=athena): slotctl then installs
+#                         only an athena rootfs into the other slot
+#   /active, /slots/a (<rootfs.tar.gz>), /slots/a.state   the store, as slotctl has it
 #
 # The filesystem has the stock feature set (no journal, no 64bit or metadata_csum: Amazon's 4.4
 # kernel mounts it as it mounted Fire OS's system) and is only as large as its contents need, so it
-# writes quickly; grow it into the partition later with resize2fs before installing a second slot.
+# writes quickly. The first boot grows it to fill the partition (slotctl grow, from /init), which is
+# what makes room for the second slot.
 #
 # <rootfs.tar.gz> comes from tools/linux/deploy-rootfs.sh --out, with
 # DEVICE_OVERLAY=tools/linux/athena/overlay EXTRA_PACKAGES=busybox-extras.
@@ -45,15 +49,17 @@ while [ $# -gt 0 ]; do
 	esac
 done
 [ -n "$ROOTFS" ] && [ -n "$KEYS" ] && [ -n "$OUT" ] || {
-	echo "usage: mkstore.sh -r rootfs.tar.gz -k authorized_keys -o system.img [-i inputs] [-w workdir] [-f fbprobe] [-s 'good'|'trial 3']" >&2; exit 1; }
+	echo "usage: mkstore.sh -r rootfs.tar.gz -k authorized_keys|none -o system.img [-i inputs] [-w workdir] [-f fbprobe] [-s 'good'|'trial 3']" >&2; exit 1; }
 case "$STATE" in good|"trial "[0-9]) ;; *) echo "mkstore: slot state must be good or 'trial N'" >&2; exit 1;; esac
 say() { echo "mkstore: $*"; }
 
 if [ -z "$INNER" ]; then
 	[ -e /proc/sys/fs/binfmt_misc/qemu-arm ] || { echo "mkstore: no qemu-arm binfmt" >&2; exit 1; }
 	[ -x "$APK" ] || { echo "mkstore: no $APK" >&2; exit 1; }
-	grep -q '^ssh-' "$KEYS" || { echo "mkstore: $KEYS holds no public key" >&2; exit 1; }
-	if grep -q 'PRIVATE KEY' "$KEYS"; then echo "mkstore: $KEYS is a private key" >&2; exit 1; fi
+	if [ "$KEYS" != none ]; then
+		grep -q '^ssh-' "$KEYS" || { echo "mkstore: $KEYS holds no public key" >&2; exit 1; }
+		if grep -q 'PRIVATE KEY' "$KEYS"; then echo "mkstore: $KEYS is a private key" >&2; exit 1; fi
+	fi
 	map=--map-auto; command -v newuidmap >/dev/null || map=
 	# Files owned by root (and by the slot's service users) without sudo.
 	exec unshare -Ur $map bash "$0" --inner -r "$ROOTFS" -k "$KEYS" -o "$OUT" -i "$INPUTS" -w "$WORK" \
@@ -91,19 +97,23 @@ rm -rf "$R/etc/dropbear"
 ln -s /run/dropbear "$R/etc/dropbear"
 sed -i 's|^root:[^:]*:|root:*:|' "$R/etc/shadow"
 install -d -m 700 "$R/root" "$R/root/.ssh"
-grep '^ssh-' "$KEYS" | sed 's/\r$//' > "$R/root/.ssh/authorized_keys"
+if [ "$KEYS" = none ]; then
+	: > "$R/root/.ssh/authorized_keys"
+else
+	grep '^ssh-' "$KEYS" | sed 's/\r$//' > "$R/root/.ssh/authorized_keys"
+fi
 chmod 600 "$R/root/.ssh/authorized_keys"
 install -d "$R/proc" "$R/sys" "$R/dev" "$R/run" "$R/data" "$R/userdata" "$R/vendor" "$R/newroot"
 install -d -m 1777 "$R/tmp"
 
 say "store: slot a from $(basename "$ROOTFS"), $STATE"
-: > "$R/.techo5-store"
+echo board=athena > "$R/.techo5-store"
 install -d "$R/slots/a"
 tar -xzf "$ROOTFS" -C "$R/slots/a"
 for f in sbin/init usr/local/bin/techo5 etc/techo5/boot.sh etc/inittab store; do
 	[ -e "$R/slots/a/$f" ] || [ -L "$R/slots/a/$f" ] || { echo "mkstore: not a techo5 rootfs: $f missing" >&2; exit 1; }
 done
-grep -q '^VENDOR_DEV=' "$R/slots/a/etc/techo5/device.conf" 2>/dev/null ||
+grep -qx 'T5_BOARD=athena' "$R/slots/a/etc/techo5/device.conf" 2>/dev/null ||
 	{ echo "mkstore: the rootfs has no athena device.conf (DEVICE_OVERLAY=tools/linux/athena/overlay)" >&2; exit 1; }
 printf '%s\n' "$STATE" > "$R/slots/a.state"
 echo a > "$R/active"

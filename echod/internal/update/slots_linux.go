@@ -36,14 +36,16 @@ func slotSystem() bool {
 	return err == nil
 }
 
-// installRootfs fetches the rootfs the manifest offers for this architecture, hands it to
-// slotctl, and reboots into it.
+// installRootfs fetches the rootfs the manifest offers for this device (rootfsArch), hands it to
+// slotctl, and reboots into it. On the 2nd gen Show 8 slotctl checks the rootfs is athena's too
+// (T5_BOARD in its device.conf against the store's board) before it empties the other slot.
 func installRootfs(ctx context.Context, m Manifest, progress func(float32)) error {
-	b, ok := m.Rootfs[arch]
+	key := rootfsArch()
+	b, ok := m.Rootfs[key]
 	if !ok {
-		return fmt.Errorf("update: %s carries no rootfs for %s; this device updates by slot", m.Version, arch)
+		return fmt.Errorf("update: %s carries no rootfs for %s; this device updates by slot", m.Version, key)
 	}
-	if err := b.valid(m.Version, arch); err != nil {
+	if err := b.valid(m.Version, key); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(rootfsDir, 0o755); err != nil {

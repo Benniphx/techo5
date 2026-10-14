@@ -13,6 +13,9 @@ firmware): releases don't carry it, so it is copied into the store before the pa
 `userdata` is kept (TECHO5 reads the Wi-Fi network Android saved from it), and TWRP stays in
 `recovery`, so LineageOS can be put back with TWRP and its zip.
 
+The 2nd gen Show 8 (`athena`) installs differently: no LineageOS, Amazon's own kernel, and one image
+written to `system` from TWRP. See [install-athena.md](install-athena.md).
+
 ## Unlock the bootloader first
 
 **The bootloader has to be unlocked before any of this works.** Running LineageOS does not mean it

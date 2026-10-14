@@ -243,6 +243,12 @@ A release may carry a rootfs tarball (`release.ps1 -Rootfs <techo5-rootfs-*.tar.
 installs that through `slotctl install` into the other slot and reboots; the boot scripts run the
 trial and commit or fall back. The daemon-only binary in the manifest is for the Android install.
 
+The 2nd gen Show 8 (athena) runs the same daemon binary but a rootfs of its own (Amazon's kernel, its
+vendor partition; tools/linux/athena), keyed `arm-athena` in the manifest (`release.ps1 -AthenaRootfs`,
+published as `techo5-rootfs-athena-<version>.tar.gz`). An athena never takes the `arm` rootfs, and
+its store (`.techo5-store`: `board=athena`) makes `slotctl install` refuse any rootfs whose
+`etc/techo5/device.conf` doesn't say `T5_BOARD=athena`. New units: docs/install-athena.md.
+
 ## Next
 
 The camera: the kernel at this commit already carries the OV02B10 sensor

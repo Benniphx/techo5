@@ -144,6 +144,18 @@ boot_slot() {
 	return 1
 }
 
+# The store is written smaller than the partition; the first boot grows it to fill it, so the
+# second slot fits (slotctl grow: online, only from a clean filesystem, layout and features kept).
+# A no-op once it fills the partition. A failure leaves the store as it was and the boot goes on.
+if [ $MODE = store ]; then
+	if STORE=/ slotctl grow $STORE_DEV > /tmp/grow.log 2>&1; then
+		crumb "store: $(tail -1 /tmp/grow.log)"
+	else
+		crumb "store: not grown: $(tail -2 /tmp/grow.log | tr '\n' ' ')"
+	fi
+	cp /tmp/grow.log $LOGDIR/grow.log 2>/dev/null
+fi
+
 if [ $MODE = store ]; then
 	if [ -e /rescue ]; then
 		store_rw && rm -f /rescue; store_ro
