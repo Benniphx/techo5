@@ -120,6 +120,10 @@ type slot struct {
 	holding  bool
 	holdEnds time.Time
 	crossing float64
+	// crossCutoff is the cutoff the crossing was judged against. By the time the hold ends the wake tone
+	// is playing, and a threshold read then carries the canceller's slack (thresholdFor), which is not
+	// what the word had to reach.
+	crossCutoff float64
 
 	// candidate is an utterance over Candidate and under the threshold so far: when it went over, and
 	// the highest it has reached.
@@ -456,9 +460,9 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 		}
 
 		slog.Info("wake detected", "slot", n+1, "id", s.model.ID, "peak", s.peak,
-			"crossing", s.crossing, "cutoff", cutoff, "dropped", source.Dropped())
+			"crossing", s.crossing, "cutoff", s.crossCutoff, "dropped", source.Dropped())
 		if e.OnScored != nil {
-			i, peak := n, s.peak
+			i, peak, cutoff := n, s.peak, s.crossCutoff
 			safe.Go("wake scored", func() { e.OnScored(i, peak, cutoff) })
 		}
 		s.holding, s.peak = false, 0
@@ -489,7 +493,7 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 
 	// Feedback fires now; the peak is only for the log, and the slot settles when the hold ends.
 	s.holding, s.holdEnds = true, now.Add(Hold)
-	s.crossing, s.peak = score, score
+	s.crossing, s.peak, s.crossCutoff = score, score, cutoff
 
 	if e.OnDetect != nil {
 		safe.Go("wake detected", func() { e.OnDetect(n) })
