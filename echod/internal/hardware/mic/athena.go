@@ -20,9 +20,16 @@ import (
 //   - hw:0,17 "I2S2ADC2_Capture": a TLV320ADC5140, four microphones, ch1/ch2 on its first data line
 //     and ch3/ch4 on the second. Fire OS opens it at 96 kHz in 32-bit slots, four channels (asp.cfg
 //     "Mics": 4 at 96000; AFE.cfg "Mics Input SamplingRate": 96000), and so does this.
-//   - hw:0,16 "I2S0AWB_Capture": the speaker's I2S stream written back, left and right. At most
-//     48 kHz and 16 bits. That this device is the reference is the best reading of the card, not a
-//     measurement yet: Fire OS states a 96 kHz reference, which this device cannot give.
+//   - hw:0,9 "DL1_AWB_Record": the AFE writing back what its DL1 memory interface sends the
+//     amplifier, so a digital copy of the playback, sample for sample, at the speaker's 96 kHz.
+//
+// Both are what Fire OS's own HAL opens for the recording Alexa hears: its PcmMerge capture
+// provider (AudioALSACaptureDataProviderPcmMerge::open in vendor audio.primary.mt8183.so) takes
+// "I2S2ADC2_Capture" as the main stream, S32_LE, 4 channels, 96 kHz, 4 periods, and
+// "DL1_AWB_Record" as the sub stream, S16_LE, 2 channels, 96 kHz, the same period, and merges the
+// two into asp.cfg's "6-channel pcm8.24 at 96 kHz" input. hw:0,16 (I2S0AWB) and hw:0,33 (I2S0VUL2)
+// read digital zero on the unit with the speaker playing (M5, 2026-10-14); the HAL opens I2S0AWB only
+// for a USB/BT echo path and never opens I2S0VUL2.
 //
 // Both are brought down to 16 kHz and interleaved into the 1st gen Show 8's frame (S24_3LE, six
 // channels, the microphones then the reference: see device_cronos.go), so the canceller, the
@@ -40,8 +47,8 @@ const (
 	athenaMicChannels = 4
 	athenaMicBits     = 32
 
-	athenaRefDevice   = 16
-	athenaRefRate     = 48000
+	athenaRefDevice   = 9
+	athenaRefRate     = 96000
 	athenaRefChannels = 2
 	athenaRefBits     = 16
 
@@ -51,11 +58,13 @@ const (
 	// panics (M4 on the unit, 2026-10-14: a 61440-byte ring on hw:0,17, data abort in set_mem_block
 	// 48 KB in, mtk_i2s2_adc2_pcm_hw_params). So the rings are sized here, never left to the driver:
 	//   - hw:0,17: at most athenaMicRingMax. Three periods, 46080 bytes, 30 ms.
-	//   - hw:0,16: 15360 bytes, the size that opened cleanly on the unit (its limit is 64 KB).
+	//   - hw:0,9: 4 periods, as Fire OS has it, 15360 bytes: the size hw:0,16 opened cleanly with on
+	//     the unit. The driver uses a preallocated block for it the same way (set_mem_block), whose
+	//     size is not known, so the ring stays this small.
 	athenaMicPeriod  = athenaMicRate / 100
 	athenaMicPeriods = 3
 	athenaRefPeriod  = athenaRefRate / 100
-	athenaRefPeriods = 8
+	athenaRefPeriods = 4
 
 	// athenaMicRingMax is the microphone DMA block that is really there: the next device's block
 	// starts 48 KB after hw:0,17's, and the fault came at exactly 48 KB.
@@ -64,7 +73,7 @@ const (
 
 	// Decimator lengths in the ratio of the rates, so both delay by the same 1 ms.
 	athenaMicTaps = 192
-	athenaRefTaps = 96
+	athenaRefTaps = 192
 
 	// athenaMicBoostDB is what Fire OS adds after the same conversion: "Athena AFE mic input (post
 	// 96KHz to 16Khz SRC) levels is 5.89dB lower than Crown" (AFE.cfg, MicBoostdB). With it the room
@@ -78,6 +87,12 @@ const (
 // and dynamic range enhancement off. The analog gain, which the same file sets to 20 dB, is the
 // daemon's own setting (athenaGain). Nothing here is the speaker's: Amazon's kernel driver sets the
 // amplifier up itself.
+//
+// "ADC Reset A" is not a reset. Its handler in Amazon's driver (adc5140_reset_set) does nothing for 0
+// and, for anything else, writes SLEEP_CFG (register 0x02) = 0x81: the internal regulator on and the
+// converter out of sleep, then waits 10 ms. The chip comes out of its reset asleep, and nothing else in
+// the driver wakes it, so without this write the microphones are never sampled. It always reads back
+// "off". Its effect shows in the kernel log as two "adc5140_reset" lines.
 var athenaControls = []struct {
 	name  string
 	value uint32
@@ -152,9 +167,13 @@ func athenaInit() {
 		return
 	}
 	defer m.Close()
+	failed := 0
 	for _, c := range athenaControls {
-		athenaWrite(m, c.name, c.value)
+		if !athenaWrite(m, c.name, c.value) {
+			failed++
+		}
 	}
+	slog.Info("athena: converter set up", "controls", len(athenaControls), "failed", failed)
 }
 
 // pairedCapture is the two devices read as one.

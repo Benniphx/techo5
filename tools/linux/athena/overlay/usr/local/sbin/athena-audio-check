@@ -1,24 +1,28 @@
 #!/bin/sh
 # athena-audio-check: which capture channels hear the speaker, on the 2nd gen Echo Show 8 under
-# Amazon's kernel. Plays a quiet 1 kHz tone on the speaker (hw:0,7) and, while it plays, records the
-# echo reference candidate (hw:0,16, I2S0AWB) and the microphones (hw:0,17, the TLV320ADC5140) for 3 s,
-# then prints each channel's level and how much of it is the tone.
+# Amazon's kernel. Sets the microphone converter up as Fire OS does, plays a quiet 1 kHz tone on the
+# speaker (hw:0,7) and, while it plays, records the echo reference (hw:0,9, DL1_AWB_Record) and the
+# microphones (hw:0,17, the TLV320ADC5140) for 3 s. Then it prints, per channel, the level, the tone's
+# own level at 1 kHz (and at 500 Hz and 2 kHz, where a stream at the wrong rate would put it) and the
+# floor: everything that is not the tone.
 #
-# What to expect if hw:0,16 is the reference: both of its channels carry the 1 kHz tone at about the
-# level played (-26 dBFS RMS at LEVEL=0.07) and next to nothing at 500 Hz or 2 kHz (a reference at the
-# wrong rate shows the tone moved to one of those). The microphones carry it well below that, with a
-# room's floor around it. A silent channel is all zeros (-inf).
+# What to expect: both reference channels carry the 1 kHz tone at the level played (-26 dBFS RMS at
+# LEVEL=0.07) with a floor near -inf (it is a digital copy). The microphones carry the tone well below
+# that, over a room floor somewhere around -60 to -90 dBFS. A floor at -inf or below -120 means the
+# converter is not sampling. A silent channel is all zeros (-inf everywhere).
 #
 # The daemon holds these devices, so it is stopped for the test (/run/techo5/hold, which techo5-run
 # waits on) and started again at the end.
 #
 #   athena-audio-check                    tone at 7% of full scale, the speaker at 96 kHz
 #   LEVEL=0.03 athena-audio-check         quieter
-#   PLAY_RATE=48000 athena-audio-check    the speaker at 48 kHz instead
-#   VUL2=1 athena-audio-check             also record hw:0,33 (I2S0VUL2), the other candidate
+#   PLAY_RATE=48000 athena-audio-check    the speaker (and the reference) at 48 kHz instead
+#   OLDREF=1 athena-audio-check           also record hw:0,16 (I2S0AWB, M4/M5's reference guess)
+#   VUL2=1 athena-audio-check             also record hw:0,33 (I2S0VUL2)
 set -u
 LEVEL=${LEVEL:-0.07}
 PLAY_RATE=${PLAY_RATE:-96000}
+OLDREF=${OLDREF:-0}
 VUL2=${VUL2:-0}
 SECS=3
 DIR=/tmp/athena-audio-check
@@ -46,7 +50,20 @@ echo "daemon: stopped"
 # The amplifier's volume as Amazon's driver left it (one control, read alone).
 amixer -c 0 cget name='Master TAS5805m Playback Volume' 2>&1 | sed -n 's/^ *: *values=/master volume: /p'
 
-# 2. The tone: one period of 1 kHz, stereo S16_LE, written as octal escapes for printf, then doubled
+# 2. The converter, as Fire OS's HAL sets it (vendor audio_device_tas5805m.xml), one control at a
+# time and in its order, the same writes the daemon makes. "ADC Reset A" 1 is what wakes the chip
+# (its driver writes SLEEP_CFG = 0x81); the kernel log says "adc5140_reset" when it happens.
+for kv in "ADC Reset A=1" "Ch1 Output A=0" "Ch1 Slot Offset A=0" "Ch2 Output A=0" \
+	"Ch2 Slot Offset A=32" "Ch3 Output A=1" "Ch3 Slot Offset A=0" "Ch4 Output A=1" \
+	"Ch4 Slot Offset A=32" "Ch1 Gain A=20" "Ch2 Gain A=20" "Ch3 Gain A=20" "Ch4 Gain A=20" \
+	"Ch1 Digital Capture Vol A=201" "Ch2 Digital Capture Vol A=201" "Ch3 Digital Capture Vol A=201" \
+	"Ch4 Digital Capture Vol A=201" "DRE Trigger Level A=4" "DRE Max Gain A=11" \
+	"Ch1 DRE Enable A=0" "Ch2 DRE Enable A=0" "Ch3 DRE Enable A=0" "Ch4 DRE Enable A=0"; do
+	amixer -q -c 0 cset name="${kv%=*}" "${kv##*=}" >/dev/null 2>&1 || echo "mixer: could not set ${kv%=*}"
+done
+dmesg 2>/dev/null | grep -i "adc5140_reset" | tail -2 | sed 's/^/kernel: /'
+
+# 3. The tone: one period of 1 kHz, stereo S16_LE, written as octal escapes for printf, then doubled
 # up to about 4 s.
 awk -v rate="$PLAY_RATE" -v level="$LEVEL" 'BEGIN {
 	n = rate / 1000
@@ -61,37 +78,48 @@ printf "$(cat "$DIR/period.esc")" > "$DIR/tone.raw"
 i=0
 while [ $i -lt 12 ]; do cat "$DIR/tone.raw" "$DIR/tone.raw" > "$DIR/t2" && mv "$DIR/t2" "$DIR/tone.raw"; i=$((i+1)); done
 
-# 3. Play, let the amplifier come up, then record the candidates at once.
+# 4. Play, let the amplifier come up, then record at once.
 #
 # Every ring size is given, never left to aplay/arecord: Amazon's drivers advertise far bigger rings
 # than the DMA blocks they set aside, and a ring larger than its block panics the kernel (hw:0,17
-# at 61440 bytes did, 2026-10-14). These are the daemon's sizes: hw:0,7 4 x 16 ms (24576 bytes
-# at 96 kHz), hw:0,17 3 x 10 ms (46080 bytes, under its 48 KB block), hw:0,16 8 x 10 ms (15360 bytes).
+# at 61440 bytes did, 2026-10-14). These are the daemon's sizes: hw:0,7 4 x 16 ms (24576 bytes at
+# 96 kHz), hw:0,17 3 x 10 ms (46080 bytes, under its 48 KB block), hw:0,9 4 x 10 ms (15360 bytes at
+# 96 kHz), hw:0,16 8 x 10 ms (15360 bytes).
 PLAY_PERIOD=$((PLAY_RATE / 1000 * 16))
+REF_PERIOD=$((PLAY_RATE / 100))
 echo "playing 1 kHz at $LEVEL of full scale, $PLAY_RATE Hz, on hw:0,7"
-aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" --period-size=$PLAY_PERIOD --buffer-size=$((PLAY_PERIOD * 4)) 	"$DIR/tone.raw" 2> "$DIR/aplay.err" &
+aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" \
+	--period-size=$PLAY_PERIOD --buffer-size=$((PLAY_PERIOD * 4)) "$DIR/tone.raw" 2> "$DIR/aplay.err" &
 PLAY=$!
 sleep 0.5
-arecord -q -D hw:0,16 -t raw -f S16_LE -c 2 -r 48000 --period-size=480 --buffer-size=3840 -d $SECS 	"$DIR/ref.raw" 2> "$DIR/ref.err" &
+arecord -q -D hw:0,9 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" \
+	--period-size=$REF_PERIOD --buffer-size=$((REF_PERIOD * 4)) -d $SECS "$DIR/ref.raw" 2> "$DIR/ref.err" &
 R1=$!
-arecord -q -D hw:0,17 -t raw -f S32_LE -c 4 -r 96000 --period-size=960 --buffer-size=2880 -d $SECS 	"$DIR/mic.raw" 2> "$DIR/mic.err" &
+arecord -q -D hw:0,17 -t raw -f S32_LE -c 4 -r 96000 \
+	--period-size=960 --buffer-size=2880 -d $SECS "$DIR/mic.raw" 2> "$DIR/mic.err" &
 R2=$!
 R3=
-if [ "$VUL2" = 1 ]; then
-	# Its DMA block is unknown, so the smallest ring that works: 4 x 10 ms, 7680 bytes.
-	arecord -q -D hw:0,33 -t raw -f S16_LE -c 2 -r 48000 --period-size=480 --buffer-size=1920 -d $SECS 		"$DIR/vul2.raw" 2> "$DIR/vul2.err" &
+R4=
+if [ "$OLDREF" = 1 ]; then
+	arecord -q -D hw:0,16 -t raw -f S16_LE -c 2 -r 48000 \
+		--period-size=480 --buffer-size=3840 -d $SECS "$DIR/awb.raw" 2> "$DIR/awb.err" &
 	R3=$!
 fi
-wait $R1 $R2 $R3 2>/dev/null
+if [ "$VUL2" = 1 ]; then
+	# Its DMA block is unknown, so the smallest ring that works: 4 x 10 ms, 7680 bytes.
+	arecord -q -D hw:0,33 -t raw -f S16_LE -c 2 -r 48000 \
+		--period-size=480 --buffer-size=1920 -d $SECS "$DIR/vul2.raw" 2> "$DIR/vul2.err" &
+	R4=$!
+fi
+wait $R1 $R2 $R3 $R4 2>/dev/null
 kill $PLAY 2>/dev/null
 wait $PLAY 2>/dev/null
-for f in aplay ref mic vul2; do
+for f in aplay ref mic awb vul2; do
 	[ -s "$DIR/$f.err" ] && { echo "--- $f:"; cat "$DIR/$f.err"; }
 done
 
-# 4. Levels. Per channel: the whole signal's RMS, and the tone's own level at 1 kHz (and at 500 Hz and
-# 2 kHz, where a stream at the wrong rate would put it), by Goertzel over 1 s after the first 0.5 s.
-# dBFS against the format's full scale; "-inf" is below -150.
+# 5. Levels, by Goertzel over 1 s after the first 0.5 s, in dBFS against the format's full scale;
+# "-inf" is below -150. The floor is the signal less its mean and less the 1 kHz tone.
 report() { # file label rate channels bytes
 	[ -s "$1" ] || { echo "$2: nothing recorded"; return; }
 	frame=$(($4 * $5))
@@ -107,7 +135,7 @@ report() { # file label rate channels bytes
 		for (j = 1; j <= NF; j++) {
 			c = i % nch
 			x = $j / full
-			sq[c] += x * x; cnt[c]++
+			sq[c] += x * x; sm[c] += x; cnt[c]++
 			for (k = 1; k <= nf; k++) {
 				s = x + co[k] * s1[c, k] - s2[c, k]
 				s2[c, k] = s1[c, k]; s1[c, k] = s
@@ -121,19 +149,22 @@ report() { # file label rate channels bytes
 		if (i < nch * rate / 10) { print "  too short"; exit }
 		for (c = 0; c < nch; c++) {
 			n = cnt[c]
-			line = sprintf("  ch%d: RMS %s dBFS", c, db(sq[c] / n))
+			line = sprintf("  ch%d: RMS %s", c, db(sq[c] / n))
 			for (k = 1; k <= nf; k++) {
-				p = s1[c, k] ^ 2 + s2[c, k] ^ 2 - co[k] * s1[c, k] * s2[c, k]
 				# Tone RMS squared: (2 sqrt(p) / n)^2 / 2.
-				line = line sprintf("   %4d Hz %s", f[k], db(2 * p / (n * n)))
+				p = s1[c, k] ^ 2 + s2[c, k] ^ 2 - co[k] * s1[c, k] * s2[c, k]
+				t[k] = 2 * p / (n * n)
+				line = line sprintf("  %4d Hz %s", f[k], db(t[k]))
 			}
-			print line
+			fl = sq[c] / n - (sm[c] / n) ^ 2 - t[1]
+			print line sprintf("  floor %s", db(fl))
 		}
 	}'
 }
 echo
-report "$DIR/ref.raw" "hw:0,16 I2S0AWB (reference?)" 48000 2 2
+report "$DIR/ref.raw" "hw:0,9 DL1_AWB_Record (reference)" "$PLAY_RATE" 2 2
 report "$DIR/mic.raw" "hw:0,17 I2S2ADC2 (microphones)" 96000 4 4
+[ "$OLDREF" = 1 ] && report "$DIR/awb.raw" "hw:0,16 I2S0AWB" 48000 2 2
 [ "$VUL2" = 1 ] && report "$DIR/vul2.raw" "hw:0,33 I2S0VUL2" 48000 2 2
 echo
 echo "raw files in $DIR"
