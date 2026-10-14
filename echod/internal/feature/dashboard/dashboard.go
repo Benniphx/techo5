@@ -61,7 +61,7 @@ type Feature struct {
 	idle  *esphome.Switch
 	kiosk *esphome.Switch
 	board *esphome.Select
-	// boardOpts keeps board's options, changed between serves.
+	// boardOpts keeps board's options.
 	boardOpts *component.Options
 
 	// back and tiles are how long a dashboard opened by hand stays up, and on the Show how big a drawn

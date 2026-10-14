@@ -93,7 +93,7 @@ type Feature struct {
 	// weatherSel picks the weather entity; weathers is Home Assistant's list of them, fetched at
 	// weathersAt.
 	weatherSel  *esphome.Select
-	weatherOpts *component.Options // weatherSel's options, changed between serves
+	weatherOpts *component.Options // weatherSel's options
 	radarSel    *esphome.Select    // where the rain map's radar comes from (radar_setting.go)
 
 	// alerts are the NWS's weather alerts at home and nearby (alerts.go); alertsSw turns them on and off.
@@ -105,7 +105,7 @@ type Feature struct {
 	// followSel picks another media player for Now Playing to follow; players is Home Assistant's list of
 	// them, fetched at playersAt (follow.go).
 	followSel  *esphome.Select
-	followOpts *component.Options // followSel's options, changed between serves
+	followOpts *component.Options // followSel's options
 	players    []hass.Entity
 	playersAt  time.Time
 
