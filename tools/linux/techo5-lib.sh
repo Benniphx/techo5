@@ -533,10 +533,17 @@ t5_bt_up() {
 # loads a firmware patch first, which can outlast a fixed wait. And it is made unfindable: a pairing
 # window open when the bridge went down was ended meanwhile by the daemon's timer, and the "not
 # findable" that ended it reached no controller. A window still open loses its findability early,
-# which a window can lose; staying findable with none open is what must not happen.
+# which a window can lose; staying findable with none open is what must not happen. Both are written
+# twice, 5 s apart, since bluetoothd puts its own back as the adapter registers. One at a time: a
+# bridge failing over and over restarts every 2 s, and each restart would start another.
 t5_bt_again() {
+	mkdir /run/techo5-bt-again 2>/dev/null || return 0
 	sleep 5
 	n=0
-	while [ $n -lt 60 ] && ! timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded; do sleep 5; n=$((n+5)); done
+	while [ $n -lt 12 ] && ! timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded; do sleep 5; n=$((n+1)); done
 	timeout 5 btmgmt discov off >/dev/null 2>&1
+	sleep 5
+	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
+	timeout 5 btmgmt discov off >/dev/null 2>&1
+	rmdir /run/techo5-bt-again
 }
