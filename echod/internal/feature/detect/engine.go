@@ -84,6 +84,9 @@ type Engine struct {
 	// Assistant's engine can tell apart (see voice's confirm).
 	Candidate   func(slot int) float64
 	OnCandidate func(slot int, peak float64)
+	// OnFrame sees every frame the detector scores, with the engine's lock held: it must only copy
+	// (clips.go).
+	OnFrame func(frame []int16)
 
 	// OnReady runs once per slot, the first time its model produces a score. That is the first moment
 	// the wake word could be detected at all: these are streaming models with a window to fill, and
@@ -385,6 +388,9 @@ func (e *Engine) score(frame []int16, source *mic.Source) {
 	// Nothing to hear and nothing to do. See Quiet.
 	if e.quiet {
 		return
+	}
+	if e.OnFrame != nil {
+		e.OnFrame(frame)
 	}
 
 	// Always feed. These are streaming models: a gap in the input is a gap in their history, and the

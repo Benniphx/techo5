@@ -1791,6 +1791,74 @@ data:
 response_variable: clip
 ```
 
+## List saved wake word clips
+
+In YAML, refer to this action as `esphome.<node>_wake_clips`.
+
+Returns the wake word clips kept on the device, newest first, with what the detector made of each.
+Clips are only kept while the device's **Keep wake clips** switch is on (off by default; see
+[Wake word clips](setup.md#wake-word-clips)). Each entry has:
+
+- `id`: what to pass to `wake_clip_audio`.
+- `kind`: `wake`, `mistake`, `noise` or `nearmiss`.
+- `at`: when, in UTC.
+- `slot`: which assistant's wake word, 1 or 2.
+- `model`: the wake word model's ID.
+- `score`: the highest score the word reached.
+- `cutoff`: the threshold it was judged against.
+
+The answer lists 50 clips at a time; `pages` says how many pages there are and `total` how many clips.
+This action answers with data; call it with a `response_variable`.
+
+### kind (Required)
+
+*string*
+
+Only this kind of clip: `wake`, `mistake`, `noise` or `nearmiss`. An empty string lists every kind.
+
+### page (Required)
+
+*integer*
+
+Which page of the list, starting at 0.
+
+```yaml
+action: esphome.office_wake_clips
+data:
+  kind: "mistake"
+  page: 0
+response_variable: clips
+```
+
+## Fetch a saved wake word clip
+
+In YAML, refer to this action as `esphome.<node>_wake_clip_audio`.
+
+Fetches one wake word clip as base64-encoded WAV (16 kHz mono 16-bit), by an ID from `wake_clips`.
+The answer has the same shape as `turn_audio`'s: a clip is about 128 KB, so it comes back in pages,
+and the response says how many there are. This action answers with data; call it with a
+`response_variable`.
+
+### id (Required)
+
+*string*
+
+One of the clip IDs `wake_clips` returned.
+
+### page (Required)
+
+*integer*
+
+Which page of the audio to fetch, starting at 0.
+
+```yaml
+action: esphome.office_wake_clip_audio
+data:
+  id: "{{ clips.clips[0].id }}"
+  page: 0
+response_variable: audio
+```
+
 ## Set the SSH authorized keys
 
 In YAML, refer to this action as `esphome.<node>_ssh_keys`.

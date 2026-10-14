@@ -125,6 +125,11 @@ func (w Writer) NoneChosen(v bool) error {
 	return w.st.Update(func(c *Config) { c.Wake.NoneChosen = v })
 }
 
+// KeepClips records whether the device keeps clips of the wake word.
+func (w Writer) KeepClips(v bool) error {
+	return w.st.Update(func(c *Config) { c.Wake.KeepClips = v })
+}
+
 func errSlot(n int) error { return fmt.Errorf("config: wake slot %d", n) }
 
 // Labelled is a setting whose values name themselves. The entity layer binds any of these to a

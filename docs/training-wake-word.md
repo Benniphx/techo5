@@ -154,6 +154,13 @@ training to test with.
 recorded the same way, next to it. Mixed behind the samples it teaches the model to hear you over
 its own speaker, and on its own it is a negative set, so music alone doesn't wake it.
 
+**Clips from the device itself** are useful on both sides. Turn on **Keep wake clips** on a device you
+already use (see [Wake word clips](setup.md#wake-word-clips)) and it keeps short clips of the wake
+word as it really hears it, with the score each one got. The `wake` clips are extra takes of your
+voices in the room. The `mistake` clips, and the `noise` and `nearmiss` ones you've listened to and
+found aren't the word, are the sounds that fool the model: add them as a negative set so the next
+model learns to leave them alone. They're 16 kHz mono 16-bit WAV already, about four seconds each.
+
 These recordings are your own voices. Keep them on your own machine.
 
 ## 5. Make training features

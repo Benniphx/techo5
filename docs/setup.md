@@ -429,6 +429,38 @@ yourself ([training-wake-word.md](training-wake-word.md) covers how, other langu
 3. Pick the new wake word in the device's **Wake word** list, on the Assist satellite in Home
    Assistant. The device downloads it from Home Assistant and keeps it.
 
+### Wake word clips
+
+For training a wake word model of your own on what your room really says and hears, the device can
+keep short clips of the wake word itself. Turn on **Keep wake clips** in Home Assistant, on the
+device's microphone (for example "Office microphone"). It is off by default, and set for each device.
+
+While it is on, the device keeps the four seconds of audio up to each of these, sorted by kind:
+
+- **wake**: a wake that opened a request.
+- **mistake**: a wake with nothing said after it, so most likely a false wake.
+- **noise**: a wake followed only by what speech-to-text writes for noise ("Thank you."). Mostly false
+  wakes too, but listen first: somebody may have said the word.
+- **nearmiss**: a word that scored at least 0.5 but stayed under the threshold. Somebody not being
+  heard, or a sound like the word; listen to each before using it.
+
+Each clip comes with its score, the threshold it was judged against, the wake word model and the time
+in UTC. The device keeps the newest 100 of each kind (about 51 MB at most) and deletes the oldest as
+new ones come in. Nothing is kept during a call, the intercom or a talk through a camera, or for a few
+seconds after the stop word. **Wake clips** and **Wake clips by kind** show how many there are.
+
+**Turning Keep wake clips off deletes every clip on the device.** Copy off the ones you want first.
+
+To get them off the device, call the `wake_clips` action to list them and `wake_clip_audio` to fetch
+each one, the same way kept voice recordings are fetched; see [actions.md](actions.md#list-saved-wake-word-clips).
+With SSH on, they're also in `wake-clips/` in the device's state folder (`/data/misc/techo5`, or
+`/data/misc/echolocal` on a Dot), one folder for each kind. Each `.wav` has a `.json` beside it with the
+same details, and the file name holds the time, the assistant, the score and the threshold:
+`20261012-213301-s1-p0.79-c0.90.wav`.
+
+The clips are what the microphones heard in your room. They stay on the device until you copy them
+off; keep them on your own machine.
+
 ### Wake word on Home Assistant
 
 The device listens for the wake word itself. Two switches on the device in Home Assistant let Home

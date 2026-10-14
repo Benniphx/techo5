@@ -40,6 +40,13 @@ type Detect struct {
 	// score is the last wake's peak, for setting the threshold by: see newScoreEntity.
 	score *esphome.Sensor
 
+	// clipsTotal and clipsKinds are how many wake clips the device keeps, and keepClips is Keep wake
+	// clips, which turns the recorder on: see clips.go.
+	clipsTotal *esphome.Sensor
+	clipsKinds *esphome.TextSensor
+	keepClips  *esphome.Switch
+	clips      *clips
+
 	// onHA is Home Assistant's wake word engine: see onha.go.
 	onHA onHAEntities
 
@@ -162,6 +169,14 @@ func newDetect() *Detect {
 	// the word is landing. One it did not confirm is not shown: it opened nothing.
 	voice.Confirmed.Listen(func(c voice.Confirmation) { d.score.Set(float32(c.Peak)) })
 
+	// After every other hook it chains onto is in place.
+	d.clipsTotal, d.clipsKinds = newClipsEntities()
+	d.keepClips = newKeepClipsEntity(d)
+	d.clips = startClips(e, func(total int, kinds string) {
+		d.clipsTotal.Set(float32(total))
+		d.clipsKinds.Set(kinds)
+	})
+
 	// A cut microphone hands on silence, and running the models over it is work that cannot find
 	// anything. The engines go down with the microphones and come back with them.
 	mute.Get().Changed.Listen(e.Quiet)
@@ -201,6 +216,9 @@ func (d *Detect) Start(ctx context.Context) error { return d.engine.Start(ctx) }
 func (d *Detect) Run(ctx context.Context) error { return d.engine.Run(ctx) }
 
 func (d *Detect) Close() error { return d.engine.Close() }
+
+// Actions are the wake clips' (clips.go).
+func (d *Detect) Actions() []*esphome.Action { return d.clips.actions() }
 
 // load puts one wake word in each slot and reports the ids that came up. Whatever the engine refuses
 // is left out, so Home Assistant reverts that slot rather than showing a wake word the device is not
