@@ -127,8 +127,8 @@ func TestWeatherShowLeavesALitScreen(t *testing.T) {
 	if err := runAction(t, d, "weather_show"); err != nil {
 		t.Fatal(err)
 	}
-	if !d.askedNight.IsZero() {
-		t.Errorf("a screen already up was taken over for the night: until %v", d.askedNight)
+	if d.askedNight {
+		t.Errorf("a screen already up was taken over for the night")
 	}
 }
 
@@ -154,8 +154,8 @@ func TestWeatherShowLeavesAScreenTurnedOff(t *testing.T) {
 		d.mu.Lock()
 		on, glow, asked, until := d.on, d.nightGlow, d.askedNight, d.weatherUntil
 		d.mu.Unlock()
-		if on || glow || !asked.IsZero() {
-			t.Errorf("night light %v: a screen turned off was lit: on %v, glowing %v, asked until %v", nightLight, on, glow, asked)
+		if on || glow || asked {
+			t.Errorf("night light %v: a screen turned off was lit: on %v, glowing %v, held %v", nightLight, on, glow, asked)
 		}
 		if !time.Now().Before(until) {
 			t.Errorf("night light %v: the forecast did not open", nightLight)
@@ -190,7 +190,7 @@ func TestTapsReachAPageAskedForAtNight(t *testing.T) {
 	d.view = voice.State{Phase: "idle"}
 	d.on, d.nightGlow = true, true
 	d.ShowWeather(false)
-	d.askedNight = time.Now().Add(weatherShow)
+	d.askedNight = true
 	if !d.overNight() {
 		t.Fatal("a page asked for at night does not count as something over the night")
 	}
@@ -209,5 +209,28 @@ func TestTapsReachAPageAskedForAtNight(t *testing.T) {
 	}
 	if !d.nightGlow {
 		t.Error("a tap on the page lifted the night light")
+	}
+}
+
+// The night's hold on a page Home Assistant asked for lasts as long as the page: the Radar button
+// keeping the rain map up past the page's first half minute, minutes on, keeps the hold too. Once the
+// page has closed the hold is gone, and a forecast put up after it (a weather question) is not held.
+func TestTheNightHoldLastsAsLongAsThePage(t *testing.T) {
+	d := nightTestDisplay(t)
+	now := time.Now()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.askedNight, d.weatherUntil = true, now.Add(weatherShow)
+	later := now.Add(10 * time.Minute)
+	d.weatherUntil = later.Add(weatherShow) // the Radar button, pressed again and again
+	if !d.askedUp(later) {
+		t.Fatal("the hold ended while the page was still up")
+	}
+	if d.askedUp(later.Add(weatherShow)) || d.askedNight {
+		t.Fatal("the hold outlasted the page")
+	}
+	d.weatherUntil = later.Add(2 * weatherShow)
+	if d.askedUp(later.Add(weatherShow + time.Second)) {
+		t.Error("a forecast put up after the page closed is held for the night")
 	}
 }

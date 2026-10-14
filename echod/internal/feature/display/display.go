@@ -251,8 +251,9 @@ type Display struct {
 	weatherUntil time.Time
 
 	// askedNight is a page Home Assistant asked for at night (askedAtNight), the forecast, the rain map
-	// or the calendar: shown over the night until then, while it is still up (askedUp).
-	askedNight time.Time
+	// or the calendar: shown over the night for as long as it is up, however long a tap keeps it there,
+	// and let go once it has closed (askedUp).
+	askedNight bool
 
 	// The calendar page (render_calendar.go): up until calUntil, on calMonth, as calDay's list when
 	// that is set, or the coming days' agenda when calAgenda is, with calDetail's window open over it

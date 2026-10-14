@@ -334,7 +334,7 @@ func (d *Display) askedAtNight(now time.Time) {
 		d.mu.Unlock()
 		return
 	}
-	d.askedNight = now.Add(max(weatherShow, calendarShow))
+	d.askedNight = true
 	if !on {
 		d.nightGlow, d.nightDark = config.Get().Screen.NightLight, false
 	}
@@ -346,9 +346,19 @@ func (d *Display) askedAtNight(now time.Time) {
 	d.wake()
 }
 
-// askedUp is whether a page Home Assistant asked for at night is still up. Called with d.mu held.
+// askedUp is whether a page Home Assistant asked for at night is still up: the hold lasts while the
+// page does, the Radar button or a tap on the calendar keeping it up keeping the hold too, and ends
+// the first time the page is found closed, so a page put up later is not held for it. Called with
+// d.mu held.
 func (d *Display) askedUp(now time.Time) bool {
-	return now.Before(d.askedNight) && (now.Before(d.weatherUntil) || now.Before(d.calUntil))
+	if !d.askedNight {
+		return false
+	}
+	if now.Before(d.weatherUntil) || now.Before(d.calUntil) {
+		return true
+	}
+	d.askedNight = false
+	return false
 }
 
 // setNightHours is the action: the night from start to end, "19:00" and "09:30"; both empty is none.
