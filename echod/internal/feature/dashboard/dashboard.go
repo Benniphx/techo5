@@ -14,6 +14,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -79,9 +80,26 @@ type Feature struct {
 	streamUsed, drawnUsed time.Time
 
 	// look asks Run to list Home Assistant's dashboards now; relist is a changed list whose reconnect
-	// is waiting for the device to be idle.
-	look   chan struct{}
-	relist bool
+	// is waiting for the device to be idle, and relisted when the last one was asked for (relistDue).
+	look     chan struct{}
+	relist   bool
+	relisted time.Time
+}
+
+// relistGap is the least time between two reconnects for a changed list: each drops the link to Home
+// Assistant for a moment, and a run of taps between views must not cost one each.
+const relistGap = 3 * time.Minute
+
+// relistDue is whether a changed list's reconnect is to be asked for now: once the device is not in a
+// turn, and not within relistGap of the last. One that has to wait stays pending.
+func (f *Feature) relistDue(now time.Time, busy bool) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.relist || busy || (!f.relisted.IsZero() && now.Sub(f.relisted) < relistGap) {
+		return false
+	}
+	f.relist, f.relisted = false, now
+	return true
 }
 
 // unused is how long a session stays open with nothing asking for it: long enough to outlast a turn,
@@ -203,8 +221,9 @@ func (f *Feature) listBoards(d config.Dashboard) {
 func boardOptions(d config.Dashboard) (opts []string, chosen string) {
 	opts, chosen = []string{automatic}, automatic
 	size := len(automatic)
+	path := listedPath(d.Path, d.Known)
 	for _, b := range d.Known {
-		mine := b.Path == d.Path
+		mine := b.Path == path
 		// Capped as home's selects are (home.roomFor, #136): all the options go in one message, and one
 		// over 64 KiB breaks the device's connection to Home Assistant. The chosen one always stays.
 		if !mine && (len(opts) >= boardsMax || size+len(b.Label) > boardBytes) {
@@ -221,6 +240,40 @@ func boardOptions(d config.Dashboard) (opts []string, chosen string) {
 		chosen = d.Path
 	}
 	return opts, chosen
+}
+
+// listedPath is the path the list has for a view reached by another name, so that going to it adds
+// no option: a dashboard of one view is listed by its own path alone ("dash" for "dash/0" or
+// "dash/lights"), a view by number is the view of that place in the list ("dash/1" is "dash/lights"
+// when that is its second), and a dashboard of several views by its path alone is its first. A path
+// the list does not have in any form is itself.
+func listedPath(p string, known []config.DashboardChoice) string {
+	p = strings.Trim(p, "/")
+	if p == "" {
+		return p
+	}
+	base, view, _ := strings.Cut(p, "/")
+	var views []string // the dashboard's views as listed, in order
+	for _, b := range known {
+		switch {
+		case b.Path == p:
+			return p
+		case b.Path == base && view != "":
+			return base
+		case strings.HasPrefix(b.Path, base+"/"):
+			views = append(views, b.Path)
+		}
+	}
+	if len(views) == 0 {
+		return p
+	}
+	if view == "" {
+		return views[0]
+	}
+	if n, err := strconv.Atoi(view); err == nil && n >= 0 && n < len(views) {
+		return views[n]
+	}
+	return p
 }
 
 // chooseBoard is a dashboard picked from the list.
@@ -252,7 +305,8 @@ func (f *Feature) chooseBoard(label string) {
 // dashboards is kept current, while the dashboard is on, and asked for once while it is off and there
 // is nothing cached (wantsList). Home Assistant reads a list's choices once per connection, so a
 // changed list is a reconnect, which drops the link to Home Assistant for a moment - so it waits for a
-// moment when the device is not in a turn. An unchanged list, the usual answer, costs nothing.
+// moment when the device is not in a turn, and comes at most once in relistGap. An unchanged list, the
+// usual answer, costs nothing.
 func (f *Feature) Run(ctx context.Context) error {
 	lists := time.NewTimer(20 * time.Second) // Home Assistant is usually not reachable the moment this starts
 	defer lists.Stop()
@@ -265,13 +319,7 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-tick.C:
 			f.closeUnused()
-			f.mu.Lock()
-			relist := f.relist && !voice.Get().Busy()
-			if relist {
-				f.relist = false
-			}
-			f.mu.Unlock()
-			if relist {
+			if f.relistDue(time.Now(), voice.Get().Busy()) {
 				component.Reconnect.Emit(struct{}{})
 			}
 			continue

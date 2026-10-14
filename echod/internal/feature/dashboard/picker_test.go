@@ -5,6 +5,7 @@ package dashboard
 import (
 	"slices"
 	"testing"
+	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
@@ -62,6 +63,73 @@ func TestANewPathAsksForTheReconnect(t *testing.T) {
 	f.listBoards(config.Dashboard{Path: "dashboard-garage/0", Known: pickerBoards})
 	if !f.relist {
 		t.Errorf("a new path in the list asked for no reconnect")
+	}
+}
+
+// A view reached by another name than the list's is the list's option, so going to it adds none and
+// costs no reconnect: a one-view dashboard by any view, a view by its number, a dashboard of several
+// views by its path alone.
+func TestAViewByAnotherNameIsTheListedOne(t *testing.T) {
+	known := []config.DashboardChoice{
+		{Label: "Overview", Path: "lovelace"},
+		{Label: "Kitchen · Lights", Path: "dashboard-kitchen/lights"},
+		{Label: "Kitchen · View 2", Path: "dashboard-kitchen/1"},
+		{Label: "Kitchen · Heat", Path: "dashboard-kitchen/heat"},
+		{Label: "Energy (streamed only)", Path: "energy", Streamed: true},
+	}
+	for _, c := range []struct{ path, want string }{
+		{"", ""},
+		{"lovelace", "lovelace"},
+		{"lovelace/0", "lovelace"},
+		{"/lovelace/home/", "lovelace"},
+		{"dashboard-kitchen/0", "dashboard-kitchen/lights"},
+		{"dashboard-kitchen/1", "dashboard-kitchen/1"},
+		{"dashboard-kitchen/2", "dashboard-kitchen/heat"},
+		{"dashboard-kitchen", "dashboard-kitchen/lights"},
+		{"dashboard-kitchen/9", "dashboard-kitchen/9"},
+		{"dashboard-kitchen/porch", "dashboard-kitchen/porch"},
+		{"dashboard-garage/0", "dashboard-garage/0"},
+	} {
+		if got := listedPath(c.path, known); got != c.want {
+			t.Errorf("listedPath(%q) = %q, want %q", c.path, got, c.want)
+		}
+	}
+
+	f := pickerFeature()
+	f.listBoards(config.Dashboard{Known: known})
+	f.relist = false
+	for _, p := range []string{"lovelace/0", "dashboard-kitchen/0", "dashboard-kitchen/2", "dashboard-kitchen"} {
+		f.listBoards(config.Dashboard{Path: p, Known: known})
+		if f.relist {
+			t.Errorf("going to %q changed the list: %q", p, f.boardOpts.Get())
+		}
+	}
+	if got := f.board.Get(); got != "Kitchen · Lights" {
+		t.Errorf("the kitchen dashboard by its path alone shows as %q, want its first view", got)
+	}
+}
+
+// A changed list's reconnect waits for the device to be out of a turn, and comes at most once in
+// relistGap however often the list changes; one that has to wait is not lost.
+func TestRelistReconnectsAreSpacedOut(t *testing.T) {
+	f := pickerFeature()
+	now := time.Now()
+	if f.relistDue(now, false) {
+		t.Fatal("a reconnect with no changed list")
+	}
+	f.relist = true
+	if f.relistDue(now, true) {
+		t.Fatal("a reconnect in the middle of a turn")
+	}
+	if !f.relistDue(now, false) {
+		t.Fatal("no reconnect for a changed list")
+	}
+	f.relist = true
+	if f.relistDue(now.Add(relistGap/2), false) {
+		t.Fatal("a second reconnect within relistGap")
+	}
+	if !f.relistDue(now.Add(relistGap), false) {
+		t.Fatal("the pending reconnect was lost")
 	}
 }
 
