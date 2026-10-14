@@ -861,8 +861,11 @@ func (d *Display) gesture(g touch.Gesture) {
 	// And only while it is what is drawn: the settings or the drawer opened from it are not shown over
 	// the night clock, so a tap on what looks like the clock must not reach them either.
 	dashAtNight := glowing && d.dash && d.dashNight && d.dashShowing
+	// So is a page Home Assistant asked for at night (askedAtNight): the forecast's Radar button and a
+	// tap to put it away, the calendar's days, all at the night light's level.
+	askedAtNight := glowing && d.askedUp(time.Now())
 	d.mu.Unlock()
-	if glowing && !dashAtNight {
+	if glowing && !dashAtNight && !askedAtNight {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
 			// An alarm or a timer rings over the night clock; a tap anywhere stops it, as the ringing
 			// page's own button would.

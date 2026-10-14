@@ -4,6 +4,7 @@ package display
 
 import (
 	"fmt"
+	"image"
 	"testing"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/screen"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/touch"
 )
 
 // runAction runs one of the display's actions by its name, as Home Assistant would.
@@ -162,5 +164,50 @@ func TestWeatherShowLeavesAScreenTurnedOff(t *testing.T) {
 		if d.on || d.nightGlow {
 			t.Errorf("night light %v: the night lit a screen turned off", nightLight)
 		}
+	}
+}
+
+// On the night light, the forecast Home Assistant asked for takes its taps as by day: the Radar button
+// turns it to the rain map and a tap anywhere else puts it away, the night light staying. With a tap on
+// the clock opening the dashboard, that tap is the page's, not the night dashboard's.
+func TestTapsReachAPageAskedForAtNight(t *testing.T) {
+	d := nightTestDisplay(t)
+	h := time.Now().Hour()
+	if err := config.Set().Screen().Night(fmt.Sprintf("%d-%d", (h+23)%24, (h+2)%24)); err != nil {
+		t.Fatal(err)
+	}
+	for _, err := range []error{
+		config.Set().Screen().Welcomed(true),
+		config.Set().Screen().NightLight(true),
+		config.Set().Dashboard().Mode(config.DashboardDrawn),
+		config.Set().Screen().ClockTap("dashboard"),
+	} {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	d.r = testRenderer()
+	d.view = voice.State{Phase: "idle"}
+	d.on, d.nightGlow = true, true
+	d.ShowWeather(false)
+	d.askedNight = time.Now().Add(weatherShow)
+	if !d.overNight() {
+		t.Fatal("a page asked for at night does not count as something over the night")
+	}
+
+	b := d.r.weatherButton()
+	d.gesture(touch.Gesture{Kind: touch.Tap, X: (b.Min.X + b.Max.X) / 2, Y: (b.Min.Y + b.Max.Y) / 2})
+	if !d.radar || !time.Now().Before(d.weatherUntil) {
+		t.Fatalf("the Radar button on the night light: radar %v, up until %v", d.radar, d.weatherUntil)
+	}
+	tapAt(d, image.Pt(480, 240))
+	if time.Now().Before(d.weatherUntil) {
+		t.Error("a tap on the rain map on the night light did not put it away")
+	}
+	if d.dash {
+		t.Error("a tap on the rain map opened the night dashboard over it")
+	}
+	if !d.nightGlow {
+		t.Error("a tap on the page lifted the night light")
 	}
 }
