@@ -63,6 +63,11 @@ t5_usb_acm() {
 	echo "acm" > $G/configs/c.1/strings/0x409/configuration
 	mkdir -p $G/functions/acm.usb0
 	[ -e $G/configs/c.1/acm.usb0 ] || ln -s $G/functions/acm.usb0 $G/configs/c.1/acm.usb0
+	# USB_RNDIS (device.conf): a network link on the same cable, set up by t5_usb_net.
+	if [ -n "${USB_RNDIS:-}" ]; then
+		mkdir -p $G/functions/rndis.usb0
+		[ -e $G/configs/c.1/rndis.usb0 ] || ln -s $G/functions/rndis.usb0 $G/configs/c.1/rndis.usb0
+	fi
 	UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
 	if [ -n "$UDC" ]; then
 		echo "$UDC" > $G/UDC && log "usb: gadget bound to $UDC (acm)" || log "usb: bind to $UDC failed"
@@ -70,6 +75,33 @@ t5_usb_acm() {
 		log "usb: no UDC; gadget not started"
 	fi
 	[ -e /dev/ttyGS0 ] || mdev -s
+}
+
+# t5_usb_net: when USB_RNDIS is set (device.conf; the address, e.g. 172.16.42.1), give the RNDIS
+# link that address and hand the host one of .2-.9 by DHCP, with no router, so the host's own
+# default route stays where it is. Idempotent. Nothing on devices that do not set USB_RNDIS.
+t5_usb_net() {
+	[ -n "${USB_RNDIS:-}" ] || return 0
+	ifc=$(cat /sys/kernel/config/usb_gadget/g1/functions/rndis.usb0/ifname 2>/dev/null)
+	ip link show "$ifc" >/dev/null 2>&1 || ifc=usb0
+	ip link show "$ifc" >/dev/null 2>&1 || ifc=rndis0
+	ip link show "$ifc" >/dev/null 2>&1 || { log "usb: no RNDIS interface"; return 1; }
+	ip addr add "$USB_RNDIS/24" dev "$ifc" 2>/dev/null
+	ip link set "$ifc" up
+	pfx=${USB_RNDIS%.*}
+	mkdir -p /run
+	printf 'start %s.2\nend %s.9\ninterface %s\nlease_file /run/udhcpd-usb.leases\npidfile /run/udhcpd-usb.pid\noption subnet 255.255.255.0\n' \
+		"$pfx" "$pfx" "$ifc" > /run/udhcpd-usb.conf
+	[ -e /run/udhcpd-usb.pid ] && kill -0 "$(cat /run/udhcpd-usb.pid)" 2>/dev/null && return 0
+	: > /run/udhcpd-usb.leases
+	if command -v udhcpd >/dev/null; then
+		udhcpd /run/udhcpd-usb.conf
+	elif command -v busybox-extras >/dev/null; then
+		busybox-extras udhcpd /run/udhcpd-usb.conf
+	else
+		log "usb: no udhcpd; the host needs a fixed address in $pfx.0/24"
+	fi
+	log "usb: $USB_RNDIS on $ifc"
 }
 
 # t5_wifi_store_records <xml>: the networks in an Android WifiConfigStore, three
