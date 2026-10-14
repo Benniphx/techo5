@@ -25,8 +25,8 @@ daemon can run on a device that already has TECHO5:
 3. Build and copy it over:
 
    ```
-   DEVICE=192.168.X.X #Replace with your device's IP address
-   
+   DEVICE=192.168.x.y   # the device's IP address
+
    cd echod
    GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0 go build -o ../bin/echod-arm ./cmd/echod
    cd ..
