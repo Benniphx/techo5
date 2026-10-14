@@ -163,7 +163,11 @@ func newKeepClipsEntity(d *Detect) *esphome.Switch {
 	sw.OnCommand = func(on bool) {
 		if err := config.Set().KeepClips(on); err != nil {
 			slog.Error("saving keep wake clips failed", "err", err)
-			return
+			// Turned off, the clips go all the same: the switch says off until the next start, which
+			// turns it back on with nothing kept.
+			if on {
+				return
+			}
 		}
 		sw.Set(on)
 		slog.Info("setting changed", "setting", sw.ObjectID, "using", on)

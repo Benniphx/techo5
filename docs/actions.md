@@ -1797,10 +1797,11 @@ In YAML, refer to this action as `esphome.<node>_wake_clips`.
 
 Returns the wake word clips kept on the device, newest first, with what the detector made of each.
 Clips are only kept while the device's **Keep wake clips** switch is on (off by default; see
-[Wake word clips](setup.md#wake-word-clips)). Each entry has:
+[Wake word clips](setup.md#wake-word-clips)); while it is off, this action and `wake_clip_audio`
+answer with an error. Each entry has:
 
 - `id`: what to pass to `wake_clip_audio`.
-- `kind`: `wake`, `mistake`, `noise` or `nearmiss`.
+- `kind`: `wake` (a wake not taken as a mistake within 30 seconds), `mistake`, `noise` or `nearmiss`.
 - `at`: when, in UTC.
 - `slot`: which assistant's wake word, 1 or 2.
 - `model`: the wake word model's ID.
@@ -1814,7 +1815,8 @@ This action answers with data; call it with a `response_variable`.
 
 *string*
 
-Only this kind of clip: `wake`, `mistake`, `noise` or `nearmiss`. An empty string lists every kind.
+Only this kind of clip: `wake`, `mistake`, `noise` or `nearmiss` (`near miss`, as **Wake clips by
+kind** writes it, works too). An empty string lists every kind.
 
 ### page (Required)
 

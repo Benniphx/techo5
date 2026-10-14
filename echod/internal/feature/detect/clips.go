@@ -12,7 +12,8 @@ package detect
 //     same, but somebody may have said the word and then thanked it: each wants listening to.
 //   - nearmiss/: a word that peaked over NearMiss and fell short of the threshold. Somebody saying it
 //     and not being heard, or a sound like it: each wants listening to before it is used.
-//   - wake/: a wake that was not a mistake, the word as this room says it.
+//   - wake/: a wake its turn did not call a mistake within mistakeWithin, the word as this room says
+//     it.
 //
 // Each clip has a sidecar beside it with what the detector made of it: the kind, when (UTC), which
 // slot, the model, the score and the cutoff it was judged against. Each kind keeps its newest
@@ -20,14 +21,16 @@ package detect
 // way it reaches a kept recording (feature/recording).
 //
 // Nothing is kept while a call, the intercom or a talk through a camera has the room, nor for four
-// seconds after the stop word, so that none of those is ever in a clip. Turning the switch off deletes
-// every clip at once.
+// seconds after one starts or ends or after the stop word, so that none of those is ever in a clip. A
+// clip of less than clipShortest is not kept either. Turning the switch off deletes every clip at once,
+// and while it is off the actions answer nothing.
 
 import (
 	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -68,6 +71,11 @@ const (
 	// message (recording.Page).
 	clipsPerPage = 50
 
+	// clipShortest is the least a clip holds, in samples: one second. Less is what is left of the ring
+	// just after it was emptied (a mute, a call, the switch turned on), too little of the word to train
+	// on.
+	clipShortest = clipRate
+
 	// mistakeWithin is how long after a wake its turn has to say it was a mistake. A turn that heard
 	// nothing ends when Home Assistant gives up listening, well inside this.
 	mistakeWithin = 30 * time.Second
@@ -97,17 +105,25 @@ type clips struct {
 	// that time passes. More than one: a wake heard again while its turn listens is part of that turn.
 	pending []*clip
 
-	// quietUntil is the end of the four seconds after the stop word was heard.
+	// quietUntil is the end of the four seconds after the stop word was heard, or a call or a talk
+	// started or ended.
 	quietUntil time.Time
 
-	dir     string
-	keep    int                         // of each kind: clipsKept, fewer in tests
-	blocked func() bool                 // something else has the room: see clipsBlocked
-	model   func(slot int) string       // the slot's model id
-	cutoff  func(slot int) float64      // the slot's threshold, for a near miss
-	now     func() time.Time            // replaced in tests
-	after   func(time.Duration, func()) // time.AfterFunc; replaced in tests
-	save    func(clip)                  // writes off the caller's goroutine; replaced in tests
+	// held is whether a call or a talk through a camera has the room, as last told (roomChanged): the
+	// ring takes nothing while it does. Read on the audio path, so it is not behind a lock of theirs.
+	held atomic.Bool
+	// room is held through roomChanged, so the last to look at the room is the last to set held.
+	room sync.Mutex
+
+	dir      string
+	keep     int                         // of each kind: clipsKept, fewer in tests
+	shortest int                         // the least a clip holds: clipShortest, none in tests
+	blocked  func() bool                 // something else has the room: see clipsBlocked
+	model    func(slot int) string       // the slot's model id
+	cutoff   func(slot int) float64      // the slot's threshold, for a near miss
+	now      func() time.Time            // replaced in tests
+	after    func(time.Duration, func()) // time.AfterFunc; replaced in tests
+	save     func(clip)                  // writes off the caller's goroutine; replaced in tests
 
 	// counts is how many clips of each kind are on the device, for the Wake clips sensors: counted from
 	// the folders once at the start, then kept as clips are written, pruned and purged. Its own lock,
@@ -124,7 +140,7 @@ type clips struct {
 var clipKinds = []string{"mistake", "noise", "nearmiss", "wake"}
 
 func newClips(dir string) *clips {
-	c := &clips{ring: make([]int16, clipRate*clipSeconds), dir: dir, keep: clipsKept,
+	c := &clips{ring: make([]int16, clipRate*clipSeconds), dir: dir, keep: clipsKept, shortest: clipShortest,
 		blocked: clipsBlocked, model: func(int) string { return "" }, cutoff: func(int) float64 { return 0 },
 		now: time.Now, after: func(d time.Duration, f func()) { time.AfterFunc(d, f) },
 		counts: map[string]int{}}
@@ -164,6 +180,9 @@ func startClips(e *Engine, publish func(total int, kinds string)) *clips {
 	}
 	voice.Mistaken.Listen(c.mistaken)
 	mute.Get().Changed.Listen(c.muted)
+	phone.Get().Changed.Listen(func(phone.State) { c.roomChanged() })
+	talkback.Get().Changed.Listen(func(struct{}) { c.roomChanged() })
+	c.roomChanged()
 	return c
 }
 
@@ -171,6 +190,25 @@ func startClips(e *Engine, publish func(total int, kinds string)) *clips {
 // goes on scoring through all of them, and none of them is anybody talking to the device.
 func clipsBlocked() bool {
 	return phone.Get().Busy() || talkback.Get().Busy()
+}
+
+// roomChanged is the phone or the talkback saying something changed. As a call or a talk starts and
+// as it ends, the ring is emptied and nothing is kept for the next four seconds; held keeps the ring
+// from taking anything in between. So nothing heard during one is ever in a clip.
+//
+// Asked before mu, as allowed does: the phone and the talkback are never waited on under mu.
+func (c *clips) roomChanged() {
+	c.room.Lock()
+	defer c.room.Unlock()
+	busy := c.blocked()
+	if busy == c.held.Load() {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.held.Store(busy)
+	c.reset()
+	c.quietUntil = c.now().Add(clipSeconds * time.Second)
 }
 
 // enable turns the recorder on or off. Off lets go of every clip, kept and pending.
@@ -254,7 +292,7 @@ func (c *clips) published() {
 // Whether something else has the room is asked before mu is taken: the phone and the talkback have
 // locks of their own, and neither is ever waited on under mu, which the audio path takes.
 func (c *clips) allowed(slot int) bool {
-	ok := slot < wakeword.Slots && c.on.Load() && !c.blocked()
+	ok := slot < wakeword.Slots && c.on.Load() && !c.blocked() && !c.held.Load()
 	c.mu.Lock()
 	now := c.now()
 	if slot >= wakeword.Slots {
@@ -267,9 +305,9 @@ func (c *clips) allowed(slot int) bool {
 	return false
 }
 
-// frame keeps one frame of what the detector heard.
+// frame keeps one frame of what the detector heard: none while a call or a talk has the room.
 func (c *clips) frame(f []int16) {
-	if !c.on.Load() {
+	if !c.on.Load() || c.held.Load() {
 		return
 	}
 	c.mu.Lock()
@@ -297,6 +335,9 @@ func (c *clips) muted(on bool) {
 	}
 }
 
+// short is whether the ring holds too little to keep (clipShortest). Held with mu.
+func (c *clips) short() bool { return !c.full && c.next < c.shortest }
+
 // snapshot is the ring in order, oldest first. Held with mu.
 func (c *clips) snapshot() []int16 {
 	if !c.full {
@@ -314,6 +355,9 @@ func (c *clips) scored(slot int, peak, cutoff float64) {
 		return
 	}
 	defer c.mu.Unlock()
+	if c.short() {
+		return
+	}
 	cl := &clip{kind: "wake", at: c.now(), slot: slot, model: model, peak: peak, cutoff: cutoff, pcm: c.snapshot()}
 	c.pending = append(c.pending, cl)
 	c.after(mistakeWithin, func() {
@@ -363,6 +407,9 @@ func (c *clips) nearMiss(slot int, peak float64) {
 		return
 	}
 	defer c.mu.Unlock()
+	if c.short() {
+		return
+	}
 	c.save(clip{kind: "nearmiss", at: c.now(), slot: slot, model: model, peak: peak, cutoff: cutoff, pcm: c.snapshot()})
 }
 
@@ -379,16 +426,22 @@ type clipMeta struct {
 }
 
 // write puts a clip on the device, with its sidecar, and lets the oldest of its kind go. The name
-// says when (UTC), which slot, how high it scored and what it had to reach:
-// 20261012-213301-s1-p0.79-c0.90.wav.
+// says when (UTC, to the millisecond), which slot, how high it scored and what it had to reach:
+// 20261012-213301-123-s1-p0.79-c0.90.wav.
 func (c *clips) write(cl clip) {
+	// Turned off before this was reached: the folders the purge took away are not made again.
+	if !c.on.Load() {
+		return
+	}
 	dir := filepath.Join(c.dir, cl.kind)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		slog.Warn("wake clip: no folder", "err", err)
 		return
 	}
-	// UTC, so that name order stays time order across a change of the clocks.
-	name := fmt.Sprintf("%s-s%d-p%.2f", cl.at.UTC().Format("20060102-150405"), cl.slot+1, cl.peak)
+	// UTC, so that name order stays time order across a change of the clocks; the milliseconds at a
+	// fixed width, so that two in one second are two files, still in order.
+	at := cl.at.UTC()
+	name := fmt.Sprintf("%s-%03d-s%d-p%.2f", at.Format("20060102-150405"), at.Nanosecond()/1e6, cl.slot+1, cl.peak)
 	if cl.cutoff > 0 {
 		name += fmt.Sprintf("-c%.2f", cl.cutoff)
 	}
@@ -454,13 +507,23 @@ type ClipList struct {
 	Clips   []clipMeta `json:"clips"`
 }
 
+// errClipsOff is what the actions answer while Keep wake clips is off.
+var errClipsOff = errors.New("wake clips are not kept: Keep wake clips is off")
+
 // list is the clips of kind (every kind when it is empty), newest first, a page at a time. Keyed off
-// the sidecars, so a clip still being written is not offered.
+// the sidecars, so a clip still being written is not offered. "near miss", as the sensor writes it,
+// is nearmiss.
 func (c *clips) list(kind string, page int) (*ClipList, error) {
+	if !c.on.Load() {
+		return nil, errClipsOff
+	}
 	kinds := clipKinds
+	if kind == "near miss" {
+		kind = "nearmiss"
+	}
 	if kind != "" {
 		if !slices.Contains(clipKinds, kind) {
-			return nil, fmt.Errorf("%q is not a kind of wake clip: %s", kind, strings.Join(clipKinds, ", "))
+			return nil, fmt.Errorf("%q is not a kind of wake clip: mistake, noise, near miss, wake", kind)
 		}
 		kinds = []string{kind}
 	}
@@ -504,6 +567,9 @@ func (c *clips) list(kind string, page int) (*ClipList, error) {
 // The id comes in over the wire, so it is whatever the caller cared to send: it names a file and it
 // is checked before it does.
 func (c *clips) audio(id string, page int) (*recording.Answer, error) {
+	if !c.on.Load() {
+		return nil, errClipsOff
+	}
 	kind, name, ok := strings.Cut(id, "/")
 	if !ok || !slices.Contains(clipKinds, kind) || !safename.OK(name) {
 		return nil, fmt.Errorf("%q is not a wake clip id", id)
