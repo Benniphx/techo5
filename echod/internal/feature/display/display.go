@@ -863,8 +863,11 @@ func (d *Display) gesture(g touch.Gesture) {
 	// the night clock, so a tap on what looks like the clock must not reach them either.
 	dashAtNight := glowing && d.dash && d.dashNight && d.dashShowing
 	// So is a page Home Assistant asked for at night (askedAtNight): the forecast's Radar button and a
-	// tap to put it away, the calendar's days, all at the night light's level.
-	askedAtNight := glowing && d.askedUp(time.Now())
+	// tap to put it away, at the night light's level. Only its taps: a swipe still opens nothing over
+	// the night and a long press still lifts the night light. The calendar takes every finger, as by
+	// day (calendarUp, which this holds mu for).
+	calUp := time.Now().Before(d.calUntil) && d.view.Phase == "idle"
+	askedAtNight := glowing && d.askedUp(time.Now()) && (g.Kind == touch.Tap || calUp)
 	d.mu.Unlock()
 	if glowing && !dashAtNight && !askedAtNight {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {

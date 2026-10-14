@@ -234,3 +234,30 @@ func TestTheNightHoldLastsAsLongAsThePage(t *testing.T) {
 		t.Error("a forecast put up after the page closed is held for the night")
 	}
 }
+
+// Only taps reach the forecast asked for at night: a swipe from the top does not open the settings
+// over the night, and a long press still lifts the night light.
+func TestOnlyTapsReachAPageAskedForAtNight(t *testing.T) {
+	d := nightTestDisplay(t)
+	h := time.Now().Hour()
+	if err := config.Set().Screen().Night(fmt.Sprintf("%d-%d", (h+23)%24, (h+2)%24)); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Set().Screen().Welcomed(true); err != nil {
+		t.Fatal(err)
+	}
+	d.r = testRenderer()
+	d.view = voice.State{Phase: "idle"}
+	d.on, d.nightGlow = true, true
+	d.ShowWeather(false)
+	d.askedNight = true
+
+	d.gesture(touch.Gesture{Kind: touch.SwipeDown, X: 480, Y: 5})
+	if d.sheet {
+		t.Error("a swipe from the top opened the settings over the night")
+	}
+	d.gesture(touch.Gesture{Kind: touch.Hold, X: 480, Y: 240})
+	if d.nightGlow {
+		t.Error("a long press on the forecast did not lift the night light")
+	}
+}
