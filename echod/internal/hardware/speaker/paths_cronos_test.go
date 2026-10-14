@@ -201,3 +201,10 @@ func TestAthenasPlaybackSettings(t *testing.T) {
 		t.Errorf("athena's trim is %+v dB: it may only make the speaker quieter", athenaTrimDB)
 	}
 }
+
+// athena's playback ring fits the block the driver used for it on the unit (paths_cronos.go).
+func TestAthenasPlaybackRingFits(t *testing.T) {
+	if bytes := period * 96000 / Rate * periods * Channels * Bits / 8; bytes > athenaRingMax {
+		t.Errorf("playback ring %d bytes, the driver's block is %d", bytes, athenaRingMax)
+	}
+}

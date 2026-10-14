@@ -62,17 +62,24 @@ i=0
 while [ $i -lt 12 ]; do cat "$DIR/tone.raw" "$DIR/tone.raw" > "$DIR/t2" && mv "$DIR/t2" "$DIR/tone.raw"; i=$((i+1)); done
 
 # 3. Play, let the amplifier come up, then record the candidates at once.
+#
+# Every ring size is given, never left to aplay/arecord: Amazon's drivers advertise far bigger rings
+# than the DMA blocks they set aside, and a ring larger than its block panics the kernel (hw:0,17
+# at 61440 bytes did, 2026-10-14). These are the daemon's sizes: hw:0,7 4 x 16 ms (24576 bytes
+# at 96 kHz), hw:0,17 3 x 10 ms (46080 bytes, under its 48 KB block), hw:0,16 8 x 10 ms (15360 bytes).
+PLAY_PERIOD=$((PLAY_RATE / 1000 * 16))
 echo "playing 1 kHz at $LEVEL of full scale, $PLAY_RATE Hz, on hw:0,7"
-aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" "$DIR/tone.raw" 2> "$DIR/aplay.err" &
+aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" --period-size=$PLAY_PERIOD --buffer-size=$((PLAY_PERIOD * 4)) 	"$DIR/tone.raw" 2> "$DIR/aplay.err" &
 PLAY=$!
 sleep 0.5
-arecord -q -D hw:0,16 -t raw -f S16_LE -c 2 -r 48000 -d $SECS "$DIR/ref.raw" 2> "$DIR/ref.err" &
+arecord -q -D hw:0,16 -t raw -f S16_LE -c 2 -r 48000 --period-size=480 --buffer-size=3840 -d $SECS 	"$DIR/ref.raw" 2> "$DIR/ref.err" &
 R1=$!
-arecord -q -D hw:0,17 -t raw -f S32_LE -c 4 -r 96000 -d $SECS "$DIR/mic.raw" 2> "$DIR/mic.err" &
+arecord -q -D hw:0,17 -t raw -f S32_LE -c 4 -r 96000 --period-size=960 --buffer-size=2880 -d $SECS 	"$DIR/mic.raw" 2> "$DIR/mic.err" &
 R2=$!
 R3=
 if [ "$VUL2" = 1 ]; then
-	arecord -q -D hw:0,33 -t raw -f S16_LE -c 2 -r 48000 -d $SECS "$DIR/vul2.raw" 2> "$DIR/vul2.err" &
+	# Its DMA block is unknown, so the smallest ring that works: 4 x 10 ms, 7680 bytes.
+	arecord -q -D hw:0,33 -t raw -f S16_LE -c 2 -r 48000 --period-size=480 --buffer-size=1920 -d $SECS 		"$DIR/vul2.raw" 2> "$DIR/vul2.err" &
 	R3=$!
 fi
 wait $R1 $R2 $R3 2>/dev/null

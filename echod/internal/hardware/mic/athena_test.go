@@ -153,3 +153,20 @@ func TestAthenaControlNamesFit(t *testing.T) {
 func rmsOfSignal() float64 {
 	return math.Sqrt((0.3*0.3 + 0.2*0.2 + 0.1*0.1) / 2)
 }
+
+// Amazon's driver does not hold a ring to the DMA block it set aside, and one that does not fit is a
+// kernel panic (athena.go). Both rings have to fit, with the period count the reader relies on.
+func TestAthenaRingsFitTheDriver(t *testing.T) {
+	mic := athenaMicPeriod * athenaMicPeriods * athenaMicChannels * athenaMicBits / 8
+	if mic > athenaMicRingMax {
+		t.Errorf("microphone ring %d bytes, the driver has %d", mic, athenaMicRingMax)
+	}
+	ref := athenaRefPeriod * athenaRefPeriods * athenaRefChannels * athenaRefBits / 8
+	if ref > athenaRefRingMax {
+		t.Errorf("reference ring %d bytes, the driver has %d", ref, athenaRefRingMax)
+	}
+	// The reader takes 20 ms at a time, so a ring has to hold more than that.
+	if athenaMicPeriods*athenaMicPeriod*Rate/athenaMicRate <= FrameSamples {
+		t.Errorf("a %d-period microphone ring is no deeper than one read", athenaMicPeriods)
+	}
+}

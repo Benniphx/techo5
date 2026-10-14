@@ -45,12 +45,22 @@ const (
 	athenaRefChannels = 2
 	athenaRefBits     = 16
 
-	// 10 ms periods. The microphone ring is four of them: the card refuses more than 64 KB of ring, and
-	// four channels of 32 bits at 96 kHz fill that in 43 ms.
+	// 10 ms periods, and rings that fit what Amazon's driver set aside for each device. hw_params
+	// advertises far more than that (16384 frames on hw:0,17) and does not check: asked for a ring
+	// larger than its DMA block, the driver clears past the end of it in hw_params and the kernel
+	// panics (M4 on the unit, 2026-10-14: a 61440-byte ring on hw:0,17, data abort in set_mem_block
+	// 48 KB in, mtk_i2s2_adc2_pcm_hw_params). So the rings are sized here, never left to the driver:
+	//   - hw:0,17: at most athenaMicRingMax. Three periods, 46080 bytes, 30 ms.
+	//   - hw:0,16: 15360 bytes, the size that opened cleanly on the unit (its limit is 64 KB).
 	athenaMicPeriod  = athenaMicRate / 100
-	athenaMicPeriods = 4
+	athenaMicPeriods = 3
 	athenaRefPeriod  = athenaRefRate / 100
 	athenaRefPeriods = 8
+
+	// athenaMicRingMax is the microphone DMA block that is really there: the next device's block
+	// starts 48 KB after hw:0,17's, and the fault came at exactly 48 KB.
+	athenaMicRingMax = 48 << 10
+	athenaRefRingMax = 15360
 
 	// Decimator lengths in the ratio of the rates, so both delay by the same 1 ms.
 	athenaMicTaps = 192

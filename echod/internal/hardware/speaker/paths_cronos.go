@@ -115,6 +115,13 @@ var PlaybackDevice = onAthena(7, 23)
 // low. So the write loop doubles the rate on the way out (lib/audio Upsampler).
 var hwRate = onAthena(96000, Rate)
 
+// athenaRingMax is the most ring hw:0,7 may be given. Amazon's capture drivers on this kernel do not
+// hold a ring to the DMA block they set aside and panic the kernel when it is larger (mic/athena.go),
+// so athena's rings are sized against what each driver was seen to use rather than what hw_params
+// offers. The playback ring is 4 periods of 1536 frames at 96 kHz, 24576 bytes: exactly the AFE SRAM
+// block the DL1 driver took for it on the unit (dma_bytes 24576, "MaxSramSize = 24576").
+const athenaRingMax = 24576
+
 // hwTrimDB is taken off everything the card is sent, after the volume and the tuning. Zero on the
 // boards that have been listened to. athena has not been yet, behind an amplifier stage of its own
 // (see initSequence), so it starts athenaTrimDB under the levels crown plays at, until it has been
