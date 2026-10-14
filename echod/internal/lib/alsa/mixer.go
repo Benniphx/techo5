@@ -29,8 +29,12 @@ const (
 	elemValueSize = valueDataOff + 128*longSize + 128 // 1224
 
 	idNumidOff = 0
+	idIfaceOff = 4
 	idNameOff  = 16
 	idNameLen  = 44
+
+	// ifaceMixer is SNDRV_CTL_ELEM_IFACE_MIXER, where every control this package writes lives.
+	ifaceMixer = 2
 
 	infoTypeOff  = elemIDSize
 	infoCountOff = elemIDSize + 8
@@ -140,6 +144,23 @@ func (m *Mixer) Find(name string) (Control, error) {
 	return Control{}, fmt.Errorf("%w named %q", ErrNoControl, name)
 }
 
+// Lookup finds one mixer control by name and asks the card about that one only, where Find walks
+// every control on the card first. On a card where touching the wrong control has side effects (the
+// 2nd gen Echo Show 8's, whose list holds timestamp and playback-state controls), a lookup is the way
+// to be sure nothing else is read.
+func (m *Mixer) Lookup(name string) (Control, error) {
+	if len(name) >= idNameLen {
+		return Control{}, fmt.Errorf("alsa: control name %q is too long", name)
+	}
+	var buf [elemInfoSize]byte
+	binary.LittleEndian.PutUint32(buf[idIfaceOff:], ifaceMixer)
+	copy(buf[idNameOff:], name)
+	if err := ioctl(m.f.Fd(), ioctlElemInfo, unsafe.Pointer(&buf)); err != nil {
+		return Control{}, fmt.Errorf("alsa: no control named %q: %w", name, err)
+	}
+	return m.decodeInfo(&buf)
+}
+
 // info reads a control's metadata, including the names of an enumerated control's items.
 func (m *Mixer) info(numid uint32) (Control, error) {
 	var buf [elemInfoSize]byte
@@ -147,7 +168,12 @@ func (m *Mixer) info(numid uint32) (Control, error) {
 	if err := ioctl(m.f.Fd(), ioctlElemInfo, unsafe.Pointer(&buf)); err != nil {
 		return Control{}, err
 	}
+	return m.decodeInfo(&buf)
+}
 
+// decodeInfo reads the answer to an info request, and the item names of an enumerated control.
+func (m *Mixer) decodeInfo(buf *[elemInfoSize]byte) (Control, error) {
+	numid := binary.LittleEndian.Uint32(buf[idNumidOff:])
 	c := Control{
 		Numid: numid,
 		Name:  cstr(buf[idNameOff : idNameOff+idNameLen]),

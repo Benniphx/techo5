@@ -15,7 +15,6 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/privacy"
-	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/denoise"
@@ -49,7 +48,7 @@ type Source struct {
 	// The hardware, taken by Start and let go by Close. Nil in between: the handle outlives the
 	// device so that a restart can take it again without every listener being rebuilt.
 	devMu sync.Mutex
-	pcm   *alsa.Capture
+	pcm   capture
 
 	mu        sync.Mutex
 	listeners map[int]*listener
@@ -153,16 +152,8 @@ func Get() *Source {
 
 func (s *Source) Name() string { return "capture" }
 
-// ErrUnsupported is Start on a board whose microphones this build does not drive yet (see
-// layout.AudioSupported). It fails the first acquire, so the supervisor carries on without the
-// capture service rather than retrying it: nothing else listening hears anything, and nothing breaks.
-var ErrUnsupported = errors.New("mic: this board's microphones are not supported yet")
-
 // Start takes the capture device, off Android if it got there first, the same way the speaker does.
 func (s *Source) Start(context.Context) error {
-	if !layout.AudioSupported() {
-		return ErrUnsupported
-	}
 	// Before the device is opened, so that a unit whose mute is the daemon's own is already cutting
 	// when the first frame arrives. The mute feature restores the same value later in the Device
 	// phase; this is only about the frames captured before it gets there. See privacy.Seed.
@@ -207,8 +198,17 @@ func Acquire() (*Source, error) {
 	return s, nil
 }
 
-func (s *Source) open() error {
-	pcm, err := alsa.Open(Card, CaptureDevice, alsa.Config{
+// capture is the hardware as the reader sees it: whole frames of Channels at Rate in S24_3LE, the
+// microphones and then the loopback. On every board but one that is a single capture device as it
+// comes (openPlain); see openDevice in the device files.
+type capture interface {
+	Read(buf []byte) (int, error)
+	Close() error
+}
+
+// openPlain opens the one capture device that carries the microphones and the loopback together.
+func openPlain() (capture, error) {
+	return alsa.Open(Card, CaptureDevice, alsa.Config{
 		Channels:   Channels,
 		Rate:       Rate,
 		Format:     alsa.FormatS24_3LE,
@@ -216,6 +216,10 @@ func (s *Source) open() error {
 		PeriodSize: period,
 		Periods:    periods,
 	})
+}
+
+func (s *Source) open() error {
+	pcm, err := openDevice()
 	if err != nil {
 		return fmt.Errorf("mic: opening capture: %w", err)
 	}
@@ -230,7 +234,7 @@ func (s *Source) open() error {
 }
 
 // device is the hardware, or nil when it is not held.
-func (s *Source) device() *alsa.Capture {
+func (s *Source) device() capture {
 	s.devMu.Lock()
 	defer s.devMu.Unlock()
 	return s.pcm

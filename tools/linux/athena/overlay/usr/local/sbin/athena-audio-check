@@ -1,0 +1,132 @@
+#!/bin/sh
+# athena-audio-check: which capture channels hear the speaker, on the 2nd gen Echo Show 8 under
+# Amazon's kernel. Plays a quiet 1 kHz tone on the speaker (hw:0,7) and, while it plays, records the
+# echo reference candidate (hw:0,16, I2S0AWB) and the microphones (hw:0,17, the TLV320ADC5140) for 3 s,
+# then prints each channel's level and how much of it is the tone.
+#
+# What to expect if hw:0,16 is the reference: both of its channels carry the 1 kHz tone at about the
+# level played (-26 dBFS RMS at LEVEL=0.07) and next to nothing at 500 Hz or 2 kHz (a reference at the
+# wrong rate shows the tone moved to one of those). The microphones carry it well below that, with a
+# room's floor around it. A silent channel is all zeros (-inf).
+#
+# The daemon holds these devices, so it is stopped for the test (/run/techo5/hold, which techo5-run
+# waits on) and started again at the end.
+#
+#   athena-audio-check                    tone at 7% of full scale, the speaker at 96 kHz
+#   LEVEL=0.03 athena-audio-check         quieter
+#   PLAY_RATE=48000 athena-audio-check    the speaker at 48 kHz instead
+#   VUL2=1 athena-audio-check             also record hw:0,33 (I2S0VUL2), the other candidate
+set -u
+LEVEL=${LEVEL:-0.07}
+PLAY_RATE=${PLAY_RATE:-96000}
+VUL2=${VUL2:-0}
+SECS=3
+DIR=/tmp/athena-audio-check
+rm -rf "$DIR" && mkdir -p "$DIR" || exit 1
+
+case "$LEVEL" in 0.0[0-9]|0.0[0-9]*|0.1|0.10) ;; *) echo "LEVEL $LEVEL is above 0.1; refusing" >&2; exit 1 ;; esac
+case "$PLAY_RATE" in 48000|96000) ;; *) echo "PLAY_RATE is 48000 or 96000" >&2; exit 1 ;; esac
+
+restart() {
+	rm -f /run/techo5/hold
+	echo "daemon: released (techo5-run starts it within 5 s)"
+}
+trap restart EXIT INT TERM
+
+# 1. Stop the daemon and keep it stopped while the devices are in use.
+mkdir -p /run/techo5 && touch /run/techo5/hold
+if pidof techo5 >/dev/null; then
+	killall techo5 2>/dev/null
+	n=0
+	while pidof techo5 >/dev/null && [ $n -lt 15 ]; do sleep 1; n=$((n+1)); done
+	pidof techo5 >/dev/null && killall -9 techo5 2>/dev/null && sleep 1
+fi
+echo "daemon: stopped"
+
+# The amplifier's volume as Amazon's driver left it (one control, read alone).
+amixer -c 0 cget name='Master TAS5805m Playback Volume' 2>&1 | sed -n 's/^ *: *values=/master volume: /p'
+
+# 2. The tone: one period of 1 kHz, stereo S16_LE, written as octal escapes for printf, then doubled
+# up to about 4 s.
+awk -v rate="$PLAY_RATE" -v level="$LEVEL" 'BEGIN {
+	n = rate / 1000
+	for (i = 0; i < n; i++) {
+		v = int(level * 32767 * sin(2 * 3.14159265358979 * i / n))
+		if (v < 0) v += 65536
+		s = sprintf("\\%03o\\%03o", v % 256, int(v / 256))
+		printf "%s%s", s, s
+	}
+}' > "$DIR/period.esc"
+printf "$(cat "$DIR/period.esc")" > "$DIR/tone.raw"
+i=0
+while [ $i -lt 12 ]; do cat "$DIR/tone.raw" "$DIR/tone.raw" > "$DIR/t2" && mv "$DIR/t2" "$DIR/tone.raw"; i=$((i+1)); done
+
+# 3. Play, let the amplifier come up, then record the candidates at once.
+echo "playing 1 kHz at $LEVEL of full scale, $PLAY_RATE Hz, on hw:0,7"
+aplay -q -D hw:0,7 -t raw -f S16_LE -c 2 -r "$PLAY_RATE" "$DIR/tone.raw" 2> "$DIR/aplay.err" &
+PLAY=$!
+sleep 0.5
+arecord -q -D hw:0,16 -t raw -f S16_LE -c 2 -r 48000 -d $SECS "$DIR/ref.raw" 2> "$DIR/ref.err" &
+R1=$!
+arecord -q -D hw:0,17 -t raw -f S32_LE -c 4 -r 96000 -d $SECS "$DIR/mic.raw" 2> "$DIR/mic.err" &
+R2=$!
+R3=
+if [ "$VUL2" = 1 ]; then
+	arecord -q -D hw:0,33 -t raw -f S16_LE -c 2 -r 48000 -d $SECS "$DIR/vul2.raw" 2> "$DIR/vul2.err" &
+	R3=$!
+fi
+wait $R1 $R2 $R3 2>/dev/null
+kill $PLAY 2>/dev/null
+wait $PLAY 2>/dev/null
+for f in aplay ref mic vul2; do
+	[ -s "$DIR/$f.err" ] && { echo "--- $f:"; cat "$DIR/$f.err"; }
+done
+
+# 4. Levels. Per channel: the whole signal's RMS, and the tone's own level at 1 kHz (and at 500 Hz and
+# 2 kHz, where a stream at the wrong rate would put it), by Goertzel over 1 s after the first 0.5 s.
+# dBFS against the format's full scale; "-inf" is below -150.
+report() { # file label rate channels bytes
+	[ -s "$1" ] || { echo "$2: nothing recorded"; return; }
+	frame=$(($4 * $5))
+	od -An -v -td"$5" -j $(($3 / 2 * frame)) -N $(($3 * frame)) "$1" |
+	awk -v label="$2" -v rate="$3" -v nch="$4" -v bytes="$5" '
+	BEGIN {
+		full = (bytes == 4) ? 2147483648 : 32768
+		nf = split("1000 500 2000", f, " ")
+		for (k = 1; k <= nf; k++) co[k] = 2 * cos(2 * 3.14159265358979 * f[k] / rate)
+		i = 0
+	}
+	{
+		for (j = 1; j <= NF; j++) {
+			c = i % nch
+			x = $j / full
+			sq[c] += x * x; cnt[c]++
+			for (k = 1; k <= nf; k++) {
+				s = x + co[k] * s1[c, k] - s2[c, k]
+				s2[c, k] = s1[c, k]; s1[c, k] = s
+			}
+			i++
+		}
+	}
+	function db(v) { return v > 1e-15 ? sprintf("%6.1f", 10 * log(v) / log(10)) : "  -inf" }
+	END {
+		printf "%s (%d Hz, %d ch, %.2f s analyzed)\n", label, rate, nch, i / nch / rate
+		if (i < nch * rate / 10) { print "  too short"; exit }
+		for (c = 0; c < nch; c++) {
+			n = cnt[c]
+			line = sprintf("  ch%d: RMS %s dBFS", c, db(sq[c] / n))
+			for (k = 1; k <= nf; k++) {
+				p = s1[c, k] ^ 2 + s2[c, k] ^ 2 - co[k] * s1[c, k] * s2[c, k]
+				# Tone RMS squared: (2 sqrt(p) / n)^2 / 2.
+				line = line sprintf("   %4d Hz %s", f[k], db(2 * p / (n * n)))
+			}
+			print line
+		}
+	}'
+}
+echo
+report "$DIR/ref.raw" "hw:0,16 I2S0AWB (reference?)" 48000 2 2
+report "$DIR/mic.raw" "hw:0,17 I2S2ADC2 (microphones)" 96000 4 4
+[ "$VUL2" = 1 ] && report "$DIR/vul2.raw" "hw:0,33 I2S0VUL2" 48000 2 2
+echo
+echo "raw files in $DIR"

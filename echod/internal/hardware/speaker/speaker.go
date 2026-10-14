@@ -18,6 +18,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/asp"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/spectrum"
@@ -39,6 +40,11 @@ const (
 	// codecSettle is how long the codec sits powered and idle before the amplifier is enabled,
 	// measured from the vendor HAL doing the same thing on a route change.
 	codecSettle = 1100 * time.Millisecond
+
+	// upsampleTaps is the length of each phase of the filter that takes a period up to hwRate, where
+	// the card runs faster than Rate: 96 taps at 96 kHz, flat to 21 kHz and about 74 dB down on the
+	// images from 27 kHz. 1 ms of delay.
+	upsampleTaps = 48
 )
 
 // VoiceRate is the rate Home Assistant's pipeline works at, and VoiceUpsample how many playback
@@ -48,10 +54,8 @@ const (
 	VoiceUpsample = Rate / VoiceRate
 )
 
-const (
-	Card           = 0
-	PlaybackDevice = 23
-)
+// Card is the sound card; PlaybackDevice, the PCM on it, is the board's own (paths_*.go).
+const Card = 0
 
 // OutputMode selects automatic routing, the speaker, headphones when plugged in, or both at once.
 type OutputMode int32
@@ -307,12 +311,13 @@ func (p *Player) open() error {
 		}
 	}
 
+	// The ring is the same length of time at whatever rate the card runs (hwRate).
 	pb, err := alsa.OpenPlayback(Card, PlaybackDevice, alsa.Config{
 		Channels:   Channels,
-		Rate:       Rate,
+		Rate:       hwRate,
 		Format:     alsa.FormatS16_LE,
 		Bits:       Bits,
-		PeriodSize: period,
+		PeriodSize: period * hwRate / Rate,
 		Periods:    periods,
 		StartFull:  startFull,
 	})
@@ -573,6 +578,16 @@ func (p *Player) Run(ctx context.Context) error {
 	safe.Go("jack watcher", func() { p.watchJack(ctx) })
 
 	silence := make([]byte, len(buf))
+
+	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go).
+	var up *audio.Upsampler
+	var hw []byte
+	if hwRate != Rate || hwTrimDB != 0 {
+		up = audio.NewUpsampler(hwRate/Rate, upsampleTaps, Channels, math.Pow(10, hwTrimDB/20))
+		hw = make([]byte, 0, len(buf)*hwRate/Rate)
+		slog.Info("playback at the card's own rate", "rate", hwRate, "trim_db", hwTrimDB)
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil
@@ -586,6 +601,10 @@ func (p *Player) Run(ctx context.Context) error {
 			s.push(buf)
 			to = silence
 		}
+		if up != nil {
+			hw = up.S16LE(to, hw[:0])
+			to = hw
+		}
 		if err := p.send(ctx, pb, to); err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -593,8 +612,10 @@ func (p *Player) Run(ctx context.Context) error {
 			return err
 		}
 		// What the card holds now is what the period rendered next waits behind, so it is read here,
-		// between the write and the render, and published with the count it belongs to.
+		// between the write and the render, and published with the count it belongs to: in frames at
+		// Rate, which is what everything placing audio counts in.
 		d, err := pb.Delay()
+		d = d * Rate / hwRate
 		at := time.Now()
 		w := p.written.Add(period)
 		if err == nil && d >= 0 {

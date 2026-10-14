@@ -175,3 +175,29 @@ func TestTheShowStartsWithAFullRing(t *testing.T) {
 		t.Fatal("the Show's playback starts before its ring is full")
 	}
 }
+
+// A workstation reads as a Show 5, so the board values have to be the Show 5's: its playback device,
+// the card at the pipeline's own rate, nothing trimmed, and its own start sequence.
+func TestTheShowsPlaybackIsUnchangedOffAthena(t *testing.T) {
+	if PlaybackDevice != 23 || hwRate != Rate || hwTrimDB != 0 {
+		t.Errorf("device %d at %d Hz trimmed %v dB, want 23 at %d and 0", PlaybackDevice, hwRate, hwTrimDB, Rate)
+	}
+	if got, want := len(boardInit()), len(showInit(rt5616())); got != want {
+		t.Errorf("start sequence has %d writes, want the Show's %d", got, want)
+	}
+	if onAthena(7, 23) != 23 {
+		t.Error("onAthena picked athena's value on a workstation")
+	}
+}
+
+// athena's card runs at twice the pipeline's rate, so a period has to come out whole there, and its
+// trim only ever turns the speaker down.
+func TestAthenasPlaybackSettings(t *testing.T) {
+	const athenaRate = 96000
+	if athenaRate%Rate != 0 || period*athenaRate%Rate != 0 {
+		t.Errorf("%d Hz is not a whole multiple of %d with a %d-frame period", athenaRate, Rate, period)
+	}
+	if athenaTrimDB > 0 {
+		t.Errorf("athena's trim is %+v dB: it may only make the speaker quieter", athenaTrimDB)
+	}
+}

@@ -53,8 +53,9 @@ var AnimationScripts = []string{}
 //
 // The 2nd gen Show 8 (athena, MT8183) is the odd one out: it runs Amazon's own 32-bit 4.4 kernel,
 // not a LineageOS one. Its screen, touch, backlight, buttons and mute are the Show 8's and the 2nd
-// gen Show 5's; its audio is not mapped yet, so the speaker and the microphones stay off there
-// (AudioSupported).
+// gen Show 5's. Its sound card is Amazon's MT8183 one, with the speaker and the microphones on device
+// numbers of their own and the playback reference on a second capture device (hardware/mic and
+// hardware/speaker ask Athena).
 var (
 	Board = showBoard(kernelCmdline(), gatingDir, deviceTreeCompatible())
 	Model = map[string]string{
@@ -93,12 +94,6 @@ func Athena() bool { return Board == boardAthena }
 // Show8 is whether the screen is the Show 8's: an 800 by 1280 portrait panel in a 1280 by 800
 // landscape device, with a FocalTech touch controller behind it. Both generations have it.
 func Show8() bool { return Crown() || Athena() }
-
-// AudioSupported is whether this build drives the board's speaker and microphones. Not on the 2nd gen
-// Show 8 yet: its amplifier and converters (TAS5805M, TLV320ADC5140) sit behind Amazon's MT8183 sound
-// card, which nobody has mapped, and opening the Show 5's device numbers there would play into
-// whatever they happen to be. The daemon runs without them, as it does when a device is taken.
-func AudioSupported() bool { return !Athena() }
 
 // showBoard names the board. The bootloader puts it in the kernel command line, inside the panel
 // driver it names: lcm=1-st7701s_wsvga_dsi_vdo_checkers_st_kd_hsd on the 1st gen Show 5,

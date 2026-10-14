@@ -90,7 +90,46 @@ type kctl struct {
 // was not enough; setting Ext_Speaker_Amp_Switch Off is what reached the room, so crown's amplifier
 // switch is active low as well and its separate amp_gpio is not the gate. A 1 kHz tone at 0.3 FS
 // then read -4 dBFS at the microphones, up from -53. See TECHO5-CROWN crown-port-notes.md.
-var initSequence = showInit(rt5616())
+//
+// The 2nd gen Show 8 (athena) has none of this to do: on Amazon's own kernel the TAS5805M driver
+// loads the amplifier's tuning and protection itself (the "speaker-config" table, its -9.5 dB analog
+// gain and the DSP's limiter) and powers it with the stream. Nothing is written to it, and its
+// "Master TAS5805m Playback Volume" is left where the driver put it.
+var initSequence = boardInit()
+
+func boardInit() []kctl {
+	if layout.Athena() {
+		return nil
+	}
+	return showInit(rt5616())
+}
+
+// PlaybackDevice is the playback PCM: the AFE's DL1 into the codec on the Show 5s and crown, and on
+// athena "I2S0DL1_PLayback", the AFE's DL1 into the TAS5805M (hw:0,7).
+var PlaybackDevice = onAthena(7, 23)
+
+// hwRate is the rate the card runs at. Everything up to the card works at Rate; athena's amplifier
+// runs at 96 kHz, as Fire OS runs it (AFE.cfg: "Speakers SamplingRate" 48000, "SpeakerHw
+// SamplingRate" 96000, the "PlaybackUpsampler" last in the chain), because the tuning inside the
+// TAS5805M was made for that rate: at 48 kHz every corner of its EQ and limiter would sit an octave
+// low. So the write loop doubles the rate on the way out (lib/audio Upsampler).
+var hwRate = onAthena(96000, Rate)
+
+// hwTrimDB is taken off everything the card is sent, after the volume and the tuning. Zero on the
+// boards that have been listened to. athena has not been yet, behind an amplifier stage of its own
+// (see initSequence), so it starts athenaTrimDB under the levels crown plays at, until it has been
+// heard.
+var hwTrimDB = onAthena(athenaTrimDB, 0)
+
+const athenaTrimDB = -10.0
+
+// onAthena picks athena's value over every other Show's.
+func onAthena[T any](athena, other T) T {
+	if layout.Athena() {
+		return athena
+	}
+	return other
+}
 
 // rt5616 is whether the speaker is the Realtek codec and its GPIO amplifier rather than the
 // MAX98396: true on the 1st gen Show 5 and on the Show 8, false on the 2nd gen Show 5.

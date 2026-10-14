@@ -64,6 +64,10 @@ const (
 	// FormatS24_3LE is 24 bits packed into 3 bytes — the only format the Echo Dot's
 	// capture codec accepts.
 	FormatS24_3LE = 32
+
+	// FormatS32_LE is 32 bits little endian: what the 2nd gen Echo Show 8's microphone converter
+	// sends in its 32-bit slots.
+	FormatS32_LE = 10
 )
 
 // ioc builds an ioctl request number the same way asm-generic/ioctl.h does.
@@ -173,6 +177,21 @@ func ioctlArgless(fd, req uintptr) error {
 // Open configures and starts a capture stream. The open is non-blocking so a device someone else
 // holds returns ErrBusy instead of waiting; reads block normally once it is ours.
 func Open(card, device int, cfg Config) (*Capture, error) {
+	c, err := OpenPrepared(card, device, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Start(); err != nil {
+		_ = c.f.Close()
+		return nil, err
+	}
+	return c, nil
+}
+
+// OpenPrepared is Open without the start: the stream is configured and prepared, and runs from Start.
+// Two streams that have to be read side by side are opened this way, so that all the slow work of
+// both is done before either runs and they start a moment apart rather than an open apart.
+func OpenPrepared(card, device int, cfg Config) (*Capture, error) {
 	path := fmt.Sprintf("/dev/snd/pcmC%dD%dc", card, device)
 	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
@@ -210,16 +229,29 @@ func Open(card, device int, cfg Config) (*Capture, error) {
 		_ = f.Close()
 		return nil, fmt.Errorf("prepare: %w", err)
 	}
-	if err := ioctlArgless(f.Fd(), ioctlStart); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("start: %w", err)
-	}
 
 	return &Capture{
 		f:          f,
 		cfg:        cfg,
 		frameBytes: cfg.Channels * cfg.Bits / 8,
 	}, nil
+}
+
+// Start runs a prepared stream.
+func (c *Capture) Start() error {
+	if err := ioctlArgless(c.f.Fd(), ioctlStart); err != nil {
+		return fmt.Errorf("start: %w", err)
+	}
+	return nil
+}
+
+// Rewind stops the stream, dropping whatever it held, and prepares it again for Start.
+func (c *Capture) Rewind() error {
+	_ = ioctlArgless(c.f.Fd(), ioctlDrop)
+	if err := ioctlArgless(c.f.Fd(), ioctlPrepare); err != nil {
+		return fmt.Errorf("prepare: %w", err)
+	}
+	return nil
 }
 
 // FrameBytes is the size of one interleaved frame across all channels.

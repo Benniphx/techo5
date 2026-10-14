@@ -5,7 +5,6 @@ import (
 	"log/slog"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
-	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 )
 
@@ -87,17 +86,17 @@ func routeInputs() {
 // applyGain sets the analog gain on every ADC. A microphone that cannot be turned up is worth a log
 // and nothing more: the array still works, quietly.
 func applyGain(db int) {
-	// A board with no microphones of ours has no converters of ours to set: its card's controls are
-	// somebody else's (layout.AudioSupported).
-	if !layout.AudioSupported() {
-		return
-	}
 	m, err := alsa.OpenMixer(Card)
 	if err != nil {
 		slog.Error("opening the mixer failed", "err", err)
 		return
 	}
 	defer m.Close()
+
+	// A board whose converter has gain controls of another shape sets them itself.
+	if setBoardGain(m, db) {
+		return
+	}
 
 	steps := min(max(float64(db)/pgaStepDB, 0), pgaMax)
 	for _, adc := range adcs {

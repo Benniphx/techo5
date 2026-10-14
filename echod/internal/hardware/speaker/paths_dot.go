@@ -187,3 +187,11 @@ const HasJack = true
 // HasBoth is whether the speaker and the jack can play at once, and so the Both choice. Not here:
 // the routes have not been tried together on this board.
 const HasBoth = false
+
+// PlaybackDevice is the codec's playback PCM, which the card takes at Rate as it is: hwRate is Rate
+// and nothing is trimmed after the volume (see paths_cronos.go for the board where neither holds).
+const (
+	PlaybackDevice = 23
+	hwRate         = Rate
+	hwTrimDB       = 0.0
+)
