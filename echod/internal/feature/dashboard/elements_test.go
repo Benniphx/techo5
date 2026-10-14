@@ -179,7 +179,14 @@ func TestColorOf(t *testing.T) {
 		{raw{"opacity": "0"}, color.RGBA{}, true},
 		{raw{"opacity": 0.0}, color.RGBA{}, true},
 		{raw{"opacity": "0.4"}, color.RGBA{}, false},
-		{raw{"visibility": "hidden"}, color.RGBA{}, true},
+		{raw{"color": "rgba(10, 20, 0)"}, color.RGBA{10, 20, 0, 255}, false},
+		{raw{"color": "#ff000000"}, color.RGBA{}, true},
+		{raw{"color": "#ff0000ff"}, color.RGBA{255, 0, 0, 255}, false},
+		{raw{"color": "#f000"}, color.RGBA{}, true},
+		{raw{"color": "#f00f"}, color.RGBA{}, false},
+		{raw{"color": "rgb(0 0 0 / 0%)"}, color.RGBA{}, true},
+		{raw{"color": "hsla(0, 0%, 0%, 0)"}, color.RGBA{}, true},
+		{raw{"color": "rgba(0, 0, 0, 0.05)"}, color.RGBA{0, 0, 0, 255}, false},
 	} {
 		got, hidden := colorOf(c.style)
 		if got != c.color || hidden != c.hidden {
@@ -197,6 +204,27 @@ func TestColorOf(t *testing.T) {
 	els := group(c.cards(cards)).blocks(look{pictures: map[string]shot{}})[0].Picture.Elements
 	if len(els) != 1 || !els[0].Hidden || els[0].Tap == nil || els[0].Tap.View != "x" {
 		t.Errorf("an invisible icon: %+v", els)
+	}
+}
+
+// An element its style takes off the page, display none or visibility hidden, is neither drawn nor a
+// tap, as in Home Assistant; one of opacity 0 is still a tap there, and here.
+func TestAnElementOffThePageIsNoTap(t *testing.T) {
+	var cards []any
+	if err := json.Unmarshal([]byte(`[{"type": "picture-elements", "image": "/local/p.png", "elements": [
+	  {"type": "icon", "icon": "mdi:a", "style": {"left": "10%", "top": "50%", "display": "none"},
+	   "tap_action": {"action": "navigate", "navigation_path": "/a"}},
+	  {"type": "icon", "icon": "mdi:b", "style": {"left": "30%", "top": "50%", "visibility": "hidden"},
+	   "tap_action": {"action": "navigate", "navigation_path": "/b"}},
+	  {"type": "icon", "icon": "mdi:c", "style": {"left": "50%", "top": "50%", "opacity": "0"},
+	   "tap_action": {"action": "navigate", "navigation_path": "/c"}}
+	]}]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	els := group(c.cards(cards)).blocks(look{pictures: map[string]shot{}})[0].Picture.Elements
+	if len(els) != 1 || els[0].Tap == nil || els[0].Tap.View != "c" || !els[0].Hidden {
+		t.Errorf("elements = %+v, want only the one of opacity 0, hidden and a tap", els)
 	}
 }
 

@@ -19,9 +19,9 @@ import (
 // translate(-50%, -50%), centers it on that point (hui-picture-elements-card's .element). An icon
 // shows its icon, a state icon and a state label their entity, a service button its title; an image
 // and a state badge are only their tap here, the picture being what shows them. An element its style
-// makes invisible is drawn as nothing, and is still its tap. Any other element, a custom one or one
-// placed in pixels or from the right or the bottom, is left out, and the rest of the card is drawn as
-// usual.
+// makes invisible is drawn as nothing, and is still its tap; one it takes off the page (display none,
+// visibility hidden) is neither, as in Home Assistant. Any other element, a custom one or one placed in
+// pixels or from the right or the bottom, is left out, and the rest of the card is drawn as usual.
 
 // element is one element as the card gives it.
 type element struct {
@@ -62,6 +62,9 @@ func (c *compiler) elements(v any, conds []cond) []element {
 			continue
 		}
 		style, _ := m["style"].(raw)
+		if str(style, "display") == "none" || str(style, "visibility") == "hidden" {
+			continue // not drawn, and no tap in Home Assistant either
+		}
 		x, okx := percent(style["left"])
 		y, oky := percent(style["top"])
 		if !okx || !oky {
@@ -177,11 +180,9 @@ var namedColors = map[string]color.RGBA{
 	"grey": {128, 128, 128, 255},
 }
 
-var alphaZero = regexp.MustCompile(`^rgba\(.*,\s*0*\.?0*\s*\)$`)
-
 // colorOf is an element's style's color, zero for none it can read, and whether the style makes it
-// invisible: opacity 0, a transparent color, display none or visibility hidden. Home Assistant draws
-// an element whatever its color, so only those leave it a tap with nothing drawn.
+// invisible: opacity 0 or a transparent color. Home Assistant draws an element whatever its color, and
+// taps one of opacity 0, so only those leave it a tap with nothing drawn.
 func colorOf(style raw) (color.RGBA, bool) {
 	hidden := false
 	switch o := style["opacity"].(type) {
@@ -192,11 +193,8 @@ func colorOf(style raw) (color.RGBA, bool) {
 			hidden = f == 0
 		}
 	}
-	if str(style, "display") == "none" || str(style, "visibility") == "hidden" {
-		hidden = true
-	}
 	v := strings.ToLower(strings.TrimSpace(str(style, "color")))
-	if v == "transparent" || alphaZero.MatchString(v) {
+	if transparent(v) {
 		return color.RGBA{}, true
 	}
 	if c, ok := namedColors[v]; ok {
@@ -204,6 +202,38 @@ func colorOf(style raw) (color.RGBA, bool) {
 	}
 	c, _ := parseColor(v)
 	return c, hidden
+}
+
+// transparent is whether a CSS color is see-through: transparent, an alpha of 0 in rgba() or hsla()
+// (or after a slash, "rgb(0 0 0 / 0)"), or a hex color whose alpha is 0 (#rgb0, #rrggbb00). Three
+// values in rgba() are a color with no alpha, not one of alpha 0.
+func transparent(v string) bool {
+	if v == "transparent" {
+		return true
+	}
+	if h, ok := strings.CutPrefix(v, "#"); ok {
+		return len(h) == 4 && h[3] == '0' || len(h) == 8 && h[6:] == "00"
+	}
+	open, end := strings.IndexByte(v, '('), strings.LastIndexByte(v, ')')
+	if open < 0 || end < open {
+		return false
+	}
+	switch strings.TrimSpace(v[:open]) {
+	case "rgb", "rgba", "hsl", "hsla":
+	default:
+		return false
+	}
+	args := v[open+1 : end]
+	var alpha string
+	if _, a, ok := strings.Cut(args, "/"); ok {
+		alpha = a
+	} else if parts := strings.Split(args, ","); len(parts) == 4 {
+		alpha = parts[3]
+	} else {
+		return false
+	}
+	f, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(alpha), "%"), 64)
+	return err == nil && f == 0
 }
 
 // at is the element as it stands, or false while its conditions are not met.
