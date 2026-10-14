@@ -52,6 +52,15 @@ const (
 	athenaRefChannels = 2
 	athenaRefBits     = 16
 
+	// athenaMicFull is the microphones' full scale. hw:0,17 is S32_LE by name, but the AFE hands over
+	// the converter's 24 bits sign-extended in the low three bytes, not left-aligned: on recordings of
+	// the unit (2026-10-14) the largest sample was about 2^17.5 and the low byte was set in 99.6% of
+	// samples, which a left-aligned 24-bit sample never does. Fire OS reads the same stream as "pcm8.24"
+	// (asp.cfg). Read against 2^31, M5 to M7 heard everything 48 dB too quiet: a quiet room at -103 dBFS
+	// rather than about -55, and a wake word that never fired. A sample past 24 bits saturates in
+	// putS24.
+	athenaMicFull = 1 << 23
+
 	// 10 ms periods, and rings that fit what Amazon's driver set aside for each device. hw_params
 	// advertises far more than that (16384 frames on hw:0,17) and does not check: asked for a ring
 	// larger than its DMA block, the driver clears past the end of it in hw_params and the kernel
@@ -187,6 +196,7 @@ type pairedCapture struct {
 	micDec         [athenaMicChannels]*audio.Decimator
 	refDec         [athenaRefChannels]*audio.Decimator
 	boost          float32
+	meter          athenaMeter
 }
 
 func openAthena() (capture, error) {
@@ -312,6 +322,8 @@ func (c *pairedCapture) Read(buf []byte) (int, error) {
 		ref = c.refBuf[:refBytes]
 	}
 	c.convert(buf[:frames*frameBytes], c.micBuf[:micBytes], ref)
+	c.meter.frames += frames
+	c.meter.report()
 	return frames * frameBytes, nil
 }
 
@@ -336,10 +348,12 @@ func (c *pairedCapture) convert(out, mics, ref []byte) {
 	for at := 0; at+athenaMicChannels*4 <= len(mics) && f < frames; at += athenaMicChannels * 4 {
 		var ready bool
 		for ch, d := range c.micDec {
-			x := float32(int32(binary.LittleEndian.Uint32(mics[at+4*ch:]))) / (1 << 31)
+			x := float32(int32(binary.LittleEndian.Uint32(mics[at+4*ch:]))) / athenaMicFull
 			y, ok := d.Push(x * c.boost)
 			if ok {
 				putS24(out[f*frameBytes+3*ch:], y)
+				c.meter.mic[ch] += float64(y) * float64(y)
+				c.meter.micPeak[ch] = max(c.meter.micPeak[ch], abs32(y))
 			}
 			ready = ok
 		}
@@ -361,6 +375,7 @@ func (c *pairedCapture) convert(out, mics, ref []byte) {
 			x := float32(int16(binary.LittleEndian.Uint16(ref[at+2*ch:]))) / (1 << 15)
 			y, ok := d.Push(x)
 			if ok {
+				c.meter.ref[ch] += float64(y) * float64(y)
 				putS24(out[f*frameBytes+3*(RefFirst+ch):], y)
 			}
 			ready = ok
@@ -404,4 +419,49 @@ func (c *pairedCapture) Close() error {
 		err = merr
 	}
 	return err
+}
+
+// athenaMeter is what the microphones and the reference measure, said in the log every
+// athenaMeterEvery of capture: per microphone the RMS and the peak, and the reference's RMS, in dBFS
+// after the boost, as the rest of the daemon hears them. For bring-up: it is how a wake word that
+// did not fire is told apart from microphones that heard nothing.
+type athenaMeter struct {
+	mic     [athenaMicChannels]float64
+	micPeak [athenaMicChannels]float32
+	ref     [athenaRefChannels]float64
+	frames  int
+}
+
+const athenaMeterEvery = 10 * Rate
+
+func (m *athenaMeter) report() {
+	if m.frames < athenaMeterEvery {
+		return
+	}
+	n := float64(m.frames)
+	db := func(v float64) float64 {
+		if v <= 1e-15 {
+			return -150
+		}
+		return math.Round(10*math.Log10(v)*10) / 10
+	}
+	var rms, peak [athenaMicChannels]float64
+	for i := range rms {
+		rms[i] = db(m.mic[i] / n)
+		peak[i] = db(float64(m.micPeak[i]) * float64(m.micPeak[i]))
+	}
+	var ref [athenaRefChannels]float64
+	for i := range ref {
+		ref[i] = db(m.ref[i] / n)
+	}
+	slog.Info("athena: capture levels", "mic_rms_dbfs", rms, "mic_peak_dbfs", peak, "ref_rms_dbfs", ref,
+		"seconds", m.frames/Rate)
+	*m = athenaMeter{}
+}
+
+func abs32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

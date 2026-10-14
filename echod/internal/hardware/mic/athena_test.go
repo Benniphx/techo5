@@ -32,7 +32,8 @@ func athenaBlock(frames, block, mic int, micLevel float64, ref int, refLevel flo
 		for ch := range athenaMicChannels {
 			v := int32(0)
 			if ch == mic {
-				v = int32(micLevel * athenaSignal(at, athenaMicRate) * math.MaxInt32)
+				// 24 bits, sign-extended in the low three bytes, as the AFE hands them over.
+				v = int32(micLevel * athenaSignal(at, athenaMicRate) * (athenaMicFull - 1))
 			}
 			mics = binary.LittleEndian.AppendUint32(mics, uint32(v))
 		}
@@ -184,5 +185,32 @@ func TestAthenaPmicPath(t *testing.T) {
 	}
 	if athenaADCMicBias {
 		t.Error("the converter's MICBIAS is on by default; Fire OS never turns it on")
+	}
+}
+
+// hw:0,17's samples are 24 bits in the low bytes of each word: a sample at 2^23 - 1 is full scale, a
+// steady one comes out at its level after the boost, and one past 24 bits saturates rather than wraps.
+func TestAthenaMicSamplesAre24BitLowAligned(t *testing.T) {
+	asShow8(t)
+	run := func(v int32) int16 {
+		c := newPairedCapture(nil, nil)
+		var mics []byte
+		for range 20 * FrameSamples * athenaMicRate / Rate {
+			for range athenaMicChannels {
+				mics = binary.LittleEndian.AppendUint32(mics, uint32(v))
+			}
+		}
+		out := make([]byte, 20*FrameSamples*Channels*Bits/8)
+		c.convert(out, mics, nil)
+		d := Decode(out)[0]
+		return d[len(d)-1]
+	}
+	// A quarter of 24-bit full scale, boosted by 5.89 dB, in the 16-bit terms Decode returns.
+	want := 0.25 * math.Pow(10, athenaMicBoostDB/20) * math.MaxInt16
+	if got := float64(run(1 << 21)); math.Abs(got-want) > 0.01*want {
+		t.Errorf("a quarter of 24-bit full scale came out at %.0f, want %.0f", got, want)
+	}
+	if got := run(1 << 30); got != math.MaxInt16 {
+		t.Errorf("a sample past 24 bits came out at %d, want saturation at %d", got, math.MaxInt16)
 	}
 }
