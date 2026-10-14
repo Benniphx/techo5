@@ -56,6 +56,11 @@ type session struct {
 	ended   func(s *session, err error, itself bool)
 	changed func()
 
+	// pauses is held through setPaused and through the sound's handover (soundSource.begin), so a pause
+	// or a resume never lands between the track becoming the clock and a pause held until then reaching
+	// it. Taken before mu.
+	pauses sync.Mutex
+
 	mu      sync.Mutex
 	cond    *sync.Cond
 	info    Info
@@ -439,6 +444,7 @@ func (s *session) pausedLocked() bool {
 
 // setPaused pauses the video or carries it on.
 func (s *session) setPaused(on bool) {
+	s.pauses.Lock()
 	s.mu.Lock()
 	soundClock := s.sound && !s.soundIn && s.src != nil && s.src.handedOver()
 	if !soundClock {
@@ -463,6 +469,7 @@ func (s *session) setPaused(on bool) {
 			media.Get().Resume()
 		}
 	}
+	s.pauses.Unlock()
 	s.changed()
 }
 
@@ -519,19 +526,24 @@ func (a *soundSource) begin() {
 	a.mu.Unlock()
 	media.Get().PlayReceived(TrackName, a, soundRate, soundChannels)
 	media.Get().SetReceivedTrack(TrackName, a.s.req.Title, "", "")
+	// Paused before the sound came (covered while loading, or a pause from Home Assistant): the pause is
+	// the track's from now, since the sound is the clock. Handed over and taken off the wall clock under
+	// one hold of the session's lock (then a.mu, as pausedLocked takes them), and with pauses held until
+	// the track has it: a resume in between would go to the wall clock, or to the track before the
+	// pause, and be lost.
+	a.s.pauses.Lock()
+	a.s.mu.Lock()
 	a.mu.Lock()
 	a.handed = true
 	a.mu.Unlock()
-	soundTurns.Unlock()
-	// Paused before the sound came (covered while loading, or a pause from Home Assistant): the pause is
-	// the track's from now, since the sound is the clock.
-	a.s.mu.Lock()
 	held := a.s.wallPaused
 	a.s.wallPaused = false
 	a.s.mu.Unlock()
 	if held {
 		media.Get().Pause()
 	}
+	a.s.pauses.Unlock()
+	soundTurns.Unlock()
 }
 
 // handedOver is whether the media player has the sound's track. Until then a pause is the wall
