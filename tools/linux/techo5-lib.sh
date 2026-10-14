@@ -465,21 +465,20 @@ t5_bt_up() {
 	# The factory address from IDME; the firmware otherwise comes up with a random one.
 	addr=$(tr -d '\n\0' < /proc/idme/bt_mac_addr 2>/dev/null)
 	if [ -n "${BT_UART:-}" ]; then
-		# The class is set again after each restart of the bridge, as on the Shows below.
+		# After each restart of the bridge, t5_bt_again, as on the Shows below.
 		(while true; do
 			btbridge -uart "$BT_UART" ${BT_HCD:+-hcd "$BT_HCD"} ${BT_BAUD:+-baud "$BT_BAUD"} ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1
 			sleep 2
-			(sleep 15; timeout 5 btmgmt class 4 20 >/dev/null 2>&1) &
+			t5_bt_again &
 		done) &
 	else
 		# -p192-keys: a phone's link key reaches the kernel as the kind the controller's E0 encryption
 		# satisfies, so a phone can stay connected to play to the Show (#105; btbridge h4.go p192Key).
-		# The class is set again after each restart of the bridge: a new hci0 comes up with bluetoothd's
-		# default, and the Show would no longer say it is a loudspeaker.
+		# After each restart of the bridge, t5_bt_again puts the new hci0 right.
 		(while true; do
 			btbridge -p192-keys ${addr:+-bdaddr "$addr"} >> "$logdir/btbridge.log" 2>&1
 			sleep 2
-			(sleep 15; timeout 5 btmgmt class 4 20 >/dev/null 2>&1) &
+			t5_bt_again &
 		done) &
 	fi
 	n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
@@ -527,4 +526,17 @@ t5_bt_up() {
 	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
 	log "bt: hci0 up; bluetoothd and bluealsa started"
 	return 0
+}
+
+# t5_bt_again: a bridge that restarted brings up a new hci0 with bluetoothd's saved settings. The class
+# goes back to bluetoothd's default, so it is set again, and tried until it takes: the Spot's bridge
+# loads a firmware patch first, which can outlast a fixed wait. And it is made unfindable: a pairing
+# window open when the bridge went down was ended meanwhile by the daemon's timer, and the "not
+# findable" that ended it reached no controller. A window still open loses its findability early,
+# which a window can lose; staying findable with none open is what must not happen.
+t5_bt_again() {
+	sleep 5
+	n=0
+	while [ $n -lt 60 ] && ! timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded; do sleep 5; n=$((n+5)); done
+	timeout 5 btmgmt discov off >/dev/null 2>&1
 }

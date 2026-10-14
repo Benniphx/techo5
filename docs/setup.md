@@ -227,8 +227,8 @@ automation that wants to know too.
   playing, including the song's address (some servers put a login token in it, as with any DLNA
   speaker). With **Video** and **DLNA video** on as well (Show and Spot), it takes videos too
   ([Video](video.md)).
-- **A phone over Bluetooth (new).** On the Show, the Spot and the Dot, the **Bluetooth phone** switch, in Home
-  Assistant, lets a phone play to the device as to any Bluetooth speaker. For two minutes the device
+- **A phone over Bluetooth (new).** On the Show, the Spot and the Dot, the **Bluetooth phone**
+  switch, in Home Assistant, lets a phone play to the device as to any Bluetooth speaker. For two minutes the device
   can be found and paired with, with no scan for speakers, and a phone connects from its own
   Bluetooth settings, a new one or one paired before; on the Dot the ring pulses blue meanwhile. Once
   the phone's audio is up the window closes, the phone is remembered, and the switch stays on while
@@ -239,7 +239,7 @@ automation that wants to know too.
   remembered phones until one answers. Anyone nearby can pair while the switch is on, as in pairing
   mode, and a phone that joined stays remembered, so **Bluetooth forget phones** forgets every phone
   and keeps the speakers and earbuds. On the Dot a phone may not get in while the Dot is connected to
-  a Bluetooth speaker. Tried on a Dot and a Show.
+  a Bluetooth speaker. Tried on a Dot, a Show and a Spot.
 - **Bluetooth, the rest of it (new).** A phone playing to the device has one volume, the device's: its
   volume slider moves the device's volume, and the device's buttons and Home Assistant move the
   slider (night volume still caps a raise from the phone). With two phones, the last to start playing
