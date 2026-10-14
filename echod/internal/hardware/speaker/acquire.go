@@ -7,8 +7,12 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/android/prop"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 )
+
+// ErrUnsupported is Start on a board whose speaker this build does not drive yet.
+var ErrUnsupported = errors.New("speaker: this board's speaker is not supported yet")
 
 const (
 	acquireRetry    = 250 * time.Millisecond
@@ -20,7 +24,14 @@ const (
 // mediaserver retries the open and wins it within a few hundred milliseconds of echod releasing,
 // so a restart can leave us with no speaker. Stopping the service releases it; it is started again
 // either way, because leaving it down trips the framework watchdog.
+//
+// On a board whose speaker this build does not drive yet (layout.AudioSupported) it fails at once and
+// touches nothing, so the supervisor carries on without the speaker rather than retrying it: Play
+// drops what it is given, as it does whenever the device is not held.
 func (p *Player) Start(context.Context) error {
+	if !layout.AudioSupported() {
+		return ErrUnsupported
+	}
 	err := p.open()
 	if err == nil || !errors.Is(err, alsa.ErrBusy) {
 		return err

@@ -45,3 +45,6 @@ const (
 )
 
 var AnimationScripts = []string{StartAnimation, StopAnimation}
+
+// AudioSupported is whether this build drives the board's speaker and microphones: always here.
+func AudioSupported() bool { return true }

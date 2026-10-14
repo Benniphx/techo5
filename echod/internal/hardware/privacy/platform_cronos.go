@@ -33,6 +33,12 @@ import (
 // write-only, as on checkers. Whether its button also only releases has not been measured — that
 // needs a finger on the unit while a capture is open — so it is assumed to match the driver it
 // shares. If it turns out to set the latch itself, gating() is the one place to correct.
+//
+// The 2nd gen Show 8 (athena) is the 2nd gen Show 5's arrangement under Amazon's own kernel: the
+// gpio-privacy driver at the same path, with gpio-privacy-state and gpio-privacy-button input devices
+// and an enable line pulsed for 1000 ms. Read off the unit 2026-10-14: the state line goes low when
+// muted, which the driver reports as the latch set, and the red light follows it in hardware. That
+// the driver's state and enable files read and pulse there as they do on cronos is not yet checked.
 var (
 	dir    = latchDir()
 	state  = dir + "/state"

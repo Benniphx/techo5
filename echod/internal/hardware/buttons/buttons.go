@@ -129,6 +129,15 @@ func (c *Controller) Start(context.Context) error {
 	if err != nil {
 		return fmt.Errorf("buttons: listing input devices: %w", err)
 	}
+	kept := devices[:0]
+	for _, d := range devices {
+		if notButtons[d.Name] {
+			_ = d.Close()
+			continue
+		}
+		kept = append(kept, d)
+	}
+	devices = kept
 	if len(devices) == 0 {
 		return fmt.Errorf("buttons: no input devices")
 	}

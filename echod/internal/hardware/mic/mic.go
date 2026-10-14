@@ -15,6 +15,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/privacy"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/denoise"
@@ -152,8 +153,16 @@ func Get() *Source {
 
 func (s *Source) Name() string { return "capture" }
 
+// ErrUnsupported is Start on a board whose microphones this build does not drive yet (see
+// layout.AudioSupported). It fails the first acquire, so the supervisor carries on without the
+// capture service rather than retrying it: nothing else listening hears anything, and nothing breaks.
+var ErrUnsupported = errors.New("mic: this board's microphones are not supported yet")
+
 // Start takes the capture device, off Android if it got there first, the same way the speaker does.
 func (s *Source) Start(context.Context) error {
+	if !layout.AudioSupported() {
+		return ErrUnsupported
+	}
 	// Before the device is opened, so that a unit whose mute is the daemon's own is already cutting
 	// when the first frame arrives. The mute feature restores the same value later in the Device
 	// phase; this is only about the frames captured before it gets there. See privacy.Seed.
