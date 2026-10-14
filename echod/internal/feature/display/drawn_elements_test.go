@@ -180,3 +180,128 @@ func TestAPictureFitsItsFrame(t *testing.T) {
 		}
 	}
 }
+
+// writePreview writes img to SHOW_PREVIEW as name, when it is set, to look at.
+func writePreview(t *testing.T, img image.Image, name string) {
+	t.Helper()
+	dir := os.Getenv("SHOW_PREVIEW")
+	if dir == "" {
+		return
+	}
+	f, err := os.Create(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := png.Encode(f, img); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// changed is how many pixels of box differ from c.
+func changed(img *image.RGBA, box image.Rectangle, c color.RGBA) int {
+	n := 0
+	for y := box.Min.Y; y < box.Max.Y; y++ {
+		for x := box.Min.X; x < box.Max.X; x++ {
+			if img.RGBAAt(x, y) != c {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// An icon element is drawn over the picture, as Home Assistant draws it, in its style's color; one
+// its style makes invisible is drawn as nothing and is still a tap. A state label's words sit on a
+// pill, so they read on a light picture too.
+func TestIconElementsAreDrawn(t *testing.T) {
+	previewFont(t)
+	paper := color.RGBA{236, 232, 220, 255}
+	img := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+	draw.Draw(img, img.Rect, image.NewUniform(paper), image.Point{}, draw.Src)
+	page := dashboard.Drawn{Sections: []dashboard.Section{{Blocks: []dashboard.Block{{Picture: &dashboard.Picture{Image: img, Elements: []dashboard.Element{
+		{X: 0.25, Y: 0.5, ShiftX: -0.5, ShiftY: -0.5, Icon: "mdi:spotify", Color: color.RGBA{30, 215, 96, 255},
+			Tap: &dashboard.Action{View: "music/spotify"}},
+		{X: 0.5, Y: 0.5, ShiftX: -0.5, ShiftY: -0.5, Icon: "mdi:radio", Hidden: true, Tap: &dashboard.Action{View: "music/radio"}},
+		{X: 0.75, Y: 0.5, ShiftX: -0.5, ShiftY: -0.5, Label: "21.5 °C", Entity: "sensor.temp"},
+	}}}}}}}
+	out := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+	r := newRenderer(out)
+	r.draw(scene{now: time.Now(), phase: "idle", showDash: true, dashMode: config.DashboardDrawn, drawn: page})
+	tiles, _ := r.dash()
+	if len(tiles) != 2 {
+		t.Fatalf("%d places to tap, want the two icons'", len(tiles))
+	}
+	side := r.s(elementSide)
+	at := func(x, y float64) image.Rectangle {
+		cx, cy := int(x*showWide), int(y*showHigh)
+		return image.Rect(cx-side/2, cy-side/2, cx+side/2, cy+side/2)
+	}
+	if changed(out, at(0.25, 0.5), paper) == 0 {
+		t.Errorf("the icon element was not drawn")
+	}
+	if n := changed(out, at(0.5, 0.5), paper); n != 0 {
+		t.Errorf("the invisible icon drew %d pixels", n)
+	}
+	if a := actionAt(tiles, at(0.5, 0.5).Min.Add(image.Pt(side/2, side/2))); a == nil || a.View != "music/radio" {
+		t.Errorf("the invisible icon's tap does %+v", a)
+	}
+	// The pill: over the paper above the label's letters.
+	if c := out.RGBAAt(int(0.75*showWide), showHigh/2-r.s(12)); c == paper {
+		t.Errorf("no pill under the label's words")
+	}
+	writePreview(t, out, "dash-picel-icon-fixb.png")
+}
+
+// A picture that will not load says so, rather than loading forever, and its buttons still work: on
+// the whole frame, its shape not being known. One too large to decode keeps its shape, and its buttons
+// are where they would be on it.
+func TestAPictureNotDrawnKeepsItsTaps(t *testing.T) {
+	previewFont(t)
+	for _, c := range []struct {
+		name string
+		pic  func(p *dashboard.Picture)
+	}{
+		{"failed", func(p *dashboard.Picture) { p.Image, p.Failed = nil, true }},
+		{"toolarge", func(p *dashboard.Picture) { p.Image, p.TooLarge, p.Shape = nil, true, image.Pt(showWide*4, showHigh*4) }},
+	} {
+		page, buttons := buttonsPage()
+		c.pic(page.Sections[0].Blocks[0].Picture)
+		out := image.NewRGBA(image.Rect(0, 0, show8Wide, show8High))
+		r := newRenderer(out)
+		r.draw(scene{now: time.Now(), phase: "idle", showDash: true, dashMode: config.DashboardDrawn, drawn: page})
+		tiles, _ := r.dash()
+		if len(tiles) != 12 {
+			t.Fatalf("%s: %d places to tap, want 12", c.name, len(tiles))
+		}
+		frame := image.Rect(0, 0, show8Wide, show8High)
+		if c.name == "toolarge" {
+			frame = image.Rect(0, 80, show8Wide, 720) // its own shape, as wide as the screen
+		}
+		sx, sy := float64(frame.Dx())/showWide, float64(frame.Dy())/showHigh
+		for i, b := range buttons {
+			mid := image.Pt(frame.Min.X+int(float64(b.Min.X+b.Max.X)/2*sx), frame.Min.Y+int(float64(b.Min.Y+b.Max.Y)/2*sy))
+			if a := actionAt(tiles, mid); a == nil || a.View != fmt.Sprintf("panel/button-%d", i) {
+				t.Errorf("%s: a tap on button %d at %v does %+v", c.name, i, mid, a)
+			}
+		}
+		writePreview(t, out, "dash-picel-"+c.name+"-fixb.png")
+	}
+}
+
+// What a card says in place of its picture: loading until it arrives, then why it is not there.
+func TestPictureNote(t *testing.T) {
+	for _, c := range []struct {
+		p    dashboard.Picture
+		want string
+	}{
+		{dashboard.Picture{}, "Loading the picture…"},
+		{dashboard.Picture{Failed: true}, "The picture would not load"},
+		{dashboard.Picture{TooLarge: true}, "Too large to show here"},
+		{dashboard.Picture{Image: image.NewRGBA(image.Rect(0, 0, 2, 2))}, ""},
+	} {
+		if got, _ := pictureNote(c.p); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.p, got, c.want)
+		}
+	}
+}

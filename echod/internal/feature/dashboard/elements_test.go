@@ -5,6 +5,7 @@ package dashboard
 import (
 	"encoding/json"
 	"image"
+	"image/color"
 	"math"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestPictureElementsAreReadAsHomeAssistantPlacesThem(t *testing.T) {
 	lk := look{states: map[string]hass.LiveEntity{
 		"light.desk":  {ID: "light.desk", State: "off", Attrs: map[string]any{}},
 		"sensor.temp": {ID: "sensor.temp", State: "21.46", Attrs: map[string]any{"unit_of_measurement": "°C"}},
-	}, history: map[string][]point{}, pictures: map[string]image.Image{}}
+	}, history: map[string][]point{}, pictures: map[string]shot{}}
 	blocks := group(nodes).blocks(lk)
 	if len(blocks) != 1 || blocks[0].Picture == nil {
 		t.Fatalf("blocks %+v", blocks)
@@ -65,7 +66,7 @@ func TestPictureElementsAreReadAsHomeAssistantPlacesThem(t *testing.T) {
 	}
 	near := func(a, b float64) bool { return math.Abs(a-b) < 1e-9 }
 	if e := els[0]; !near(e.X, 0.17) || !near(e.Y, 0.25) || !near(e.W, 0.30) || !near(e.H, 0.45) ||
-		e.ShiftX != -0.5 || e.ShiftY != -0.5 || e.Tap == nil || e.Tap.View != "alfred-show/spotify" || e.Icon != "" {
+		e.ShiftX != -0.5 || e.ShiftY != -0.5 || e.Tap == nil || e.Tap.View != "alfred-show/spotify" || e.Icon != "mdi:spotify" || e.Hidden {
 		t.Errorf("spotify %+v", e)
 	}
 	if e := els[1]; e.Tap == nil || e.Tap.Service != "script.radio" {
@@ -102,7 +103,7 @@ func TestPictureElementsAreNotCutToAGallery(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
-	blocks := group(c.cards(cards)).blocks(look{pictures: map[string]image.Image{}})
+	blocks := group(c.cards(cards)).blocks(look{pictures: map[string]shot{}})
 	if len(blocks) != 2 || blocks[0].Picture == nil || blocks[1].Picture == nil || len(blocks[1].Picture.Elements) != 1 {
 		t.Errorf("blocks %+v", blocks)
 	}
@@ -130,5 +131,120 @@ func TestAWidePictureIsKeptWide(t *testing.T) {
 	}
 	if b := shrink(big, wanted{}.width()).Bounds(); b.Dx() != pictureWidth {
 		t.Errorf("card: %v", b)
+	}
+}
+
+// A transform's translates move the element on their own axes only, as in Home Assistant, a move in
+// pixels counting for none; no transform is Home Assistant's own, centered on its point.
+func TestShiftOf(t *testing.T) {
+	for _, c := range []struct {
+		style  raw
+		dx, dy float64
+	}{
+		{raw{}, -0.5, -0.5},
+		{raw{"transform": "none"}, 0, 0},
+		{raw{"transform": "translate(-50%, -50%)"}, -0.5, -0.5},
+		{raw{"transform": "translate(-50%)"}, -0.5, 0},
+		{raw{"transform": "translateX(-50%)"}, -0.5, 0},
+		{raw{"transform": "translateY(-50%)"}, 0, -0.5},
+		{raw{"transform": "translateX(-50%) translateY(-100%)"}, -0.5, -1},
+		{raw{"transform": "translate(-50%, 10px)"}, -0.5, 0},
+		{raw{"transform": "translate(12px, -50%)"}, 0, -0.5},
+		{raw{"transform": "translate(-25%, 10%) scale(2)"}, -0.25, 0.1},
+		{raw{"transform": "scale(1.5)"}, 0, 0},
+	} {
+		dx, dy := shiftOf(c.style)
+		if math.Abs(dx-c.dx) > 1e-9 || math.Abs(dy-c.dy) > 1e-9 {
+			t.Errorf("shiftOf(%v) = %v, %v, want %v, %v", c.style, dx, dy, c.dx, c.dy)
+		}
+	}
+}
+
+// An element is drawn in its style's color, and not at all when its style makes it invisible; it is
+// still its tap either way. An icon with a color Home Assistant would draw is drawn.
+func TestColorOf(t *testing.T) {
+	for _, c := range []struct {
+		style  raw
+		color  color.RGBA
+		hidden bool
+	}{
+		{raw{}, color.RGBA{}, false},
+		{raw{"color": "white"}, color.RGBA{255, 255, 255, 255}, false},
+		{raw{"color": "#f00"}, color.RGBA{255, 0, 0, 255}, false},
+		{raw{"color": "rgb(0, 128, 255)"}, color.RGBA{0, 128, 255, 255}, false},
+		{raw{"color": "var(--accent-color)"}, color.RGBA{}, false},
+		{raw{"color": "transparent"}, color.RGBA{}, true},
+		{raw{"color": "rgba(0, 0, 0, 0)"}, color.RGBA{}, true},
+		{raw{"color": "rgba(0, 0, 0, 0.5)"}, color.RGBA{0, 0, 0, 255}, false},
+		{raw{"opacity": "0"}, color.RGBA{}, true},
+		{raw{"opacity": 0.0}, color.RGBA{}, true},
+		{raw{"opacity": "0.4"}, color.RGBA{}, false},
+		{raw{"visibility": "hidden"}, color.RGBA{}, true},
+	} {
+		got, hidden := colorOf(c.style)
+		if got != c.color || hidden != c.hidden {
+			t.Errorf("colorOf(%v) = %v %v, want %v %v", c.style, got, hidden, c.color, c.hidden)
+		}
+	}
+	var cards []any
+	if err := json.Unmarshal([]byte(`[{"type": "picture-elements", "image": "/local/p.png", "elements": [
+	  {"type": "icon", "icon": "mdi:play", "style": {"left": "50%", "top": "50%", "opacity": 0},
+	   "tap_action": {"action": "navigate", "navigation_path": "/x"}}
+	]}]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	els := group(c.cards(cards)).blocks(look{pictures: map[string]shot{}})[0].Picture.Elements
+	if len(els) != 1 || !els[0].Hidden || els[0].Tap == nil || els[0].Tap.View != "x" {
+		t.Errorf("an invisible icon: %+v", els)
+	}
+}
+
+// The same image in a card and in a picture-elements card is two pictures, each kept at its size.
+func TestAPictureKeptWideIsAPictureOfItsOwn(t *testing.T) {
+	card, wide := wanted{url: "/local/p.png"}, wanted{url: "/local/p.png", wide: true}
+	if card.key() == wide.key() {
+		t.Errorf("one key for both: %q", card.key())
+	}
+	if cam := (wanted{camera: "camera.porch", wide: true}); cam.key() == (wanted{camera: "camera.porch"}).key() {
+		t.Errorf("one key for a camera kept at both sizes")
+	}
+}
+
+// A picture that would not load says so, and one too large to decode keeps its shape, so that its
+// elements can still be placed; a picture that arrived has no shape of its own to say.
+func TestAPicturesStateIsSaid(t *testing.T) {
+	n := pictureNode{want: wanted{url: "/local/p.png", wide: true}}
+	for _, c := range []struct {
+		sh   shot
+		want Picture
+	}{
+		{shot{}, Picture{}},
+		{shot{failed: true}, Picture{Failed: true}},
+		{shot{tooLarge: true, size: image.Pt(8000, 4000)}, Picture{TooLarge: true, Shape: image.Pt(8000, 4000)}},
+	} {
+		got := n.picture(look{pictures: map[string]shot{n.want.key(): c.sh}})
+		if got.Failed != c.want.Failed || got.TooLarge != c.want.TooLarge || got.Shape != c.want.Shape || got.Image != nil {
+			t.Errorf("%+v: %+v, want %+v", c.sh, got, c.want)
+		}
+	}
+	img := image.NewRGBA(image.Rect(0, 0, 4, 2))
+	if got := n.picture(look{pictures: map[string]shot{n.want.key(): {img: img, size: image.Pt(4, 2)}}}); got.Image == nil || got.Shape != (image.Point{}) {
+		t.Errorf("arrived: %+v", got)
+	}
+}
+
+// A view of one picture card fills the screen, so its picture is kept as wide as the screen, behind
+// its visibility conditions too; any other card is left as it is.
+func TestALonePictureIsKeptWide(t *testing.T) {
+	p := pictureNode{want: wanted{url: "/local/p.png"}}
+	if n, w, ok := widePicture(p); !ok || !w.wide || !n.(pictureNode).want.wide {
+		t.Errorf("a lone picture: %+v %+v %v", n, w, ok)
+	}
+	if n, w, ok := widePicture(condNode{child: p}); !ok || !w.wide || !n.(condNode).child.(pictureNode).want.wide {
+		t.Errorf("a lone picture behind a condition: %+v %+v %v", n, w, ok)
+	}
+	if _, _, ok := widePicture(headingNode{}); ok {
+		t.Errorf("a heading is a picture")
 	}
 }

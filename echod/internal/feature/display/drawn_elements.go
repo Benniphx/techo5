@@ -70,21 +70,48 @@ func elementBox(e dashboard.Element, pic image.Rectangle, natural int) image.Rec
 	return image.Rect(int(math.Round(x)), int(math.Round(y)), int(math.Round(x+w)), int(math.Round(y+h)))
 }
 
+// pictureNote is what a card says in place of a picture it has not drawn, and false while there is
+// nothing to say.
+func pictureNote(p dashboard.Picture) (string, bool) {
+	switch {
+	case p.Image != nil && !p.Image.Bounds().Empty():
+		return "", false
+	case p.TooLarge:
+		return "Too large to show here", true
+	case p.Failed:
+		return "The picture would not load", true
+	}
+	return "Loading the picture…", true
+}
+
+// shapeOf is a picture's shape: the picture's own, its size when it is known but not drawn (a
+// picture too large to decode), or nothing.
+func shapeOf(p dashboard.Picture) image.Rectangle {
+	if p.Image != nil {
+		return p.Image.Bounds()
+	}
+	return image.Rectangle{Max: p.Shape}
+}
+
 // wholePicture draws a picture whole in frame, its elements over it, and keeps the places to tap:
 // the elements, the last one first as it is the one on top, then the picture's own tap. Until the
-// picture has arrived there is nothing to place them on, and nothing is kept.
+// picture has arrived there is nothing to place them on, and nothing is kept. One that will not be
+// drawn, too large or not loading, still has them: on a blank frame of its shape when that is known,
+// on the whole frame when not, so a page of buttons still works.
 func (r *paint) wholePicture(frame image.Rectangle, p dashboard.Picture, pal dashPal, tiles *[]dashTile) {
 	fc := r.faces()
-	if p.Image == nil || p.Image.Bounds().Empty() {
-		msg := "Loading the picture…"
-		if p.TooLarge {
-			msg = "Too large to show here"
+	pic := fit(shapeOf(p), frame)
+	if msg, ok := pictureNote(p); ok {
+		if p.TooLarge || p.Failed {
+			draw.Draw(r.dst, pic, image.NewUniform(pal.card), image.Point{}, draw.Src) // the blank frame
 		}
-		r.text(fc.sub, msg, frame.Min.X+(frame.Dx()-r.width(fc.sub, msg))/2, frame.Min.Y+frame.Dy()/2, pal.sub)
-		return
+		r.text(fc.sub, msg, pic.Min.X+(pic.Dx()-r.width(fc.sub, msg))/2, pic.Min.Y+pic.Dy()/2, pal.sub)
+		if !p.TooLarge && !p.Failed {
+			return
+		}
+	} else {
+		xdraw.ApproxBiLinear.Scale(r.dst, pic, p.Image, p.Image.Bounds(), draw.Src, nil)
 	}
-	pic := fit(p.Image.Bounds(), frame)
-	xdraw.ApproxBiLinear.Scale(r.dst, pic, p.Image, p.Image.Bounds(), draw.Src, nil)
 	boxes := make([]image.Rectangle, len(p.Elements))
 	for i, e := range p.Elements {
 		boxes[i] = elementBox(e, pic, r.s(elementSide))
@@ -104,15 +131,22 @@ func (r *paint) wholePicture(frame image.Rectangle, p dashboard.Picture, pal das
 	r.zone(tiles, pic, dashboard.Tile{Tap: p.Tap})
 }
 
-// element draws what an element shows, centered in its box: a state icon's icon, lit when its entity
-// is on, or a state label's words. Anything else is the picture's to show.
+// element draws what an element shows, centered in its box: an icon, a state icon's lit when its
+// entity is on, or a state label's or a service button's words, in the style's color when it gives
+// one. The words are on a see-through pill of the page's color, so that they stay readable on any
+// picture. Anything else, and an element its style hides, is the picture's to show.
 func (r *paint) element(box image.Rectangle, e dashboard.Element, pic image.Rectangle, pal dashPal) {
+	if e.Hidden {
+		return
+	}
 	c := pal.text
 	switch {
 	case e.Gone:
 		c = lerp(pal.text, pal.bg, 0.5)
 	case e.On:
 		c = pal.active
+	case e.Color.A != 0:
+		c = e.Color
 	}
 	cx, cy := (box.Min.X+box.Max.X)/2, (box.Min.Y+box.Max.Y)/2
 	switch {
@@ -121,7 +155,23 @@ func (r *paint) element(box image.Rectangle, e dashboard.Element, pic image.Rect
 		r.mdiIcon(e.Icon, cx-r.s(isz)/2, cy-r.s(isz)/2, isz, c)
 	case e.Label != "":
 		fc := r.faces()
-		text := r.fit(fc.label, e.Label, pic.Dx())
-		r.text(fc.label, text, cx-r.width(fc.label, text)/2, cy+r.s(9), c)
+		text := r.fit(fc.label, e.Label, pic.Dx()-2*r.s(labelPad))
+		w := r.width(fc.label, text)
+		pill := image.Rect(cx-w/2-r.s(labelPad), cy-r.s(14), cx+w/2+r.s(labelPad), cy+r.s(14))
+		r.roundOver(pill, float64(pill.Dy())/2, pal.bg, 0.6)
+		r.text(fc.label, text, cx-w/2, cy+r.s(9), c)
+	}
+}
+
+// labelPad is the room either side of an element's words on their pill.
+const labelPad = 10
+
+// roundOver lays c over a rounded rectangle at opacity a: a see-through pill.
+func (r *paint) roundOver(b image.Rectangle, rad float64, c color.RGBA, a float64) {
+	x0, y0, x1, y1 := rectF(b)
+	for y := b.Min.Y - 1; y <= b.Max.Y; y++ {
+		for x := b.Min.X - 1; x <= b.Max.X; x++ {
+			r.blendAt(x, y, c, a*clamp01(0.5-rrDist(float64(x)+0.5, float64(y)+0.5, x0, y0, x1, y1, rad)))
+		}
 	}
 }

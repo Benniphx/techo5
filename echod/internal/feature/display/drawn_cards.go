@@ -280,8 +280,8 @@ func (r *paint) block(b dashboard.Block, x, y, w int, pal dashPal, adj dashAdjus
 		// A picture with elements is drawn whole, its own proportions across the column, no taller
 		// than the screen.
 		h := w * 9 / 16
-		if img := b.Picture.Image; img != nil && img.Bounds().Dx() > 0 {
-			h = w * img.Bounds().Dy() / img.Bounds().Dx()
+		if shape := shapeOf(*b.Picture); shape.Dx() > 0 {
+			h = w * shape.Dy() / shape.Dx()
 		}
 		h = min(h, r.h-2*r.s(dashSide))
 		if r.visible(y, y+h) {
@@ -546,15 +546,11 @@ func (r *paint) gaugeCard(b image.Rectangle, g dashboard.Gauge, pal dashPal) {
 func (r *paint) pictureCard(b image.Rectangle, p dashboard.Picture, pal dashPal) {
 	fc := r.faces()
 	r.roundFill(b, pal.rad, pal.card, pal.card)
-	if p.Image != nil {
+	if msg, ok := pictureNote(p); ok {
+		r.text(fc.sub, msg, b.Min.X+(b.Dx()-r.width(fc.sub, msg))/2, b.Min.Y+b.Dy()/2, pal.sub)
+	} else {
 		inner := b.Inset(r.s(2))
 		xdraw.ApproxBiLinear.Scale(r.dst, inner, p.Image, cover(p.Image.Bounds(), inner), draw.Src, nil)
-	} else {
-		msg := "Loading the picture…"
-		if p.TooLarge {
-			msg = "Too large to show here"
-		}
-		r.text(fc.sub, msg, b.Min.X+(b.Dx()-r.width(fc.sub, msg))/2, b.Min.Y+b.Dy()/2, pal.sub)
 	}
 	if p.Name != "" {
 		band := image.Rect(b.Min.X, b.Max.Y-r.s(40), b.Max.X, b.Max.Y)

@@ -4,6 +4,7 @@ package dashboard
 
 import (
 	"fmt"
+	"image/color"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,10 +16,12 @@ import (
 // picture drawn for the screen can be a whole page of buttons. They are placed as Home Assistant
 // places them, so the same card works the same on both: an element is position: absolute in the
 // picture, its style's left and top in percent, and Home Assistant's own transform,
-// translate(-50%, -50%), centers it on that point (hui-picture-elements-card's .element). A state
-// icon and a state label show their entity; an icon, an image, a state badge and a service button
-// are only their tap here, the picture being what shows them. Any other element, a custom one or one
-// placed in pixels, is left out, and the rest of the card is drawn as usual.
+// translate(-50%, -50%), centers it on that point (hui-picture-elements-card's .element). An icon
+// shows its icon, a state icon and a state label their entity, a service button its title; an image
+// and a state badge are only their tap here, the picture being what shows them. An element its style
+// makes invisible is drawn as nothing, and is still its tap. Any other element, a custom one or one
+// placed in pixels or from the right or the bottom, is left out, and the rest of the card is drawn as
+// usual.
 
 // element is one element as the card gives it.
 type element struct {
@@ -30,6 +33,8 @@ type element struct {
 	attribute, prefix, suffix string
 	tap                       *Action
 	conds                     []cond // a conditional element's, all of them met for it to be there
+	color                     color.RGBA
+	hidden                    bool
 }
 
 // elementKinds are the elements the device places; anything else is left out.
@@ -67,6 +72,7 @@ func (c *compiler) elements(v any, conds []cond) []element {
 		e.w, _ = percent(style["width"])
 		e.h, _ = percent(style["height"])
 		e.sx, e.sy = shiftOf(style)
+		e.color, e.hidden = colorOf(style)
 		if (kind == "state-icon" || kind == "state-label") && e.entity == "" {
 			continue
 		}
@@ -132,26 +138,72 @@ func percent(v any) (float64, bool) {
 	return f / 100, true
 }
 
-var translate = regexp.MustCompile(`translate\(\s*(-?[\d.]+)%\s*(?:,\s*(-?[\d.]+)%\s*)?\)`)
+var translate = regexp.MustCompile(`(translate[XY]?)\(([^)]*)\)`)
 
 // shiftOf is how far an element's style moves it by its own size: Home Assistant's translate(-50%,
-// -50%) when it gives no transform, the transform's own translate when it gives one, and nothing for
-// a transform without one ("none", or a translate in pixels), which replaces Home Assistant's.
+// -50%) when it gives no transform, and the transform's own translates when it gives one, which
+// replaces Home Assistant's: translate(x, y), translate(x) with no move down, translateX(x) and
+// translateY(y), each moving it on its own axis only. A move in pixels is taken as none, as is a
+// transform without a translate ("none", a scale): there is no telling what pixels come to here.
 func shiftOf(style raw) (float64, float64) {
 	t, ok := style["transform"].(string)
 	if !ok {
 		return -0.5, -0.5
 	}
-	m := translate.FindStringSubmatch(t)
-	if m == nil {
-		return 0, 0
+	var x, y float64
+	for _, m := range translate.FindAllStringSubmatch(t, -1) {
+		args := strings.Split(m[2], ",")
+		first, _ := percent(args[0])
+		switch m[1] {
+		case "translate":
+			x += first
+			if len(args) > 1 {
+				second, _ := percent(args[1])
+				y += second
+			}
+		case "translateX":
+			x += first
+		case "translateY":
+			y += first
+		}
 	}
-	x, _ := strconv.ParseFloat(m[1], 64)
-	y := 0.0
-	if m[2] != "" {
-		y, _ = strconv.ParseFloat(m[2], 64)
+	return x, y
+}
+
+// namedColors are the few colors a style is likely to name rather than write out.
+var namedColors = map[string]color.RGBA{
+	"white": {255, 255, 255, 255}, "black": {0, 0, 0, 255}, "red": {255, 0, 0, 255}, "green": {0, 128, 0, 255},
+	"blue": {0, 0, 255, 255}, "yellow": {255, 255, 0, 255}, "orange": {255, 165, 0, 255}, "gray": {128, 128, 128, 255},
+	"grey": {128, 128, 128, 255},
+}
+
+var alphaZero = regexp.MustCompile(`^rgba\(.*,\s*0*\.?0*\s*\)$`)
+
+// colorOf is an element's style's color, zero for none it can read, and whether the style makes it
+// invisible: opacity 0, a transparent color, display none or visibility hidden. Home Assistant draws
+// an element whatever its color, so only those leave it a tap with nothing drawn.
+func colorOf(style raw) (color.RGBA, bool) {
+	hidden := false
+	switch o := style["opacity"].(type) {
+	case float64:
+		hidden = o == 0
+	case string:
+		if f, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(o), "%"), 64); err == nil {
+			hidden = f == 0
+		}
 	}
-	return x / 100, y / 100
+	if str(style, "display") == "none" || str(style, "visibility") == "hidden" {
+		hidden = true
+	}
+	v := strings.ToLower(strings.TrimSpace(str(style, "color")))
+	if v == "transparent" || alphaZero.MatchString(v) {
+		return color.RGBA{}, true
+	}
+	if c, ok := namedColors[v]; ok {
+		return c, hidden
+	}
+	c, _ := parseColor(v)
+	return c, hidden
 }
 
 // at is the element as it stands, or false while its conditions are not met.
@@ -159,8 +211,11 @@ func (e element) at(l look) (Element, bool) {
 	if !all(e.conds, l) {
 		return Element{}, false
 	}
-	out := Element{X: e.x, Y: e.y, W: e.w, H: e.h, ShiftX: e.sx, ShiftY: e.sy, Entity: e.entity, Tap: e.tap}
+	out := Element{X: e.x, Y: e.y, W: e.w, H: e.h, ShiftX: e.sx, ShiftY: e.sy, Entity: e.entity, Tap: e.tap,
+		Color: e.color, Hidden: e.hidden}
 	switch e.kind {
+	case "icon":
+		out.Icon = e.icon
 	case "state-icon", "state-label":
 		st, ok := l.states[e.entity]
 		if !ok {
