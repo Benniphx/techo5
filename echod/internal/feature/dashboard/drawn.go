@@ -117,6 +117,23 @@ type Picture struct {
 	Image    image.Image // nil until it has arrived
 	TooLarge bool        // it arrived, larger than the device will decode
 	Tap      *Action     // the card's own tap_action; nil when a tap does nothing
+	// Elements are a picture-elements card's: places on the picture, each a tap of its own, some
+	// showing an entity. A picture with them is drawn whole, so they stay where they were put.
+	Elements []Element
+}
+
+// Element is one of a picture-elements card's elements, placed as its style places it in Home
+// Assistant: left and top name a point on the picture, and the element is moved by its own size from
+// there, by half of it unless the style's transform says otherwise, so that it is centered on it.
+type Element struct {
+	X, Y           float64 // the point, as fractions of the picture's width and height
+	W, H           float64 // its size, as fractions of the picture; 0 when the style gives none
+	ShiftX, ShiftY float64 // how far it moves by its own size: -0.5 each, as Home Assistant has it
+	Icon           string  // a state icon's; empty for a place that is only tapped
+	Label          string  // a state label's words, or a service button's
+	On, Gone       bool
+	Entity         string
+	Tap            *Action // nil when a tap does nothing
 }
 
 // Drawn is the page as it stands.

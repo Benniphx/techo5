@@ -31,6 +31,9 @@ const (
 type wanted struct {
 	camera string
 	url    string
+	// wide is a picture kept as wide as the screen rather than a card: a picture-elements card's,
+	// which may be the whole page.
+	wide bool
 }
 
 func (w wanted) key() string {
@@ -47,7 +50,7 @@ func fetchPicture(w wanted) (image.Image, error) {
 	if w.camera != "" {
 		// Asked for at the size it is kept: a camera whose integration scales its snapshot then sends
 		// a small one. Many ignore the width and send their own size, which pictureMost then bounds.
-		b, err = hass.Get().Fetch("/api/camera_proxy/" + w.camera + "?width=" + strconv.Itoa(pictureWidth))
+		b, err = hass.Get().Fetch("/api/camera_proxy/" + w.camera + "?width=" + strconv.Itoa(w.width()))
 	} else {
 		u := w.url
 		if strings.HasPrefix(u, "/") {
@@ -70,7 +73,15 @@ func fetchPicture(w wanted) (image.Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	return shrink(img), nil
+	return shrink(img, w.width()), nil
+}
+
+// width is as wide as the picture is kept.
+func (w wanted) width() int {
+	if w.wide {
+		return screenWidth
+	}
+	return pictureWidth
 }
 
 // errTooLarge is a picture with more pixels than pictureMost, which is said on its card rather than
@@ -86,14 +97,14 @@ const (
 	pictureWidth = 640
 )
 
-// shrink is a picture at most pictureWidth wide.
-func shrink(img image.Image) image.Image {
+// shrink is a picture at most most wide.
+func shrink(img image.Image, most int) image.Image {
 	b := img.Bounds()
-	if b.Dx() <= pictureWidth {
+	if b.Dx() <= most {
 		return img
 	}
-	h := b.Dy() * pictureWidth / b.Dx()
-	out := image.NewRGBA(image.Rect(0, 0, pictureWidth, max(h, 1)))
+	h := b.Dy() * most / b.Dx()
+	out := image.NewRGBA(image.Rect(0, 0, most, max(h, 1)))
 	xdraw.ApproxBiLinear.Scale(out, out.Rect, img, b, xdraw.Src, nil)
 	return out
 }

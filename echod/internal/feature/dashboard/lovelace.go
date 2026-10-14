@@ -318,12 +318,22 @@ func (c *compiler) cardItself(card raw) node {
 
 	case kind == "picture-entity" || kind == "picture-glance" || kind == "picture" || kind == "picture-elements":
 		w := wanted{camera: str(card, "camera_image"), url: str(card, "image")}
+		if m, ok := card["image"].(raw); ok {
+			w.url = str(m, "media_content_id") // an image picked in the editor's media browser
+		}
 		e := str(card, "entity")
 		if w.camera == "" && w.url == "" && strings.HasPrefix(e, "camera.") {
 			w.camera = e
 		}
 		if w.camera == "" && w.url == "" {
 			return nil
+		}
+		if kind == "picture-elements" {
+			// Its picture is often the whole page, drawn as wide as the screen: kept that wide.
+			w.wide = true
+			// No band with its title across the foot, either: that is where its buttons may be.
+			c.need.pictures = append(c.need.pictures, w)
+			return pictureNode{key: w.key(), tap: pictureTap(card, e), elements: c.elements(card["elements"], nil)}
 		}
 		c.need.pictures = append(c.need.pictures, w)
 		name := str(card, "title")
@@ -718,11 +728,18 @@ func (g gaugeNode) blocks(l look) []Block {
 type pictureNode struct {
 	key, name string
 	tap       *Action
+	elements  []element // a picture-elements card's
 }
 
 func (p pictureNode) picture(l look) Picture {
 	img, arrived := l.pictures[p.key]
-	return Picture{Name: p.name, Image: img, TooLarge: arrived && img == nil, Tap: p.tap}
+	pic := Picture{Name: p.name, Image: img, TooLarge: arrived && img == nil, Tap: p.tap}
+	for _, e := range p.elements {
+		if el, ok := e.at(l); ok {
+			pic.Elements = append(pic.Elements, el)
+		}
+	}
+	return pic
 }
 
 func (p pictureNode) blocks(l look) []Block {
@@ -748,7 +765,8 @@ type galleryNode struct {
 }
 
 // asGallery is a grid's cards as a gallery, when the grid asks for two or more columns and every
-// card in it is a picture. Anything else in it, and the grid stays as it was: its cards in turn.
+// card in it is a picture. Anything else in it, and the grid stays as it was: its cards in turn. A
+// picture with elements is not cut to a gallery's frame, which would move them off what they are on.
 func asGallery(children []node, card raw) (galleryNode, bool) {
 	cols, _ := card["columns"].(float64)
 	if cols < 2 || len(children) < 2 {
@@ -757,7 +775,7 @@ func asGallery(children []node, card raw) (galleryNode, bool) {
 	g := galleryNode{columns: int(cols)}
 	for _, n := range children {
 		p, ok := n.(pictureNode)
-		if !ok {
+		if !ok || len(p.elements) > 0 {
 			return galleryNode{}, false
 		}
 		g.pics = append(g.pics, p)

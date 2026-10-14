@@ -74,6 +74,13 @@ func (r *paint) dashPage(v dashboard.Drawn, scroll int, adj dashAdjusting, area 
 		return
 	}
 
+	// A view of one picture is that picture, as large as the screen takes it whole: a page drawn
+	// as one picture, with its buttons placed on it as a picture-elements card's elements.
+	if p, ok := lonePicture(v); ok {
+		r.wholePage(p, area, pal)
+		return
+	}
+
 	if size == "fill" {
 		if few, ok := fewTiles(v); ok {
 			r.fillGrid(few, area, pal, adj)
@@ -266,6 +273,21 @@ func (r *paint) block(b dashboard.Block, x, y, w int, pal dashPal, adj dashAdjus
 		h := r.s(gaugeH)
 		if r.visible(y, y+h) {
 			r.gaugeCard(image.Rect(x, y, x+w, y+h), *b.Gauge, pal)
+		}
+		return h
+
+	case b.Picture != nil && len(b.Picture.Elements) > 0:
+		// A picture with elements is drawn whole, its own proportions across the column, no taller
+		// than the screen.
+		h := w * 9 / 16
+		if img := b.Picture.Image; img != nil && img.Bounds().Dx() > 0 {
+			h = w * img.Bounds().Dy() / img.Bounds().Dx()
+		}
+		h = min(h, r.h-2*r.s(dashSide))
+		if r.visible(y, y+h) {
+			box := image.Rect(x, y, x+w, y+h)
+			r.roundFill(box, pal.rad, pal.card, pal.card)
+			r.wholePicture(box, *b.Picture, pal, tiles)
 		}
 		return h
 
