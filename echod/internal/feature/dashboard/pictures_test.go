@@ -32,7 +32,7 @@ func pngHeader(w, h uint32, depth byte) []byte {
 
 // A picture's limit is the memory it takes decoded: a 16-bit PNG is twice an 8-bit one's, so one the
 // 8-bit limit would let through is too large; and a size whose pixels overflow an int on the 32-bit
-// devices is too large, not wrapped round to small.
+// devices is too large, not wrapped around to small.
 func TestAPicturesLimitIsInBytes(t *testing.T) {
 	ctx := context.Background()
 	wide := wanted{url: "/local/plan.png", wide: true}

@@ -62,7 +62,7 @@ func (c *compiler) elements(v any, conds []cond) []element {
 			continue
 		}
 		style, _ := m["style"].(raw)
-		if str(style, "display") == "none" || str(style, "visibility") == "hidden" {
+		if cssValue(style, "display") == "none" || cssValue(style, "visibility") == "hidden" {
 			continue // not drawn, and no tap in Home Assistant either
 		}
 		x, okx := percent(style["left"])
@@ -178,6 +178,12 @@ var namedColors = map[string]color.RGBA{
 	"white": {255, 255, 255, 255}, "black": {0, 0, 0, 255}, "red": {255, 0, 0, 255}, "green": {0, 128, 0, 255},
 	"blue": {0, 0, 255, 255}, "yellow": {255, 255, 0, 255}, "orange": {255, 165, 0, 255}, "gray": {128, 128, 128, 255},
 	"grey": {128, 128, 128, 255},
+}
+
+// cssValue is a style's value as CSS reads it: in any case, spaces and an !important left off.
+func cssValue(style raw, key string) string {
+	v, _, _ := strings.Cut(str(style, key), "!")
+	return strings.ToLower(strings.TrimSpace(v))
 }
 
 // colorOf is an element's style's color, zero for none it can read, and whether the style makes it

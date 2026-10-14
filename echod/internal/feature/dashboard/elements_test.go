@@ -216,6 +216,10 @@ func TestAnElementOffThePageIsNoTap(t *testing.T) {
 	   "tap_action": {"action": "navigate", "navigation_path": "/a"}},
 	  {"type": "icon", "icon": "mdi:b", "style": {"left": "30%", "top": "50%", "visibility": "hidden"},
 	   "tap_action": {"action": "navigate", "navigation_path": "/b"}},
+	  {"type": "icon", "icon": "mdi:d", "style": {"left": "70%", "top": "50%", "display": " None !important"},
+	   "tap_action": {"action": "navigate", "navigation_path": "/d"}},
+	  {"type": "icon", "icon": "mdi:e", "style": {"left": "90%", "top": "50%", "visibility": "HIDDEN"},
+	   "tap_action": {"action": "navigate", "navigation_path": "/e"}},
 	  {"type": "icon", "icon": "mdi:c", "style": {"left": "50%", "top": "50%", "opacity": "0"},
 	   "tap_action": {"action": "navigate", "navigation_path": "/c"}}
 	]}]`), &cards); err != nil {
