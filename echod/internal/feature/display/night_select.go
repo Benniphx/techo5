@@ -277,7 +277,7 @@ func (d *Display) setNight(v string) {
 }
 
 // Actions: screen_night_hours sets the night to any start and end, "19:00" and "09:30"; both empty is
-// no night.
+// no night. The rest put a page up from an automation: the calendar, the forecast, the rain map.
 func (d *Display) Actions() []*esphome.Action {
 	return []*esphome.Action{{
 		Name: "screen_night_hours",
@@ -295,7 +295,24 @@ func (d *Display) Actions() []*esphome.Action {
 			}
 			return nil, nil
 		},
+	}, {
+		Name: "weather_show",
+		Run:  func(esphome.Call) (any, error) { return nil, d.weatherShown(false) },
+	}, {
+		Name: "radar_show",
+		Run:  func(esphome.Call) (any, error) { return nil, d.weatherShown(true) },
 	}}
+}
+
+// weatherShown is the weather_show and radar_show actions: the forecast or the rain map, as a tap on
+// the weather and the page's Radar button do. Not on a device set to no weather: its forecast page
+// would be empty, and somebody who turned the weather off did not ask for the rain map either.
+func (d *Display) weatherShown(radar bool) error {
+	if config.Get().Home.WeatherEntity() == "" {
+		return errors.New("weather: this device shows no weather; choose a source with home_weather")
+	}
+	d.ShowWeather(radar)
+	return nil
 }
 
 // setNightHours is the action: the night from start to end, "19:00" and "09:30"; both empty is none.

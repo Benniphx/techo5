@@ -35,7 +35,8 @@ Android, with one Go daemon, `echod`, doing everything the device does:
   zone, the last hour as a loop, over NASA's Blue Marble with a GOES satellite's clouds and the towns
   named. The radar comes from the National Weather Service in the lower 48 and RainViewer anywhere
   else; the "Radar source" setting (settings screen, or the `radar_source` select) can pick either
-  always. "Show the radar" asks for it directly.
+  always. "Show the radar" asks for it directly. On a Show, Home Assistant's `weather_show` and
+  `radar_show` actions open the forecast and the rain map, for a dashboard button or an automation.
 - **Weather alerts** (U.S.): the National Weather Service's alerts in force at home put a badge on the
   clock (a pill on the Spot) and pills over the rain map, with the alerts' storm polygons and counties
   outlined on it; a tap opens the alert's whole text, swiped sideways to the next. On unless turned off

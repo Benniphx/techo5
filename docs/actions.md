@@ -1326,6 +1326,25 @@ no calendar (choose one with `calendar_sources`, or Settings, General, Calendars
 action: esphome.office_calendar_show
 ```
 
+## Show the forecast or the rain map
+
+In YAML, refer to these actions as `esphome.<node>_weather_show` and `esphome.<node>_radar_show`.
+
+`weather_show` opens the forecast page on a Show, as a tap on the weather on the home screen does;
+`radar_show` opens the rain map, as the page's Radar button does. The button turns between the two,
+a tap anywhere else puts the page away, and it closes on its own after 30 seconds. Fails on a device
+set to no weather (choose a source with `home_weather`, the "Weather source" select, or Settings,
+General, Weather). No arguments.
+
+```yaml
+action: esphome.office_weather_show
+```
+
+```yaml
+# A storm warning: the rain map up on the kitchen Show.
+action: esphome.kitchen_radar_show
+```
+
 ## Choose the calendars that pop up
 
 In YAML, refer to this action as `esphome.<node>_calendar_popup_sources`.
