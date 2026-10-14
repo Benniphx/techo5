@@ -184,10 +184,16 @@ const (
 )
 
 // listBoards puts the known dashboards in the list, with the one chosen selected. Home Assistant is
-// offered a changed list from its next connection on.
+// offered a changed list from its next connection on, which Run asks for (relist): a path chosen
+// that it does not list, from dashboard_path or a navigate tap, is a new option, and until then Home
+// Assistant would show the select as unknown.
 func (f *Feature) listBoards(d config.Dashboard) {
 	opts, chosen := boardOptions(d)
-	f.boardOpts.Set(opts)
+	if f.boardOpts.Set(opts) {
+		f.mu.Lock()
+		f.relist = true
+		f.mu.Unlock()
+	}
 	f.board.Set(chosen)
 }
 

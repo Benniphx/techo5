@@ -48,6 +48,23 @@ func TestThePickerKeepsAChosenDashboardHomeAssistantNoLongerLists(t *testing.T) 
 	}
 }
 
+// A path Home Assistant does not list, chosen by dashboard_path or a navigate tap, is a new option,
+// and Home Assistant only hears of it on its next connection: the reconnect is asked for, or its
+// select shows unknown until then. The same list again asks for nothing.
+func TestANewPathAsksForTheReconnect(t *testing.T) {
+	f := pickerFeature()
+	f.listBoards(config.Dashboard{Known: pickerBoards})
+	f.relist = false
+	f.listBoards(config.Dashboard{Known: pickerBoards})
+	if f.relist {
+		t.Errorf("the same list asked for a reconnect")
+	}
+	f.listBoards(config.Dashboard{Path: "dashboard-garage/0", Known: pickerBoards})
+	if !f.relist {
+		t.Errorf("a new path in the list asked for no reconnect")
+	}
+}
+
 // The list is asked for while the dashboard is off only while there is nothing cached: once a device
 // has been given a list it stops asking, which is the whole of "no dashboard polling while it is off".
 func TestTheListIsAskedForWhileThereIsNothingCached(t *testing.T) {
