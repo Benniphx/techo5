@@ -187,15 +187,29 @@ func (f *Feature) Restore(c config.Config) {
 	f.tiles.Set(tilesLabel(c.Dashboard.Tiles))
 }
 
+// boardsMax and boardBytes cap the dashboard list (listBoards).
+const (
+	boardsMax  = 100
+	boardBytes = 8 << 10
+)
+
 // listBoards puts the known dashboards in the list, with the one chosen selected. A chosen path
 // Home Assistant no longer lists is kept as a choice of its own, so the list never claims a
 // different one is showing.
 func (f *Feature) listBoards(d config.Dashboard) {
 	opts := []string{automatic}
 	chosen := automatic
+	size := len(automatic)
 	for _, b := range d.Known {
+		mine := b.Path == d.Path
+		// Capped as home's selects are (home.roomFor, #136): all the options go in one message, and one
+		// over 64 KiB breaks the device's connection to Home Assistant. The chosen one always stays.
+		if !mine && (len(opts) >= boardsMax || size+len(b.Label) > boardBytes) {
+			continue
+		}
 		opts = append(opts, b.Label)
-		if b.Path == d.Path {
+		size += len(b.Label)
+		if mine {
 			chosen = b.Label
 		}
 	}

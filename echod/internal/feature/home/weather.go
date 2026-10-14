@@ -65,11 +65,11 @@ func weatherOptions(h config.Home) []string {
 		opts = append(opts, config.DefaultWeather)
 	}
 	add := func(id string) {
-		if id != "" && !slices.Contains(opts, id) {
+		if id != "" && roomFor(opts, id) && !slices.Contains(opts, id) {
 			opts = append(opts, id)
 		}
 	}
-	add(h.WeatherEntity())
+	add(h.WeatherEntity()) // first, so the cap never leaves it out (roomFor)
 	for _, id := range h.WeatherSources {
 		add(id)
 	}

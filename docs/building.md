@@ -78,10 +78,11 @@ cd ..
 
 (`go test` runs everywhere; a few hardware packages only build for Linux.) To try a daemon on a Show
 already running TECHO5: turn on its SSH switch in Home Assistant with a key sent through the
-`ssh_keys` action, copy the binary over, and bind it in place until the next reboot:
+`ssh_keys` action, copy the binary over, and bind it in place until the next reboot. The devices
+have no SFTP server, which `scp` uses by default since OpenSSH 9, so `-O` asks for the old way:
 
 ```
-scp bin/echod-arm root@<address>:/tmp/echod-test
+scp -O bin/echod-arm root@<address>:/tmp/echod-test
 ssh root@<address> 'mount --bind /tmp/echod-test /usr/local/bin/techo5 && killall techo5'
 ```
 

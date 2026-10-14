@@ -50,6 +50,14 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
    Home Assistant's media folder, and the photos will not show up.
 
    Anything else the Media page can browse works too, such as an Immich album or a network share.
+
+   **Immich without Home Assistant.** The device can read an Immich server itself. On the setup page,
+   **Screen & Photos**, **Photos from Immich**: the server's address (like `http://192.168.1.20:2283`)
+   and an API key made in Immich under **Account Settings > API Keys**, then **Save**. Pick **The whole
+   library** or an album under **Photos to show**, then **Show these photos**. The key stays on the
+   device and the page never shows it again; **Forget this server** removes it. Once set up, Immich and
+   its albums are in the device's own **Photo folder** list too. Photos only, no videos; each is shown
+   as Immich's preview of it.
 2. **Check** that the photos show in Home Assistant under **Media → My media**. If Home Assistant
    can see them, the device can too.
 3. **On the device**, swipe down for Settings, then **Display**:
@@ -199,11 +207,15 @@ automation that wants to know too.
   Settings → Sound, on the setup page (Sound & Voice), or in Home Assistant. What they play shows as
   now playing, with the song's cover from Spotify. The Spotify app's volume slider and the device's
   volume are one: the slider sets the device to where it is, and the device's buttons, Home Assistant
-  and night volume move the slider. A pause on the device stops the stream there; the phone keeps
-  going until it is paused too. Anyone on the same network can play to the device while one is on, as
-  with any AirPlay or Spotify speaker, and Spotify Connect keeps the login a phone hands it until it
-  is turned off. Spotify Connect has been tried on a Show; AirPlay has not been tried with an iPhone
-  yet. If something does not work, open an issue.
+  and night volume move the slider. With AirPlay, play, pause, next and previous on the device's
+  screen, and play and pause from Home Assistant, reach the iPhone, and the song stays on the screen
+  while it is paused, until half an hour after the iPhone lets go of the device (it does a few seconds
+  after a pause); a pause or a play on the phone shows on the device too, and Stop pauses the phone as
+  well. With Spotify Connect, and with an AirPlay app that gives the device no way back to it, a pause
+  on the device stops the stream there; the phone keeps going until it is paused too. Anyone on the
+  same network can play to the device while one is on, as with any AirPlay or Spotify speaker, and
+  Spotify Connect keeps the login a phone hands it until it is turned off. Both have been tried on a
+  Show, AirPlay with an iPhone. If something does not work, open an issue.
 - **DLNA (new).** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to
   this device box, or Home Assistant) makes the device a DLNA speaker, a "media renderer", under its
   own name. Music apps and servers on the network find it and play to it: BubbleUPnP on a phone,
@@ -215,6 +227,29 @@ automation that wants to know too.
   playing, including the song's address (some servers put a login token in it, as with any DLNA
   speaker). With **Video** and **DLNA video** on as well (Show and Spot), it takes videos too
   ([Video](video.md)).
+- **A phone over Bluetooth (new).** On the Show and the Dot, the **Bluetooth phone** switch, in Home
+  Assistant, lets a phone play to the device as to any Bluetooth speaker. For two minutes the device
+  can be found and paired with, with no scan for speakers, and a phone connects from its own
+  Bluetooth settings, a new one or one paired before; on the Dot the ring pulses blue meanwhile. Once
+  the phone's audio is up the window closes, the phone is remembered, and the switch stays on while
+  it is connected: turning it off disconnects the phone. The **Bluetooth audio** sensor names the
+  connected phone, as the phone calls itself (often with its owner's name), and a phone paired in
+  pairing mode shows there and turns the switch on too. A phone that went away may not come back by
+  itself: it can connect from its own Bluetooth settings, and **Bluetooth reconnect phone** calls the
+  remembered phones until one answers. Anyone nearby can pair while the switch is on, as in pairing
+  mode, and a phone that joined stays remembered, so **Bluetooth forget phones** forgets every phone
+  and keeps the speakers and earbuds. On the Dot a phone may not get in while the Dot is connected to
+  a Bluetooth speaker. Tried on a Dot and a Show.
+- **Bluetooth, the rest of it (new).** A phone playing to the device has one volume, the device's: its
+  volume slider moves the device's volume, and the device's buttons and Home Assistant move the
+  slider (night volume still caps a raise from the phone). With two phones, the last to start playing
+  has the speaker, and the first takes it back when the second stops, if it is still playing; not
+  after AirPlay, Spotify Connect or Music Assistant played, or after a stop on the device. While
+  earbuds or a speaker are connected, a phone's audio goes on to them. A short rising tone says a
+  Bluetooth device connected and a falling one that it went, except in quiet hours and during a
+  call. **Forget**, under the earbuds or speaker in **Settings > Connections** (it asks twice), or the
+  **Bluetooth forget** button in Home Assistant on any device, forgets them, so new ones can be
+  paired.
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's
