@@ -1,0 +1,229 @@
+#!/bin/busybox.static sh
+# TECHO5 /init for the Echo Show 8 2nd gen (athena) on Amazon's stock 32-bit kernel.
+#
+# athena has no initramfs in normal boot: the kernel mounts the system partition read-only as /
+# (skip_initramfs ro init=/init root=PARTUUID=<system>) and runs this file. So the system partition
+# is the slot store and this script sits at its root; it does what tools/linux/init does from the
+# initramfs on the other Shows:
+#
+#  1. Pick a slot with slotctl (store = /, made writable only while slotctl writes), then pivot_root
+#     into slots/<x>: the old root, the whole store, lands at /store in the slot, which is where
+#     etc/techo5/boot.sh and slotctl expect it. switch_root cannot be used: it only works from an
+#     initramfs. If pivot_root fails, chroot with the store bound at /store.
+#
+#  2. Failing that (no bootable slot, a `rescue` marker, the slot's init missing, the hand-over
+#     failing), stay up as the rescue environment on the store root itself: root shell on USB serial
+#     (ACM), RNDIS at 172.16.42.1 with DHCP for the host, dropbear with the keys in /root/.ssh
+#     (the bench key the image carries), Wi-Fi from the vendor partition when a network is saved.
+#     The USB link is always there, so rescue never reboots by itself.
+#
+# Userdata is Fire OS's own partition: TECHO5 keeps all of its state in userdata/techo5, bound to
+# /data, and never touches anything else there. Without userdata, /data is a tmpfs.
+#
+# Logged to the kernel log, to MISC's spare area (tools/linux/readmisc.sh, as on the other Shows)
+# and to /data/techo5-linux.
+
+BB=/bin/busybox.static
+MISC=/dev/mmcblk1p6
+STORE_DEV=/dev/mmcblk1p21
+DATA_DEV=/dev/mmcblk1p23
+VENDOR_DEV=/dev/mmcblk1p12
+WIFI_PRE=/vendor/lib/modules/wlan_mt76x3_sdio_prealloc.ko
+WIFI_MODULE=/vendor/lib/modules/wlan_mt76x3_sdio.ko
+export T5_PRODUCT="Echo Show 8 2nd gen Linux"
+export USB_RNDIS=172.16.42.1
+
+$BB mount -t proc proc /proc
+$BB mount -t sysfs sysfs /sys
+$BB mount -t tmpfs -o mode=0755 tmpfs /dev
+$BB mdev -s
+exec > /dev/kmsg 2>&1
+
+CRUMB=0
+crumb() {
+	# one 512-byte block per stage, starting at MISC byte offset 4096
+	CRUMB=$((CRUMB+1))
+	echo "techo5 crumb $CRUMB: $*"
+	[ -b $MISC ] && printf 'TECHO5 %02d %s\n' "$CRUMB" "$*" | $BB dd of=$MISC bs=512 seek=$((7+CRUMB)) count=1 conv=notrunc,sync 2>/dev/null
+}
+log() { crumb "$*"; }
+crumb "athena init started, kernel $($BB uname -r) $($BB uname -m)"
+
+# Recovery bootloader message: cleared first, so a crash later still boots normally next time.
+[ -b $MISC ] && $BB dd if=/dev/zero of=$MISC bs=32 count=1 conv=notrunc 2>/dev/null
+
+$BB mkdir -p /dev/pts
+$BB mount -t devpts devpts /dev/pts
+$BB mount -t tmpfs tmpfs /run
+$BB mount -t tmpfs tmpfs /tmp
+echo 7 4 1 7 > /proc/sys/kernel/printk
+crumb "dev populated: $($BB ls /dev | $BB wc -l) nodes, misc=$([ -b $MISC ] && echo yes || echo no)"
+
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+. /lib/techo5-lib.sh
+
+# --- Userdata: TECHO5's own directory on it, as /data.
+if mount -t ext4 -o noatime,nosuid,nodev $DATA_DEV /userdata 2>/dev/null &&
+	mkdir -p /userdata/techo5 && mount --bind /userdata/techo5 /data; then
+	crumb "userdata mounted; /data is userdata/techo5"
+else
+	mount -t tmpfs -o mode=0755 tmpfs /data
+	crumb "userdata mount failed; /data is a tmpfs"
+fi
+mkdir -p /data/techo5-linux
+LOGDIR=/data/techo5-linux
+
+# --- The store is this root.
+MODE=none
+[ -e /.techo5-store ] && MODE=store
+crumb "store: $MODE, active=$(cat /active 2>/dev/null) a=$(cat /slots/a.state 2>/dev/null) b=$(cat /slots/b.state 2>/dev/null)"
+
+store_rw() { mount -o remount,rw / 2>/dev/null || { crumb "store: remount rw failed"; return 1; }; }
+store_ro() { sync; mount -o remount,ro / 2>/dev/null || crumb "store: remount ro failed"; }
+
+snapshot() {
+	{
+		echo "=== $(date) uptime $(cut -d' ' -f1 /proc/uptime) mode $MODE"
+		echo "--- slots"; STORE=/ slotctl status 2>&1
+		echo "--- dmesg tail"; dmesg | tail -60
+		echo "--- ip"; ip addr 2>&1
+		echo "--- mounts"; cat /proc/mounts
+		echo "--- mem"; head -3 /proc/meminfo
+	} > /tmp/snapshot 2>&1
+	cp /tmp/snapshot $LOGDIR/rescue.log 2>/dev/null
+	sync
+}
+
+MOVED=
+move_mounts() {
+	for m in data run tmp dev sys proc; do
+		mkdir -p /newroot/$m 2>/dev/null
+		mount --move /$m /newroot/$m && MOVED="$m $MOVED" || crumb "moving /$m failed"
+	done
+}
+move_back() {
+	for m in $MOVED; do $BB mount --move /newroot/$m /$m; done
+	MOVED=
+}
+
+# --- Normal path: hand over to a slot.
+boot_slot() {
+	slot=$1
+	root=/slots/$slot
+	[ -x $root/sbin/init ] || [ -L $root/sbin/init ] || { crumb "slot $slot has no /sbin/init"; return 1; }
+	[ -d $root/store ] || { crumb "slot $slot has no /store to put the old root on"; return 1; }
+	mount --bind $root /newroot || { crumb "bind mount of slot $slot failed"; return 1; }
+	mkdir -p /run/techo5
+	echo $slot > /run/techo5/slot
+	crumb "pivoting into slot $slot ($(cat $root/etc/techo5-release 2>/dev/null))"
+	sync
+	# Nothing started here may keep running under the slot.
+	kill -9 -1 2>/dev/null
+	move_mounts
+	cd /newroot
+	if $BB pivot_root . store; then
+		# The old root, the whole store, is /store now; so is this busybox.
+		exec /store/bin/busybox.static chroot . /sbin/init
+		echo "techo5: chroot into slot $slot after pivot_root failed" > /dev/kmsg
+		# Nothing sane is left to do from here: the root has moved. Reboot rather than hang.
+		/store/bin/busybox.static reboot -f
+	fi
+	crumb "pivot_root failed; chroot with the store bound at /store"
+	cd /
+	if mount --bind / /newroot/store; then
+		exec $BB chroot /newroot /sbin/init
+	fi
+	crumb "chroot into slot $slot failed"
+	umount /newroot/store 2>/dev/null
+	cd /
+	move_back
+	umount /newroot 2>/dev/null
+	rm -f /run/techo5/slot
+	return 1
+}
+
+if [ $MODE = store ]; then
+	if [ -e /rescue ]; then
+		store_rw && rm -f /rescue; store_ro
+		crumb "rescue marker found: staying on the store root this boot"
+		: > /tmp/rescue-asked
+	else
+		store_rw
+		if slot=$(STORE=/ slotctl next 2>/tmp/slotctl.err); then
+			store_ro
+			crumb "slotctl: $(tr '\n' ' ' < /tmp/slotctl.err)"
+			boot_slot "$slot"
+		else
+			store_ro
+			crumb "slotctl: $(tr '\n' ' ' < /tmp/slotctl.err)"
+		fi
+	fi
+fi
+
+# --- Rescue environment, on the store root (read-only; /run, /tmp and /data are writable).
+crumb "rescue mode ($MODE)"
+echo /sbin/mdev > /proc/sys/kernel/hotplug
+hostname techo5-rescue
+
+rescue_screen() {
+	[ -x /usr/local/bin/fbprobe ] || return 0
+	killall fbprobe 2>/dev/null
+	/usr/local/bin/fbprobe -hold 1000h -title RESCUE -lines \
+"This device could not start its system.|Nothing is lost - your data is intact.|Connect USB and open the serial console.|github.com/HuskerMinion/techo5|$1" \
+		> /tmp/fbprobe.log 2>&1 &
+}
+if [ -e /tmp/rescue-asked ]; then
+	rescue_screen "Rescue was asked for (slotctl rescue)."
+else
+	rescue_screen "No bootable slot; the store is intact."
+fi
+
+# USB first: serial shell, RNDIS, SSH. This is what keeps the unit reachable.
+t5_usb_acm
+n=0; while [ $n -lt 10 ] && [ ! -e /dev/ttyGS0 ]; do sleep 1; mdev -s; n=$((n+1)); done
+(
+	while true; do
+		[ -e /dev/ttyGS0 ] || mdev -s
+		if [ -e /dev/ttyGS0 ]; then
+			setsid sh -c 'exec sh -l < /dev/ttyGS0 > /dev/ttyGS0 2>&1'
+		fi
+		sleep 2
+	done
+) &
+sleep 2
+mdev -s
+t5_usb_net
+# Host keys on userdata (or /tmp without it); /etc/dropbear links to /run/dropbear, which points there.
+mkdir -p $LOGDIR/dropbear
+ln -sfn $LOGDIR/dropbear /run/dropbear
+if [ -s /root/.ssh/authorized_keys ]; then
+	t5_dropbear $LOGDIR/dropbear -s
+else
+	crumb "ssh: no key in /root/.ssh; USB serial console only"
+fi
+snapshot
+crumb "rescue: USB up ($(ip -4 addr 2>/dev/null | grep -c 'inet ') addresses)"
+
+# Wi-Fi in the background: the vendor partition's driver and firmware, a network saved in
+# $LOGDIR/wpa_supplicant.conf (none is taken from Fire OS).
+(
+	if mount -t ext4 -o ro,noatime $VENDOR_DEV /vendor 2>/dev/null; then
+		printf %s /vendor/firmware > /sys/module/firmware_class/parameters/path
+		grep -q '^wlan_mt76x3_sdio_prealloc ' /proc/modules || insmod $WIFI_PRE 2>/tmp/insmod-pre.err ||
+			log "wifi: prealloc: $(cat /tmp/insmod-pre.err)"
+		t5_wifi_conf $LOGDIR/wpa_supplicant.conf
+		if t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf; then
+			crumb "rescue: Wi-Fi $IP"
+			t5_ntp
+		fi
+	else
+		crumb "rescue: vendor partition mount failed; no Wi-Fi"
+	fi
+	snapshot
+) &
+
+crumb "rescue ready: serial, RNDIS $USB_RNDIS, SSH with the image's key"
+while true; do
+	sleep 60
+	snapshot
+done

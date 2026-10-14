@@ -82,6 +82,10 @@ t5_usb_acm() {
 # default route stays where it is. Idempotent. Nothing on devices that do not set USB_RNDIS.
 t5_usb_net() {
 	[ -n "${USB_RNDIS:-}" ] || return 0
+	# The interface appears when the gadget binds; give it a few seconds.
+	n=0; while [ $n -lt 5 ] && ! ip link show usb0 >/dev/null 2>&1 && ! ip link show rndis0 >/dev/null 2>&1; do
+		sleep 1; n=$((n+1))
+	done
 	ifc=$(cat /sys/kernel/config/usb_gadget/g1/functions/rndis.usb0/ifname 2>/dev/null)
 	ip link show "$ifc" >/dev/null 2>&1 || ifc=usb0
 	ip link show "$ifc" >/dev/null 2>&1 || ifc=rndis0
