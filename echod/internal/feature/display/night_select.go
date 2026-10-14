@@ -322,14 +322,15 @@ func (d *Display) weatherShown(radar bool) error {
 // half brightness when not (relight), and the red night clock gives way to the page. The night comes
 // back once the page is gone. Somebody set this up to be seen: a storm's rain map, the day's
 // calendar at the alarm. By day, or on a screen somebody has already brought up, there is nothing to
-// lift.
+// lift. A screen somebody turned off stays off: the page opens under it all the same, as by day, but
+// lighting it would leave it lit at the night light's level all night.
 func (d *Display) askedAtNight(now time.Time) {
 	if !nightNow(now) {
 		return
 	}
 	d.mu.Lock()
 	on := d.on
-	if on && !d.nightGlow {
+	if (on && !d.nightGlow) || (!on && !d.nightDark) {
 		d.mu.Unlock()
 		return
 	}

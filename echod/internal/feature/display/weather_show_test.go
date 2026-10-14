@@ -129,3 +129,38 @@ func TestWeatherShowLeavesALitScreen(t *testing.T) {
 		t.Errorf("a screen already up was taken over for the night: until %v", d.askedNight)
 	}
 }
+
+// A screen somebody turned off at night is not lit by weather_show: with a night light set, it would
+// stay lit at that level all night. The action still works, the page waiting under the dark screen.
+func TestWeatherShowLeavesAScreenTurnedOff(t *testing.T) {
+	for _, nightLight := range []bool{true, false} {
+		d := nightTestDisplay(t)
+		d.view = voice.State{Phase: "idle"}
+		h := time.Now().Hour()
+		if err := config.Set().Screen().Night(fmt.Sprintf("%d-%d", (h+23)%24, (h+2)%24)); err != nil {
+			t.Fatal(err)
+		}
+		if err := config.Set().Screen().NightLight(nightLight); err != nil {
+			t.Fatal(err)
+		}
+		d.touchedAt = time.Now().Add(-time.Hour)
+		d.on, d.nightDark, d.ceiling = false, false, 100
+
+		if err := runAction(t, d, "weather_show"); err != nil {
+			t.Fatalf("night light %v: weather_show: %v", nightLight, err)
+		}
+		d.mu.Lock()
+		on, glow, asked, until := d.on, d.nightGlow, d.askedNight, d.weatherUntil
+		d.mu.Unlock()
+		if on || glow || !asked.IsZero() {
+			t.Errorf("night light %v: a screen turned off was lit: on %v, glowing %v, asked until %v", nightLight, on, glow, asked)
+		}
+		if !time.Now().Before(until) {
+			t.Errorf("night light %v: the forecast did not open", nightLight)
+		}
+		d.night(time.Now(), false, d.view)
+		if d.on || d.nightGlow {
+			t.Errorf("night light %v: the night lit a screen turned off", nightLight)
+		}
+	}
+}
