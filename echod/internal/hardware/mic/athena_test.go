@@ -170,3 +170,19 @@ func TestAthenaRingsFitTheDriver(t *testing.T) {
 		t.Errorf("a %d-period microphone ring is no deeper than one read", athenaMicPeriods)
 	}
 }
+
+// The PMIC path is Fire OS's builtin_Mic_SingleMic (audio_device_tas5805m.xml) after its mic type,
+// and every name has to fit a control id.
+func TestAthenaPmicPath(t *testing.T) {
+	if athenaPmicMicOn[0].name != "Audio_MIC1_Mode_Select" || athenaPmicMicOn[0].item != "ACCMODE" {
+		t.Errorf("the mic type goes first: %+v", athenaPmicMicOn[0])
+	}
+	for _, c := range append(append([]struct{ name, item string }{}, athenaPmicMicOn...), athenaPmicMicOff...) {
+		if len(c.name) >= 44 || c.item == "" {
+			t.Errorf("%+v", c)
+		}
+	}
+	if athenaADCMicBias {
+		t.Error("the converter's MICBIAS is on by default; Fire OS never turns it on")
+	}
+}

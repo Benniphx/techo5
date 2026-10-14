@@ -19,11 +19,14 @@
 #   PLAY_RATE=48000 athena-audio-check    the speaker (and the reference) at 48 kHz instead
 #   OLDREF=1 athena-audio-check           also record hw:0,16 (I2S0AWB, M4/M5's reference guess)
 #   VUL2=1 athena-audio-check             also record hw:0,33 (I2S0VUL2)
+#   ADCBIAS=1 athena-audio-check          also turn on the converter's own MICBIAS (PWR_CFG 0x75
+#                                         bit 7) while recording; Fire OS never does this
 set -u
 LEVEL=${LEVEL:-0.07}
 PLAY_RATE=${PLAY_RATE:-96000}
 OLDREF=${OLDREF:-0}
 VUL2=${VUL2:-0}
+ADCBIAS=${ADCBIAS:-0}
 SECS=3
 DIR=/tmp/athena-audio-check
 rm -rf "$DIR" && mkdir -p "$DIR" || exit 1
@@ -62,6 +65,16 @@ for kv in "ADC Reset A=1" "Ch1 Output A=0" "Ch1 Slot Offset A=0" "Ch2 Output A=0
 	amixer -q -c 0 cset name="${kv%=*}" "${kv##*=}" >/dev/null 2>&1 || echo "mixer: could not set ${kv%=*}"
 done
 dmesg 2>/dev/null | grep -i "adc5140_reset" | tail -2 | sed 's/^/kernel: /'
+
+# The PMIC's microphone path, which Fire OS's HAL turns on once its capture runs (startInputDevice:
+# the mic type, then "builtin_Mic_SingleMic" from the same file). The likely source of the analog
+# microphones' bias. Enumerated controls, set by item name.
+for kv in "Audio_MIC1_Mode_Select=ACCMODE" "Audio_MicSource1_Setting=ADC1" "Audio_ADC_1_Switch=On" 	"Audio_ADC_2_Switch=On" "Audio_Preamp1_Switch=IN_ADC1" "Audio_Preamp2_Switch=IN_ADC3"; do
+	amixer -q -c 0 cset name="${kv%=*}" "${kv##*=}" >/dev/null 2>&1 || echo "mixer: could not set ${kv%=*}"
+done
+
+# One converter register, read over I2C (the daemon binary's own tool; the daemon itself is stopped).
+reg() { techo5 tools i2c get -b 4 4c "$1" 2>/dev/null | awk '{print $NF}'; }
 
 # 3. The tone: one period of 1 kHz, stereo S16_LE, written as octal escapes for printf, then doubled
 # up to about 4 s.
@@ -111,6 +124,14 @@ if [ "$VUL2" = 1 ]; then
 		--period-size=480 --buffer-size=1920 -d $SECS "$DIR/vul2.raw" 2> "$DIR/vul2.err" &
 	R4=$!
 fi
+sleep 0.1
+echo "converter during capture: SLEEP_CFG 0x02=$(reg 02) PWR_CFG 0x75=$(reg 75) DEV_STS0 0x76=$(reg 76)"
+if [ "$ADCBIAS" = 1 ]; then
+	v=$(reg 75)
+	if [ -n "$v" ]; then
+		techo5 tools i2c set -b 4 4c 75 "$(printf %02x $((0x$v | 0x80)))"
+	fi
+fi
 wait $R1 $R2 $R3 $R4 2>/dev/null
 kill $PLAY 2>/dev/null
 wait $PLAY 2>/dev/null
@@ -118,12 +139,13 @@ for f in aplay ref mic awb vul2; do
 	[ -s "$DIR/$f.err" ] && { echo "--- $f:"; cat "$DIR/$f.err"; }
 done
 
-# 5. Levels, by Goertzel over 1 s after the first 0.5 s, in dBFS against the format's full scale;
-# "-inf" is below -150. The floor is the signal less its mean and less the 1 kHz tone.
+# 5. Levels, by Goertzel over 1 s after the first 1.5 s (time for a bias to settle), in dBFS
+# against the format's full scale; "-inf" is below -150. The floor is the signal less its mean and
+# less the 1 kHz tone.
 report() { # file label rate channels bytes
 	[ -s "$1" ] || { echo "$2: nothing recorded"; return; }
 	frame=$(($4 * $5))
-	od -An -v -td"$5" -j $(($3 / 2 * frame)) -N $(($3 * frame)) "$1" |
+	od -An -v -td"$5" -j $(($3 * 3 / 2 * frame)) -N $(($3 * frame)) "$1" |
 	awk -v label="$2" -v rate="$3" -v nch="$4" -v bytes="$5" '
 	BEGIN {
 		full = (bytes == 4) ? 2147483648 : 32768

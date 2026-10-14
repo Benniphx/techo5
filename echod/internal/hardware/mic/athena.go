@@ -226,6 +226,10 @@ func openAthena() (capture, error) {
 		_ = c.Close()
 		return nil, err
 	}
+	// As Fire OS does once both streams run: the PMIC's microphone path, which is where the bias for
+	// the analog microphones is read to come from (athena_bias.go).
+	athenaPmicMic(true)
+	athenaADCBiasOn()
 	slog.Info("athena: capture open", "mics", fmt.Sprintf("hw:%d,%d", Card, athenaMicDevice),
 		"reference", ref != nil, "ref_device", fmt.Sprintf("hw:%d,%d", Card, athenaRefDevice))
 	return c, nil
@@ -268,7 +272,12 @@ func (c *pairedCapture) restart() error {
 	for _, d := range c.refDec {
 		d.Reset()
 	}
-	return c.start()
+	if err := c.start(); err != nil {
+		return err
+	}
+	// The driver's prepare rewrites PWR_CFG on every start.
+	athenaADCBiasOn()
+	return nil
 }
 
 // Read fills buf with whole 16 kHz frames in the 1st gen Show 8's layout. An overrun on either device
@@ -386,6 +395,7 @@ func readFull(pcm *alsa.Capture, buf []byte) error {
 
 // Close lets both devices go.
 func (c *pairedCapture) Close() error {
+	athenaPmicMic(false)
 	var err error
 	if c.ref != nil {
 		err = c.ref.Close()
