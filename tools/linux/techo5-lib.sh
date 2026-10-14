@@ -534,16 +534,23 @@ t5_bt_up() {
 # window open when the bridge went down was ended meanwhile by the daemon's timer, and the "not
 # findable" that ended it reached no controller. A window still open loses its findability early,
 # which a window can lose; staying findable with none open is what must not happen. Both are written
-# twice, 5 s apart, since bluetoothd puts its own back as the adapter registers. One at a time: a
-# bridge failing over and over restarts every 2 s, and each restart would start another.
+# twice, 5 s apart, since bluetoothd puts its own back as the adapter registers. Only the newest call
+# carries on: a bridge failing over and over restarts every 2 s, and the hci0 that matters is the
+# last one. A count in /run says which is newest, with no lock to be left behind.
 t5_bt_again() {
-	mkdir /run/techo5-bt-again 2>/dev/null || return 0
+	g=$(( $(cat /run/techo5-bt-again 2>/dev/null || echo 0) + 1 ))
+	echo $g > /run/techo5-bt-again
 	sleep 5
 	n=0
-	while [ $n -lt 12 ] && ! timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded; do sleep 5; n=$((n+1)); done
+	while [ $n -lt 12 ]; do
+		[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] || return 0
+		timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded && break
+		sleep 5
+		n=$((n+1))
+	done
 	timeout 5 btmgmt discov off >/dev/null 2>&1
 	sleep 5
+	[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] || return 0
 	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
 	timeout 5 btmgmt discov off >/dev/null 2>&1
-	rmdir /run/techo5-bt-again
 }
