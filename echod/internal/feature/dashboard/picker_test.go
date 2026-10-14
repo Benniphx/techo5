@@ -89,6 +89,9 @@ func TestAViewByAnotherNameIsTheListedOne(t *testing.T) {
 		{"dashboard-kitchen/9", "dashboard-kitchen/9"},
 		{"dashboard-kitchen/porch", "dashboard-kitchen/porch"},
 		{"dashboard-garage/0", "dashboard-garage/0"},
+		{"/dashboard-kitchen/heat?edit=1", "dashboard-kitchen/heat"},
+		{"dashboard-kitchen/heat#popup", "dashboard-kitchen/heat"},
+		{"lovelace/0?x=1#y", "lovelace"},
 	} {
 		if got := listedPath(c.path, known); got != c.want {
 			t.Errorf("listedPath(%q) = %q, want %q", c.path, got, c.want)
@@ -106,6 +109,20 @@ func TestAViewByAnotherNameIsTheListedOne(t *testing.T) {
 	}
 	if got := f.board.Get(); got != "Kitchen · Lights" {
 		t.Errorf("the kitchen dashboard by its path alone shows as %q, want its first view", got)
+	}
+}
+
+// A navigation path's query and hash are not part of the path kept.
+func TestANavigationPathIsKeptWithoutItsQuery(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"/dash/lights?x=1", "dash/lights"},
+		{"dash/lights#popup", "dash/lights"},
+		{" /dash/?a=b#c ", "dash"},
+		{"dash/lights", "dash/lights"},
+	} {
+		if got := navPath(c.in); got != c.want {
+			t.Errorf("navPath(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 

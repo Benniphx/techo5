@@ -248,7 +248,7 @@ func boardOptions(d config.Dashboard) (opts []string, chosen string) {
 // when that is its second), and a dashboard of several views by its path alone is its first. A path
 // the list does not have in any form is itself.
 func listedPath(p string, known []config.DashboardChoice) string {
-	p = strings.Trim(p, "/")
+	p = navPath(p)
 	if p == "" {
 		return p
 	}
@@ -274,6 +274,14 @@ func listedPath(p string, known []config.DashboardChoice) string {
 		return views[n]
 	}
 	return p
+}
+
+// navPath is a dashboard path as it is kept: no slashes at its ends, and no query or hash, which a
+// navigation path may carry ("/dash/lights?edit=1", "dash/lights#popup") and which name no other view.
+func navPath(p string) string {
+	p, _, _ = strings.Cut(strings.TrimSpace(p), "#")
+	p, _, _ = strings.Cut(p, "?")
+	return strings.Trim(p, "/")
 }
 
 // chooseBoard is a dashboard picked from the list.
@@ -451,7 +459,7 @@ func (f *Feature) Actions() []*esphome.Action {
 			Name: "dashboard_path",
 			Args: []esphome.Arg{{Name: "path", Type: esphome.ArgString}},
 			Run: func(c esphome.Call) (any, error) {
-				p := strings.Trim(strings.TrimSpace(c.String("path")), "/")
+				p := navPath(c.String("path"))
 				if err := config.Set().Dashboard().Path(p); err != nil {
 					return nil, err
 				}

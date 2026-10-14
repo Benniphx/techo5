@@ -285,7 +285,7 @@ func (f *Feature) CloseDrawn() {
 func (f *Feature) Tap(a Action) {
 	if a.View != "" {
 		// A navigation path names the dashboard as well as the view: "home-refresh/climate".
-		if err := config.Set().Dashboard().Path(strings.Trim(a.View, "/")); err != nil {
+		if err := config.Set().Dashboard().Path(navPath(a.View)); err != nil {
 			slog.Warn("dashboard: going to a view failed", "err", err)
 		}
 		f.listBoards(config.Get().Dashboard)
