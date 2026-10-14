@@ -209,6 +209,25 @@ func TestAClipWrittenWhileOffIsNotKept(t *testing.T) {
 	}
 }
 
+// A clip whose write is waiting on a purge looks at the switch only once the purge is done: turned off
+// in the meantime, it leaves no folder behind, empty or not.
+func TestAClipWaitingOnAPurgeLeavesNoFolder(t *testing.T) {
+	c, _ := testClips(t, true)
+	c.disk.Lock() // a purge under way
+	done := make(chan struct{})
+	go func() {
+		c.write(clip{kind: "wake", at: time.Now(), peak: 0.99, pcm: []int16{1}})
+		close(done)
+	}()
+	time.Sleep(50 * time.Millisecond) // the write is waiting for disk
+	c.on.Store(false)
+	c.disk.Unlock()
+	<-done
+	if _, err := os.Stat(filepath.Join(c.dir, "wake")); !os.IsNotExist(err) {
+		t.Fatalf("a folder was left behind: %v", err)
+	}
+}
+
 // Off, the actions hand nothing out, not even what a failed purge left behind.
 func TestTheActionsAnswerNothingWhileOff(t *testing.T) {
 	c, _ := testClips(t, true)

@@ -429,15 +429,7 @@ type clipMeta struct {
 // says when (UTC, to the millisecond), which slot, how high it scored and what it had to reach:
 // 20261012-213301-123-s1-p0.79-c0.90.wav.
 func (c *clips) write(cl clip) {
-	// Turned off before this was reached: the folders the purge took away are not made again.
-	if !c.on.Load() {
-		return
-	}
 	dir := filepath.Join(c.dir, cl.kind)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		slog.Warn("wake clip: no folder", "err", err)
-		return
-	}
 	// UTC, so that name order stays time order across a change of the clocks; the milliseconds at a
 	// fixed width, so that two in one second are two files, still in order.
 	at := cl.at.UTC()
@@ -448,8 +440,17 @@ func (c *clips) write(cl clip) {
 	path := filepath.Join(dir, name+".wav")
 	meta, _ := json.Marshal(clipMeta{Kind: cl.kind, At: cl.at.UTC().Format(time.RFC3339), Slot: cl.slot + 1,
 		Model: cl.model, Score: round3(cl.peak), Cutoff: round3(cl.cutoff)})
+	// disk from before the switch is looked at: turned off before this, the folders the purge took away
+	// are not made again; turned off after, the purge waits for disk and takes this clip with the rest.
 	c.disk.Lock()
 	defer c.disk.Unlock()
+	if !c.on.Load() {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		slog.Warn("wake clip: no folder", "err", err)
+		return
+	}
 	// The sidecar last: a clip without one is not offered, and is pruned.
 	if err := os.WriteFile(path, wave(cl.pcm), 0o600); err != nil {
 		os.Remove(path)
@@ -460,12 +461,6 @@ func (c *clips) write(cl clip) {
 		os.Remove(path)
 		os.Remove(sidecar(path))
 		slog.Warn("wake clip: not saved", "err", err)
-		return
-	}
-	// Turned off while this was being written: the purge would have missed it.
-	if !c.on.Load() {
-		os.Remove(path)
-		os.Remove(sidecar(path))
 		return
 	}
 	slog.Info("wake clip saved", "kind", cl.kind, "slot", cl.slot+1, "peak", cl.peak)

@@ -452,7 +452,9 @@ seconds after one starts or ends, or for a few seconds after the stop word. A cl
 of audio (just after a mute, for example) isn't kept either. **Wake clips** and **Wake clips by kind** show how many there are.
 
 **Turning Keep wake clips off deletes every clip on the device.** Copy off the ones you want first:
-while it is off, the actions below answer with an error.
+while it is off, the actions below answer with an error. If the device can't save the setting (a
+full or failing state folder), the clips are deleted all the same, but the next start finds the switch
+still on and keeps clips again: turn it off once more after the restart.
 
 To get them off the device, call the `wake_clips` action to list them and `wake_clip_audio` to fetch
 each one, the same way kept voice recordings are fetched; see [actions.md](actions.md#list-saved-wake-word-clips).
