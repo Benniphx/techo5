@@ -362,7 +362,12 @@ func build() *Player {
 		// Switching waits out the codec (over a second), and Home Assistant's commands are carried
 		// out one at a time: done here, it would hold up every other one. What is applied is what is
 		// saved by then, so quick changes in a row end on the last.
-		safe.Go("audio output", func() { p.applyOutputMode(config.Get().Speaker.OutputMode) })
+		safe.Go("audio output", func() {
+			p.applyOutputMode(config.Get().Speaker.OutputMode)
+			if mode == config.OutputModeSpeaker && speaker.HasJack {
+				speaker.Get().Reopen()
+			}
+		})
 	}
 	p.output.Set(outputAutomatic)
 	component.Bind(p.resampling, speaker.Resamplings(), speaker.Get().SetResampling,
