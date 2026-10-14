@@ -132,12 +132,12 @@ func (w Writer) KeepClips(v bool) error {
 
 func errSlot(n int) error { return fmt.Errorf("config: wake slot %d", n) }
 
-// Labelled is a setting whose values name themselves. The entity layer binds any of these to a
+// Labeled is a setting whose values name themselves. The entity layer binds any of these to a
 // select without knowing which setting it is.
-type Labelled interface{ Label() string }
+type Labeled interface{ Label() string }
 
 // Labels is the list Home Assistant shows for a set of values, in the order given.
-func Labels[T Labelled](values []T) []string {
+func Labels[T Labeled](values []T) []string {
 	out := make([]string, 0, len(values))
 	for _, v := range values {
 		out = append(out, v.Label())
@@ -147,7 +147,7 @@ func Labels[T Labelled](values []T) []string {
 
 // ByLabel resolves what Home Assistant sent back to the value it names. A select speaks labels,
 // everything else speaks values, and this is the one place the two meet.
-func ByLabel[T Labelled](values []T, label string) (T, bool) {
+func ByLabel[T Labeled](values []T, label string) (T, bool) {
 	for _, v := range values {
 		if v.Label() == label {
 			return v, true
