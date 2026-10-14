@@ -148,6 +148,9 @@ for m in ${WIFI_PRE_MODULES:-}; do
 	grep -q "^$n " /proc/modules || insmod "$m" 2>/tmp/insmod.err || log "wifi: insmod $m failed: $(cat /tmp/insmod.err)"
 done
 t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
+# Networks written into the file by hand reach a supplicant that started without any
+# (WIFI_CONF_WATCH, device.conf: athena).
+[ "${WIFI_CONF_WATCH:-}" = 1 ] && t5_wifi_watch $LOGDIR/wpa_supplicant.conf
 
 # SSH is echod's (feature/security): off unless switched on, and only with a key on userdata.
 if [ -n "$IP" ]; then

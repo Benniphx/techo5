@@ -32,6 +32,8 @@ WIFI_PRE=/vendor/lib/modules/wlan_mt76x3_sdio_prealloc.ko
 WIFI_MODULE=/vendor/lib/modules/wlan_mt76x3_sdio.ko
 export T5_PRODUCT="Echo Show 8 2nd gen Linux"
 export USB_RNDIS=172.16.42.1
+# Fire OS's saved networks, for t5_wifi_conf: its userdata is mounted whole at /userdata here.
+export WIFI_STORES=/userdata/misc/wifi/WifiConfigStore.xml
 
 $BB mount -t proc proc /proc
 $BB mount -t sysfs sysfs /sys
@@ -205,7 +207,8 @@ snapshot
 crumb "rescue: USB up ($(ip -4 addr 2>/dev/null | grep -c 'inet ') addresses)"
 
 # Wi-Fi in the background: the vendor partition's driver and firmware, a network saved in
-# $LOGDIR/wpa_supplicant.conf (none is taken from Fire OS).
+# $LOGDIR/wpa_supplicant.conf, or Fire OS's saved networks the first time (WIFI_STORES). A network
+# written into the file later is picked up without a reconfigure (t5_wifi_watch).
 (
 	if mount -t ext4 -o ro,noatime $VENDOR_DEV /vendor 2>/dev/null; then
 		printf %s /vendor/firmware > /sys/module/firmware_class/parameters/path
@@ -216,6 +219,7 @@ crumb "rescue: USB up ($(ip -4 addr 2>/dev/null | grep -c 'inet ') addresses)"
 			crumb "rescue: Wi-Fi $IP"
 			t5_ntp
 		fi
+		t5_wifi_watch $LOGDIR/wpa_supplicant.conf
 	else
 		crumb "rescue: vendor partition mount failed; no Wi-Fi"
 	fi

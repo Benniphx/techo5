@@ -181,14 +181,30 @@ t5_wifi_from_store() {
 }
 
 # t5_wifi_conf <file>: write a wpa_supplicant configuration from the networks
-# Android had saved on userdata, unless <file> exists already. Nothing is typed
-# and nothing leaves the device.
+# Android had saved on userdata, unless <file> holds a network already. Nothing
+# is typed and nothing leaves the device.
+#
+# WIFI_STORES (device.conf) names more places to look, after the usual two: on
+# athena /data is a directory of Fire OS's userdata, so Fire OS's own store is
+# under /store/userdata (in a slot) or /userdata (in rescue). With WIFI_STORES
+# set, a file with no network in it (the header written when there was nothing
+# to import) is tried again, so a store that turns up later is still taken; but
+# only until one import has worked (.wifi-imported beside <file>), so networks
+# forgotten on the screen afterwards stay forgotten.
 t5_wifi_conf() {
 	out=$1
-	[ -s "$out" ] && return 0
-	xml=/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml   # Android 11
-	[ -r "$xml" ] || xml=/data/misc/wifi/WifiConfigStore.xml         # older Android
-	if [ ! -r "$xml" ]; then
+	grep -q '^network={' "$out" 2>/dev/null && return 0
+	if [ -s "$out" ]; then
+		[ -n "${WIFI_STORES:-}" ] || return 0
+		[ -e "$(dirname "$out")/.wifi-imported" ] && return 0
+	fi
+	xml=
+	for c in /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml /data/misc/wifi/WifiConfigStore.xml \
+		${WIFI_STORES:-}; do
+		[ -r "$c" ] && { xml=$c; break; }
+	done
+	if [ -z "$xml" ]; then
+		[ -s "$out" ] && return 1
 		# Nothing to take one from: a unit installed from TWRP, or one that has moved house. An empty
 		# configuration still lets the supplicant start, so the screen's Wi-Fi page can find and join a
 		# network; without one the page would have nothing to talk to.
@@ -210,7 +226,43 @@ t5_wifi_conf() {
 		return 1
 	fi
 	mv -f "$out.tmp" "$out"
+	: > "$(dirname "$out")/.wifi-imported"
 	log "wifi: configuration written from $n of Android's saved networks"
+}
+
+# t5_wifi_watch <file>: a running supplicant that read <file> while it held no network keeps none,
+# however many are written into it later; it needs a reconfigure. This watches for exactly that: the
+# file holding networks the supplicant does not have (by count), steady for a few seconds, while no
+# one is choosing a network on the screen (/run/techo5/wifi-setup). The daemon's own writes
+# (lib/wifi) reconfigure as they go, so the counts already agree there, and a join it is in the middle
+# of (which pins one network with select_network) is never undone from here. An edit that only
+# changes a passphrase keeps the count and is not seen: reconfigure by hand, or reboot. Runs in the
+# background for good; device.conf turns it on (WIFI_CONF_WATCH=1, athena).
+t5_wifi_watch() {
+	conf=$1
+	(
+		while true; do
+			sleep 5
+			[ -e /run/techo5/wifi-setup ] && continue
+			pidof wpa_supplicant >/dev/null || continue
+			want=$(grep -c '^network={' "$conf" 2>/dev/null)
+			[ "${want:-0}" -gt 0 ] || continue
+			have=$(wpa_cli -p /run/wpa -i wlan0 list_networks 2>/dev/null | grep -c '^[0-9]')
+			[ "$want" = "$have" ] && continue
+			# Not while it is being written: the file must be the same 5 s later.
+			a=$(cksum < "$conf" 2>/dev/null); sleep 5; b=$(cksum < "$conf" 2>/dev/null)
+			[ "$a" = "$b" ] || continue
+			if wpa_cli -p /run/wpa -i wlan0 reconfigure >/dev/null 2>&1; then
+				log "wifi: $conf holds $want networks, the supplicant had $have; reconfigured"
+				# The lease client started with no network is still asking; one that gave up is
+				# started again.
+				pidof udhcpc >/dev/null || udhcpc -i wlan0 -b -R -p /run/udhcpc.pid \
+					-s "${UDHCPC_SCRIPT:-/usr/share/udhcpc/default.script}" > /tmp/udhcpc.log 2>&1
+			else
+				log "wifi: reconfigure after a change to $conf failed"
+			fi
+		done
+	) &
 }
 
 # t5_ipv6_private <interface>: keep this device's IPv6 addresses from spelling out its MAC.
