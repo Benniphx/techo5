@@ -48,6 +48,39 @@ func TestSettlingHoldsDetectionsBack(t *testing.T) {
 	}
 }
 
+// A spared slot is not held: the stop word has to stop an alarm ringing through the unmute sound,
+// which held it for as long as the sound played.
+func TestSettlingSparesTheStopWord(t *testing.T) {
+	fakes(t)
+	e := New(2, nil)
+	e.Threshold = func(int) float64 { return 0.7 }
+	for slot, id := range []string{"hey_jarvis", "stop"} {
+		if err := e.Use(slot, model(id, wake.KindMicroWakeWord)); err != nil {
+			t.Fatalf("Use(%d): %v", slot, err)
+		}
+	}
+	woke := make(chan int, 4)
+	e.OnDetect = func(slot int) { woke <- slot }
+
+	e.Settle(time.Second, 1)
+	at := time.Now()
+	e.judge(0, &e.slots[0], 0.95, at, nil)
+	e.judge(1, &e.slots[1], 0.95, at, nil)
+	select {
+	case slot := <-woke:
+		if slot != 1 {
+			t.Fatalf("slot %d woke while settling", slot)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the spared slot was held")
+	}
+	select {
+	case slot := <-woke:
+		t.Fatalf("slot %d woke as well", slot)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 // The hold after an unmute lasts as long as the unmute sound, whichever one plays, and a little
 // after.
 func TestUnmuteSettlesForTheWholeSound(t *testing.T) {
