@@ -88,6 +88,9 @@ type Player struct {
 
 	volume atomic.Uint32 // linear gain, derived from step and the current output's curve
 	step   atomic.Int32
+	// gainMu serializes amplifier writes and the saved gain reapplied when the stream starts.
+	gainMu sync.Mutex
+	gainDB int
 
 	pathMu sync.Mutex
 	out    Output
@@ -549,6 +552,11 @@ func (p *Player) Run(ctx context.Context) error {
 	out := p.Output()
 	p.apply(initSequence)
 	p.route()
+	if GainAvailable() {
+		if err := p.applySpeakerGain(); err != nil {
+			slog.Error("restoring speaker gain failed, continuing playback", "err", err)
+		}
+	}
 
 	select {
 	case <-ctx.Done():
