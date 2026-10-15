@@ -205,6 +205,7 @@ class FakeTWRP:
         self.root = root
         self.mmc = mmc
         self.log = []
+        self.readies = {}
         self.rebooted = False
         self.sh_root = subprocess.run([BASH, '-c', 'cygpath -u "$1" 2>/dev/null || echo "$1"', '_', root],
                                       stdout=subprocess.PIPE).stdout.decode().strip() if os.name == 'nt' else root
@@ -282,6 +283,7 @@ class FakeTWRP:
 
     def push(self, local, remote, tries=4, ready=None):
         self.log.append('push %s' % remote)
+        self.readies[remote] = ready
         shutil.copyfile(local, os.path.join(self.root, remote.lstrip('/')))
 
     def exec_out_to_file(self, cmd, path):
@@ -541,6 +543,10 @@ class SimulatedTWRP(unittest.TestCase):
         out, err = self.install(u, '--stock-boot', stock, *self.mainline_args())
         self.assertIsNone(err, out)
         self.assertEqual(u.writes(), [21, 20])
+        # The backup was made with TECHO5 on boot: said plainly, and no restore lines that would not
+        # bring Fire OS back.
+        self.assertIn('NOT a Fire OS backup', out)
+        self.assertNotIn('adb exec-in', out)
 
     def test_unknown_table_stops_before_writing(self):
         inst.KNOWN_AMP_TABLES.clear()
@@ -583,6 +589,159 @@ class SimulatedTWRP(unittest.TestCase):
         out, err = self.install(u, *self.mainline_args())
         self.assertIn('saiyaku-athena', err or '')
         self.assertEqual(u.writes(), [])
+
+    def test_fire_os_backup_gets_restore_lines(self):
+        u = self.unit()
+        out, err = self.install(u, *self.mainline_args())
+        self.assertIsNone(err, out)
+        self.assertNotIn('NOT a Fire OS backup', out)
+        self.assertIn('adb exec-in', out)
+
+    def test_settings_pushes_wait_for_userdata(self):
+        u = self.unit()
+        pub = os.path.join(self.tmp, 'id.pub')
+        with open(pub, 'w') as f:
+            f.write('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample made-up\n')
+        out, err = self.install(u, '--ssh-key', pub, *self.mainline_args())
+        self.assertIsNone(err, out)
+        settings = {r: f for r, f in u.readies.items() if r.startswith('/data/')}
+        self.assertEqual(len(settings), 4, settings)  # name, psk, authorized_keys, state.json
+        for remote, ready in settings.items():
+            self.assertIsNotNone(ready, remote)
+            self.assertTrue(ready(), remote)
+
+    def test_wifi_added_to_saved_networks(self):
+        u = self.unit()
+        conf = 'data/techo5/techo5-linux/wpa_supplicant.conf'
+        home = 'Home'.encode().hex()
+        u.put(conf, 'ctrl_interface=/run/wpa\nupdate_config=0\n'
+                    'network={\n\tssid=%s\n\tpsk=%s\n}\n'
+                    'network={\n\tssid="Home"\n\tpsk="an old one"\n}\n'
+                    'network={\n\tssid=%s\n\tpsk=%s\n}\n' % ('aa' * 4, 'bb' * 32, home, 'cc' * 32))
+        passfile = os.path.join(self.tmp, 'pass.txt')
+        with open(passfile, 'wb') as f:
+            f.write(b'\xef\xbb\xbfcorrect horse\r\n')  # as Notepad saves it
+        out, err = self.install(u, '--wifi', 'Home', '--wifi-passphrase-file', passfile, *self.mainline_args())
+        self.assertIsNone(err, out)
+        got = u.get(conf).decode()
+        want_psk = hashlib.pbkdf2_hmac('sha1', b'correct horse', b'Home', 4096, 32).hex()
+        self.assertEqual(got, 'ctrl_interface=/run/wpa\nupdate_config=0\n'
+                              'network={\n\tssid=%s\n\tpsk=%s\n}\n'
+                              'network={\n\tssid=%s\n\tpsk=%s\n}\n' % ('aa' * 4, 'bb' * 32, home, want_psk))
+
+    def test_nothing_unmounted_before_confirm(self):
+        u = self.unit()
+        u.put('proc/mounts', u.get('proc/mounts').decode() + '%s/dev/block/mmcblk1p21 /system_root ext4 ro 0 0\n'
+              % u.sh_root)
+        asked = []
+
+        def no(force, lines):
+            asked.append(list(u.log))
+            raise Fail('not confirmed')
+        saved, inst.confirm = inst.confirm, no
+        try:
+            out, err = self.install(u, *self.mainline_args())
+        finally:
+            inst.confirm = saved
+        self.assertEqual(err, 'not confirmed')
+        self.assertFalse(any('umount' in c or 'mount -' in c for c in asked[0]), asked[0])
+        self.assertIn('unmounted once you confirm', out)
+        self.assertEqual(u.changed(), [])
+
+    def test_readback_mismatch_twice_stops(self):
+        u = self.unit()
+        real_sh = u.sh
+        u.sh = lambda cmd: '0' * 64 + '  -' if 'drop_caches' in cmd and 'p21' in cmd else real_sh(cmd)
+        out, err = self.install(u, *self.mainline_args())
+        self.assertIn('did not read back as written, twice', err or '')
+        self.assertEqual(u.writes(), [21, 21])  # system twice, boot never
+        self.assertNotIn(20, u.changed())
+        self.assertFalse(u.rebooted)
+        self.assertIn('try 1 of 2', out)
+
+    def test_readback_mismatch_once_retries(self):
+        u = self.unit()
+        real_sh = u.sh
+        bad = [1]
+
+        def sh(cmd):
+            if 'drop_caches' in cmd and 'p21' in cmd and bad:
+                bad.pop()
+                return '0' * 64 + '  -'
+            return real_sh(cmd)
+        u.sh = sh
+        out, err = self.install(u, *self.mainline_args())
+        self.assertIsNone(err, out)
+        self.assertEqual(u.writes(), [21, 21, 20])
+        self.assertIn('second try', out)
+
+
+class TargetCheck(unittest.TestCase):
+    """target_ok, the check run right before every write."""
+
+    class Answers:
+        def __init__(self, out):
+            self.out = out
+
+        def sh(self, cmd):
+            return self.out
+
+    PARTS = {21: ('system', 4 << 20), 20: ('boot', 2 << 20), 23: ('userdata', 64 << 10)}
+
+    def setUp(self):
+        self.mmc, inst.MMC = inst.MMC, 'mmcblk1'
+
+    def tearDown(self):
+        inst.MMC = self.mmc
+
+    def test_the_partition(self):
+        a = self.Answers('BLOCK\n/dev/block/mmcblk1p21\nsystem')
+        self.assertEqual(inst.target_ok(a, self.PARTS, 21), 4 << 20)
+
+    def test_link_to_another_node(self):
+        # The node is a link: readlink -f names where it really goes.
+        for out in ('BLOCK\n/dev/block/mmcblk1p23\nsystem', 'BLOCK\n/dev/block/mmcblk1p3\nsystem',
+                    '\n/dev/null\nsystem', 'BLOCK\n/dev/block/mmcblk1p21\nuserdata', 'BLOCK'):
+            with self.assertRaisesRegex(Fail, 'refusing to write'):
+                inst.target_ok(self.Answers(out), self.PARTS, 21)
+
+    def test_never_other_partitions(self):
+        with self.assertRaisesRegex(Fail, 'refusing to write'):
+            inst.target_ok(self.Answers('BLOCK\n/dev/block/mmcblk1p23\nuserdata'), self.PARTS, 23)
+
+    def test_symlinked_node_on_the_simulated_unit(self):
+        tmp = tempfile.mkdtemp(prefix='t5-athena-link-')
+        try:
+            u = FakeTWRP(os.path.join(tmp, 'unit'), boot=stock_boot())
+            node = os.path.join(u.root, 'dev', 'block', 'mmcblk1p21')
+            os.remove(node)
+            try:
+                os.symlink(os.path.join(u.root, 'dev', 'block', 'mmcblk1p23'), node)
+            except (OSError, NotImplementedError) as e:
+                self.skipTest('no symlinks here: %s' % e)
+            with self.assertRaisesRegex(Fail, 'refusing to write'):
+                inst.target_ok(u, {21: ('system', 4 << 20)}, 21)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class MergeWifi(unittest.TestCase):
+    NEW = ('4e6577', 'ab' * 32)
+
+    def test_no_configuration(self):
+        for existing in (None, '', '\n'):
+            self.assertEqual(inst.merge_wifi(existing, *self.NEW), inst.WIFI_CONF % self.NEW)
+
+    def test_header_only(self):
+        self.assertEqual(inst.merge_wifi('ctrl_interface=/run/wpa\nupdate_config=0', *self.NEW),
+                         inst.WIFI_CONF % self.NEW)
+
+    def test_keeps_others_replaces_same_name(self):
+        existing = ('ctrl_interface=/run/wpa\r\nupdate_config=0\r\nnetwork={\r\n\tssid="New"\r\n\tpsk="x"\r\n}\r\n'
+                    'network={\n\tssid=4f6c64\n\tkey_mgmt=NONE\n}\nnetwork={\n\tssid=4E6577\n\tpsk=%s\n}' % ('cd' * 32))
+        self.assertEqual(inst.merge_wifi(existing, *self.NEW),
+                         'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=4f6c64\n\tkey_mgmt=NONE\n}\n'
+                         'network={\n\tssid=4e6577\n\tpsk=%s\n}\n' % ('ab' * 32))
 
 
 STOCK = [p for p in os.environ.get('TECHO5_STOCK_BOOTS', '').split(os.pathsep) if p]

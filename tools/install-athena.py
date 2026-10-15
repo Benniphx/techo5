@@ -34,8 +34,12 @@ recovery). Each step is checked before the next:
                the release's, checked against its signed manifest
   4. amp       mainline only: the unit's speaker tuning, from Fire OS's boot in the backup, into the
                boot image's tuning slot; the boot image's id recomputed
-  5. write     system, then boot (mainline only), each read back from the flash and compared by sha256
-  6. settings  name, Home Assistant key, SSH key and Wi-Fi into userdata/techo5
+  5. write     asked once; only then are system and boot unmounted if TWRP had them mounted, and
+               written: system, then boot (mainline only), each read back from the flash and compared
+               by sha256. Before this nothing on the unit changes: userdata is only mounted, and
+               read-only when TWRP has not mounted it already
+  6. settings  name, Home Assistant key, SSH key and Wi-Fi (added to the unit's saved networks) into
+               userdata/techo5
   7. boot      restart into TECHO5; the first boot grows the store to fill the partition, then slot a
                starts; the install watches for the daemon over the USB serial console
 
@@ -669,20 +673,50 @@ def target_ok(adb, parts, n):
     return size
 
 
+OWN_USERDATA = '/tmp/t5-userdata'
+
+
 def userdata_dir(adb, dry_run):
     """Where userdata is mounted in TWRP, mounting it when TWRP has not. Its root is never encrypted, so
-    TECHO5's folder there is readable however TWRP left Fire OS's own."""
+    TECHO5's folder there is readable however TWRP left Fire OS's own. Mounted here, it is read-only
+    until the install is confirmed (userdata_writable)."""
     block = dev(USERDATA)
     for m in mounts_of(adb, block):
         if adb.sh('[ -d %s ] && echo YES' % quote(m)) == 'YES':
             return m
     if dry_run:
         return None
-    out = adb.sh('mkdir -p /tmp/t5-userdata && mount -t ext4 %s /tmp/t5-userdata && echo MOUNTED' % block)
+    out = adb.sh('mkdir -p %s && mount -t ext4 -o ro %s %s && echo MOUNTED' % (OWN_USERDATA, block, OWN_USERDATA))
     if 'MOUNTED' not in out:
         fail('userdata (%s) could not be mounted in TWRP: %s\n'
              '   TECHO5 keeps its settings there. Mount Data in TWRP (Mount menu) and run this again.' % (block, out))
-    return '/tmp/t5-userdata'
+    return OWN_USERDATA
+
+
+def userdata_writable(adb, ud):
+    """userdata read-write for the settings, once the install is confirmed. TWRP's own mount is left as
+    TWRP made it; the one this installer made read-only is remounted read-write."""
+    if ud != OWN_USERDATA:
+        return
+    out = adb.sh('mount -o remount,rw %s && echo REMOUNTED' % OWN_USERDATA)
+    if 'REMOUNTED' not in out:
+        fail('userdata (%s) could not be made writable for the settings: %s\n'
+             '   system and boot are written. Mount Data in TWRP (Mount menu) and run this again: it keeps\n'
+             '   the backup and writes the same images and the settings.' % (dev(USERDATA), out))
+
+
+def userdata_ready(adb, ud):
+    """For Adb.push's ready: userdata mounted where the settings go, mounted again (read-write) where
+    this installer had mounted it. TWRP may have restarted since, and a push before then would land in
+    its RAM disk instead."""
+    def ready():
+        if ud in mounts_of(adb, dev(USERDATA)):
+            return True
+        if ud == OWN_USERDATA:
+            adb.sh('mkdir -p %s && mount -t ext4 %s %s' % (OWN_USERDATA, dev(USERDATA), OWN_USERDATA))
+            return ud in mounts_of(adb, dev(USERDATA))
+        return False
+    return ready
 
 
 def read_partition(adb, n, size, path):
@@ -824,19 +858,44 @@ def unit_file(adb, path):
     return out.strip() or None
 
 
-def put_file(adb, local_dir, text, remote, mode):
+def put_file(adb, local_dir, text, remote, mode, ready=None):
     """A small file onto the unit through adb push (no shell quoting of its contents), mode set after.
     Written as bytes, so Windows does not turn its line ends into CRLF on the way: wpa_supplicant and
-    the daemon read these exactly. Readable only by its owner here, as write_private makes it."""
+    the daemon read these exactly. Readable only by its owner here, as write_private makes it. ready is
+    Adb.push's: what must be true again before a retry, after TWRP resets USB."""
     tmp = os.path.join(local_dir, 'athena-setting.tmp')
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_BINARY', 0), 0o600)
     with os.fdopen(fd, 'wb') as f:
         f.write(text.encode('utf-8'))
     try:
-        adb.push(tmp, remote)
+        adb.push(tmp, remote, ready=ready)
     finally:
         os.remove(tmp)
     adb.sh('chmod %s %s' % (mode, quote(remote)))
+
+
+def merge_wifi(existing, ssid_hex, psk_hex):
+    """The unit's wpa_supplicant configuration (existing, or None) with the --wifi network added: its
+    saved networks kept as they are, except one of the same name, which this one replaces. With no
+    configuration yet, the one the unit writes, with this network in it."""
+    text = (existing or '').replace('\r\n', '\n')
+    if not text.strip():
+        return WIFI_CONF % (ssid_hex, psk_hex)
+
+    def same_name(block):
+        m = re.search(r'^\s*ssid=(.*?)\s*$', block, re.M)
+        if not m:
+            return False
+        name = m.group(1)
+        if len(name) >= 2 and name[0] == name[-1] == '"':
+            name = name[1:-1].encode('utf-8').hex()
+        return name.lower() == ssid_hex.lower()
+
+    kept = re.sub(r'^network=\{\n.*?^\}[ \t]*(\n|$)', lambda m: '' if same_name(m.group(0)) else m.group(0),
+                  text, flags=re.M | re.S)
+    if not kept.endswith('\n'):
+        kept += '\n'
+    return kept + 'network={\n\tssid=%s\n\tpsk=%s\n}\n' % (ssid_hex, psk_hex)
 
 
 def read_file(path):
@@ -922,23 +981,25 @@ def main(argv=None):
     wifi = None
     if a.wifi:
         if a.wifi_passphrase_file:
-            with open(a.wifi_passphrase_file) as f:
+            with open(a.wifi_passphrase_file, encoding='utf-8-sig') as f:
                 wifi = wifi_conf(a.wifi, f.read().rstrip('\r\n'))
         else:
             wifi = ask_wifi(a.wifi)
         kv = dict(line.split('=', 1) for line in wifi.strip().split('\n'))
         wifi = (kv['ssid'], kv['psk'])
         note("Wi-Fi: '%s' (only its key goes to the unit)" % a.wifi)
-    for n in ((SYSTEM, BOOT) if mainline else (SYSTEM,)):
+    # Nothing is unmounted or written before the install is confirmed. userdata is only mounted, and
+    # read-only when this installer mounts it.
+    targets = (SYSTEM, BOOT) if mainline else (SYSTEM,)
+    for n in targets:
         mounted = mounts_of(adb, dev(n))
-        if mounted and a.dry_run:
-            note('dry run: the %s partition is mounted at %s; the real run unmounts it' % (WRITABLE[n], ', '.join(mounted)))
-        elif mounted:
-            unmount(adb, n)
-            note('%s partition unmounted (TWRP had it at %s)' % (WRITABLE[n], ', '.join(mounted)))
+        if mounted:
+            note('the %s partition is mounted at %s; it is unmounted once you confirm'
+                 % (WRITABLE[n], ', '.join(mounted)))
     ud = userdata_dir(adb, a.dry_run)
     if ud:
-        note('userdata mounted at %s; TECHO5 keeps its settings in its techo5 folder' % ud)
+        note('userdata mounted at %s%s; TECHO5 keeps its settings in its techo5 folder'
+             % (ud, ' (read-only until you confirm)' if ud == OWN_USERDATA else ''))
     else:
         note('dry run: userdata is not mounted in TWRP; the real run mounts it')
     state_dir = ud + '/techo5/misc/techo5' if ud else None
@@ -969,6 +1030,13 @@ def main(argv=None):
     os.remove(os.path.join(a.work, 'athena-boot-now.img'))
     boot_is_techo5 = is_techo5_boot(current_boot)
     note('boot now holds %s' % ("TECHO5's mainline kernel" if boot_is_techo5 else "Amazon's kernel"))
+    # A backup made with TECHO5 already on the unit holds TECHO5, not Fire OS.
+    backup_not_fire_os = os.path.exists(saved_boot) and is_techo5_boot(read_file(saved_boot))
+    if backup_not_fire_os:
+        note('WARNING: the backup in %s is NOT a Fire OS backup.\n'
+             '   It was made with TECHO5 already installed: its p%d-boot.img holds TECHO5\'s kernel, and\n'
+             '   writing it back does not bring Fire OS back. Keep the backup made before TECHO5 was first\n'
+             '   installed: that one is the way back to Fire OS.' % (folder, BOOT))
     if not mainline and boot_is_techo5:
         fail("--kernel amazon needs Amazon's kernel on boot, and boot holds TECHO5's. Put Fire OS's boot back\n"
              '   first (the way back in docs/install-athena.md: %s to boot), then run this again.' % saved_boot)
@@ -1047,6 +1115,11 @@ def main(argv=None):
         lines += ['boot, vendor, recovery (TWRP) and the unlock are not touched; userdata only gains settings in its']
     lines += ['techo5 folder. The backup is in %s.' % folder]
     confirm(a.force, lines)
+    for n in targets:
+        mounted = mounts_of(adb, dev(n))
+        if mounted:
+            unmount(adb, n)
+            note('%s partition unmounted (TWRP had it at %s)' % (WRITABLE[n], ', '.join(mounted)))
 
     # ------------------------------------------------------------------------------------ 5. write
     # system first: a unit left with TECHO5's store and Amazon's kernel still starts TECHO5 (the store
@@ -1084,21 +1157,25 @@ def main(argv=None):
         psk = new_api_key()
         write_private(key_file, psk)
         note('Home Assistant key: new, in %s' % key_file)
+    userdata_writable(adb, ud)
+    ready = userdata_ready(adb, ud)
     linux_dir = ud + '/techo5/techo5-linux'
     adb.sh('mkdir -p %s %s && chmod 700 %s' % (quote(state_dir), quote(linux_dir), quote(state_dir)))
-    put_file(adb, a.work, a.name + '\n', state_dir + '/name', '644')
-    put_file(adb, a.work, psk + '\n', state_dir + '/psk', '600')
+    put_file(adb, a.work, a.name + '\n', state_dir + '/name', '644', ready)
+    put_file(adb, a.work, psk + '\n', state_dir + '/psk', '600', ready)
     done = ['name', 'Home Assistant key']
     if pub:
         adb.sh('mkdir -p %s/ssh && chmod 700 %s/ssh' % (quote(state_dir), quote(state_dir)))
-        put_file(adb, a.work, pub + '\n', state_dir + '/ssh/authorized_keys', '600')
+        put_file(adb, a.work, pub + '\n', state_dir + '/ssh/authorized_keys', '600', ready)
         if not unit_file(adb, state_dir + '/state.json'):
-            put_file(adb, a.work, '{"security":{"ssh":true}}\n', state_dir + '/state.json', '600')
+            put_file(adb, a.work, '{"security":{"ssh":true}}\n', state_dir + '/state.json', '600', ready)
         done.append('SSH key')
     if wifi:
-        put_file(adb, a.work, WIFI_CONF % wifi, linux_dir + '/wpa_supplicant.conf', '600')
+        # Added to the networks the unit has saved, not in place of them.
+        conf = linux_dir + '/wpa_supplicant.conf'
+        put_file(adb, a.work, merge_wifi(unit_file(adb, conf), *wifi), conf, '600', ready)
         done.append('Wi-Fi')
-    if ud == '/tmp/t5-userdata':
+    if ud == OWN_USERDATA:
         adb.sh('sync; umount /tmp/t5-userdata')
     else:
         adb.sh('sync')
@@ -1130,6 +1207,12 @@ def main(argv=None):
     print("\nDone. '%s' runs TECHO5 from slot a; the slot commits itself after five healthy minutes." % a.name)
     print('Home Assistant finds it as an ESPHome device. When it asks for the encryption key, paste:\n\n    %s\n\n'
           '(kept in %s)' % (psk, key_file))
+    if backup_not_fire_os:
+        print('\nWARNING: the backup in %s is NOT a Fire OS backup. It was made with TECHO5 already\n'
+              'installed, so writing it back does not return the unit to Fire OS. The way back is the backup\n'
+              'made before TECHO5 was first installed (docs/install-athena.md, "The way back to Fire OS").'
+              % folder)
+        return
     restore = [('system', SYSTEM)] + ([('boot', BOOT)] if mainline else [])
     print('\nThe way back to Fire OS (TWRP stays in recovery; %s and the unlock were never changed):'
           % ('vendor' if mainline else 'boot, vendor'))
