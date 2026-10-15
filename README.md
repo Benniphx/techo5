@@ -2,7 +2,7 @@
   <img src="logo/TECHO5_logo.png" alt="TECHO5" width="220">
 </p>
 
-<h3 align="center">Your Echo Show 5, rebuilt. Linux inside, Home Assistant in charge, no Amazon cloud.</h3>
+<h3 align="center">Your Echo Show, rebuilt. Linux inside, Home Assistant in charge, no Amazon cloud.</h3>
 
 <p align="center">
   <a href="https://github.com/HuskerMinion/techo5/releases/latest"><img src="https://img.shields.io/github/v/release/HuskerMinion/techo5?label=release&color=e9a23b" alt="Latest release"></a>
@@ -23,6 +23,7 @@
   <a href="#install">Install</a> ·
   <a href="#under-the-hood">Under the hood</a> ·
   <a href="#made-possible-by">Credits</a> ·
+  <a href="https://github.com/HuskerMinion/techo5-athena">TECHO5 ATHENA</a> ·
   <a href="https://github.com/HuskerMinion/techo5-dot">TECHO5 Dot</a> ·
   <a href="https://github.com/HuskerMinion/techo5-spot">TECHO5 Spot</a>
 </p>
@@ -33,9 +34,10 @@
 > The story, the board and the UART pads: [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena).
 > Install: [docs/install-athena.md](docs/install-athena.md).
 
-**TECHO5** (Tech Echo 5) is open firmware for the **Amazon Echo Show 5**. It replaces Android and
-Alexa with a small Alpine Linux image and one Go daemon, turning the Show into a fast, private Home
-Assistant voice satellite with a touch screen of its own.
+**TECHO5** (Tech Echo 5) is open firmware for **Amazon's Echo Show 5 and Echo Show 8**, both
+generations of each. It replaces Fire OS and Alexa with a small Alpine Linux image and one Go daemon,
+turning the Show into a fast, private Home Assistant voice satellite with a touch screen of its own.
+It started on the Show 5, which is where the name comes from.
 
 **Every Echo that can be unlocked now runs it.** The bootloader exploit these devices are opened with,
 [amonet](https://github.com/R0rt1z2/amonet), reaches five Amazon Echos, and saiyaku-athena unlocks a sixth. All six run the same daemon:
@@ -44,13 +46,12 @@ Assistant voice satellite with a touch screen of its own.
 |---|---|---|---|
 | **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N82 | this one | In daily use |
 | **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | Working, tested end to end on one unit |
-| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | Working on one unit |
+| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
 | **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
 
-Every other device amonet opens is a Fire tablet. The Echo Show 8 2nd gen (2021) can be unlocked now,
-and support for it is in progress; no Echo made after 2021 has a public unlock.
+Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
 <p align="center">
   <img src="docs/screenshots/sunrise-show.gif" alt="The screen turning into a sunrise over the twenty minutes before an alarm: a dark red sky warming through orange to a pale gold, a sun climbing into it, the time readable throughout" width="560">
@@ -64,7 +65,22 @@ and support for it is in progress; no Echo made after 2021 has a public unlock.
 
 ## What's new
 
-The bigger changes of late September and early October 2026. Every release lists the rest.
+The bigger changes of September and October 2026. Every release lists the rest.
+
+- 🆕 **The Echo Show 8 2nd gen** (v1.2.16). TECHO5 now runs on the 2021 Show 8 (`athena`), on its own
+  64-bit mainline Linux kernel: the first OS other than Fire OS on it. Screen, touch, all four mics,
+  the speaker, Bluetooth, Wi-Fi and the light sensor work. The story and the board:
+  [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena). Install:
+  [docs/install-athena.md](docs/install-athena.md)
+- 🌙 **The night clock on the Spot** (spot-v1.1.14). The Spot can show the Show's dim red night clock
+  at night, or turn its screen off, instead of only dimming.
+- 🔊 **Speaker gain** (v1.2.15, Show 5 units with the TAS5805M amp). Up to +6 dB more, kept across
+  restarts. Thanks to [@OneWithNoFace](https://github.com/OneWithNoFace).
+- 📱 **Your phone plays to the device** (v1.2.11 to v1.2.15). Pair a phone and play to the Show, Spot
+  or Dot over Bluetooth; pause and play on either side reach the other. Thanks to
+  [@tibole](https://github.com/tibole).
+- ✋ **Cancel request** (v1.2.14). A button in Home Assistant ends a request that's running, at any
+  step. Thanks to [@tibole](https://github.com/tibole).
 
 <table>
 <tr>
@@ -273,7 +289,7 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 
 ## Stock vs TECHO5
 
-| | Stock Echo Show 5 (Alexa) | TECHO5 |
+| | Stock Echo Show (Alexa) | TECHO5 |
 |---|---|---|
 | Operating system | Fire OS (Android) | Alpine Linux, one daemon |
 | Voice assistant | Alexa, in Amazon's cloud | Home Assistant Assist, with any pipeline you run |
@@ -296,7 +312,7 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 | Device | Mics |
 |---|:---:|
 | Echo Show 5, 1st and 2nd gen | 2 |
-| Echo Show 8, 1st gen | 4 |
+| Echo Show 8, 1st and 2nd gen | 4 |
 | Echo Spot | 4 |
 | Echo Dot, 2nd gen | 7 |
 
@@ -344,8 +360,8 @@ It finds the Show, asks what to call it and asks once before erasing anything (o
 the USB serial console, and prints where the Home Assistant key is kept. Later updates come from Home
 Assistant. Every step by hand, and the fixes for what can go wrong: **[docs/install.md](docs/install.md)**.
 
-> **Status:** in daily use on two Echo Show 5 units. It's a hobby project, not a product: keep your
-> backups, and expect rough edges.
+> **Status:** in daily use on two Echo Show 5s and two Echo Show 8s, plus the Spot and the Dot. It's
+> a hobby project, not a product: keep your backups, and expect rough edges.
 
 **Echo Show 5 1st gen (2019, `checkers`)** installs with the same command: the installer sees which
 generation it is talking to and takes that unit's boot image from the release. Everything works on it —
@@ -355,17 +371,24 @@ are in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers).
 
 **Echo Show 8 1st gen (2019, `crown`)** installs with the same command as well. Its screen, touch,
 speaker, four microphones, wake word, camera, lens cover and mute latch all work, and it takes slot
-updates like the others. It is the newest of the three and has been through far less use than either
-Show 5, so treat it as such. Two things worth knowing first: a seller's model number does not tell the
-two Show 8 generations apart, so go by the year when buying second-hand. A unit installed before
+updates like the others. Two of them are in daily use. Two things worth knowing first: a seller's
+model number does not tell the two Show 8 generations apart, so go by the year when buying
+second-hand. A unit installed before
 v1.0.1 needs the new boot image so a quick tap to unmute no longer leaves the camera off
 ([updating the boot image](docs/install.md#updating-the-boot-image)).
+
+**Echo Show 8 2nd gen (2021, `athena`)** installs differently. There's no LineageOS for it: after
+the saiyaku-athena unlock, `tools/install-athena.py` puts TECHO5's own 64-bit mainline kernel and the
+system on it from TWRP, backing up every partition first. Only one of the screen panels Amazon used is
+supported on that kernel so far, and the installer checks yours. Every step:
+**[docs/install-athena.md](docs/install-athena.md)**. The story and the hardware:
+[TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena).
 
 ## Under the hood
 
 | Layer | What |
 |---|---|
-| Boot | Amazon's LK, unlocked with amonet; the LineageOS 4.9 kernel rebuilt with Bluetooth; a rescue initramfs that picks a slot |
+| Boot | Amazon's LK, unlocked with amonet; the LineageOS 4.9 kernel rebuilt with Bluetooth; a rescue initramfs that picks a slot. On the 2nd gen Show 8: saiyaku-athena and TECHO5's own Linux 6.18 kernel ([source](tools/linux/athena/kernel)) |
 | System | Alpine Linux armv7 in two root filesystem slots, read-only, with a trial-and-commit boot counter |
 | Daemon | `echod`, one Go binary: audio, wake word, echo cancellation, screen renderer, touch, camera ISP, Bluetooth, updates |
 | Home Assistant | The native ESPHome API: voice satellite, media player, camera, update entity, dozens of settings |
@@ -386,6 +409,8 @@ v1.0.1 needs the new boot image so a quick tap to unmute no longer leaves the ca
 generation: Linux in place of Fire OS, all seven microphones, Bluetooth speaker mode, signed
 updates. **[TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot)** does it for the Echo Spot
 (1st gen), on its round screen. All three run the same daemon source, built per device.
+**[TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena)** tells the story of the 2nd gen
+Echo Show 8 port, which lives here in this repository.
 
 ## Made possible by
 
@@ -397,6 +422,11 @@ TECHO5 exists because of these projects and the people behind them.
   [go-esphome-device](https://github.com/ygelfand/go-esphome-device), the ESPHome device API it speaks.
 - **amonet-cronos and kaeru** (k4y0z, [R0rt1z2](https://github.com/R0rt1z2)): the bootloader unlock
   and recovery that make any of this possible.
+- **saiyaku-athena** ([R0rt1z2](https://github.com/R0rt1z2) with bengris32 and FieryFlames
+  (jackmthws); thanks to nuno407 for the META mode idea): the unlock for the 2nd gen Echo Show 8,
+  [on XDA](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/).
+- The mainline Linux kernel, and everyone who brought the MT8183 into it for its Chromebooks: the
+  2nd gen Show 8's kernel is built on their work.
 - [@proffalken](https://github.com/proffalken): the
   [step-by-step install from Linux](https://gist.github.com/proffalken/377ae50146affe1886dddaaacb87926b)
   that [Getting started](docs/getting-started.md) and the cross-platform installers are based on.
