@@ -308,8 +308,8 @@ the Spot too, in its settings.
 - **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
-  from the bottom), *World* (the time here and in other places), *Agenda* (today's and tomorrow's
-  events beside the time) and *Glow* (soft colors drifting behind the time). Swipe left or right
+  from the bottom), *World* (the time here and in other places), *Agenda* (the coming week's
+  events beside the time, each day under its heading) and *Glow* (soft colors drifting behind the time). Swipe left or right
   across the clock for the next style or the one before; its name shows for a moment, and a swipe
   the other way puts the last style back. The night clock keeps its own look. Also in Home Assistant
   and on the setup page's Screen & Photos tab.
