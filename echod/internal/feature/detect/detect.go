@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -47,6 +48,8 @@ type Detect struct {
 	clipsKinds *esphome.TextSensor
 	keepClips  *esphome.Switch
 	clips      *clips
+	// clipsOffRetrying is whether a Keep wake clips off that was not saved is being tried again.
+	clipsOffRetrying atomic.Bool
 
 	// onHA is Home Assistant's wake word engine: see onha.go.
 	onHA onHAEntities
