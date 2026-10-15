@@ -304,8 +304,11 @@ t5_ipv6_private() {
 # refusal is logged and the placeholder kept. Other
 # addresses are left alone, so a Show or a Dot keeps the one its router reservation is for.
 t5_wifi_mac() {
-	case "$(cat "/sys/class/net/$1/address" 2>/dev/null)" in 00:90:4c:*) ;; *) return 0 ;; esac
-	mac=$(tr -dc '0-9A-Fa-f' 2>/dev/null < /proc/idme/mac_addr | tr 'A-F' 'a-f')
+	# Placeholders the drivers come up with instead of the unit's own address: Broadcom's on the Echo
+	# Spot, and MediaTek's default 00:0c:43:26:60:00 on athena's MT7663 under mainline (every unit
+	# the same, so two units on one network took the same DHCP lease; unit 1 and 2, 2026-10-15).
+	case "$(cat "/sys/class/net/$1/address" 2>/dev/null)" in 00:90:4c:*|00:0c:43:26:60:00) ;; *) return 0 ;; esac
+	mac=$(t5_idme_mac mac_addr | tr 'A-F' 'a-f')
 	# Twelve digits, not all zeros, and not a group address.
 	case "$mac" in 000000000000|?[13579bdf]*) mac= ;; esac
 	[ ${#mac} -eq 12 ] || { log "wifi: no factory address in IDME; keeping the placeholder"; return 0; }
@@ -543,9 +546,14 @@ t5_dropbear() {
 # (internal/layout/athena_mainline.go parseIdme): "beefdeed", the item count as a 32-bit word at
 # 0x0c, then from 0x10 one item after another: a 16-byte name, the value's size and two more 32-bit
 # words, then the value, NUL padded.
-t5_bt_idme_addr() {
-	if [ -r /proc/idme/bt_mac_addr ]; then
-		v=$(tr -d '\n\0 ' < /proc/idme/bt_mac_addr)
+t5_bt_idme_addr() { t5_idme_mac bt_mac_addr; }
+
+# t5_idme_mac <field>: a 12-hex-digit address from idme, from /proc/idme on Amazon's kernels or read
+# off the eMMC's second boot partition where /proc/idme is missing (athena on mainline), or nothing.
+t5_idme_mac() {
+	field=$1
+	if [ -r "/proc/idme/$field" ]; then
+		v=$(tr -d '\n\0 ' < "/proc/idme/$field")
 	else
 		dev=${T5_IDME_DEV:-/dev/mmcblk0boot1}
 		v=
@@ -557,7 +565,7 @@ t5_bt_idme_addr() {
 			size=$(od -A n -t u4 -j $((off + 16)) -N 4 "$dev" | tr -d ' ')
 			case "$size" in ''|*[!0-9]*) return 0;; esac
 			[ "$size" -le 4096 ] || return 0
-			if [ "$name" = bt_mac_addr ]; then
+			if [ "$name" = "$field" ]; then
 				v=$(dd if="$dev" bs=1 skip=$((off + 28)) count="$size" 2>/dev/null | tr -d '\n\0 ')
 				break
 			fi
