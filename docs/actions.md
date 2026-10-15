@@ -1380,8 +1380,8 @@ data:
 
 In YAML, refer to this action as `esphome.<node>_screen_night_hours`.
 
-Sets when the night starts and ends on a Show: the hours the screen goes dark, or down to its night
-light, by itself. Any times, to the minute, and the night may cross midnight. The same can be set on
+Sets when the night starts and ends on a Show or a Spot: the hours the screen goes dark, or down to
+its night light or night clock, by itself. Any times, to the minute, and the night may cross midnight. The same can be set on
 the screen (Settings, Display, Night hours, Custom) and with the **Night hours**, **Night starts**
 and **Night ends** selects, which offer quarter hours.
 
@@ -1395,7 +1395,8 @@ When the night starts, in 24-hour time: `19:00`.
 
 *string*
 
-When it ends: `09:30`. Both empty turns the night off.
+When it ends: `09:30`. Both empty turns the night off (on a Spot too: it does not go back to 10 PM to
+7 AM).
 
 ```yaml
 action: esphome.office_screen_night_hours
@@ -1406,7 +1407,7 @@ data:
 
 ### Turning the night on from an automation
 
-A Show also has a **Night mode** switch, on while it is night. Turn it on or off from an automation,
+A Show or a Spot also has a **Night mode** switch, on while it is night. Turn it on or off from an automation,
 a "house to sleep" scene for example, to start or end the night now. With night hours set, the switch
 holds until the hours next start or end the night, then the hours take over again. To leave the night
 to Home Assistant entirely, set **Night hours** to **Controlled by Home Assistant**: the hours are then
