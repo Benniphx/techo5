@@ -65,9 +65,10 @@
 		ranges;
 
 		/*
-		 * UART0 (GPIO95 RX / GPIO96 TX) at 921600 like stock. The pads
-		 * have not been found yet, so the framebuffer is the first
-		 * console in practice ("console=tty0" on the cmdline).
+		 * UART0 (GPIO95 RX / GPIO96 TX) at 921600 like stock, the
+		 * kernel console (pack.py's cmdline: console=ttyS0,921600).
+		 * Its TX is a 1.8 V test point on the back of the board; the
+		 * boot loaders print there too.
 		 */
 		stdout-path = "serial0:921600n8";
 
