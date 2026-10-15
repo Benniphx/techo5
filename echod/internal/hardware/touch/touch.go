@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
-	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/input"
 	"github.com/HuskerMinion/techo5/echod/internal/service"
 )
