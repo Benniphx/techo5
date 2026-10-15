@@ -58,6 +58,19 @@ type Mute struct {
 	// Changed fires when the microphones are actually cut or brought back, with the new state. It is
 	// what lets the detector stop running models over silence.
 	Changed hook.Hook[bool]
+
+	// mu takes whatever publishes the line one at a time: Home Assistant, the screen, the button, a
+	// press that went to a ring, and the watch after a hold. Each reads the switch as the state it
+	// starts from, so none may publish a move that another is in the middle of.
+	mu sync.Mutex
+
+	// button is whether the mute button is down, and when it last went down (buttons.Pressed). Tests
+	// stand in for it.
+	button func() (down bool, went time.Time)
+
+	// announce is what follows once the switch says what the line reads: announced, unless a test
+	// stands in for it.
+	announce func(muted, asked bool)
 }
 
 var (
@@ -146,6 +159,8 @@ func (m *Mute) Restore(c config.Config) {
 	if m.line == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	was, err := m.line.Get()
 	if err != nil {
 		slog.Error("reading mute state failed", "err", err)
@@ -173,6 +188,12 @@ func (m *Mute) Set(muted bool) {
 	if m.line == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.set(muted)
+}
+
+func (m *Mute) set(muted bool) {
 	if err := m.line.Set(muted); err != nil {
 		slog.Error("setting mute failed", "muted", muted, "err", err)
 		return
@@ -188,12 +209,14 @@ func (m *Mute) Flip() {
 	if m.line == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	is, err := m.line.Get()
 	if err != nil {
 		slog.Error("reading mute state failed", "err", err)
 		return
 	}
-	m.Set(!is)
+	m.set(!is)
 }
 
 // Toggle is the button on top of the device. Where the hardware has already acted on the press, the
@@ -203,6 +226,8 @@ func (m *Mute) Toggle() {
 	if m.line == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.mustMove(m.sw.Get()) {
 		if _, err := m.line.Toggle(); err != nil {
 			slog.Error("toggling mute failed", "err", err)
@@ -275,30 +300,80 @@ var (
 	followPoll = 100 * time.Millisecond
 )
 
-// following keeps it to one watch: a second hold during the first is covered by it.
-var following atomic.Bool
+// following keeps it to one watch, and followUntil is when that watch ends: a hold during it moves
+// the end on rather than starting a second one.
+var (
+	following   atomic.Bool
+	followUntil atomic.Int64
+)
 
 // followHold publishes whatever the line does during and after a hold.
 func (m *Mute) followHold() {
-	if m.line == nil || !following.CompareAndSwap(false, true) {
+	if m.line == nil {
 		return
 	}
-	defer following.Store(false)
-	m.follow(followFor, followPoll, func() { m.settled(true) })
+	followUntil.Store(time.Now().Add(followFor).UnixNano())
+	until := func() time.Time { return time.Unix(0, followUntil.Load()) }
+	for following.CompareAndSwap(false, true) {
+		m.follow(until, followPoll)
+		following.Store(false)
+		// A hold that came in as the watch was ending moved the end on, and found it still running.
+		if !time.Now().Before(until()) {
+			return
+		}
+	}
 }
 
-// follow calls settle each time the line is found to differ from the switch, for d, looking every
-// poll. settle is what brings the switch up to the line.
-func (m *Mute) follow(d, poll time.Duration, settle func()) {
-	for deadline := time.Now().Add(d); ; {
-		if is, err := m.line.Get(); err == nil && is != m.sw.Get() {
-			settle()
-		}
-		if !time.Now().Before(deadline) {
+// follow publishes the line whenever it differs from the switch, looking every poll until until has
+// passed.
+//
+// A difference is taken only once two looks in a row have read it, with the button up and not
+// pressed since the first. The hardware moves the line for a tap as the button goes down, and the tap
+// arrives when it comes up; published in between, the switch already said where the press went, and
+// the tap - taken for a press from there - set the latch straight back on a Show (#153 again) or
+// played its sound a second time elsewhere. The button reads as down until its tap has been dealt
+// with, and the second look covers a press the hardware acted on just before it was heard.
+func (m *Mute) follow(until func() time.Time, poll time.Duration) {
+	var prev look
+	for {
+		prev = m.look(prev)
+		if !time.Now().Before(until()) {
 			return
 		}
 		time.Sleep(poll)
 	}
+}
+
+// look is one read of the line during a watch.
+type look struct {
+	at    time.Time
+	muted bool
+	ok    bool
+}
+
+// look reads the line once, and publishes it if prev read the same and nothing has pressed the
+// button since; see follow.
+func (m *Mute) look(prev look) look {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	at := time.Now()
+	is, err := m.line.Get()
+	if err != nil {
+		return look{}
+	}
+	down, went := m.pressedState()
+	if prev.ok && prev.muted == is && is != m.sw.Get() && !down && went.Before(prev.at) {
+		m.settled(true)
+	}
+	return look{at: at, muted: is, ok: true}
+}
+
+// pressedState is whether the mute button is down, and when it last went down.
+func (m *Mute) pressedState() (bool, time.Time) {
+	if m.button != nil {
+		return m.button()
+	}
+	return buttons.Get().Pressed(buttons.Mute)
 }
 
 // keep leaves the microphones where they were after a press that went to a ring. Where the hardware
@@ -314,6 +389,8 @@ func (m *Mute) keep() {
 	if m.line == nil {
 		return
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	was := m.sw.Get()
 	if !m.line.HardwareActs(was) {
 		return
@@ -355,6 +432,15 @@ func (m *Mute) settled(asked bool) {
 	}
 
 	m.sw.Set(muted)
+	if m.announce != nil {
+		m.announce(muted, asked)
+		return
+	}
+	m.announced(muted, asked)
+}
+
+// announced shows what the line reads on the ring and, when somebody asked, tells everything else.
+func (m *Mute) announced(muted, asked bool) {
 	m.show(component.ChosenEffect(m.ring))
 
 	// A latch that has just been released may have taken the microphone chip down with it, which
