@@ -2,6 +2,8 @@ package metrics
 
 import (
 	"net"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -33,10 +35,46 @@ func Addresses() []net.IP {
 	return ips
 }
 
-// usbGadget is whether an interface is a USB gadget link: the RNDIS and ECM functions (rndis0, usb0,
-// usb1) and the bridge TECHO5's bench shells put them on (br0).
+// netClass is where the kernel lists network interfaces; a variable for the tests.
+var netClass = "/sys/class/net"
+
+// usbGadget is whether an interface is a USB gadget link: one the device itself serves on its USB
+// port (the RNDIS and ECM functions; see gadgetDevice), or a bridge with only such links in it (the
+// bench shells put them on br0). Told by the device rather than by the name, so a USB Ethernet
+// adapter plugged into a device, which the kernel may also call usb0, is a network like any other:
+// its device is the adapter's USB interface.
 func usbGadget(name string) bool {
-	return strings.HasPrefix(name, "rndis") || strings.HasPrefix(name, "usb") || name == "br0"
+	dir := filepath.Join(netClass, name)
+	if ports, err := os.ReadDir(filepath.Join(dir, "brif")); err == nil {
+		if len(ports) == 0 {
+			return false
+		}
+		for _, p := range ports {
+			if !gadgetDevice(filepath.Join(netClass, p.Name())) {
+				return false
+			}
+		}
+		return true
+	}
+	return gadgetDevice(dir)
+}
+
+// gadgetDevice is whether the interface at dir in sysfs belongs to a USB gadget: the kernel's gadget
+// Ethernet code marks it DEVTYPE=gadget, and its device is the gadget.
+func gadgetDevice(dir string) bool {
+	if b, err := os.ReadFile(filepath.Join(dir, "uevent")); err == nil {
+		for _, line := range strings.Split(string(b), "\n") {
+			if strings.TrimSpace(line) == "DEVTYPE=gadget" {
+				return true
+			}
+		}
+	}
+	dev, err := filepath.EvalSymlinks(filepath.Join(dir, "device"))
+	if err != nil {
+		return false
+	}
+	base := filepath.Base(dev)
+	return base == "gadget" || strings.HasPrefix(base, "gadget.")
 }
 
 // WiFiAddresses is the addresses of Addresses on the Wi-Fi interface alone: the network's own, without a
