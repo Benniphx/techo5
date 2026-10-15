@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -27,6 +28,13 @@ import (
 // the screen.
 const nameLimit = 31
 
+// hiddenRune is a character a name must not hold: a control character (Unicode's Cc), which shows as
+// nothing or a box and some programs stop at, or one that turns the text's direction (the bidi
+// embeddings, overrides and isolates), which makes what is shown differ from what is stored.
+func hiddenRune(r rune) bool {
+	return unicode.Is(unicode.Cc, r) || (r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069')
+}
+
 // rename writes the new name and restarts, since the name is announced when the daemon starts.
 // It reports what was wrong, or empty when the device is on its way back up.
 func rename(to string, acknowledged bool) string {
@@ -40,6 +48,8 @@ func rename(to string, acknowledged bool) string {
 		return "a name is at most 31 characters"
 	case strings.ContainsAny(to, "\n\r\t"):
 		return "a name is one line"
+	case strings.IndexFunc(to, hiddenRune) >= 0:
+		return "a name cannot hold control or text-direction characters"
 	case to == config.Get().Device.Name:
 		return "that is already its name"
 	case !acknowledged:

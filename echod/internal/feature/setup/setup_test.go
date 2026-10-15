@@ -319,6 +319,15 @@ func TestRenamingNeedsTheBoxTicked(t *testing.T) {
 	if got := rename("K\xfcche", true); got == "" {
 		t.Error("accepted a name that is not UTF-8")
 	}
+	// Control characters, and the ones that turn the text's direction, are not a name's either.
+	for _, bad := range []string{"Kit\x00chen", "Kit\x7fchen", "Kit\u0085chen", "Kit\u202echen", "Kit\u2066chen", "Kit\u2069chen"} {
+		if got := rename(bad, true); !strings.Contains(got, "control or text-direction") {
+			t.Errorf("%q refused with %q, want it refused for what it holds", bad, got)
+		}
+	}
+	if got := rename("Küche \u200dÉcho", false); !strings.Contains(got, "tick the box") {
+		t.Errorf("a name with a joiner refused with %q, want only the box asked for", got)
+	}
 	// The limit is characters, as the installer counts them: 31 of them, two bytes each, are a name.
 	if got := rename(strings.Repeat("ü", 31), false); !strings.Contains(got, "tick the box") {
 		t.Errorf("31 characters of two bytes refused with %q, want only the box asked for", got)
