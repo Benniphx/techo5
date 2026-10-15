@@ -1,6 +1,7 @@
 package speaker
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,9 +29,25 @@ func gainControlOn(m gainMixer) (alsa.Control, error) {
 	}
 	if c.Type != alsa.TypeInteger || c.Count != 1 || c.Min > gainUnity ||
 		c.Max < gainUnity+config.SpeakerGainMax || c.Step > 1 {
-		return c, fmt.Errorf("speaker: unsupported amplifier gain control")
+		return c, errGainShape
 	}
 	return c, nil
+}
+
+// errGainShape is a gain control there, but not the TAS5805M's scale this writes.
+var errGainShape = errors.New("speaker: unsupported amplifier gain control")
+
+// gainAnswer is what gainControlOn's err says about the control: there (ok), or sure not to be, the
+// mixer read whole without it or with one of another shape. Any other error is a mixer that could not
+// be read (an ioctl failing, the mixer closed under it), which says nothing, so it is asked again.
+func gainAnswer(err error) (ok, sure bool) {
+	switch {
+	case err == nil:
+		return true, true
+	case errors.Is(err, alsa.ErrNoControl), errors.Is(err, errGainShape):
+		return false, true
+	}
+	return false, false
 }
 
 // GainAvailable checks the actual mixer, not the model name: not every 2nd gen
@@ -79,7 +96,7 @@ func gainOn(m gainMixer) bool {
 		return gainSeen.ok
 	}
 	_, err := gainControlOn(m)
-	gainSeen.ok, gainSeen.sure = err == nil, true
+	gainSeen.ok, gainSeen.sure = gainAnswer(err)
 	return gainSeen.ok
 }
 
@@ -124,7 +141,7 @@ func findGain(mayHave bool, open func() (gainMixerCloser, error)) (ok, sure bool
 	}
 	defer m.Close()
 	_, err = gainControlOn(m)
-	return err == nil, true
+	return gainAnswer(err)
 }
 
 // i2cDevices lists the I2C devices the device tree describes, each with its name:

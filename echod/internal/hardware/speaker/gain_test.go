@@ -3,8 +3,10 @@ package speaker
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
@@ -13,13 +15,17 @@ import (
 type testGainMixer struct {
 	control alsa.Control
 	missing bool
+	findErr error // the mixer failing to be read, as an ioctl does
 	fail    error
 	writes  []uint32
 }
 
 func (m *testGainMixer) Find(name string) (alsa.Control, error) {
+	if m.findErr != nil {
+		return alsa.Control{}, m.findErr
+	}
 	if m.missing || name != gainControl {
-		return alsa.Control{}, errors.New("control absent")
+		return alsa.Control{}, fmt.Errorf("%w named %q", alsa.ErrNoControl, name)
 	}
 	return m.control, nil
 }
@@ -292,5 +298,29 @@ func TestSpeakerGainIsAskedOfTheHeldMixer(t *testing.T) {
 	gainThere(t, false, false)
 	if gainOn(gainTestMixer()) || gainSeen.sure {
 		t.Fatal("a board that cannot have the amplifier asked the mixer")
+	}
+}
+
+// A mixer that fails to be read (an ioctl error, the mixer closed under it) says nothing about the
+// control: the answer stays unsure and is asked again, where a mixer read whole without it is a sure no.
+func TestSpeakerGainMixerErrorsAreNotANo(t *testing.T) {
+	t.Cleanup(func() { gainSeen.ok, gainSeen.sure = false, false })
+	gainThere(t, true, false)
+	gainSeen.ok, gainSeen.sure = false, false
+	broken := gainTestMixer()
+	broken.findErr = syscall.EBADF
+	if gainOn(broken) || gainSeen.sure {
+		t.Fatalf("a mixer that could not be read was taken as sure: ok %v, sure %v", gainSeen.ok, gainSeen.sure)
+	}
+	if !gainOn(gainTestMixer()) || !gainSeen.sure {
+		t.Fatal("asked again with the mixer readable, the control was not found")
+	}
+	if ok, sure := findGain(true, func() (gainMixerCloser, error) { return broken, nil }); ok || sure {
+		t.Fatalf("the mixer walk took a read error as sure: ok %v, sure %v", ok, sure)
+	}
+	shape := gainTestMixer()
+	shape.control.Max = gainUnity
+	if ok, sure := gainAnswer(func() error { _, err := gainControlOn(shape); return err }()); ok || !sure {
+		t.Fatalf("a control of another shape: ok %v, sure %v", ok, sure)
 	}
 }

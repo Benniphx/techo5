@@ -2,6 +2,7 @@ package alsa
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -122,6 +123,10 @@ func (m *Mixer) Controls() ([]Control, error) {
 }
 
 // Find looks a control up by name.
+// ErrNoControl is Find's answer for a mixer read whole without the control asked for, as opposed to
+// one that could not be read.
+var ErrNoControl = errors.New("alsa: no control")
+
 func (m *Mixer) Find(name string) (Control, error) {
 	controls, err := m.Controls()
 	if err != nil {
@@ -132,7 +137,7 @@ func (m *Mixer) Find(name string) (Control, error) {
 			return c, nil
 		}
 	}
-	return Control{}, fmt.Errorf("alsa: no control named %q", name)
+	return Control{}, fmt.Errorf("%w named %q", ErrNoControl, name)
 }
 
 // info reads a control's metadata, including the names of an enumerated control's items.
