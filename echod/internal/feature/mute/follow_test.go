@@ -173,16 +173,16 @@ func (l *lockedLine) set(muted bool) {
 // and was dropped, so what it did after the first watch ended was never published.
 func TestASecondHoldExtendsTheWatch(t *testing.T) {
 	defer func(f, p time.Duration) { followFor, followPoll = f, p }(followFor, followPoll)
-	followFor, followPoll = 300*time.Millisecond, 5*time.Millisecond
+	followFor, followPoll = time.Second, 5*time.Millisecond
 
 	line := &lockedLine{}
 	w := watch(line, false)
 	done := make(chan struct{})
 	go func() { w.followHold(); close(done) }()
 
-	time.Sleep(150 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	w.followHold() // the second hold, which finds the first watch running
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(750 * time.Millisecond)
 	line.set(true) // past the first watch's end, inside the second's
 	<-done
 

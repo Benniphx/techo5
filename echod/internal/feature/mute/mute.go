@@ -327,8 +327,8 @@ func (m *Mute) followHold() {
 // follow publishes the line whenever it differs from the switch, looking every poll until until has
 // passed.
 //
-// A difference is taken only once two looks in a row have read it, with the button up and not
-// pressed since the first. The hardware moves the line for a tap as the button goes down, and the tap
+// A difference is taken only once two looks in a row have read it, the second with the button up,
+// and the button not pressed since the first was taken. The hardware moves the line for a tap as the button goes down, and the tap
 // arrives when it comes up; published in between, the switch already said where the press went, and
 // the tap - taken for a press from there - set the latch straight back on a Show (#153 again) or
 // played its sound a second time elsewhere. The button reads as down until its tap has been dealt

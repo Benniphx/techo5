@@ -200,11 +200,16 @@ func newDetect() *Detect {
 	// anything. The engines go down with the microphones and come back with them.
 	mute.Get().Changed.Listen(func(muted bool) {
 		e.Quiet(muted)
-		// The stop word is spared: an alarm ringing through the unmute has to stop when told, and the
-		// sound could otherwise hold it for as long as ten seconds.
+		// The stop word is spared while an alarm or timer rings: it has to stop when told, and the sound
+		// could otherwise hold it for as long as ten seconds. With nothing ringing it settles too, or
+		// the unmute sound could be heard as "stop" and cut itself short, and music with it.
 		if !muted {
 			settle := unmuteSettle()
-			e.Settle(settle, StopSlot)
+			if ring.IsSounding() {
+				e.Settle(settle, StopSlot)
+			} else {
+				e.Settle(settle)
+			}
 			slog.Info("wake words settling after unmute", "for", settle)
 		}
 	})
