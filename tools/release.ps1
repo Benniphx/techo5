@@ -25,8 +25,9 @@ param(
     [string]$DotRootfs = '',
     # The Echo Show 8 2nd gen (athena) rootfs tarball: deploy-rootfs.sh --out with
     # DEVICE_OVERLAY=tools/linux/athena/overlay EXTRA_PACKAGES=busybox-extras. athena runs the Show's
-    # binary but boots this rootfs of its own (Amazon's kernel, its vendor partition), keyed arm-athena
-    # in the manifest and published as techo5-rootfs-athena-<version>.tar.gz. An athena is offered a
+    # binary but boots this rootfs of its own, the same on both kernels it can run: TECHO5's mainline
+    # one (the default) and Amazon's (install-athena.py --kernel amazon, with its vendor partition). It
+    # is keyed arm-athena in the manifest and published as techo5-rootfs-athena-<version>.tar.gz. An athena is offered a
     # release only when it carries this; the other Shows never take it.
     [string]$AthenaRootfs = '',
     # The athena store image for new units (tools/linux/athena/mkstore.sh -k none, gzipped), published as
