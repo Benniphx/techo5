@@ -2,7 +2,8 @@
 # TECHO5 /init for the Echo Show 8 2nd gen (athena), on Amazon's stock 32-bit kernel or on TECHO5's
 # own 64-bit mainline one (TECHO5-ATHENA), which runs this same 32-bit userspace. The two differ here
 # in the eMMC's name (mmcblk1 on Amazon's, mmcblk0 on mainline; the partition numbers are the same)
-# and in Wi-Fi: mainline has the MT7663 driver and its firmware built in, so there is nothing to load.
+# and in Wi-Fi: mainline has the MT7663 driver built in, with its firmware in the boot image's ramdisk
+# (tools/linux/athena/kernel), so there is nothing to load.
 #
 # athena has no initramfs in normal boot: the kernel mounts the system partition read-only as /
 # (skip_initramfs ro init=/init root=PARTUUID=<system>) and runs this file. So the system partition

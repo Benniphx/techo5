@@ -248,6 +248,8 @@ vendor partition; tools/linux/athena), keyed `arm-athena` in the manifest (`rele
 published as `techo5-rootfs-athena-<version>.tar.gz`). An athena never takes the `arm` rootfs, and
 its store (`.techo5-store`: `board=athena`) makes `slotctl install` refuse any rootfs whose
 `etc/techo5/device.conf` doesn't say `T5_BOARD=athena`. New units: docs/install-athena.md.
+On the mainline path athena boots TECHO5's own Linux 6.18 kernel; its source, patches and build
+script are in tools/linux/athena/kernel (README.md there).
 
 ## Next
 
