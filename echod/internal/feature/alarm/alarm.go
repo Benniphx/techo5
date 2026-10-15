@@ -1008,11 +1008,11 @@ func (a *Alarms) deleteFromHA(id string, timers []timer.Countdown) error {
 	if !slices.ContainsFunc(config.Get().Alarms.List, func(al config.Alarm) bool { return al.ID == id }) {
 		if i := slices.IndexFunc(timers, func(c timer.Countdown) bool { return c.ID == id }); i >= 0 {
 			if timers[i].Local {
-				return fmt.Errorf("alarms: %q is a timer, not an alarm; timer_cancel cancels it", id)
+				return fmt.Errorf("alarms: %.64q is a timer, not an alarm; timer_cancel cancels it", id)
 			}
-			return fmt.Errorf("alarms: %q is a timer set through Home Assistant, not an alarm; cancel it there", id)
+			return fmt.Errorf("alarms: %.64q is a timer set through Home Assistant, not an alarm; cancel it there", id)
 		}
-		return fmt.Errorf("alarms: no alarm %q on this device", id)
+		return fmt.Errorf("alarms: no alarm %.64q on this device", id)
 	}
 	if err := a.Delete(id); err != nil {
 		return err
