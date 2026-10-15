@@ -80,6 +80,11 @@ if (-not $Agents -and -not $NoAgents) {
 if (($PrebuiltArm -and -not $PrebuiltArmDot) -or ($PrebuiltArmDot -and -not $PrebuiltArm)) {
     throw "PrebuiltArm and PrebuiltArmDot must be given together"
 }
+# install-athena.py's default install writes both the store image and the boot image from the same
+# release: one without the other would leave new units with nothing to install.
+if (($AthenaImage -and -not $AthenaBoot) -or ($AthenaBoot -and -not $AthenaImage)) {
+    throw "AthenaImage and AthenaBoot must be given together: install-athena.py needs both from one release"
+}
 # A root filesystem must not carry LineageOS's vendor tree: it is Amazon's and the chip makers', not ours to
 # publish. Each unit mounts its own (tools/linux/rootfs/etc/techo5/boot.sh).
 foreach ($t in @($Rootfs, $AthenaRootfs) | Where-Object { $_ }) {
