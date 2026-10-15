@@ -102,9 +102,11 @@ type kctl struct {
 // On TECHO5's mainline kernel (TECHO5-ATHENA, machine driver mt8183-athena) the AFE's interconnect
 // from DL1 into I2S1 is a mixer switch per channel that starts off, and the upstream tas5805m driver
 // starts its digital volume at 0, which is silence. The driver loads Amazon's DSP blob itself
-// (tas5805m_dsp_athena.bin), and the machine driver sets I2S1's low-jitter clock. Master 100 is
-// -10 dB (110 is 0 dB), the level the speaker was checked at on unit 1 (2026-10-15), not yet tuned
-// against crown's loudness.
+// (tas5805m_dsp_athena.bin), and the machine driver sets I2S1's low-jitter clock. Master 110 is
+// 0 dB, as Amazon's setup runs it, with the blob's analog gain and DSP limiter as the protection. The
+// first bring-up used 100 (-10 dB); with a phone at full volume over Bluetooth that played clearly
+// quieter than the device can, and 110 measured +10 dB at the microphones with peaks still 12 dB
+// under full scale (unit 1, 2026-10-15).
 var initSequence = boardInit()
 
 func boardInit() []kctl {
@@ -117,7 +119,7 @@ func boardInit() []kctl {
 	return showInit(rt5616())
 }
 
-var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: "Master Playback Volume", level: 100})
+var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: "Master Playback Volume", level: 110})
 
 // athenaMainlineRoutes are the AFE's DL1 into I2S1. Without them the DPCM front end has no back end
 // and the playback device does not open ("no backend DAIs enabled for Playback_1", EINVAL), so they
