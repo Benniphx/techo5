@@ -108,11 +108,11 @@ func Push(pcm []byte, rate int, heardEnd time.Time) {
 		for i := range p.dec {
 			p.dec[i] = audio.NewDecimator(rate/Rate, p.taps)
 		}
-		p.clock.Reset()
+		p.restart()
 	}
 	if p.clock.ok && heardEnd.Sub(p.last) > stale {
 		// The speaker stopped and started over; nothing before now lines up with it.
-		p.clock.Reset()
+		p.restart()
 	}
 	for at := 0; at+4 <= len(pcm); at += 4 {
 		l := float32(int16(binary.LittleEndian.Uint16(pcm[at:]))) / (1 << 15)
@@ -131,6 +131,17 @@ func Push(pcm []byte, rate int, heardEnd time.Time) {
 	delay := time.Duration(float64(p.taps-1) / 2 / float64(rate) * float64(time.Second))
 	p.clock.Mark(p.end-1, heardEnd.Add(-delay))
 	p.last = heardEnd
+}
+
+// restart starts the reference over: no samples, the decimators' history gone and the line forgotten.
+// What was there before belongs to audio that ended, and kept, the new line would place it just
+// before the new audio, and the decimators would smear its tail into the first new samples.
+func (p *ring) restart() {
+	p.end = 0
+	for _, d := range p.dec {
+		d.Reset()
+	}
+	p.clock.Reset()
 }
 
 // Fill writes into l and r what the speaker played over len(l) samples at Rate, the first heard at

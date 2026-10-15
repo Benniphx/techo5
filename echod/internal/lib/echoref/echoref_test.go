@@ -80,3 +80,45 @@ func TestClockSnapsOnRestart(t *testing.T) {
 		t.Errorf("a restart was smoothed rather than snapped to: %v s off", d)
 	}
 }
+
+// TestRestartAfterGap: after the speaker stops and starts again, the reference holds only the new
+// audio. Before it, the stretch is empty (the old audio is not placed just ahead of the new one), and
+// the new audio's first samples carry nothing of the old through the decimators.
+func TestRestartAfterGap(t *testing.T) {
+	const (
+		rate   = 48000
+		period = 768
+	)
+	played = &ring{clock: NewClock(Rate)}
+	stamp := func(from time.Time, n int) time.Time {
+		return from.Add(time.Duration((n+1)*period-1) * time.Second / rate)
+	}
+	loud := make([]byte, period*4)
+	for i := 0; i < len(loud); i += 2 {
+		binary.LittleEndian.PutUint16(loud[i:], uint16(int16(16000)))
+	}
+	t0 := time.Now()
+	for n := 0; n < 10; n++ {
+		Push(loud, rate, stamp(t0, n))
+	}
+	// Silence, after a gap well past stale.
+	t1 := t0.Add(500 * time.Millisecond)
+	quiet := make([]byte, period*4)
+	for n := 0; n < 10; n++ {
+		Push(quiet, rate, stamp(t1, n))
+	}
+
+	l := make([]float32, Rate*30/1000)
+	r := make([]float32, len(l))
+	if Fill(l, r, Seconds(t1)-0.06) {
+		t.Error("the stretch before the restart reads as the speaker's: the old audio was kept")
+	}
+	if !Fill(l, r, played.clock.At(0)-Lead.Seconds()) {
+		t.Fatal("Fill found nothing at the start of the new audio")
+	}
+	for i := range l {
+		if math.Abs(float64(l[i])) > 1e-4 || math.Abs(float64(r[i])) > 1e-4 {
+			t.Fatalf("sample %d of the new audio is %v/%v, want silence: the old audio carried over", i, l[i], r[i])
+		}
+	}
+}
