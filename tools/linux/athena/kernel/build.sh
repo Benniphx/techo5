@@ -124,8 +124,10 @@ for want in 'CONFIG_SND_SOC_MT8183_ATHENA=y' 'CONFIG_SND_SOC_TAS5805M=y' 'CONFIG
 done
 # The Wi-Fi firewall (rootfs usr/local/sbin/techo5-firewall) and the video decoder's fence
 # (echod feature/video) use the legacy iptables tools, and the image ships no modules: every
-# table, match and target they use is built in, or Wi-Fi is left open.
+# table, match and target they use is built in, or Wi-Fi is left open. The tools are 32-bit (armv7
+# userspace on this 64-bit kernel), so xtables' 32-bit translation layer is needed too.
 for want in 'CONFIG_NETFILTER=y' 'CONFIG_NETFILTER_XTABLES=y' 'CONFIG_NETFILTER_XTABLES_LEGACY=y' \
+		'CONFIG_COMPAT=y' 'CONFIG_NETFILTER_XTABLES_COMPAT=y' \
 		'CONFIG_NF_CONNTRACK=y' 'CONFIG_NETFILTER_XT_MATCH_STATE=y' 'CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y' \
 		'CONFIG_NETFILTER_XT_MATCH_OWNER=y' 'CONFIG_IP_NF_IPTABLES=y' 'CONFIG_IP_NF_IPTABLES_LEGACY=y' \
 		'CONFIG_IP_NF_FILTER=y' 'CONFIG_IP_NF_TARGET_REJECT=y' 'CONFIG_IP6_NF_IPTABLES=y' \
