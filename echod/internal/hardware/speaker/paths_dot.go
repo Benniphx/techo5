@@ -148,6 +148,12 @@ const DRAMHold = ""
 // the restart storm the Show's had (paths_cronos.go).
 const startFull = false
 
+// softRef is off: the card's own loopback is the echo reference.
+const softRef = false
+
+// openSequence is empty: the playback device opens with the card as the kernel left it.
+var openSequence []kctl
+
 // MediaService is the init service that owns Android's audio HAL on Fire OS.
 const MediaService = "media"
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/input"
 )
 
 // The Echo Show 5 exposes its mute through the gpio-privacy platform driver rather than a bare
@@ -117,7 +118,53 @@ type noLED struct{}
 func (noLED) SetBright(bool) error  { return nil }
 func (noLED) Bright() (bool, error) { return true, nil }
 
+// TECHO5's mainline kernel on the 2nd gen Show 8 has no gpio-privacy driver: the hardware latch's
+// state line (GPIO63) is a gpio-keys switch, SW_MUTE_DEVICE, 1 while muted (seen 2026-10-15: 1 on the
+// first press, 0 on the second). The enable line that lets software flip the latch (GPIO159) is not
+// driven from mainline yet, so only the button mutes there.
+const swMuteDevice = 0x0e
+
+type mainlineMute struct{}
+
+func (mainlineMute) Get() (bool, error) {
+	dev, err := input.Find("gpio-keys")
+	if err != nil {
+		return false, fmt.Errorf("privacy: %w", err)
+	}
+	defer dev.Close()
+	return dev.Switch(swMuteDevice)
+}
+
+func (mainlineMute) HardwareActs(bool) bool { return true }
+
+func (mainlineMute) Lag() time.Duration { return toggleLag }
+
+func (m mainlineMute) Set(muted bool) error {
+	is, err := m.Get()
+	if err != nil {
+		return err
+	}
+	if is == muted {
+		return nil
+	}
+	if !muted {
+		return ErrButtonOnly
+	}
+	return errors.New("privacy: muting from software is not on the mainline kernel yet; use the button")
+}
+
+func (m mainlineMute) Toggle() (bool, error) {
+	is, err := m.Get()
+	if err != nil {
+		return false, err
+	}
+	return !is, m.Set(!is)
+}
+
 func platformMute() (Mute, error) {
+	if layout.AthenaMainline() {
+		return mainlineMute{}, nil
+	}
 	if !present(state) {
 		return nil, fmt.Errorf("privacy: %s is missing", state)
 	}

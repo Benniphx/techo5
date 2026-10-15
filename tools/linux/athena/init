@@ -1,5 +1,8 @@
 #!/bin/busybox.static sh
-# TECHO5 /init for the Echo Show 8 2nd gen (athena) on Amazon's stock 32-bit kernel.
+# TECHO5 /init for the Echo Show 8 2nd gen (athena), on Amazon's stock 32-bit kernel or on TECHO5's
+# own 64-bit mainline one (TECHO5-ATHENA), which runs this same 32-bit userspace. The two differ here
+# in the eMMC's name (mmcblk1 on Amazon's, mmcblk0 on mainline; the partition numbers are the same)
+# and in Wi-Fi: mainline has the MT7663 driver and its firmware built in, so there is nothing to load.
 #
 # athena has no initramfs in normal boot: the kernel mounts the system partition read-only as /
 # (skip_initramfs ro init=/init root=PARTUUID=<system>) and runs this file. So the system partition
@@ -24,10 +27,6 @@
 # and to /data/techo5-linux.
 
 BB=/bin/busybox.static
-MISC=/dev/mmcblk1p6
-STORE_DEV=/dev/mmcblk1p21
-DATA_DEV=/dev/mmcblk1p23
-VENDOR_DEV=/dev/mmcblk1p12
 WIFI_PRE=/vendor/lib/modules/wlan_mt76x3_sdio_prealloc.ko
 WIFI_MODULE=/vendor/lib/modules/wlan_mt76x3_sdio.ko
 export T5_PRODUCT="Echo Show 8 2nd gen Linux"
@@ -37,7 +36,27 @@ export WIFI_STORES=/userdata/misc/wifi/WifiConfigStore.xml
 
 $BB mount -t proc proc /proc
 $BB mount -t sysfs sysfs /sys
-$BB mount -t tmpfs -o mode=0755 tmpfs /dev
+
+# The eMMC, found by the system partition's name: mmcblk1 on Amazon's kernel, mmcblk0 on mainline.
+EMMC=mmcblk1
+for d in mmcblk0 mmcblk1; do
+	$BB grep -qx PARTNAME=system /sys/class/block/${d}p21/uevent 2>/dev/null && { EMMC=$d; break; }
+done
+MISC=/dev/${EMMC}p6
+STORE_DEV=/dev/${EMMC}p21
+DATA_DEV=/dev/${EMMC}p23
+VENDOR_DEV=/dev/${EMMC}p12
+MAINLINE=
+case "$($BB uname -r)" in 4.*) ;; *) MAINLINE=1 ;; esac
+# Mainline probes some devices after this runs (the sound card, the backlight: ~11 s into the boot)
+# and has no hotplug helper, so a tmpfs filled once by mdev would never get their nodes: the kernel's
+# devtmpfs makes them as they appear. Amazon's kernel has probed everything by now. The mainline
+# kernel mounts devtmpfs on /dev itself before running this (DEVTMPFS_MOUNT), and the same filesystem
+# cannot be mounted on the same place twice, so one already there is kept.
+if [ -n "$MAINLINE" ] && $BB grep -q '^devtmpfs /dev ' /proc/mounts; then :
+elif [ -n "$MAINLINE" ] && $BB mount -t devtmpfs -o mode=0755 devtmpfs /dev 2>/dev/null; then :; else
+	$BB mount -t tmpfs -o mode=0755 tmpfs /dev
+fi
 $BB mdev -s
 exec > /dev/kmsg 2>&1
 
@@ -49,7 +68,7 @@ crumb() {
 	[ -b $MISC ] && printf 'TECHO5 %02d %s\n' "$CRUMB" "$*" | $BB dd of=$MISC bs=512 seek=$((7+CRUMB)) count=1 conv=notrunc,sync 2>/dev/null
 }
 log() { crumb "$*"; }
-crumb "athena init started, kernel $($BB uname -r) $($BB uname -m)"
+crumb "athena init started, kernel $($BB uname -r) $($BB uname -m), eMMC $EMMC"
 
 # Recovery bootloader message: cleared first, so a crash later still boots normally next time.
 [ -b $MISC ] && $BB dd if=/dev/zero of=$MISC bs=32 count=1 conv=notrunc 2>/dev/null
@@ -222,7 +241,14 @@ crumb "rescue: USB up ($(ip -4 addr 2>/dev/null | grep -c 'inet ') addresses)"
 # $LOGDIR/wpa_supplicant.conf, or Fire OS's saved networks the first time (WIFI_STORES). A network
 # written into the file later is picked up without a reconfigure (t5_wifi_watch).
 (
-	if mount -t ext4 -o ro,noatime $VENDOR_DEV /vendor 2>/dev/null; then
+	if [ -n "$MAINLINE" ]; then
+		t5_wifi_conf $LOGDIR/wpa_supplicant.conf
+		if t5_wifi_up builtin $LOGDIR/wpa_supplicant.conf; then
+			crumb "rescue: Wi-Fi $IP"
+			t5_ntp
+		fi
+		t5_wifi_watch $LOGDIR/wpa_supplicant.conf
+	elif mount -t ext4 -o ro,noatime $VENDOR_DEV /vendor 2>/dev/null; then
 		printf %s /vendor/firmware > /sys/module/firmware_class/parameters/path
 		grep -q '^wlan_mt76x3_sdio_prealloc ' /proc/modules || insmod $WIFI_PRE 2>/tmp/insmod-pre.err ||
 			log "wifi: prealloc: $(cat /tmp/insmod-pre.err)"

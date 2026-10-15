@@ -35,6 +35,12 @@ const DRAMHold = "/dev/snd/pcmC0D1c"
 // underrun.
 const startFull = true
 
+// softRef is off: the card's own loopback is the echo reference.
+const softRef = false
+
+// openSequence is empty: the playback device opens with the card as the kernel left it.
+var openSequence []kctl
+
 // A mixer write, as the shared player applies it.
 type kctl struct {
 	name  string

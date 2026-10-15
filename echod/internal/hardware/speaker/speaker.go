@@ -19,6 +19,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/asp"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/echoref"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/spectrum"
@@ -311,6 +312,10 @@ func (p *Player) open() error {
 		}
 	}
 
+	// A card whose front end reaches the codec only through mixer routes will not open the device
+	// before they are on (openSequence).
+	applyTo(m, openSequence)
+
 	// The ring is the same length of time at whatever rate the card runs (hwRate).
 	pb, err := alsa.OpenPlayback(Card, PlaybackDevice, alsa.Config{
 		Channels:   Channels,
@@ -521,7 +526,11 @@ func (p *Player) apply(seq []kctl) {
 	if mixer == nil {
 		return
 	}
+	applyTo(mixer, seq)
+}
 
+// applyTo is apply on a mixer that is not held yet.
+func applyTo(mixer *alsa.Mixer, seq []kctl) {
 	for _, c := range seq {
 		if c.ifPresent {
 			if _, err := mixer.Find(c.name); err != nil {
@@ -601,6 +610,7 @@ func (p *Player) Run(ctx context.Context) error {
 			s.push(buf)
 			to = silence
 		}
+		sent := to
 		if up != nil {
 			hw = up.S16LE(to, hw[:0])
 			to = hw
@@ -620,6 +630,10 @@ func (p *Player) Run(ctx context.Context) error {
 		w := p.written.Add(period)
 		if err == nil && d >= 0 {
 			p.ring.Store(&ringReading{written: w, frames: int64(d), at: at})
+			if softRef {
+				// The period's last frame is the card's newest: heard once the ring ahead of it plays.
+				echoref.Push(sent, Rate, at.Add(time.Duration(d)*time.Second/Rate+OutputExtra))
+			}
 		} else {
 			p.ring.Store(nil)
 		}

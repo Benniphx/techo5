@@ -330,6 +330,11 @@ t5_wifi_up() {
 	# Android's runs), and the video player's guard proxy (feature/video/guard.go) listens on it. Up,
 	# it is what it is on any Linux: 127.0.0.1, which nothing on the network reaches.
 	ip link set lo up 2>/dev/null
+	# builtin: a driver in the kernel (athena on mainline), which makes wlan0 once its firmware is in.
+	if [ "$mod" = builtin ]; then
+		n=0; while [ $n -lt 20 ] && ! ip link show wlan0 >/dev/null 2>&1; do sleep 1; n=$((n+1)); done
+		ip link show wlan0 >/dev/null 2>&1 || { log "wifi: no wlan0 from the built-in driver"; return 1; }
+	fi
 	if ! ip link show wlan0 >/dev/null 2>&1; then
 		[ -e "$mod" ] || { log "wifi: driver not found at $mod"; return 1; }
 		insmod "$mod" 2>/tmp/insmod.err || { log "wifi: insmod failed: $(cat /tmp/insmod.err)"; return 1; }
@@ -532,11 +537,81 @@ t5_dropbear() {
 	dropbear -R -p 22 "$@" > /tmp/dropbear.log 2>&1 && log "ssh: dropbear listening on :22" || { log "ssh: dropbear failed to start"; return 1; }
 }
 
+# The factory Bluetooth address from idme, as 12 hex digits, or nothing. Amazon's kernels serve idme
+# as /proc/idme. athena's mainline kernel has no idme driver, so there it is read off the eMMC's
+# second boot area, read only (T5_IDME_DEV, for tests). The layout is the one echod reads
+# (internal/layout/athena_mainline.go parseIdme): "beefdeed", the item count as a 32-bit word at
+# 0x0c, then from 0x10 one item after another: a 16-byte name, the value's size and two more 32-bit
+# words, then the value, NUL padded.
+t5_bt_idme_addr() {
+	if [ -r /proc/idme/bt_mac_addr ]; then
+		v=$(tr -d '\n\0 ' < /proc/idme/bt_mac_addr)
+	else
+		dev=${T5_IDME_DEV:-/dev/mmcblk0boot1}
+		v=
+		[ -r "$dev" ] && [ "$(dd if="$dev" bs=8 count=1 2>/dev/null | tr -d '\0')" = beefdeed ] || return 0
+		n=$(od -A n -t u4 -j 12 -N 4 "$dev" | tr -d ' ')
+		off=16; i=0
+		while [ "$i" -lt "${n:-0}" ] && [ "$i" -lt 256 ]; do
+			name=$(dd if="$dev" bs=1 skip=$off count=16 2>/dev/null | tr -d '\0')
+			size=$(od -A n -t u4 -j $((off + 16)) -N 4 "$dev" | tr -d ' ')
+			case "$size" in ''|*[!0-9]*) return 0;; esac
+			[ "$size" -le 4096 ] || return 0
+			if [ "$name" = bt_mac_addr ]; then
+				v=$(dd if="$dev" bs=1 skip=$((off + 28)) count="$size" 2>/dev/null | tr -d '\n\0 ')
+				break
+			fi
+			off=$((off + 28 + size)); i=$((i + 1))
+		done
+	fi
+	case "$v" in
+	[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])
+		echo "$v";;
+	esac
+}
+
+# Bluetooth from the kernel's own driver (BT_MODULE=builtin, device.conf: athena on mainline, whose
+# btmtksdio registers hci0 itself): no vendor module, no btbridge, no vhci. What btbridge did on the
+# way through is done here instead: the factory address goes to the controller through the kernel
+# (mgmt Set Public Address; btmtksdio passes it on with MediaTek's 0xFC1A command), before bluetoothd
+# starts, since the kernel takes a new address only while the controller is off.
+t5_bt_native() {
+	n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
+	[ -d /sys/class/bluetooth/hci0 ] || { log "bt: no hci0 from the kernel's driver"; return 1; }
+	command -v btmgmt >/dev/null || { log "bt: no btmgmt"; return 1; }
+	a=$(t5_bt_idme_addr | sed 's/../&:/g; s/:$//' | tr a-f A-F)
+	[ -n "$a" ] || { log "bt: no factory address in idme; keeping the controller's own"; return 0; }
+	# The kernel powers hci0 up once to set it up and off again two seconds later; until then
+	# the index is busy or powered, and the address is refused. Tried for up to 15 seconds.
+	n=0
+	while [ $n -lt 15 ]; do
+		cur=$(timeout 3 btmgmt -i hci0 info 2>/dev/null | awk '$1 == "addr" { print $2; exit }')
+		[ "$cur" = "$a" ] && { log "bt: factory address in place"; return 0; }
+		timeout 3 btmgmt -i hci0 power off >/dev/null 2>&1
+		timeout 5 btmgmt -i hci0 public-addr "$a" >/dev/null 2>&1
+		sleep 1; n=$((n+1))
+	done
+	log "bt: the factory address was not taken; keeping the controller's own"
+	return 0
+}
+
 # Bluetooth: the vendor driver gives a raw H4 channel (/dev/stpbt); btbridge
 # turns it into hci0 through the kernel's vhci driver; BlueZ and bluez-alsa
 # sit on top. Needs a kernel with CONFIG_BT + CONFIG_BT_HCIVHCI — without
 # /dev/vhci this quietly does nothing, so an older boot image keeps working.
+# With BT_MODULE=builtin hci0 comes from the kernel's own driver instead (t5_bt_native).
 t5_bt_up() {
+	mod=$1; logdir=${2:-/tmp}
+	if [ "$mod" = builtin ]; then
+		t5_bt_native || return 1
+	else
+		t5_bt_bridge "$mod" "$logdir" || return 1
+	fi
+	t5_bt_stack "$logdir"
+}
+
+# hci0 from the vendor driver through btbridge and vhci (t5_bt_up).
+t5_bt_bridge() {
 	mod=$1; logdir=${2:-/tmp}
 	[ -e /dev/vhci ] || { log "bt: no /dev/vhci (kernel without Bluetooth); skipping"; return 1; }
 	# BT_UART (device.conf): a Broadcom controller on a tty, which btbridge patches and brings up itself
@@ -571,6 +646,11 @@ t5_bt_up() {
 	fi
 	n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
 	[ -d /sys/class/bluetooth/hci0 ] || { log "bt: bridge up but no hci0"; return 1; }
+}
+
+# BlueZ and bluez-alsa on hci0, however it came up (t5_bt_up).
+t5_bt_stack() {
+	logdir=${1:-/tmp}
 	# Pairings and bluez-alsa's state must survive reboots and slot changes: keep
 	# them on userdata (the root is read-only).
 	mkdir -p /run/dbus /data/misc/techo5/bluetooth /data/misc/techo5/bluealsa
@@ -604,6 +684,12 @@ t5_bt_up() {
 	# reports an inquiry result or an advertisement until it has been powered off and on once.
 	n=0; while [ $n -lt 10 ] && ! timeout 3 btmgmt info 2>/dev/null | grep -q "current settings: powered"; do sleep 1; n=$((n+1)); done
 	timeout 5 btmgmt power off >/dev/null 2>&1; sleep 1; timeout 5 btmgmt power on >/dev/null 2>&1
+	# BT_SC=off (device.conf: athena on mainline): no Secure Connections on BR/EDR, so a phone pairs
+	# with a P-192 key. It does what btbridge's -p192-keys does on the other Shows (#105), without a
+	# bridge to rewrite the key on its way: a MediaTek controller that makes a P-256 key but encrypts
+	# with E0 has the kernel drop the phone ("Missing AES-CCM usage"). After bluetoothd has set the
+	# controller up, which turns it on; the kernel keeps it across power cycles.
+	[ "${BT_SC:-}" = off ] && timeout 5 btmgmt sc off >/dev/null 2>&1
 	# bluez-alsa registers its A2DP endpoints with bluetoothd, so it must come after it. A source, to
 	# play to earbuds and speakers, and a sink, so a phone can play to the device, which then says it
 	# is a loudspeaker (major 4, audio/video; minor 5, loudspeaker). btmgmt takes the minor as the

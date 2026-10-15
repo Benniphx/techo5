@@ -280,6 +280,16 @@ func (c *Capture) Read(buf []byte) (int, error) {
 	return int(x.result) * c.frameBytes, nil
 }
 
+// Delay is how many frames the card has captured that have not been read yet: the frame a Read
+// returns last was recorded this many frames ago. Synced against the DMA position, as Playback's is.
+func (c *Capture) Delay() (int, error) {
+	var d int
+	if err := ioctl(c.f.Fd(), ioctlDelay, unsafe.Pointer(&d)); err != nil {
+		return 0, err
+	}
+	return d, nil
+}
+
 func (c *Capture) Close() error {
 	_ = ioctlArgless(c.f.Fd(), ioctlDrop)
 	return c.f.Close()

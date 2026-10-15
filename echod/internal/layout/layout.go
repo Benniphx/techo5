@@ -156,7 +156,11 @@ func MAC(raw string) string {
 func FactoryMAC() (string, error) {
 	raw, err := os.ReadFile(MACPath)
 	if err != nil {
-		return "", fmt.Errorf("reading the factory MAC: %w", err)
+		v, ok := idmeFallback("mac_addr")
+		if !ok {
+			return "", fmt.Errorf("reading the factory MAC: %w", err)
+		}
+		raw = []byte(v)
 	}
 	mac := MAC(string(raw))
 	if mac == "" {
@@ -180,12 +184,14 @@ func NameFromMAC(mac string) string {
 	return DefaultName + " " + s[len(s)-6:]
 }
 
-// Idme reads a factory identity field from /proc/idme, empty on any error. These are written at
+// Idme reads a factory identity field from /proc/idme (on the 2nd gen Show 8's mainline kernel,
+// from the eMMC: idmeFallback), empty on any error. These are written at
 // manufacture and never change, so a caller reads once and holds it.
 func Idme(name string) string {
 	raw, err := os.ReadFile("/proc/idme/" + name)
 	if err != nil {
-		return ""
+		v, _ := idmeFallback(name)
+		return v
 	}
 	return strings.TrimSpace(string(raw))
 }

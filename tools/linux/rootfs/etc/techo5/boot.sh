@@ -235,6 +235,13 @@ t5_bt_up "$BT_MODULE" /var/log
 	done
 ) &
 
+# --- Hardware that comes up late (HW_WAIT, device.conf: athena on mainline, whose sound card and
+# backlight probe ~11 s into the boot): the daemon opens them once, at its start, so it waits here.
+for p in ${HW_WAIT:-}; do
+	n=0; while [ $n -lt 30 ] && [ ! -e "$p" ]; do sleep 1; n=$((n+1)); done
+	if [ -e "$p" ]; then log "hardware: $p after ${n}s"; else log "hardware: no $p after 30s"; fi
+done
+
 # --- Slot trial: this slot is committed once the daemon has been running for
 # five minutes without a restart — the same evidence the daemon itself takes
 # before it commits an update of its own. Until then every boot costs a try,

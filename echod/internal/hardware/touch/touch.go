@@ -18,6 +18,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/input"
 	"github.com/HuskerMinion/techo5/echod/internal/service"
 )
@@ -151,7 +152,13 @@ func (s *Screen) Touched() bool {
 
 // Start opens the controller's node and reads its coordinate ranges.
 func (s *Screen) Start(context.Context) error {
-	dev, err := input.Find(deviceName)
+	find := input.Find
+	name := deviceName
+	if layout.AthenaMainline() {
+		// TECHO5's mainline kernel: edt-ft5x06 names the same FocalTech "generic ft5x06 (<module id>)"
+		find, name = input.FindPrefix, "generic ft5x06"
+	}
+	dev, err := find(name)
 	if err != nil {
 		return fmt.Errorf("touch: %w", err)
 	}

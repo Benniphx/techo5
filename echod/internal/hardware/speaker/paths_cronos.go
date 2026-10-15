@@ -39,7 +39,10 @@ const (
 // ffffff8009eb0004), reproduced five times on 2026-09-14 with rings of 12 and 16 KB — while the
 // DRAM path plays cleanly. Holding any other AFE node marks the SRAM taken, so DL1 takes DRAM.
 // MultiMedia1_Capture is an AFE capture nothing on this device uses.
-const DRAMHold = "/dev/snd/pcmC0D1c"
+//
+// athena on TECHO5's mainline kernel has no such fault, and its pcmC0D1c is the microphones'
+// capture, so nothing is held there.
+var DRAMHold = onMainline("", "/dev/snd/pcmC0D1c")
 
 // startFull starts the stream only once the whole ring is written, at open and after every underrun.
 //
@@ -95,18 +98,43 @@ type kctl struct {
 // loads the amplifier's tuning and protection itself (the "speaker-config" table, its -9.5 dB analog
 // gain and the DSP's limiter) and powers it with the stream. Nothing is written to it, and its
 // "Master TAS5805m Playback Volume" is left where the driver put it.
+//
+// On TECHO5's mainline kernel (TECHO5-ATHENA, machine driver mt8183-athena) the AFE's interconnect
+// from DL1 into I2S1 is a mixer switch per channel that starts off, and the upstream tas5805m driver
+// starts its digital volume at 0, which is silence. The driver loads Amazon's DSP blob itself
+// (tas5805m_dsp_athena.bin), and the machine driver sets I2S1's low-jitter clock. Master 100 is
+// -10 dB (110 is 0 dB), the level the speaker was checked at on unit 1 (2026-10-15), not yet tuned
+// against crown's loudness.
 var initSequence = boardInit()
 
 func boardInit() []kctl {
+	if layout.AthenaMainline() {
+		return athenaMainlineInit
+	}
 	if layout.Athena() {
 		return nil
 	}
 	return showInit(rt5616())
 }
 
+var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: "Master Playback Volume", level: 100})
+
+// athenaMainlineRoutes are the AFE's DL1 into I2S1. Without them the DPCM front end has no back end
+// and the playback device does not open ("no backend DAIs enabled for Playback_1", EINVAL), so they
+// are also the openSequence.
+var athenaMainlineRoutes = []kctl{
+	{name: "I2S1_CH1 DL1_CH1", level: 1},
+	{name: "I2S1_CH2 DL1_CH2", level: 1},
+}
+
+// openSequence is written before the playback device is opened: athena's mainline routes, and nothing
+// on any other Show.
+var openSequence = onMainline(athenaMainlineRoutes, nil)
+
 // PlaybackDevice is the playback PCM: the AFE's DL1 into the codec on the Show 5s and crown, and on
-// athena "I2S0DL1_PLayback", the AFE's DL1 into the TAS5805M (hw:0,7).
-var PlaybackDevice = onAthena(7, 23)
+// athena "I2S0DL1_PLayback", the AFE's DL1 into the TAS5805M (hw:0,7). On athena's mainline kernel
+// DL1 is the card's first front end, Playback_1 (hw:0,0).
+var PlaybackDevice = onMainline(0, onAthena(7, 23))
 
 // hwRate is the rate the card runs at. Everything up to the card works at Rate; athena's amplifier
 // runs at 96 kHz, as Fire OS runs it (AFE.cfg: "Speakers SamplingRate" 48000, "SpeakerHw
@@ -131,6 +159,18 @@ const athenaRingMax = 24576
 var hwTrimDB = onAthena(athenaTrimDB, 0)
 
 const athenaTrimDB = 0.0
+
+// softRef is whether the speaker feeds the software echo reference (lib/echoref): only athena on the
+// mainline kernel, whose card has no loopback.
+var softRef = layout.AthenaMainline()
+
+// onMainline picks the value for athena on TECHO5's mainline kernel over any other.
+func onMainline[T any](mainline, other T) T {
+	if layout.AthenaMainline() {
+		return mainline
+	}
+	return other
+}
 
 // onAthena picks athena's value over every other Show's.
 func onAthena[T any](athena, other T) T {
