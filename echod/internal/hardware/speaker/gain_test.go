@@ -218,7 +218,9 @@ func TestSpeakerGainAsksAgainUntilSure(t *testing.T) {
 		t.Fatal("available with no card")
 	}
 	openErr = nil
-	if !GainAvailable() || !GainAvailable() || opened != 2 {
+	// Asked twice: the first answer is found and kept, the second comes from what was kept.
+	first, kept := GainAvailable(), GainAvailable()
+	if !first || !kept || opened != 2 {
 		t.Fatalf("the card once up: opened %d times, want 2", opened)
 	}
 }
