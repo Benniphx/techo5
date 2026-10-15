@@ -68,8 +68,12 @@ func (f *Feature) control(device dbus.ObjectPath, name string) func(media.Transp
 // as it stays connected.
 const phoneKeptFor = 30 * time.Minute
 
-// phoneKeptAfter starts the timer for that; a variable for the tests.
-var phoneKeptAfter = time.AfterFunc
+// phoneKeptAfter starts the timer for that, and phoneKeptGone ends the track when it runs out;
+// variables for the tests.
+var (
+	phoneKeptAfter = time.AfterFunc
+	phoneKeptGone  = func(item string) { media.Get().ReceiverGone(item) }
+)
 
 // playerChanged follows a phone that paused or played again on its own: the track here pauses with
 // it and plays again with it, so a play on the phone after a pause from here is heard. A phone
@@ -128,13 +132,16 @@ func (f *Feature) keep(item string, paused bool) {
 	if paused {
 		var t *time.Timer
 		t = phoneKeptAfter(phoneKeptFor, func() {
+			// A wait replaced or stopped just as it ran out, its run already waiting on mu, is over.
 			f.mu.Lock()
-			if f.kept[item] == t {
-				delete(f.kept, item)
+			if f.kept[item] != t {
+				f.mu.Unlock()
+				return
 			}
+			delete(f.kept, item)
 			f.mu.Unlock()
 			slog.Info("bluetooth: a phone paused this long is taken as put away", "device", item, "after", phoneKeptFor)
-			media.Get().ReceiverGone(item)
+			phoneKeptGone(item)
 		})
 		f.kept[item] = t
 	}

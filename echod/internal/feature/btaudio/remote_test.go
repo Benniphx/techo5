@@ -91,3 +91,38 @@ func TestAPausedPhoneIsKeptAWhile(t *testing.T) {
 		t.Error("a play left the wait running")
 	}
 }
+
+// A wait replaced just as it ran out, its run already under way, ends nothing: only the wait now
+// running for the phone does.
+func TestAReplacedWaitEndsNothing(t *testing.T) {
+	var runs []func()
+	phoneKeptAfter = func(d time.Duration, fn func()) *time.Timer {
+		runs = append(runs, fn)
+		return time.AfterFunc(time.Hour, func() {})
+	}
+	var gone []string
+	phoneKeptGone = func(item string) { gone = append(gone, item) }
+	t.Cleanup(func() {
+		phoneKeptAfter = time.AfterFunc
+		phoneKeptGone = func(item string) { media.Get().ReceiverGone(item) }
+	})
+	f := &Feature{}
+	pixel := media.BluetoothPrefix + "Pixel"
+
+	f.keep(pixel, true)
+	f.keep(pixel, true) // a second pause as the first wait ran out
+	runs[0]()           // the first wait's run, which was waiting on mu
+	if len(gone) != 0 {
+		t.Fatal("a wait that was replaced ended the track")
+	}
+	f.mu.Lock()
+	still := f.kept[pixel] != nil
+	f.mu.Unlock()
+	if !still {
+		t.Fatal("a wait that was replaced took the new one with it")
+	}
+	runs[1]()
+	if len(gone) != 1 || gone[0] != pixel {
+		t.Errorf("the wait running out ended %v, want the phone's track", gone)
+	}
+}
