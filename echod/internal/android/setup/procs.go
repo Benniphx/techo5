@@ -23,7 +23,7 @@ func procs() error {
 	return nil
 }
 
-// hps is MediaTek's hotplug governor. A mainline kernel (athena on TECHO5-ATHENA) has none, and
+// hps is MediaTek's hotplug governor. A mainline kernel (athena on TECHO5's own kernel) has none, and
 // keeps every core online, so there is nothing to hold.
 const hps = "/proc/hps"
 

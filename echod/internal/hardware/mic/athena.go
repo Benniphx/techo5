@@ -132,13 +132,13 @@ var athenaControls = []athenaControl{
 const athenaGainControl = "Ch%d Gain A"
 
 // athenaKernel is what differs between the two kernels athena can run: Amazon's 4.4 (everything
-// above) and TECHO5's mainline one (TECHO5-ATHENA), whose machine driver is mt8183-athena. On
-// mainline the converter is the upstream tlv320adcx140 driver, with its own control names; the mics
-// come from the Capture_1 front end (UL1, the AFE's VUL12 in its 4-channel mode), hw:0,2: ch1/ch2 off
-// the converter's first data line (I2S2_DI) and ch3/ch4 off its second (I2S2_DI2), which needs the
-// shell13 kernel's AFE patch (TECHO5-ATHENA build/audio/patch-afe-di2.py); the samples are 24-bit,
-// left-aligned in 32; and there is no reference device: the speaker amplifier's output reaches no pin
-// the SoC reads, and mainline has no AWB loopback front end.
+// above) and TECHO5's mainline one (tools/linux/athena/kernel), whose machine driver is
+// mt8183-athena. On mainline the converter is the upstream tlv320adcx140 driver, with its own control
+// names; the mics come from the Capture_1 front end (UL1, the AFE's VUL12 in its 4-channel mode),
+// hw:0,2: ch1/ch2 off the converter's first data line (I2S2_DI) and ch3/ch4 off its second
+// (I2S2_DI2), which needs the kernel's AFE patch for the second data line (patches/patch-afe-di2.py
+// there); the samples are 24-bit, left-aligned in 32; and there is no reference device: the speaker
+// amplifier's output reaches no pin the SoC reads, and mainline has no AWB loopback front end.
 type athenaKernel struct {
 	micDevice   int
 	micChannels int
@@ -170,7 +170,7 @@ var athenaAmazonKernel = athenaKernel{
 }
 
 // athenaMainlineControls are the routes and settings the mainline card needs, as used on unit 1 on
-// shell13 (2026-10-15): I2S2 in the AFE's low-jitter mode, the AFE interconnect from I2S2's four
+// TECHO5's mainline kernel (2026-10-15): I2S2 in the AFE's low-jitter mode, the AFE interconnect from I2S2's four
 // channels into UL1's, the converter's ASI channel enables, and digital volume at 0 dB (201). The
 // converter's slots and second output are the machine driver's own. Without low-jitter mode the
 // converter sees no valid clocks at 96 kHz (ASI_STS 0xff) and every sample is zero; the machine driver

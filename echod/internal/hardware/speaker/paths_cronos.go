@@ -99,14 +99,14 @@ type kctl struct {
 // gain and the DSP's limiter) and powers it with the stream. Nothing is written to it, and its
 // "Master TAS5805m Playback Volume" is left where the driver put it.
 //
-// On TECHO5's mainline kernel (TECHO5-ATHENA, machine driver mt8183-athena) the AFE's interconnect
-// from DL1 into I2S1 is a mixer switch per channel that starts off, and the upstream tas5805m driver
-// starts its digital volume at 0, which is silence. The driver loads Amazon's DSP blob itself
-// (tas5805m_dsp_athena.bin), and the machine driver sets I2S1's low-jitter clock. Master 110 is
-// 0 dB, as Amazon's setup runs it, with the blob's analog gain and DSP limiter as the protection. The
-// first bring-up used 100 (-10 dB); with a phone at full volume over Bluetooth that played clearly
-// quieter than the device can, and 110 measured +10 dB at the microphones with peaks still 12 dB
-// under full scale (unit 1, 2026-10-15).
+// On TECHO5's mainline kernel (tools/linux/athena/kernel, machine driver mt8183-athena) the AFE's
+// interconnect from DL1 into I2S1 is a mixer switch per channel that starts off, and the upstream
+// tas5805m driver starts its digital volume at 0, which is silence. The driver loads Amazon's DSP
+// blob itself (tas5805m_dsp_athena.bin), and the machine driver sets I2S1's low-jitter clock. Master
+// 110 is 0 dB, as Amazon's setup runs it, with the blob's analog gain and DSP limiter as the
+// protection. The first bring-up used 100 (-10 dB); with a phone at full volume over Bluetooth that
+// played clearly quieter than the device can, and 110 measured +10 dB at the microphones with peaks
+// still 12 dB under full scale (unit 1, 2026-10-15).
 var initSequence = boardInit()
 
 func boardInit() []kctl {

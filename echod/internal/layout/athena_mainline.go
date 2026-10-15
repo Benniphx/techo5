@@ -9,8 +9,8 @@ import (
 	"strings"
 )
 
-// The 2nd gen Show 8 can also run a mainline 64-bit kernel of TECHO5's own (TECHO5-ATHENA) instead
-// of Amazon's 32-bit 4.4 one. The board is the same and the device tree keeps Amazon's root
+// The 2nd gen Show 8 can also run a mainline 64-bit kernel of TECHO5's own (tools/linux/athena/kernel)
+// instead of Amazon's 32-bit 4.4 one. The board is the same and the device tree keeps Amazon's root
 // compatible, so Board still reads athena; what changes is every driver's name. AthenaMainline
 // tells the two apart, from the kernel's release alone, so it holds from the first moment of boot.
 var athenaMainline = Board == boardAthena && mainlineRelease(kernelRelease())

@@ -49,7 +49,7 @@ func TestParseIdme(t *testing.T) {
 }
 
 func TestMainlineRelease(t *testing.T) {
-	for rel, want := range map[string]bool{"4.4.146+": false, "6.18.56-athena-shell12-dirty\n": true, "": false} {
+	for rel, want := range map[string]bool{"4.4.146+": false, "6.18.56-techo5-athena\n": true, "6.18.56-dirty": true, "": false} {
 		if got := mainlineRelease(rel); got != want {
 			t.Errorf("mainlineRelease(%q) = %v, want %v", rel, got, want)
 		}
