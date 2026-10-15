@@ -245,7 +245,7 @@ func FindPrefix(prefix string) (*Device, error) {
 			return Open(p)
 		}
 	}
-	return nil, fmt.Errorf("input: no device named %q...", prefix)
+	return nil, fmt.Errorf("input: no device named %q or starting with it", prefix)
 }
 
 // Find opens the one event node whose reported name matches, leaving every other node closed.
