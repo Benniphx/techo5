@@ -45,7 +45,7 @@ It started on the Show 5, which is where the name comes from.
 | Device | Model | Repository | Status |
 |---|---|---|---|
 | **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N82 | this one | In daily use |
-| **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | Working, tested end to end on one unit |
+| **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
 | **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
 | **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
@@ -360,13 +360,14 @@ It finds the Show, asks what to call it and asks once before erasing anything (o
 the USB serial console, and prints where the Home Assistant key is kept. Later updates come from Home
 Assistant. Every step by hand, and the fixes for what can go wrong: **[docs/install.md](docs/install.md)**.
 
-> **Status:** in daily use on two Echo Show 5s and two Echo Show 8s, plus the Spot and the Dot. It's
-> a hobby project, not a product: keep your backups, and expect rough edges.
+> **Status:** in daily use on at least five 2nd gen Echo Show 5s, a 1st gen Show 5 and two 1st gen
+> Show 8s, plus the Spot and the Dot. It's a hobby project, not a product: keep your backups, and
+> expect rough edges.
 
 **Echo Show 5 1st gen (2019, `checkers`)** installs with the same command: the installer sees which
-generation it is talking to and takes that unit's boot image from the release. Everything works on it —
-screen, touch, speaker, microphones, wake word, camera, the mute button and voice — tested end to end,
-though so far on one unit rather than the two years of daily use behind the 2nd gen. The hardware notes
+generation it is talking to and takes that unit's boot image from the release. Everything works on it:
+screen, touch, speaker, microphones, wake word, camera, the mute button and voice. One is in daily
+use. The hardware notes
 are in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers).
 
 **Echo Show 8 1st gen (2019, `crown`)** installs with the same command as well. Its screen, touch,
