@@ -311,6 +311,7 @@ func (p *Player) open() error {
 		Bits:       Bits,
 		PeriodSize: period,
 		Periods:    periods,
+		StartFull:  startFull,
 	})
 	if err != nil {
 		_ = m.Close()
@@ -318,6 +319,9 @@ func (p *Player) open() error {
 			_ = hold.Close()
 		}
 		return fmt.Errorf("speaker: opening playback: %w", err)
+	}
+	if startFull && !pb.StartsFull() {
+		slog.Warn("the kernel would not hold playback until its ring is full; it starts on the first period")
 	}
 
 	p.devMu.Lock()
