@@ -77,8 +77,10 @@ New files, copied into the tree:
 athena units ship with several panels. Only the ILI9881C on BOE glass
 (`amazon,athena-ili9881c-boe`) has been tested, and the DTS hard-codes it. The tables for the other
 variants (four more `amazon,athena-ili9881c-*`, five `amazon,athena-jd9365-*`) are in the panel
-patches, taken from Amazon's LCM driver, but untested; a unit with one of them would need its
-compatible in the DTS (and the JD9365 ones different supplies, see the comment at `&dsi0`).
+patches, taken from Amazon's GPL-2.0 kernel for the device (its LCM drivers), but untested; a unit
+with one of them would need its compatible in the DTS (and the JD9365 ones different supplies, see
+the comment at `&dsi0`). All the panel init tables, the tested one included, are taken from that
+kernel.
 
 ## Firmware
 

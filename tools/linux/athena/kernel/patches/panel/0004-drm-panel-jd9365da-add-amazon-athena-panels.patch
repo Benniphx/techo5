@@ -7,7 +7,7 @@ index 9e5287829..d8cc4461d 100644
  };
  
 +/*
-+ * Amazon Echo Show 8 2nd gen (athena), stock LCM driver
++ * Amazon Echo Show 8 2nd gen (athena): taken from Amazon's GPL-2.0 kernel for the device, LCM driver
 + * "jd936x_wxga_dsi_vdo_athena_st_kd_hsd", vendor nibble 0x1 (also 0x23 "proto").
 + */
 +static int athena_jd_kd_hsd_init_cmds(struct jadard *jadard)
@@ -257,7 +257,7 @@ index 9e5287829..d8cc4461d 100644
 +};
 +
 +/*
-+ * Amazon Echo Show 8 2nd gen (athena), stock LCM driver
++ * Amazon Echo Show 8 2nd gen (athena): taken from Amazon's GPL-2.0 kernel for the device, LCM driver
 + * "jd936x_wxga_dsi_vdo_athena_st_kd_hsd_new", vendor nibble 0x2.
 + */
 +static int athena_jd_kd_hsd_new_init_cmds(struct jadard *jadard)
@@ -507,7 +507,7 @@ index 9e5287829..d8cc4461d 100644
 +};
 +
 +/*
-+ * Amazon Echo Show 8 2nd gen (athena), stock LCM driver
++ * Amazon Echo Show 8 2nd gen (athena): taken from Amazon's GPL-2.0 kernel for the device, LCM driver
 + * "jd936x_wxga_dsi_vdo_athena_st_boe", vendor nibble 0x4.
 + */
 +static int athena_jd_boe_init_cmds(struct jadard *jadard)
@@ -750,7 +750,7 @@ index 9e5287829..d8cc4461d 100644
 +};
 +
 +/*
-+ * Amazon Echo Show 8 2nd gen (athena), stock LCM driver
++ * Amazon Echo Show 8 2nd gen (athena): taken from Amazon's GPL-2.0 kernel for the device, LCM driver
 + * "jd936x_wxga_dsi_vdo_athena_st_boe_new", vendor nibble 0x5.
 + */
 +static int athena_jd_boe_new_init_cmds(struct jadard *jadard)
@@ -966,7 +966,7 @@ index 9e5287829..d8cc4461d 100644
 +};
 +
 +/*
-+ * Amazon Echo Show 8 2nd gen (athena), stock LCM driver
++ * Amazon Echo Show 8 2nd gen (athena): taken from Amazon's GPL-2.0 kernel for the device, LCM driver
 + * "jd936x_wxga_dsi_vdo_athena_st_inx", vendor nibble 0x7.
 + */
 +static int athena_jd_inx_init_cmds(struct jadard *jadard)
