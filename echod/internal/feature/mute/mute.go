@@ -180,6 +180,22 @@ func (m *Mute) Set(muted bool) {
 	m.settled(true)
 }
 
+// Flip is the microphone switch on the screen. It asks for the other state, as Home Assistant does,
+// rather than standing in for the button: a press is news where the hardware has already moved, and
+// from the screen nothing has, so on a Show the switch did nothing to the line and only played the
+// sound again. Unmuting a Show from it fails the way it does from Home Assistant.
+func (m *Mute) Flip() {
+	if m.line == nil {
+		return
+	}
+	is, err := m.line.Get()
+	if err != nil {
+		slog.Error("reading mute state failed", "err", err)
+		return
+	}
+	m.Set(!is)
+}
+
 // Toggle is the button on top of the device. Where the hardware has already acted on the press, the
 // press is only news: what follows is the same either way. Whether it has can depend on which way
 // the press goes, and the switch still holds the state from before it.

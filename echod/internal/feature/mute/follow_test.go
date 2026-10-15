@@ -1,6 +1,7 @@
 package mute
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -74,6 +75,33 @@ func TestTapMovesTheLineOnlyWhereNothingElseHas(t *testing.T) {
 		m := &Mute{sw: &esphome.Switch{}, line: &fakeLine{muted: tc.line, acts: tc.acts}}
 		if got := m.mustMove(tc.was); got != tc.want {
 			t.Errorf("%s: mustMove = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// oneWay refuses every request, so that nothing past the request runs.
+type oneWay struct {
+	fakeLine
+	asked []bool
+}
+
+func (o *oneWay) Set(muted bool) error {
+	o.asked = append(o.asked, muted)
+	return errors.New("refused")
+}
+
+// The screen's switch asks for the other state of the line, not for a button press: on a Show a
+// press is taken as already done by the hardware, so from the screen nothing moved.
+func TestFlipAsksForTheOtherState(t *testing.T) {
+	for _, muted := range []bool{false, true} {
+		line := &oneWay{fakeLine: fakeLine{muted: muted, acts: true}}
+		m := &Mute{sw: &esphome.Switch{}, line: line}
+		m.sw.Set(muted)
+
+		m.Flip()
+
+		if len(line.asked) != 1 || line.asked[0] != !muted {
+			t.Errorf("muted=%v: asked for %v, want [%v]", muted, line.asked, !muted)
 		}
 	}
 }
