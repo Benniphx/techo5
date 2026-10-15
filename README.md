@@ -29,18 +29,23 @@
 
 ---
 
+> **New: the Echo Show 8 2nd gen (2021, `athena`) runs TECHO5 on a 64-bit mainline Linux kernel.**
+> The story, the board and the UART pads: [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena).
+> Install: [docs/install-athena.md](docs/install-athena.md).
+
 **TECHO5** (Tech Echo 5) is open firmware for the **Amazon Echo Show 5**. It replaces Android and
 Alexa with a small Alpine Linux image and one Go daemon, turning the Show into a fast, private Home
 Assistant voice satellite with a touch screen of its own.
 
 **Every Echo that can be unlocked now runs it.** The bootloader exploit these devices are opened with,
-[amonet](https://github.com/R0rt1z2/amonet), reaches five Amazon Echos. All five run the same daemon:
+[amonet](https://github.com/R0rt1z2/amonet), reaches five Amazon Echos, and saiyaku-athena unlocks a sixth. All six run the same daemon:
 
 | Device | Model | Repository | Status |
 |---|---|---|---|
 | **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N82 | this one | In daily use |
 | **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | Working, tested end to end on one unit |
-| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | Working on one unit, the newest port |
+| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | Working on one unit |
+| **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
 
