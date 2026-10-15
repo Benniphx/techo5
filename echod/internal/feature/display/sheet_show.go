@@ -34,7 +34,7 @@ const (
 
 // atNightChoices are what the night does to a Show's screen: puts it out, leaves a night light, or
 // leaves only the clock (render_night.go).
-var atNightChoices = []atNightChoice{{"Screen off", false, false}, {"Night light", true, false}, {"Night clock", true, true}}
+var atNightChoices = []atNightChoice{{"Screen off", false, false, false}, {"Night light", true, false, false}, {"Night clock", true, true, false}}
 
 // settingsScreen draws the settings screen for the scene's category.
 func (r *renderer) settingsScreen(s scene) {

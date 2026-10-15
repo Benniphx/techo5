@@ -18,7 +18,7 @@
 // The backlight: the panel shows almost nothing below about 120 of 255 and glares at 255, so a
 // brightness in percent spans backlightMin to the top. Through the night hours, 22:00 to 07:00 unless
 // others are set (config Screen.Night), it is held to nightCeiling, or the face is left to the red night
-// clock at the night light's level (night_spot.go).
+// clock at the night light's level, or put out (night_spot.go).
 //
 // To Home Assistant the screen is a light with brightness, and a switch for auto-brightness, with the
 // night's settings and Night mode beside them: the same entities the Show has.
@@ -215,10 +215,12 @@ type Display struct {
 
 	// touchedAt is the last finger on the face. nightGlow is the night having left the red clock alone
 	// on the face at the night light's level, until a touch or the end of the night takes it down
-	// (night_spot.go); redShown is the frame drawn last being that clock.
+	// (night_spot.go); redShown is the frame drawn last being that clock. nightDark is the face put out
+	// by the night (Screen off) rather than by anyone.
 	touchedAt time.Time
 	nightGlow bool
 	redShown  bool
+	nightDark bool
 
 	// The night's settings in Home Assistant, as on the Show (night_select.go): its hours, their two
 	// ends to the quarter hour, what it does to the face, the red clock's look and brightness.
@@ -355,6 +357,8 @@ func build() *Display {
 	notify.Get().Changed.Listen(func(struct{}) { d.notifyLights() })
 	notify.SetNight(nightNow)
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
+	// An announcement arriving lights a face the night put out (frame).
+	announce.Get().Changed.Listen(func(struct{}) { d.wake() })
 	doorbell.Get().Changed.Listen(func(struct{}) { d.wake() })
 	d.watchRoom()
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
@@ -433,6 +437,11 @@ func (d *Display) apply(on bool, pct int, save bool) {
 	pct = min(max(pct, 0), 100)
 	d.mu.Lock()
 	d.on, d.ceiling = on, pct
+	// Somebody chose this, so the night no longer owns the face: a face put to sleep in the night stays
+	// asleep when it ends, as on the Show.
+	if save {
+		d.nightDark = false
+	}
 	d.mu.Unlock()
 	d.relight(true)
 
@@ -608,12 +617,21 @@ func (d *Display) gesture(g touch.Gesture) {
 	ringTap := g.Kind == touch.Tap && ringingNow(time.Now()).any()
 
 	if !on {
-		// A dark panel only lights; nothing under the finger is acted on.
+		// A dark panel only lights; nothing under the finger is acted on. A long press on a face the
+		// night put out goes on to open the ring menu, as it does on the red night clock.
 		if g.Kind == touch.Tap || g.Kind == touch.Hold {
 			if !ringTap {
 				d.releaseHeld()
 			}
+			byNight := d.darkByNight()
 			d.apply(true, d.ceilingOrDefault(), true)
+			if byNight && g.Kind == touch.Hold && !held && !ringingNow(time.Now()).any() {
+				d.mu.Lock()
+				d.openMenu(modeMain, itemTalk)
+				d.spinning, d.spinAngle = true, fingerAngle(g.X, g.Y)
+				d.mu.Unlock()
+				d.wake()
+			}
 		}
 		// Unless something is ringing, where spending the press on the backlight is the wrong trade:
 		// the person is reaching for a noise, not for a screen they cannot see. A ring lights the
@@ -1350,9 +1368,17 @@ func (d *Display) frame() time.Duration {
 			on = true
 		}
 	}
-	// The red night clock up or down; relit at once either way, and drawn from this frame.
+	if !on && d.darkByNight() && (sunriseProgress(now) > 0 || announcing()) {
+		// A face the night put out comes on for the light before an alarm and for an announcement, which
+		// are shown on the red night clock too; a ring, a call, a reminder and a video light it themselves.
+		d.apply(true, d.ceilingOrDefault(), false)
+		on = true
+	}
+	// The red night clock up or down, or the face put out or back; relit at once, and drawn from this
+	// frame.
 	d.night(now, on, view)
 	d.mu.Lock()
+	on = d.on
 	s.redClock, s.redStyle = d.nightGlow && nightClockOn(), config.Get().Screen.NightClockStyle
 	d.mu.Unlock()
 	if !on && !video.Get().State().Active() {
@@ -1365,6 +1391,9 @@ func (d *Display) frame() time.Duration {
 		return videoRecheck
 	}
 	if !on {
+		if d.darkByNight() {
+			return time.Minute // until the night ends, or something lights the face
+		}
 		return time.Hour
 	}
 	if view.Phase == "idle" && (view.Heard != "" || view.Reply != "") && now.Sub(at) < linger() {

@@ -356,7 +356,7 @@ func (d *Display) setAtNight(i int) {
 		return
 	}
 	c := atNightChoices[i]
-	if err := config.Set().Screen().AtNight(c.light, c.red); err != nil {
+	if err := config.Set().Screen().AtNightDark(c.light, c.red, c.dark); err != nil {
 		slog.Error("saving the night setting failed", "err", err)
 		return
 	}

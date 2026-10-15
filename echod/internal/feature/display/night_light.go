@@ -8,15 +8,16 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
-// atNightChoice is one of the Screen at night choices: its name, and the two settings it is.
+// atNightChoice is one of the Screen at night choices: its name, and the settings it is.
 type atNightChoice struct {
 	label      string
 	light, red bool // config Screen.NightLight and Screen.NightRed
+	dark       bool // config Screen.NightDark: the Spot's Screen off
 }
 
 // atNightOptions are atNightChoices' names, as the screen and Home Assistant list them. The choices are
-// each device's own: the Show's go dark, leave a night light or leave only the clock; the Spot's dim
-// or leave only the clock.
+// each device's own: the Show's go dark, leave a night light or leave only the clock; the Spot's dim,
+// leave only the clock or go dark.
 var atNightOptions = func() []string {
 	out := make([]string, len(atNightChoices))
 	for i, c := range atNightChoices {
@@ -28,7 +29,7 @@ var atNightOptions = func() []string {
 func atNightIndex() int {
 	sc := config.Get().Screen
 	for i, c := range atNightChoices {
-		if c.light == sc.NightLight && c.red == (sc.NightLight && sc.NightRed) {
+		if c.light == sc.NightLight && c.red == (sc.NightLight && sc.NightRed) && c.dark == (!sc.NightLight && sc.NightDark) {
 			return i
 		}
 	}

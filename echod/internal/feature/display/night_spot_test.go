@@ -245,3 +245,99 @@ func TestTheSpotNightClockGivesWay(t *testing.T) {
 		}
 	}
 }
+
+// spotDarkDisplay is spotNightDisplay set to Screen off.
+func spotDarkDisplay(t *testing.T, night bool) *Display {
+	t.Helper()
+	d := spotNightDisplay(t, night)
+	d.setAtNight(2)
+	if atNightOptions[atNightIndex()] != "Screen off" || !nightDarkOn() || nightClockOn() {
+		t.Fatalf("Screen at night says %q", atNightOptions[atNightIndex()])
+	}
+	return d
+}
+
+func (d *Display) lit() (on, dark bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.on, d.nightDark
+}
+
+// Set to Screen off, the night puts an idle face out, backlight and all; a tap lights it at the night's
+// dimmed brightness, and the face stays lit while it is being used.
+func TestTheSpotScreenOffAtNight(t *testing.T) {
+	d := spotDarkDisplay(t, true)
+	if !d.night(time.Now(), true, voice.State{Phase: "idle"}) {
+		t.Fatal("the night left an idle face lit")
+	}
+	d.mu.Lock()
+	level := d.level
+	d.mu.Unlock()
+	if on, dark := d.lit(); on || !dark || level != 0 {
+		t.Fatalf("on=%v dark=%v backlight=%v, want the face out by the night", on, dark, level)
+	}
+
+	d.gesture(touch.Gesture{Kind: touch.Tap, X: center, Y: center})
+	d.mu.Lock()
+	level, open := d.level, d.menuOpen
+	d.mu.Unlock()
+	if on, _ := d.lit(); !on || open {
+		t.Fatalf("after a tap: on=%v menu=%v, want the face lit and nothing else", on, open)
+	}
+	if want := backlightMin + (screen.BacklightMax-backlightMin)*nightCeiling/100.0; level != want {
+		t.Errorf("lit, the backlight is %v, want the night's dimmed %v", level, want)
+	}
+	if d.night(time.Now(), true, voice.State{Phase: "idle"}) {
+		t.Error("the face went out again while it was being used")
+	}
+
+	// Left alone again, it goes out again.
+	d.touchedAt = time.Now().Add(-time.Hour)
+	if !d.night(time.Now(), true, voice.State{Phase: "idle"}) {
+		t.Error("the face stayed lit once nobody was using it")
+	}
+}
+
+// A long press on a face the night put out lights it and opens the ring menu.
+func TestALongPressOnTheSpotDarkAtNightOpensTheMenu(t *testing.T) {
+	d := spotDarkDisplay(t, true)
+	d.night(time.Now(), true, voice.State{Phase: "idle"})
+	d.gesture(touch.Gesture{Kind: touch.Hold, X: center, Y: 40})
+	d.mu.Lock()
+	on, open, mode := d.on, d.menuOpen, d.menuMode
+	d.closeMenu()
+	d.mu.Unlock()
+	if !on || !open || mode != modeMain {
+		t.Errorf("after a long press: on=%v menu=%v mode=%v, want the face lit and the menu up", on, open, mode)
+	}
+}
+
+// The night's end lights the face the night put out, but not one somebody put to sleep; choosing
+// something other than Screen off in the night lights it too.
+func TestTheSpotDarkNightEnds(t *testing.T) {
+	d := spotDarkDisplay(t, false)
+	d.on, d.nightDark = false, true
+	if !d.night(time.Now(), false, voice.State{Phase: "idle"}) {
+		t.Fatal("the end of the night left the face out")
+	}
+	if on, dark := d.lit(); !on || dark {
+		t.Errorf("on=%v dark=%v after the night", on, dark)
+	}
+
+	d = spotDarkDisplay(t, false)
+	d.on, d.nightDark = false, true
+	d.apply(false, 50, true) // put to sleep by hand
+	if d.night(time.Now(), false, voice.State{Phase: "idle"}) {
+		t.Error("the end of the night lit a face somebody put to sleep")
+	}
+
+	d = spotDarkDisplay(t, true)
+	d.night(time.Now(), true, voice.State{Phase: "idle"})
+	d.setAtNight(0)
+	if !d.night(time.Now(), false, voice.State{Phase: "idle"}) {
+		t.Fatal("choosing Dim in the night left the face out")
+	}
+	if on, _ := d.lit(); !on {
+		t.Error("the face is still out")
+	}
+}
