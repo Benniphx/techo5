@@ -122,11 +122,11 @@ func (m *Mixer) Controls() ([]Control, error) {
 	return out, nil
 }
 
-// Find looks a control up by name.
 // ErrNoControl is Find's answer for a mixer read whole without the control asked for, as opposed to
 // one that could not be read.
 var ErrNoControl = errors.New("alsa: no control")
 
+// Find looks a control up by name.
 func (m *Mixer) Find(name string) (Control, error) {
 	controls, err := m.Controls()
 	if err != nil {
