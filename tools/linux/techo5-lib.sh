@@ -525,10 +525,14 @@ t5_bt_up() {
 	# loudspeaker too (mkrootfs.sh), so each new hci0 comes up as one before anything here runs.
 	command -v bluealsa >/dev/null && bluealsa -p a2dp-source -p a2dp-sink >> "$logdir/bluealsa.log" 2>&1 &
 	# Tried until it takes: written once, it could meet the kernel still adding bluez-alsa's services
-	# (Busy), and a phone that paired then remembers the device as having no type (#105).
-	n=0; while [ $n -lt 5 ] && ! t5_bt_class; do sleep 1; n=$((n+1)); done
-	[ $n -lt 5 ] || log "bt: the loudspeaker class did not take"
-	log "bt: hci0 up; bluetoothd and bluealsa started; class $(timeout 3 btmgmt info 2>/dev/null | sed -n 's/.*class \(0x[0-9a-f]*\).*/\1/p' | head -1)"
+	# (Busy), and a phone that paired then remembers the device as having no type (#105). In the
+	# background, since five tries that time out are half a minute the boot would otherwise wait.
+	(n=1
+	while ! t5_bt_class; do
+		[ $n -lt 5 ] || { log "bt: the loudspeaker class did not take"; break; }
+		sleep 1; n=$((n+1))
+	done
+	log "bt: hci0 up; bluetoothd and bluealsa started; class $(timeout 3 btmgmt info 2>/dev/null | sed -n 's/.*class \(0x[0-9a-f]*\).*/\1/p' | head -1)") &
 	return 0
 }
 
@@ -545,10 +549,11 @@ t5_bt_again() {
 	g=$(( $(cat /run/techo5-bt-again 2>/dev/null || echo 0) + 1 ))
 	echo $g > /run/techo5-bt-again
 	sleep 5
-	n=0
-	while [ $n -lt 12 ]; do
+	n=1
+	while :; do
 		[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] || return 0
 		t5_bt_class && break
+		[ $n -lt 12 ] || break
 		sleep 5
 		n=$((n+1))
 	done
