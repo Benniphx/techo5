@@ -266,3 +266,31 @@ func TestSpeakerGainPossibleBeforeSure(t *testing.T) {
 		t.Error("a sure no was possible")
 	}
 }
+
+// A card the mixer walk could not open on its own, with the playback device held, is answered by the
+// mixer the speaker holds: the saved gain is written then, not at the next start.
+func TestSpeakerGainIsAskedOfTheHeldMixer(t *testing.T) {
+	t.Cleanup(func() { gainSeen.ok, gainSeen.sure = false, false })
+	gainThere(t, true, false)
+	gainSeen.ok, gainSeen.sure = false, false
+	if gainOn(nil) {
+		t.Fatal("available with no mixer to ask")
+	}
+	if !gainOn(gainTestMixer()) || !gainSeen.ok || !gainSeen.sure {
+		t.Fatal("the held mixer's control was not taken as a sure yes")
+	}
+	gainSeen.ok, gainSeen.sure = false, false
+	missing := gainTestMixer()
+	missing.missing = true
+	if gainOn(missing) || !gainSeen.sure {
+		t.Fatal("a held mixer without the control was not a sure no")
+	}
+	if (&Player{}).heldMixer() != nil {
+		t.Fatal("a speaker holding no mixer handed one over")
+	}
+	gainSeen.ok, gainSeen.sure = false, false
+	gainThere(t, false, false)
+	if gainOn(gainTestMixer()) || gainSeen.sure {
+		t.Fatal("a board that cannot have the amplifier asked the mixer")
+	}
+}

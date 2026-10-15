@@ -62,6 +62,35 @@ var GainPossible = func() bool {
 	return mayHaveTAS5805M && tas5805mListed(i2cDevices)
 }
 
+// gainOn is GainAvailable, asked of m, the mixer the speaker already holds, when the card could not
+// be opened on its own to say: a card whose playback device is held is up, so what m says is sure,
+// and kept as GainAvailable's answer. Without it, a gain saved while the answer was not sure waited
+// for the next start of the speaker to be written.
+func gainOn(m gainMixer) bool {
+	if GainAvailable() {
+		return true
+	}
+	if m == nil || !GainPossible() {
+		return false
+	}
+	gainSeen.mu.Lock()
+	defer gainSeen.mu.Unlock()
+	if gainSeen.sure {
+		return gainSeen.ok
+	}
+	_, err := gainControlOn(m)
+	gainSeen.ok, gainSeen.sure = err == nil, true
+	return gainSeen.ok
+}
+
+// heldMixer is the mixer the speaker holds, as a gainMixer: nil, not a nil *alsa.Mixer, when it holds none.
+func (p *Player) heldMixer() gainMixer {
+	if _, m := p.device(); m != nil {
+		return m
+	}
+	return nil
+}
+
 var gainSeen struct {
 	mu       sync.Mutex
 	ok, sure bool
@@ -148,7 +177,7 @@ func (p *Player) SetSpeakerGain(db int) error {
 	p.gainMu.Lock()
 	defer p.gainMu.Unlock()
 	if _, m := p.device(); m != nil {
-		if GainAvailable() {
+		if gainOn(m) {
 			if err := writeSpeakerGain(m, db); err != nil {
 				return err
 			}
