@@ -84,8 +84,15 @@ var followed = (*Feature).playerChanged
 // listeners must not block (bluez.Adapter.PlayerChanged), and following a pause tells Home Assistant
 // the media player's state, a write to the network that can stall. A change still waiting for the same
 // phone gives way to st, which goes to the back: the latest is what the phone is doing, and with Home
-// Assistant stalled the queue holds one change for each phone at most rather than growing.
+// Assistant stalled the queue holds one change for each phone at most rather than growing. Only a
+// change playerChanged follows (playing, paused, stopped) is queued: a seek or an error coming after
+// a pause still waiting would otherwise take its place and be ignored, and the pause lost.
 func (f *Feature) followPlayer(st bluez.PlayerStatus) {
+	switch st.Status {
+	case "playing", "paused", "stopped":
+	default:
+		return
+	}
 	f.statusMu.Lock()
 	f.statuses = slices.DeleteFunc(f.statuses, func(w bluez.PlayerStatus) bool { return w.Device == st.Device })
 	f.statuses = append(f.statuses, st)

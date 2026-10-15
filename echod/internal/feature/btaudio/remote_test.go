@@ -215,7 +215,7 @@ func TestWaitingPlayerChangesAreOneForEachPhone(t *testing.T) {
 	got := make(chan bluez.PlayerStatus, 16)
 	was := followed
 	followed = func(_ *Feature, st bluez.PlayerStatus) {
-		if st.Status == "stalls" {
+		if st.Status == "stopped" {
 			close(stalled)
 			<-release
 		}
@@ -223,7 +223,7 @@ func TestWaitingPlayerChangesAreOneForEachPhone(t *testing.T) {
 	}
 	t.Cleanup(func() { followed = was })
 	f := &Feature{}
-	f.followPlayer(bluez.PlayerStatus{Device: "/a", Status: "stalls"})
+	f.followPlayer(bluez.PlayerStatus{Device: "/a", Status: "stopped"})
 	<-stalled // under way, not waiting
 	for _, st := range []bluez.PlayerStatus{{Device: "/a", Status: "paused"}, {Device: "/b", Status: "paused"},
 		{Device: "/a", Status: "playing"}, {Device: "/a", Status: "paused"}} {
@@ -233,7 +233,7 @@ func TestWaitingPlayerChangesAreOneForEachPhone(t *testing.T) {
 	waiting := len(f.statuses)
 	f.statusMu.Unlock()
 	close(release)
-	want := []bluez.PlayerStatus{{Device: "/a", Status: "stalls"}, {Device: "/b", Status: "paused"}, {Device: "/a", Status: "paused"}}
+	want := []bluez.PlayerStatus{{Device: "/a", Status: "stopped"}, {Device: "/b", Status: "paused"}, {Device: "/a", Status: "paused"}}
 	for _, w := range want {
 		select {
 		case st := <-got:
@@ -246,5 +246,43 @@ func TestWaitingPlayerChangesAreOneForEachPhone(t *testing.T) {
 	}
 	if waiting > 2 {
 		t.Errorf("%d changes waiting, want one for each phone", waiting)
+	}
+}
+
+// A seek or an error from a phone does not take the place of its pause still waiting: only what is
+// followed is queued.
+func TestASeekDoesNotTakeAWaitingPausesPlace(t *testing.T) {
+	release, stalled := make(chan struct{}), make(chan struct{})
+	got := make(chan bluez.PlayerStatus, 16)
+	was := followed
+	followed = func(_ *Feature, st bluez.PlayerStatus) {
+		if st.Device == "/b" {
+			close(stalled)
+			<-release
+		}
+		got <- st
+	}
+	t.Cleanup(func() { followed = was })
+	f := &Feature{}
+	f.followPlayer(bluez.PlayerStatus{Device: "/b", Status: "playing"})
+	<-stalled
+	for _, st := range []string{"paused", "forward-seek", "reverse-seek", "error"} {
+		f.followPlayer(bluez.PlayerStatus{Device: "/a", Status: st})
+	}
+	close(release)
+	for _, want := range []bluez.PlayerStatus{{Device: "/b", Status: "playing"}, {Device: "/a", Status: "paused"}} {
+		select {
+		case st := <-got:
+			if st != want {
+				t.Fatalf("followed %+v, want %+v", st, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%+v was never followed", want)
+		}
+	}
+	select {
+	case st := <-got:
+		t.Fatalf("followed %+v as well", st)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
