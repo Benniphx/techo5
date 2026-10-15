@@ -93,7 +93,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
 		}
 		rows = append(rows, settingRow{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)})
-		if _, _, ok := nightWindow(st.night); ok {
+		if nightCanHappen(st.night) {
 			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: atNightSub,
 				kind: ctlChoice, value: atNightOptions[atNightIndex()]})
 			if nightClockOn() {
@@ -157,7 +157,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		if media.Get().SpeakerGainAvailable() {
 			rows = append(rows, settingRow{id: "speakergain", label: "Speaker gain",
 				sub:  "0 dB is normal; boosts can distort, especially with more bass",
-				kind: ctlStepper, value: fmt.Sprintf("%+d dB", media.Get().SpeakerGain())})
+				kind: ctlStepper, value: gainText(media.Get().SpeakerGain())})
 		}
 		rows = append(rows, []settingRow{
 			{label: "Voice", kind: ctlHeading},
@@ -380,6 +380,25 @@ const nightByHARow = "Controlled by Home Assistant"
 
 // nightRowLabel is what the Display card calls the night setting.
 const nightRowLabel = "Night hours"
+
+// nightCanHappen is whether the night can come with the hours v: they make one, or Home Assistant has
+// the night (Night hours set to Controlled by Home Assistant), whose Night mode switch turns it on
+// whatever the hours are. The At night choice matters only then.
+func nightCanHappen(v string) bool {
+	if config.Get().Screen.NightByHA {
+		return true
+	}
+	_, _, ok := nightWindow(v)
+	return ok
+}
+
+// gainText is the speaker gain as the Sound card shows it: "0 dB", "+3 dB".
+func gainText(db int) string {
+	if db == 0 {
+		return "0 dB"
+	}
+	return fmt.Sprintf("%+d dB", db)
+}
 
 // nightRowValue is what the night row says: the hours, or that Home Assistant has the night.
 func nightRowValue(v string) string {
