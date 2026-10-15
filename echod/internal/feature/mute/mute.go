@@ -10,6 +10,7 @@ package mute
 import (
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -24,6 +25,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/privacy"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
 func init() {
@@ -185,13 +187,27 @@ func (m *Mute) Toggle() {
 	if m.line == nil {
 		return
 	}
-	if !m.line.HardwareActs(m.sw.Get()) {
+	if m.mustMove(m.sw.Get()) {
 		if _, err := m.line.Toggle(); err != nil {
 			slog.Error("toggling mute failed", "err", err)
 			return
 		}
 	}
 	m.settled(true)
+}
+
+// mustMove reports whether a press has to move the line itself, given the switch from before it. Not
+// where the hardware acts on the press, and not where the line has already left that state: Amazon's
+// gating driver sets the latch itself on a press of half a second or more, which is still a tap
+// here, and toggling after it asked for an unmute the latch refuses - the press was dropped and the
+// switch left saying live over a set latch, so the next tap set it again instead of letting it go
+// (#153). A line that cannot be read is left to Toggle, which says so.
+func (m *Mute) mustMove(was bool) bool {
+	if m.line.HardwareActs(was) {
+		return false
+	}
+	is, err := m.line.Get()
+	return err != nil || is == was
 }
 
 // pressed is the mute button. A hold only sounds: nothing is bound to it, and the tone says the
@@ -221,6 +237,50 @@ func (m *Mute) pressed(e buttons.Event) {
 		// A hold is what tells the kernel's camera driver the privacy latch is off, on the Show 8
 		// and the 1st gen Show 5; a camera held off since a tap to unmute can be tried again.
 		camera.Get().Unwedge()
+		safe.Go("mute after a hold", m.followHold)
+	}
+}
+
+// After a hold the switch can be behind the line. Amazon's gating driver (the 1st gen Show 5, the
+// Show 8) takes a press of half a second or more as its own mute toggle and sets the latch when the
+// button is let go, and any press releases it; where the hardware acts on the press itself (the 2nd
+// gen, the Dot) a press held long enough to be a hold moves it all the same. Nothing here acts on a
+// hold, so the line is watched instead. Left behind, the switch said live over a latch that was set,
+// and the next tap - taken for a press with the microphones live - set the latch again instead of
+// letting it go: the button seemed unable to unmute (#153).
+var (
+	// followFor is how long after a hold the line is watched. The driver moves it when the button
+	// is let go, which can be any time after the hold is reported, and a release can be followed
+	// by the driver's own set.
+	followFor = 15 * time.Second
+
+	// followPoll is how often it looks.
+	followPoll = 100 * time.Millisecond
+)
+
+// following keeps it to one watch: a second hold during the first is covered by it.
+var following atomic.Bool
+
+// followHold publishes whatever the line does during and after a hold.
+func (m *Mute) followHold() {
+	if m.line == nil || !following.CompareAndSwap(false, true) {
+		return
+	}
+	defer following.Store(false)
+	m.follow(followFor, followPoll, func() { m.settled(true) })
+}
+
+// follow calls settle each time the line is found to differ from the switch, for d, looking every
+// poll. settle is what brings the switch up to the line.
+func (m *Mute) follow(d, poll time.Duration, settle func()) {
+	for deadline := time.Now().Add(d); ; {
+		if is, err := m.line.Get(); err == nil && is != m.sw.Get() {
+			settle()
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(poll)
 	}
 }
 
