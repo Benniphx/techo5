@@ -636,6 +636,12 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	// retrying — minutes of a player reporting that it is playing while nothing comes out.
 	fetch, giveUp := context.WithCancel(ctx)
 	defer giveUp()
+	// Live radio is fetched again when it drops (resume.go), so a station gone quiet is given up on
+	// sooner than a track would be: the sooner it is fetched again, the shorter the gap.
+	limit := stall
+	if live() {
+		limit = liveStall
+	}
 
 	req, err := http.NewRequestWithContext(fetch, http.MethodGet, url, nil)
 	if err != nil {
@@ -653,12 +659,12 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	}
 
 	body := bufio.NewReaderSize(resp.Body, chunk)
-	watchdog := time.AfterFunc(stall, giveUp) // an MP3's first frame is read here, before the loop's own
+	watchdog := time.AfterFunc(limit, giveUp) // an MP3's first frame is read here, before the loop's own
 	src, err := pcmSource(body, resp.Header.Get("Content-Type"))
 	watchdog.Stop()
 	if err != nil {
 		if fetch.Err() != nil && ctx.Err() == nil {
-			return fmt.Errorf("nothing arrived for %s", stall)
+			return fmt.Errorf("nothing arrived for %s", limit)
 		}
 		return err
 	}
@@ -668,7 +674,7 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	for {
 		// Armed only around the read: a track waiting for a turn to finish is not stalled, and
 		// counting that time would end it for being interrupted.
-		watchdog := time.AfterFunc(stall, giveUp)
+		watchdog := time.AfterFunc(limit, giveUp)
 		n, err := io.ReadFull(src, buf)
 		watchdog.Stop()
 
@@ -691,7 +697,7 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 			return m.settle(ctx)
 		case fetch.Err() != nil && ctx.Err() == nil:
-			return fmt.Errorf("nothing arrived for %s", stall)
+			return fmt.Errorf("nothing arrived for %s", limit)
 		default:
 			return err
 		}

@@ -25,6 +25,11 @@ const (
 	resumeTries = 3
 )
 
+// liveStall is how long a live station may send nothing before it is fetched again: on unit 2 the
+// proxy went quiet for about 20 seconds before it reset the connection, which with the 30 seconds a
+// track is given (stall) was all heard as silence.
+const liveStall = 8 * time.Second
+
 // resumeWaits is the wait before each try in a row.
 var resumeWaits = [resumeTries]time.Duration{time.Second, 5 * time.Second, 15 * time.Second}
 
