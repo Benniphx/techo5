@@ -122,6 +122,16 @@ for want in 'CONFIG_SND_SOC_MT8183_ATHENA=y' 'CONFIG_SND_SOC_TAS5805M=y' 'CONFIG
 		'CONFIG_INITRAMFS_SOURCE=""' 'CONFIG_LOCALVERSION="-techo5-athena"'; do
 	grep -qxF "$want" .config || { echo "config check failed: $want" >&2; exit 1; }
 done
+# The Wi-Fi firewall (rootfs usr/local/sbin/techo5-firewall) and the video decoder's fence
+# (echod feature/video) use the legacy iptables tools, and the image ships no modules: every
+# table, match and target they use is built in, or Wi-Fi is left open.
+for want in 'CONFIG_NETFILTER=y' 'CONFIG_NETFILTER_XTABLES=y' 'CONFIG_NETFILTER_XTABLES_LEGACY=y' \
+		'CONFIG_NF_CONNTRACK=y' 'CONFIG_NETFILTER_XT_MATCH_STATE=y' 'CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y' \
+		'CONFIG_NETFILTER_XT_MATCH_OWNER=y' 'CONFIG_IP_NF_IPTABLES=y' 'CONFIG_IP_NF_IPTABLES_LEGACY=y' \
+		'CONFIG_IP_NF_FILTER=y' 'CONFIG_IP_NF_TARGET_REJECT=y' 'CONFIG_IP6_NF_IPTABLES=y' \
+		'CONFIG_IP6_NF_IPTABLES_LEGACY=y' 'CONFIG_IP6_NF_FILTER=y' 'CONFIG_IP6_NF_TARGET_REJECT=y'; do
+	grep -qxF "$want" .config || { echo "config check failed: $want" >&2; exit 1; }
+done
 
 # 5. Build
 make -s -j"$JOBS" Image.gz mediatek/mt8183-amazon-athena.dtb
