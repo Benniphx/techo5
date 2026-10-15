@@ -881,21 +881,58 @@ def merge_wifi(existing, ssid_hex, psk_hex):
     text = (existing or '').replace('\r\n', '\n')
     if not text.strip():
         return WIFI_CONF % (ssid_hex, psk_hex)
+    # A line at a time, as echod's wifi package reads it (lib/wifi blocks): a trimmed "network={" opens
+    # a block and a trimmed "}" closes it, so indenting either changes nothing. Lines outside blocks,
+    # comments included, are kept as they are.
+    kept, block = [], None
+    for line in text.split('\n'):
+        if block is None:
+            if line.strip() == 'network={':
+                block = [line]
+            else:
+                kept.append(line)
+            continue
+        block.append(line)
+        if line.strip() == '}':
+            if wifi_ssid_hex(block) != ssid_hex.lower():
+                kept.extend(block)
+            block = None
+    if block is not None:  # never closed: kept as it was
+        kept.extend(block)
+    while kept and not kept[-1].strip():
+        kept.pop()
+    return '\n'.join(kept) + '\n' + 'network={\n\tssid=%s\n\tpsk=%s\n}\n' % (ssid_hex, psk_hex)
 
-    def same_name(block):
-        m = re.search(r'^\s*ssid=(.*?)\s*$', block, re.M)
-        if not m:
-            return False
-        name = m.group(1)
-        if len(name) >= 2 and name[0] == name[-1] == '"':
-            name = name[1:-1].encode('utf-8').hex()
-        return name.lower() == ssid_hex.lower()
 
-    kept = re.sub(r'^network=\{\n.*?^\}[ \t]*(\n|$)', lambda m: '' if same_name(m.group(0)) else m.group(0),
-                  text, flags=re.M | re.S)
-    if not kept.endswith('\n'):
-        kept += '\n'
-    return kept + 'network={\n\tssid=%s\n\tpsk=%s\n}\n' % (ssid_hex, psk_hex)
+def wifi_ssid_hex(block):
+    """A network block's name as lowercase hex, or None: hex as written, "text" (what lies between the
+    first quote and the last, as the supplicant reads it), or P"text" with its printf escapes."""
+    for line in block:
+        key, eq, v = line.strip().partition('=')
+        if not eq or key != 'ssid':
+            continue
+        if v.startswith('P"') and v.endswith('"') and len(v) >= 3:
+            out, s, i = bytearray(), v[2:-1], 0
+            while i < len(s):
+                if s[i] == '\\' and i + 1 < len(s):
+                    c = s[i + 1]
+                    if c == 'x' and re.fullmatch(r'[0-9a-fA-F]{2}', s[i + 2:i + 4]):
+                        out.append(int(s[i + 2:i + 4], 16))
+                        i += 4
+                        continue
+                    out += {'n': b'\n', 'r': b'\r', 't': b'\t', 'e': b'\x1b'}.get(c, c.encode('utf-8'))
+                    i += 2
+                    continue
+                out += s[i].encode('utf-8')
+                i += 1
+            return out.hex()
+        if v.startswith('"'):
+            end = v.rfind('"')
+            return v[1:end].encode('utf-8').hex() if end > 0 else None
+        if re.fullmatch(r'(?:[0-9a-fA-F]{2})+', v):
+            return v.lower()
+        return None
+    return None
 
 
 def read_file(path):

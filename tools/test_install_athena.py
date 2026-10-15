@@ -743,6 +743,33 @@ class MergeWifi(unittest.TestCase):
                          'ctrl_interface=/run/wpa\nupdate_config=0\nnetwork={\n\tssid=4f6c64\n\tkey_mgmt=NONE\n}\n'
                          'network={\n\tssid=4e6577\n\tpsk=%s\n}\n' % ('ab' * 32))
 
+    def test_indented_braces(self):
+        # An indented closing brace still closes its block: the next block is not swallowed with it.
+        existing = ('ctrl_interface=/run/wpa\n  network={\n\tssid="New"\n\tpsk="x"\n\t}\n'
+                    'network={\n\tssid="Other"\n\tpsk="y"\n  }\n')
+        self.assertEqual(inst.merge_wifi(existing, *self.NEW),
+                         'ctrl_interface=/run/wpa\nnetwork={\n\tssid="Other"\n\tpsk="y"\n  }\n'
+                         'network={\n\tssid=4e6577\n\tpsk=%s\n}\n' % ('ab' * 32))
+
+    def test_first_of_two_same_name(self):
+        existing = ('# saved by hand\nnetwork={\n\tssid=4e6577\n\tpsk="old"\n}\n'
+                    'network={\n\tssid="Next"\n\tkey_mgmt=NONE\n}\n')
+        self.assertEqual(inst.merge_wifi(existing, *self.NEW),
+                         '# saved by hand\nnetwork={\n\tssid="Next"\n\tkey_mgmt=NONE\n}\n'
+                         'network={\n\tssid=4e6577\n\tpsk=%s\n}\n' % ('ab' * 32))
+
+    def test_p_ssid(self):
+        for ssid in ('P"New"', 'P"N\\x65w"', 'P"\\x4e\\x65\\x77"'):
+            existing = 'update_config=0\nnetwork={\n\tssid=%s\n\tpsk="old"\n}\n' % ssid
+            self.assertEqual(inst.merge_wifi(existing, *self.NEW), 'update_config=0\n'
+                             'network={\n\tssid=4e6577\n\tpsk=%s\n}\n' % ('ab' * 32), ssid)
+        self.assertEqual(inst.wifi_ssid_hex(['\tssid=P"a\\tb\\\\"']), b'a\tb\\'.hex())
+        self.assertEqual(inst.wifi_ssid_hex(['\tssid="a"b"']), b'a"b'.hex())
+
+    def test_only_block_removed_leaves_no_blank_line(self):
+        existing = 'ctrl_interface=/run/wpa\nupdate_config=0\n\nnetwork={\n\tssid="New"\n\tpsk="x"\n}\n\n'
+        self.assertEqual(inst.merge_wifi(existing, *self.NEW), inst.WIFI_CONF % self.NEW)
+
 
 STOCK = [p for p in os.environ.get('TECHO5_STOCK_BOOTS', '').split(os.pathsep) if p]
 
