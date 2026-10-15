@@ -67,7 +67,8 @@ LINEAGE_RELEASE = {
     'checkers': 'lineage-18.1-checkers-v0.7',
     'crown': 'lineage-18.1-crown-v0.5',
 }
-LINEAGE_ZIP = 'lineage-18.1-20260904-UNOFFICIAL-%s.zip'
+LINEAGE_DATE = '20260904'
+LINEAGE_ZIP = 'lineage-18.1-' + LINEAGE_DATE + '-UNOFFICIAL-%s.zip'
 WIFI_MODULE = 'vendor/lib/modules/mt76x8_wlan.ko'
 
 # The boards this installs on, as `getprop ro.product.device` reports them. They share the SoC, the
@@ -110,6 +111,13 @@ LOGO_KAERU = {
                   stock='6a717f0f8bd3502df2e2a811f1a90a2ec83e58f151874e11c2920a9a63dc4fa1',
                   logo='926bc8449b1a9e0ce894c0df1bc66f549c2b294247bc73da9e8998b5e9344f64'),
 }
+
+
+def lineage_zip_date(zip_path):
+    """The build date in a LineageOS zip's file name (lineage-18.1-YYYYMMDD-...), or None for a name
+    that carries none."""
+    m = re.search(r'(20\d{6})', os.path.basename(zip_path))
+    return m.group(1) if m else None
 
 
 def lineage_board(zip_path):
@@ -396,6 +404,11 @@ def main():
         zdev = lineage_board(a.lineage_zip)
         if zdev != dev:
             fail('%s is a LineageOS build for %s, and this unit is a %s' % (a.lineage_zip, zdev, dev))
+        # A later build's drivers do not fit TECHO5's kernel, which check_lineage_driver only finds out
+        # once it is installed; its name says so before anything is written.
+        zdate = lineage_zip_date(a.lineage_zip)
+        if zdate and zdate != LINEAGE_DATE:
+            fail('%s is the %s build of LineageOS. %s' % (a.lineage_zip, zdate, lineage_hint(dev)))
         note('%s in TWRP; LineageOS zip for %s' % (dev, zdev))
     else:
         kr = adb.sh('uname -r')
