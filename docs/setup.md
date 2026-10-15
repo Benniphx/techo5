@@ -406,8 +406,9 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
   wasn't sure of. See [Wake word on Home Assistant](#wake-word-on-home-assistant) below.
 - **Wake**, a button for each wake word, and **Cancel request**, in Home Assistant. Wake starts
   listening for that assistant, as its wake word would. Cancel request ends a request that is
-  running, listening, thinking or replying, as a tap on the action button does; it stops nothing
-  else. The device's Assist satellite says whether one is running, so a tile can show it and start
+  running, listening, thinking or replying, as a tap on the action button does, and with it
+  anything else playing at that moment, like an announcement. With no request running it does
+  nothing. The device's Assist satellite says whether one is running, so a tile can show it and start
   or stop it.
 - **Quiet hours** and **Do not disturb**.
 

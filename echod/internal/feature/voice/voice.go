@@ -183,8 +183,10 @@ func (v *Voice) HomeAssistant() bool { return v.vs.Subscribed() }
 func (v *Voice) Start(slot int) { v.open(slot, false) }
 
 // CancelRequest is the Cancel request button: it ends a request that is running, whichever
-// assistant it is for and whatever step it is at, as a tap on the action button ends one. Nothing
-// else is stopped: music, a ringing alarm and an announcement are the action button's, not this.
+// assistant it is for and whatever step it is at, as a tap on the action button ends one, and like
+// that tap it silences what holds the speaker then: an announcement or a call ring that came in
+// during the request stops with it. A ringing alarm is not on the speaker claim and goes on. With no
+// request running it does nothing.
 func (v *Voice) CancelRequest() {
 	if !v.turn.Busy() {
 		return

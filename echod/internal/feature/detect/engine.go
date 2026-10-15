@@ -535,8 +535,6 @@ func (e *Engine) candidate(n int, s *slot, score, cutoff float64, now time.Time)
 	}
 }
 
-// Quiet drops the engines while the microphones are cut, and builds them again when they come back.
-//
 // Settle holds every slot's detections back for d from now, while scoring goes on: for a sound of
 // the device's own about to play into microphones that cannot yet tell it from the room. A hold
 // already running for longer is kept.
@@ -552,6 +550,8 @@ func (e *Engine) Settle(d time.Duration) {
 	}
 }
 
+// Quiet drops the engines while the microphones are cut, and builds them again when they come back.
+//
 // A cut microphone hands on silence, so nothing can be detected in it — but the models were still
 // being run over that silence, frame after frame, which on a Dot is a third of the time it has.
 // Reported as "muting does not disable wake word detection", and the reporter was right about what
