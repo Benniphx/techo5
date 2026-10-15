@@ -71,7 +71,8 @@ func count(got []Kind, k Kind) int {
 
 // The swipes of issue #113, in notches so they hold on every screen: a sideways swipe that drifts up
 // or down a little is a sideways swipe and never the volume; an up or down one that drifts sideways
-// is still the volume; a slant is nothing; and a finger that settles one way stays that way.
+// is still the volume; a slant is never the volume, and a swipe only if it ends clearly sideways; and
+// a finger that settles up or down stays that way.
 func checkSwipeDirections(t *testing.T) {
 	t.Helper()
 	n := notch
@@ -95,6 +96,10 @@ func checkSwipeDirections(t *testing.T) {
 		{name: "down with 20% drift", pts: path(center, image.Pt(-n*2/5, 2*n+n/2)), down: 2},
 		{name: "diagonal", pts: path(center, image.Pt(-2*n, -2*n))},
 		{name: "diagonal the other way", pts: path(center, image.Pt(3*n, 3*n))},
+		// Settled on a slant, then sideways far enough that it ends clearly sideways: a swipe, still
+		// no volume. Before, a slant was lost for good.
+		{name: "diagonal then sideways", pts: path(right, image.Pt(-2*n, -2*n), image.Pt(-3*n, 0)), left: 1},
+		{name: "diagonal then up", pts: path(image.Pt(Width/2, Height-n/2-1), image.Pt(-2*n, -2*n), image.Pt(0, -3*n))},
 		// Settled sideways, then up: no volume, and no swipe either, since where it lifts is not
 		// clearly sideways.
 		{name: "sideways then up", pts: path(center, image.Pt(-3*n, 0), image.Pt(0, -3*n))},

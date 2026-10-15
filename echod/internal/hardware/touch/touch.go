@@ -49,7 +49,8 @@ const (
 	// lockNum/lockDen times as far as along the other: up or down, and only that finger's vertical
 	// travel turns the volume, or sideways, and none of it does. A drift of a few pixels off a
 	// sideways swipe used to turn the volume, because every move was read on its own. A finger that
-	// has gone lockGiveUp notches without either is a slant, and does nothing.
+	// has gone lockGiveUp notches without either is a slant: never the volume, and a sideways swipe
+	// only if it ends clearly sideways, as any swipe must.
 	lockNum, lockDen = 3, 2
 	lockGiveUp       = 2
 
@@ -199,7 +200,7 @@ const (
 	unsettled axis = iota
 	vertical
 	horizontal
-	slanted // neither, clearly: nothing comes of it
+	slanted // neither, clearly: never the volume, and a swipe only if it ends sideways
 )
 
 // settle decides a finger's direction from its travel so far in frame pixels, once: after that it
@@ -463,8 +464,9 @@ func (s *Screen) moved(f *finger) {
 }
 
 // lift is the finger leaving: a tap if it barely moved and did not stay, a horizontal swipe if it
-// settled sideways and is still clearly sideways where it lifts, nothing otherwise (its vertical
-// notches already went out).
+// settled sideways or on a slant and is clearly sideways where it lifts, nothing otherwise (its
+// vertical notches already went out). A slant is let through so that a swipe which starts at an
+// angle and then goes sideways is not lost; one settled up or down never is a sideways swipe.
 func (s *Screen) lift(f *finger) {
 	if f.sx < 0 {
 		return
@@ -483,7 +485,7 @@ func (s *Screen) lift(f *finger) {
 	// The last position can arrive in the frame that lifts the finger, with no report of its own.
 	s.mu.Lock()
 	settle(f, dx, dy)
-	sideways := f.axis == horizontal
+	sideways := f.axis == horizontal || f.axis == slanted
 	s.mu.Unlock()
 	held := time.Since(f.at)
 	switch {
