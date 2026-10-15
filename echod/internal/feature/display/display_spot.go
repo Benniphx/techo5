@@ -16,11 +16,12 @@
 // value, is a jog wheel), and a tap in the middle does the item at the top.
 //
 // The backlight: the panel shows almost nothing below about 120 of 255 and glares at 255, so a
-// brightness in percent spans backlightMin to the top. From 22:00 to 07:00 (config Screen.Night) it is
-// held to nightCeiling.
+// brightness in percent spans backlightMin to the top. Through the night hours, 22:00 to 07:00 unless
+// others are set (config Screen.Night), it is held to nightCeiling, or the face is left to the red night
+// clock at the night light's level (night_spot.go).
 //
-// To Home Assistant the screen is a light with brightness, and a switch for auto-brightness, the
-// same entities the Show has.
+// To Home Assistant the screen is a light with brightness, and a switch for auto-brightness, with the
+// night's settings and Night mode beside them: the same entities the Show has.
 package display
 
 import (
@@ -73,10 +74,6 @@ func init() {
 
 // hasEqualizer is whether this screen offers the Wave and Bars turn screens (render_turn_spot.go).
 const hasEqualizer = true
-
-// hasNightSwitch is whether Home Assistant can turn the night on and off here: not on the Spot, whose
-// night hours are its own.
-const hasNightSwitch = false
 
 const (
 	// volumeShow is how long the level stays up after it last moved.
@@ -215,6 +212,26 @@ type Display struct {
 
 	// wasNight is whether the last backlight was set for the night, so the change of hour relights.
 	wasNight bool
+
+	// touchedAt is the last finger on the face. nightGlow is the night having left the red clock alone
+	// on the face at the night light's level, until a touch or the end of the night takes it down
+	// (night_spot.go); redShown is the frame drawn last being that clock.
+	touchedAt time.Time
+	nightGlow bool
+	redShown  bool
+
+	// The night's settings in Home Assistant, as on the Show (night_select.go): its hours, their two
+	// ends to the quarter hour, what it does to the face, the red clock's look and brightness.
+	nightHours, atNight  *esphome.Select
+	nightStart, nightEnd *esphome.Select
+	nightStyle           *esphome.Select
+	glowLevel            *esphome.Number
+	// nightMode is Night mode: Home Assistant turning the night on and off; nightShown what it last said.
+	nightMode  *esphome.Switch
+	nightShown bool
+	nightSeen  bool // nightShown has been sent at least once
+	// nightPubMu keeps publishing the Night mode switch to one caller at a time (showNightMode).
+	nightPubMu sync.Mutex
 	// lightMu makes each relight one step, from working out the level to writing it.
 	lightMu sync.Mutex
 	// sunriseLit is the light before an alarm having been on at the last settle tick (autobright.go).
@@ -321,6 +338,12 @@ func build() *Display {
 	d.styleSwipeSw = styleSwipeSwitch()
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.muteRing = muteRingSwitch(d.wake)
+	d.nightHours = nightHoursSelect(d)
+	d.nightStart, d.nightEnd = nightEndSelect(d, true), nightEndSelect(d, false)
+	d.atNight = atNightSelect(d)
+	d.nightStyle = nightStyleSelect(d)
+	d.glowLevel = glowNumber(d)
+	d.nightMode = nightModeSwitch(d)
 	d.lang = langSelect()
 	voice.Changed.Listen(d.changed)
 	media.Get().OnVolume.Listen(d.volumeMoved)
@@ -330,7 +353,7 @@ func build() *Display {
 	alarm.Get().Changed.Listen(func(struct{}) { d.ringLights() })
 	remind.Get().Changed.Listen(func(struct{}) { d.reminderLights() })
 	notify.Get().Changed.Listen(func(struct{}) { d.notifyLights() })
-	notify.SetNight(inNight)
+	notify.SetNight(nightNow)
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
 	doorbell.Get().Changed.Listen(func(struct{}) { d.wake() })
 	d.watchRoom()
@@ -369,7 +392,8 @@ func (d *Display) Name() string { return "screen" }
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.fontSel}
+	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.fontSel,
+		d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel}
 }
 
 // Restore lights the panel the way it was left.
@@ -385,6 +409,10 @@ func (d *Display) Restore(c config.Config) {
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	setMuteRingSubtle(d.muteRing, c.Screen.MuteRingSubtle)
+	d.nightHoursChanged()
+	d.atNight.Set(atNightOptions[atNightIndex()])
+	d.nightStyle.Set(nightStyleOptions[nightStyleIndex()])
+	d.glowLevel.Set(float32(d.glowSetting()))
 	d.setAuto(c.Screen.Auto, false)
 	d.apply(c.Screen.On, c.Screen.Brightness, false)
 }
@@ -443,7 +471,7 @@ func (d *Display) relight(jump bool) {
 	// setting changed on the screen all relight, and a level worked out first must not land last.
 	d.lightMu.Lock()
 	defer d.lightMu.Unlock()
-	night := inNight(time.Now())
+	night := nightNow(time.Now())
 	d.mu.Lock()
 	// The hour turning is a change to show at once, whoever relights first: the settle ticker taking
 	// it would otherwise leave the frame nothing to jump for, and it would fade in.
@@ -463,6 +491,10 @@ func (d *Display) relight(jump bool) {
 			}
 		}
 		target = backlightMin + (screen.BacklightMax-backlightMin)*math.Min(math.Max(pct, 0), 100)/100
+		if d.nightGlow {
+			// The red night clock: the night light's level, whatever the room and the brightness ask.
+			target = float64(d.glowBacklight())
+		}
 	}
 	// The light before an alarm takes the backlight over while it runs: it starts under whatever the
 	// room would otherwise ask for and ends at the face's own brightness.
@@ -488,15 +520,6 @@ func (d *Display) relight(jump bool) {
 	if err := screen.SetBacklight(level); err != nil {
 		slog.Warn("setting the backlight failed", "err", err)
 	}
-}
-
-// inNight says whether now is within the night hours, which may cross midnight.
-func inNight(now time.Time) bool {
-	v := config.Get().Screen.Night
-	if v == "" {
-		v = defaultNight
-	}
-	return config.InWindow(v, now)
 }
 
 func allowed(lux float64) float64 {
@@ -576,6 +599,7 @@ func (d *Display) volumeMoved(step int) {
 func (d *Display) gesture(g touch.Gesture) {
 	d.mu.Lock()
 	on, open := d.on, d.menuOpen
+	d.touchedAt = time.Now()
 	d.mu.Unlock()
 	// A notification that came up at night waits for a touch (releaseNotice), but not for one that stops
 	// a ring: that one is for the alarm. The touch that releases it only releases: whoever touched the
@@ -598,6 +622,33 @@ func (d *Display) gesture(g touch.Gesture) {
 		if !ringingNow(time.Now()).any() {
 			return
 		}
+	}
+
+	// The red night clock: a touch lights the face as it is by night, dimmed, and only lights it, as a
+	// touch on a dark face does: nobody can see what they are pressing on a clock alone at a glow. A ring
+	// under it is stopped or snoozed as on its own face, and a notification held for the night is only
+	// released. A long press goes on to open the ring menu, so the menu is one press away in the dark.
+	if d.redClockUp() {
+		if d.ringGesture(g) {
+			return
+		}
+		if held {
+			d.releaseHeld()
+			d.wake()
+			return
+		}
+		switch g.Kind {
+		case touch.Tap, touch.Hold, touch.SwipeUp, touch.SwipeDown, touch.SwipeLeft, touch.SwipeRight:
+			d.liftNight()
+		}
+		if g.Kind == touch.Hold {
+			d.mu.Lock()
+			d.openMenu(modeMain, itemTalk)
+			d.spinning, d.spinAngle = true, fingerAngle(g.X, g.Y)
+			d.mu.Unlock()
+			d.wake()
+		}
+		return
 	}
 
 	if d.callGesture(g) || d.ringGesture(g) || d.pinGesture(g) {
@@ -1210,7 +1261,7 @@ func (d *Display) frame() time.Duration {
 	d.videoPainting, d.vp.dark = false, false
 	now := time.Now()
 	d.mu.Lock()
-	nightChanged := d.wasNight != inNight(now)
+	nightChanged := d.wasNight != nightNow(now)
 	d.mu.Unlock()
 	if nightChanged {
 		d.relight(true)
@@ -1286,12 +1337,12 @@ func (d *Display) frame() time.Duration {
 	vs := video.Get().State()
 	busy := view.Phase != "idle" || sheetOpen || ringingNow(now).any() || phone.Get().Busy() || pinIsOpen() ||
 		sunriseProgress(now) > 0 || setup.Get().Waiting() || reminding || vs.Active()
-	if d.awayTick(now, on, busy, inNight(now)) {
+	if d.awayTick(now, on, busy, nightNow(now)) {
 		d.mu.Lock()
 		on = d.on
 		d.mu.Unlock()
 	}
-	if vs.Active() && vs.ID != d.videoLit && (vs.Phase != video.Asking || !inNight(now)) {
+	if vs.Active() && vs.ID != d.videoLit && (vs.Phase != video.Asking || !nightNow(now)) {
 		// A video starting lights a dark face, once per video; a DLNA video's question only by day.
 		d.videoLit = vs.ID
 		if !on {
@@ -1299,6 +1350,11 @@ func (d *Display) frame() time.Duration {
 			on = true
 		}
 	}
+	// The red night clock up or down; relit at once either way, and drawn from this frame.
+	d.night(now, on, view)
+	d.mu.Lock()
+	s.redClock, s.redStyle = d.nightGlow && nightClockOn(), config.Get().Screen.NightClockStyle
+	d.mu.Unlock()
 	if !on && !video.Get().State().Active() {
 		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
@@ -1319,7 +1375,7 @@ func (d *Display) frame() time.Duration {
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
 	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
-		s.eq = eqFor(s.phase, inNight(now), now)
+		s.eq = eqFor(s.phase, nightNow(now), now)
 		s.eq.wave = waveOn()
 	}
 	s.muted, _ = mute.Get().Muted()
@@ -1368,7 +1424,7 @@ func (d *Display) frame() time.Duration {
 	s.style = styleFactsFor(clockStyle(), now)
 	s.style.named = d.styleName(now)
 	s.camera, s.showCamera = home.Get().Camera()
-	s.camera, s.showCamera = d.gateCamera(s.camera, s.showCamera, inNight(now))
+	s.camera, s.showCamera = d.gateCamera(s.camera, s.showCamera, nightNow(now))
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	if s.showCamera {
 		s.talkOffered, s.talk = talkback.Offered(s.camera.Entity), talkback.Get().State()
@@ -1422,7 +1478,7 @@ func (d *Display) frame() time.Duration {
 	s.announcement, s.showAnnouncement = announce.Get().Showing()
 	s.reminder, s.showReminder = remind.Get().Showing()
 	s.notification, s.showNotification = notify.Get().Card()
-	d.gateNotice(&s, inNight(now))
+	d.gateNotice(&s, nightNow(now))
 	if s.reminder.From != config.Get().Device.Name {
 		s.reminderFrom = s.reminder.From
 	}
@@ -1436,7 +1492,7 @@ func (d *Display) frame() time.Duration {
 		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
 		// The weather art only where it will be seen: not under the night clock or the light before an
 		// alarm, which take the whole screen, where composing it each second is work for nothing.
-		artSeen := s.sunrise == 0
+		artSeen := !s.redClock && s.sunrise == 0
 		s.slideshow = home.Get().SlideshowBackground()
 		if home.Get().SlideshowMode() == config.SlideshowBackground && artSeen {
 			if art, fx := sceneArt(now, side, side); art != nil {
@@ -1448,7 +1504,7 @@ func (d *Display) frame() time.Duration {
 		}
 	}
 	d.mu.Lock()
-	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil
+	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock
 	if !boring {
 		d.slideshowIdleSince = time.Time{}
 	} else if d.slideshowIdleSince.IsZero() {
@@ -1458,7 +1514,7 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
-		if home.Get().SlideshowMode() == config.SlideshowScreensaver && s.sunrise == 0 {
+		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {
 			if art, fx := sceneArt(now, side, side); art != nil {
 				s.slideshowScreensaver, s.artFx = art, fx
 			}
@@ -1469,6 +1525,14 @@ func (d *Display) frame() time.Duration {
 	d.dashSceneSpot(&s)
 	s.callButton = callButton.Load()
 	d.videoSceneSpot(&s, now)
+	d.mu.Lock()
+	if s.showDash && d.dashHeld {
+		// A dashboard Home Assistant put up is shown over the night, as on the Show: somebody set it up
+		// to be seen.
+		s.redClock = false
+	}
+	d.redShown = s.nightClockFace()
+	d.mu.Unlock()
 	if s.showVideo && s.videoLive {
 		// The picture's own frames go to the panel; the canvas holds only the controls.
 		d.r.draw(s)
@@ -1564,15 +1628,6 @@ func (d *Display) Screenshot() *image.RGBA {
 		return nil
 	}
 }
-
-// setAtNight and nightHoursChanged are the Show's night light and its Home Assistant selects; the
-// Spot's night only dims, and its hours are not in Home Assistant.
-func (d *Display) setAtNight(int)     {}
-func (d *Display) nightHoursChanged() {}
-
-// nightLeftToHA does nothing on the Spot, which has no Night mode switch (hasNightSwitch).
-func (d *Display) nightLeftToHA()    {}
-func (d *Display) setNightStyle(int) {}
 
 // popupSettingsChanged: the Spot has no event pop-ups yet.
 func (d *Display) popupSettingsChanged() {}

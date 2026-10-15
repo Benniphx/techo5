@@ -93,10 +93,10 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
 		}
 		rows = append(rows, settingRow{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)})
-		if hasNightLight && st.night != "" {
-			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: "Dark, a faint glow, or a clock alone until touched",
+		if _, _, ok := nightWindow(st.night); ok {
+			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: atNightSub,
 				kind: ctlChoice, value: atNightOptions[atNightIndex()]})
-			if atNightIndex() == 2 {
+			if nightClockOn() {
 				rows = append(rows, settingRow{id: "nightstyle", label: "Night clock", sub: "How the night clock looks",
 					kind: ctlChoice, value: nightStyleLabel()})
 			}
@@ -378,9 +378,12 @@ func slideshowIndex() int {
 // nightByHARow is the night row's choice that leaves the night to Home Assistant's Night mode switch.
 const nightByHARow = "Controlled by Home Assistant"
 
+// nightRowLabel is what the Display card calls the night setting.
+const nightRowLabel = "Night hours"
+
 // nightRowValue is what the night row says: the hours, or that Home Assistant has the night.
 func nightRowValue(v string) string {
-	if hasNightSwitch && config.Get().Screen.NightByHA {
+	if config.Get().Screen.NightByHA {
 		return nightByHARow
 	}
 	return nightText(v)
@@ -470,11 +473,9 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		if _, _, ok := nightWindow(cur); ok && p.cur < 0 {
 			p.cur = len(p.opts) - 1
 		}
-		if hasNightSwitch {
-			p.opts = append(p.opts, nightByHARow)
-			if config.Get().Screen.NightByHA {
-				p.cur = len(p.opts) - 1
-			}
+		p.opts = append(p.opts, nightByHARow)
+		if config.Get().Screen.NightByHA {
+			p.cur = len(p.opts) - 1
 		}
 		return p, true
 	case "nightfromh", "nighttoh":
@@ -641,7 +642,7 @@ func (d *Display) choose(id string, i int) {
 				slog.Warn("saving the night setting failed", "err", err)
 			}
 			d.openPicker("nightfromh")
-		} else if i == len(nightPresets)+1 && hasNightSwitch {
+		} else if i == len(nightPresets)+1 {
 			d.nightLeftToHA()
 		}
 	case "nightfromh", "nighttoh":

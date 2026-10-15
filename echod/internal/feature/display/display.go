@@ -72,9 +72,6 @@ func init() {
 // round one would want its own.
 const hasEqualizer = true
 
-// hasNightSwitch is whether Home Assistant can turn the night on and off here (Night mode).
-const hasNightSwitch = true
-
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -1610,9 +1607,6 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	}
 	return false
 }
-
-// nightIdle is how long the panel stays lit after a finger or a turn during the night.
-const nightIdle = 90 * time.Second
 
 // inNight is whether now falls in the window, which may cross midnight.
 
