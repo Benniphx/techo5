@@ -165,6 +165,10 @@ const MediaService = "vendor.audio-hal"
 // AmpSwitch gates the speaker. On the Spot it is safe to switch, unlike the Show's.
 const AmpSwitch = "Ext_Speaker_Amp_Switch"
 
+// mayHaveTAS5805M is whether a board of this build can carry the TAS5805M amplifier (GainAvailable):
+// the Spot plays through its TLV320AIC32x4 and an external amplifier gated by AmpSwitch.
+const mayHaveTAS5805M = false
+
 // OutputBoost is make-up gain on everything the speaker plays. Unity until measured.
 const OutputBoost = 1.0
 

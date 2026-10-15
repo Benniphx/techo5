@@ -255,6 +255,10 @@ const MediaService = "vendor.audio-hal"
 // (found 2026-09-14). The amplifier is left as the kernel brought it up.
 const AmpSwitch = ""
 
+// mayHaveTAS5805M is whether a board of this build can carry the TAS5805M amplifier (GainAvailable):
+// some 2nd gen Show 5 units do, and the Show 8's kernel carries its driver too.
+const mayHaveTAS5805M = true
+
 // OutputBoost is make-up gain on everything the speaker plays, before the volume curve and the
 // limiter. Unity: the quiet output that once seemed to need it was the amplifier's safe mode
 // (see initSequence), and speech has its own normalizer.

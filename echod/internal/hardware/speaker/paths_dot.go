@@ -154,6 +154,10 @@ const MediaService = "media"
 // AmpSwitch gates the speaker.
 const AmpSwitch = "Ext_Speaker_Amp_Switch"
 
+// mayHaveTAS5805M is whether a board of this build can carry the TAS5805M amplifier (GainAvailable):
+// the Dot plays through its TLV320AIC32x4 and an external amplifier gated by AmpSwitch.
+const mayHaveTAS5805M = false
+
 // OutputBoost is make-up gain on the output; the Dot's vendor tuning already carries its own.
 const OutputBoost = 1.0
 

@@ -2,6 +2,9 @@ package speaker
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -31,16 +34,81 @@ func gainControlOn(m gainMixer) (alsa.Control, error) {
 }
 
 // GainAvailable checks the actual mixer, not the model name: not every 2nd gen
-// Show 5 has this amplifier. Enumeration is cached and happens only once per process.
-var GainAvailable = sync.OnceValue(func() bool {
+// Show 5 has this amplifier. The mixer walk takes over a second, so a build or a
+// board without the amplifier (tas5805mListed) skips it. An answer is kept for the
+// process once it is sure: the amplifier's control found, or the amplifier absent.
+// A card that could not be opened yet is asked again next time.
+var GainAvailable = func() bool {
+	gainSeen.mu.Lock()
+	defer gainSeen.mu.Unlock()
+	if gainSeen.sure {
+		return gainSeen.ok
+	}
+	ok, sure := findGain(mayHaveTAS5805M && tas5805mListed(i2cDevices), openGainMixer)
+	gainSeen.ok, gainSeen.sure = ok, sure
+	return ok
+}
+
+var gainSeen struct {
+	mu       sync.Mutex
+	ok, sure bool
+}
+
+type gainMixerCloser interface {
+	gainMixer
+	Close() error
+}
+
+// openGainMixer opens the card's mixer; a variable for the tests.
+var openGainMixer = func() (gainMixerCloser, error) {
 	m, err := alsa.OpenMixer(Card)
 	if err != nil {
-		return false
+		return nil, err
+	}
+	return m, nil
+}
+
+// findGain is whether the amplifier's gain control is there, and whether that is
+// sure. A board that cannot have the amplifier is a sure no without the walk; a
+// mixer that does not open is not sure, since the card may not be up yet. Once it
+// is, the codecs are all on it, so a missing control is a sure no.
+func findGain(mayHave bool, open func() (gainMixerCloser, error)) (ok, sure bool) {
+	if !mayHave {
+		return false, true
+	}
+	m, err := open()
+	if err != nil {
+		return false, false
 	}
 	defer m.Close()
 	_, err = gainControlOn(m)
-	return err == nil
-})
+	return err == nil, true
+}
+
+// i2cDevices lists the I2C devices the device tree describes, each with its name:
+// the amplifier's is "tas5805m" (compatible "ti,tas5805m"), bound to its driver or
+// not. A variable for the tests.
+var i2cDevices = "/sys/bus/i2c/devices"
+
+// tas5805mListed is whether the board may have the amplifier: a device named
+// tas5805m in dir. It says no only when the list was read and none is there; a
+// list that cannot be read, or is empty, leaves the mixer to say.
+func tas5805mListed(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) == 0 {
+		return true
+	}
+	for _, e := range entries {
+		name, err := os.ReadFile(filepath.Join(dir, e.Name(), "name"))
+		if err != nil {
+			return true
+		}
+		if strings.TrimSpace(string(name)) == "tas5805m" {
+			return true
+		}
+	}
+	return false
+}
 
 func writeSpeakerGain(m gainMixer, db int) error {
 	if db < 0 || db > config.SpeakerGainMax {
