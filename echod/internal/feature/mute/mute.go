@@ -251,7 +251,8 @@ func (m *Mute) pressed(e buttons.Event) {
 	case buttons.Hold:
 		speaker.Sound().Chime(speaker.ToneMuteHold)
 		// A hold is what tells the kernel's camera driver the privacy latch is off, on the Show 8
-		// and the 1st gen Show 5; a camera held off since a tap to unmute can be tried again.
+		// and the 1st gen Show 5 with an older boot image; a camera held off since a tap to unmute
+		// can be tried again. On a newer one the hold mutes instead (camera.ErrNeedsReboot).
 		camera.Get().Unwedge()
 		safe.Go("mute after a hold", m.followHold)
 	}

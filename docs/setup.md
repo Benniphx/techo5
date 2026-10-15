@@ -381,7 +381,8 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   device. The mute button and the lens shutter stop it, and then the screen is left as it is. On a
   Show 8 or 1st gen Show 5 with a boot image older than v1.0.1, a quick tap of the mute button to
   unmute leaves the camera switched off inside Amazon's kernel: **hold the mute button for a second**
-  (it chimes and stays unmuted) and the camera, presence and camera stills come back, or restart.
+  (it chimes and stays unmuted; if it mutes instead, tap it to unmute) and the camera, presence and
+  camera stills come back, or restart.
   The v1.0.1 boot image fixes it ([updating the boot image](install.md#updating-the-boot-image)); with
   it, holding the button mutes like a tap. The 2nd gen Show 5 is not affected.
 - **Gestures** (Show and Spot, experimental, off by default; the **Gestures** switch in Home
