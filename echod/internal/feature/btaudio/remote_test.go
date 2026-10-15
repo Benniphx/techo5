@@ -126,3 +126,27 @@ func TestAReplacedWaitEndsNothing(t *testing.T) {
 		t.Errorf("the wait running out ended %v, want the phone's track", gone)
 	}
 }
+
+// A phone's wait goes with its track: once the track loaded here is another's, or none, the waits of
+// the phones whose track ended some other way are stopped; the one for the track loaded stays.
+func TestAWaitGoesWithItsTrack(t *testing.T) {
+	phoneKeptAfter = func(d time.Duration, fn func()) *time.Timer { return time.AfterFunc(time.Hour, fn) }
+	t.Cleanup(func() { phoneKeptAfter = time.AfterFunc })
+	f := &Feature{}
+	pixel, redmi := media.BluetoothPrefix+"Pixel", media.BluetoothPrefix+"Redmi"
+	f.keep(pixel, true)
+	f.keep(redmi, true)
+	pt := f.kept[pixel]
+
+	f.letGoKept(redmi)
+	if f.kept[pixel] != nil || f.kept[redmi] == nil {
+		t.Fatalf("waits left %v, want only the loaded track's", f.kept)
+	}
+	if pt.Stop() {
+		t.Error("the ended track's timer was left running")
+	}
+	f.letGoKept("")
+	if len(f.kept) != 0 {
+		t.Errorf("with nothing loaded, waits left %v", f.kept)
+	}
+}

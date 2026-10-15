@@ -147,6 +147,21 @@ func (f *Feature) keep(item string, paused bool) {
 	}
 }
 
+// letGoKept stops the waits of the phones whose track is not the one loaded here, cur: it ended some
+// other way (a stop, the phone playing on after a pause, the phone gone), or it was never this
+// phone's. A phone's track only comes back playing, which needs no wait, so there is nothing left
+// for one to end.
+func (f *Feature) letGoKept(cur string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for item, t := range f.kept {
+		if item != cur {
+			t.Stop()
+			delete(f.kept, item)
+		}
+	}
+}
+
 // goneFrom ends a phone's track left paused here once the phone is no longer connected: nothing
 // will play it again (ReceiverGone). A track playing, or one that is not a phone's, is left as it
 // is.

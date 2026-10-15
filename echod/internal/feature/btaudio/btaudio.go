@@ -657,6 +657,7 @@ func (f *Feature) refresh() {
 		})
 	}
 	goneFrom(devices)
+	f.letGoKept(media.Get().Receiving())
 	if phoneJoined != "" {
 		slog.Info("bluetooth phone pairing: a phone connected; phone pairing ends", "address", phoneJoined)
 		if err := a.Trust(phoneJoined, true); err != nil {
