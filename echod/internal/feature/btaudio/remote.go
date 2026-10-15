@@ -75,6 +75,50 @@ var (
 	phoneKeptGone  = func(item string) { media.Get().ReceiverGone(item) }
 )
 
+// followed is what follows each phone's player change (playerChanged); a variable for the tests.
+var followed = (*Feature).playerChanged
+
+// followPlayer hands st on to be followed on a goroutine of its own, after the changes heard before it
+// and in the order they came, and returns at once: it is heard on the BlueZ signal goroutine, whose
+// listeners must not block (bluez.Adapter.PlayerChanged), and following a pause tells Home Assistant
+// the media player's state, a write to the network that can stall.
+func (f *Feature) followPlayer(st bluez.PlayerStatus) {
+	f.statusMu.Lock()
+	f.statuses = append(f.statuses, st)
+	if f.following {
+		f.statusMu.Unlock()
+		return
+	}
+	f.following = true
+	f.statusMu.Unlock()
+	safe.Go("bluetooth follow a phone", f.follow)
+}
+
+// follow follows what is waiting until nothing is. following goes false in the same hold of statusMu
+// that finds nothing waiting, so a change just after it starts another; one that panics is let go of
+// here, so the rest are still followed.
+func (f *Feature) follow() {
+	for {
+		f.statusMu.Lock()
+		if len(f.statuses) == 0 {
+			f.following = false
+			f.statusMu.Unlock()
+			return
+		}
+		st := f.statuses[0]
+		f.statuses = f.statuses[1:]
+		f.statusMu.Unlock()
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("recovered from a panic", "in", "bluetooth follow a phone", "panic", r)
+				}
+			}()
+			followed(f, st)
+		}()
+	}
+}
+
 // playerChanged follows a phone that paused or played again on its own: the track here pauses with
 // it and plays again with it, so a play on the phone after a pause from here is heard. A phone
 // whose track is not the one playing here is left alone (ReceiverPaused). A pause starts
@@ -96,7 +140,7 @@ func (f *Feature) playerChanged(st bluez.PlayerStatus) {
 	}
 	for _, d := range a.Devices() {
 		if d.Path == st.Device {
-			// Here, not on a goroutine of its own: a pause and a play close together stay in order.
+			// Here, one change at a time (followPlayer): a pause and a play close together stay in order.
 			item := media.BluetoothPrefix + displayName(d)
 			media.Get().ReceiverPaused(item, paused)
 			f.keep(item, paused)
@@ -191,6 +235,24 @@ func playingToNobody(sending []received, receiving string, playing, paused, exte
 		return nil
 	}
 	return sending
+}
+
+// openTries is how many looks in a row a phone's stream that starts may fail to open before the phone
+// is paused away for playing to nobody all the same: a stream a phone paused and played again quickly
+// can still be held by the track that was playing it for a look or two (receive), and the play on the
+// phone is the listener's, which a pause at once would undo.
+const openTries = 3
+
+// stillOpening is away without the phones whose stream failed to open this look and is still being
+// tried (opening): each is tried again at the next look rather than paused (pauseAway).
+func stillOpening(away []received, opening map[string]bool) []received {
+	var out []received
+	for _, r := range away {
+		if !opening[r.item] {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // pauseAway pauses each phone playing to nobody (playingToNobody), once for as long as it is: so

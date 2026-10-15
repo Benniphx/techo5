@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/bluez"
 )
 
 // A phone still sending is playing to nobody once the speaker is something else's that is not a
@@ -148,5 +149,58 @@ func TestAWaitGoesWithItsTrack(t *testing.T) {
 	f.letGoKept("")
 	if len(f.kept) != 0 {
 		t.Errorf("with nothing loaded, waits left %v", f.kept)
+	}
+}
+
+// A phone whose stream failed to open as it started is not paused away while it is still being tried:
+// it is tried again at the next look, and paused only once that has failed openTries times.
+func TestAPhoneStillOpeningIsNotPausedAway(t *testing.T) {
+	pixel, redmi := received{item: media.BluetoothPrefix + "Pixel"}, received{item: media.BluetoothPrefix + "Redmi"}
+	away := []received{pixel, redmi}
+	got := stillOpening(away, map[string]bool{pixel.item: true})
+	if len(got) != 1 || got[0].item != redmi.item {
+		t.Fatalf("paused away %v, want only the phone not being tried again", got)
+	}
+	if got := stillOpening(away, map[string]bool{pixel.item: false}); len(got) != 2 {
+		t.Errorf("a phone out of tries was not paused away: %v", got)
+	}
+}
+
+// A phone's player changes are followed off the goroutine they are heard on, one at a time and in
+// the order they came, however long following one takes.
+func TestPlayerChangesAreFollowedInOrderWithoutBlocking(t *testing.T) {
+	release := make(chan struct{})
+	got := make(chan string, 4)
+	was := followed
+	followed = func(_ *Feature, st bluez.PlayerStatus) {
+		if st.Status == "paused" {
+			<-release // a write to Home Assistant that stalls
+		}
+		got <- st.Status
+	}
+	t.Cleanup(func() { followed = was })
+	f := &Feature{}
+	done := make(chan struct{})
+	go func() {
+		for _, st := range []string{"paused", "playing", "paused"} {
+			f.followPlayer(bluez.PlayerStatus{Status: st})
+		}
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("hearing a change waited for the one before it to be followed")
+	}
+	close(release)
+	for _, want := range []string{"paused", "playing", "paused"} {
+		select {
+		case st := <-got:
+			if st != want {
+				t.Fatalf("followed %s, want %s", st, want)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s was never followed", want)
+		}
 	}
 }

@@ -113,6 +113,13 @@ type Feature struct {
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
 
+	// statuses is the phones' player changes waiting to be followed, oldest first, and following
+	// whether a goroutine is following them (followPlayer); under statusMu, not mu, which following
+	// one takes.
+	statusMu  sync.Mutex
+	statuses  []bluez.PlayerStatus
+	following bool
+
 	mu      sync.Mutex
 	adapter *bluez.Adapter
 	alsa    *bluealsa.Client
@@ -158,6 +165,9 @@ type Feature struct {
 	// pausedAway is the phones paused for playing to nobody, by item, while they go on sending
 	// (pauseAway): each is asked once.
 	pausedAway map[string]bool
+	// openFailed is how many looks in a row each phone's stream, by item, failed to open as it started
+	// (receive): one failing is not paused away while it is still being tried (stillOpening).
+	openFailed map[string]int
 	// kept ends a phone's track left paused too long (keep), one timer for each phone by item.
 	kept map[string]*time.Timer
 	// levels is each received stream's level as last seen or set, by PCM path: a phone's volume slider,
@@ -233,6 +243,7 @@ func build() *Feature {
 		received:   map[string]bool{},
 		displaced:  map[string]bool{},
 		pausedAway: map[string]bool{},
+		openFailed: map[string]int{},
 		kept:       map[string]*time.Timer{},
 		levels:     map[string]int{},
 		ours:       map[string]time.Time{},
@@ -329,7 +340,7 @@ func (f *Feature) open(ctx context.Context) error {
 	f.state.Remembered = config.Get().Bluetooth.AudioName
 	f.mu.Unlock()
 	a.Changed.Listen(func(struct{}) { f.wake() })
-	a.PlayerChanged.Listen(f.playerChanged)
+	a.PlayerChanged.Listen(f.followPlayer)
 	al.Changed.Listen(func(struct{}) { f.wake() })
 	slog.Info("bluetooth up", "address", a.Address(), "devices", len(a.Devices()))
 	return nil
@@ -486,7 +497,8 @@ func (f *Feature) refresh() {
 	// takes the speaker. Only on that edge, so Home Assistant media started afterwards is not taken
 	// back while the phone keeps its transport open.
 	var sending []received
-	taken := map[string]bool{} // streams taken this look: their level is the one handed to them, not one read
+	taken := map[string]bool{}   // streams taken this look: their level is the one handed to them, not one read
+	opening := map[string]bool{} // streams that failed to open this look and are tried again at the next
 	for _, p := range al.PCMs() {
 		if !p.Receivable() {
 			continue
@@ -497,10 +509,13 @@ func (f *Feature) refresh() {
 		was := f.received[string(p.Path)]
 		f.received[string(p.Path)] = running
 		f.mu.Unlock()
+		r := received{pcm: p, dev: d, item: media.BluetoothPrefix + displayName(d)}
 		if !running {
+			f.mu.Lock()
+			delete(f.openFailed, r.item)
+			f.mu.Unlock()
 			continue
 		}
-		r := received{pcm: p, dev: d, item: media.BluetoothPrefix + displayName(d)}
 		sending = append(sending, r)
 		if was {
 			continue
@@ -512,9 +527,14 @@ func (f *Feature) refresh() {
 			// quickly can still be held by the track that was playing it until that track lets go.
 			f.mu.Lock()
 			f.received[string(p.Path)] = false
+			f.openFailed[r.item]++
+			opening[r.item] = f.openFailed[r.item] < openTries
 			f.mu.Unlock()
 			continue
 		}
+		f.mu.Lock()
+		delete(f.openFailed, r.item)
+		f.mu.Unlock()
 		if holder != "" && holder != r.item {
 			f.mu.Lock()
 			f.displaced[holder] = true
@@ -540,7 +560,7 @@ func (f *Feature) refresh() {
 		taken[string(back.pcm.Path)] = true
 		f.receive(al, back.pcm, back.dev)
 	}
-	f.pauseAway(playingToNobody(sending, m.Receiving(), playing, paused, external))
+	f.pauseAway(stillOpening(playingToNobody(sending, m.Receiving(), playing, paused, external), opening))
 	if cur := m.Receiving(); cur != "" {
 		for _, r := range sending {
 			if r.item == cur && !taken[string(r.pcm.Path)] {
