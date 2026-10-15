@@ -14,7 +14,9 @@
 #   /bin/busybox.static   PID 1's interpreter
 #   /root/.ssh/authorized_keys   <authorized_keys>: the rescue's SSH keys, and the slot's bench keys
 #                         (BENCH_SSH_KEYS in device.conf); `-k none` leaves it empty, as an image
-#                         meant for anyone must (rescue is then USB serial only)
+#                         meant for anyone must (rescue is then USB serial only). A key here opens
+#                         SSH on every interface, Wi-Fi included, from every boot (the bench hook
+#                         in boot.sh, whatever the SSH switch says): for a unit on the bench only
 #   /.techo5-store        the store marker, naming the board (board=athena): slotctl then installs
 #                         only an athena rootfs into the other slot
 #   /active, /slots/a (<rootfs.tar.gz>), /slots/a.state   the store, as slotctl has it
@@ -59,6 +61,8 @@ if [ -z "$INNER" ]; then
 	if [ "$KEYS" != none ]; then
 		grep -q '^ssh-' "$KEYS" || { echo "mkstore: $KEYS holds no public key" >&2; exit 1; }
 		if grep -q 'PRIVATE KEY' "$KEYS"; then echo "mkstore: $KEYS is a private key" >&2; exit 1; fi
+		echo "mkstore: warning: this image carries SSH keys, and a unit running it accepts them on every" >&2
+		echo "mkstore: interface, Wi-Fi too, whatever the SSH switch says. Bench units only; -k none for anyone else." >&2
 	fi
 	map=--map-auto; command -v newuidmap >/dev/null || map=
 	# Files owned by root (and by the slot's service users) without sudo.
