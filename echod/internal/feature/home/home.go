@@ -213,6 +213,13 @@ const forecastEvery = 30 * time.Minute
 
 // Run keeps the forecast current. Nothing to do without a token or a weather entity.
 func (f *Feature) Run(ctx context.Context) error {
+	// What plays is live radio while a station is being followed: a drop is fetched again (media
+	// resume.go), where a song would start over.
+	media.SetLive(func() bool {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		return f.meta.station != ""
+	})
 	go f.metaLoop(ctx)
 	go f.nowPlayingLoop(ctx)
 	if hasScreen {

@@ -127,6 +127,8 @@ type track struct {
 	// (the voice assistant) finds out, rather than taking the start for the sound.
 	heard, done chan struct{}
 	failed      error
+	// heardOnce closes heard: a resumed live stream (resume.go) fetches again, and arrives again.
+	heardOnce sync.Once
 
 	// handOff is a track Play started, whose url goes to the stream's handOff if it cannot be decoded.
 	// PlayChecked's caller is waiting for the answer, and hands it on itself.
@@ -274,7 +276,15 @@ func (m *Stream) play(url string, handOff bool) *track {
 			// Canceled means stopped or replaced, which is somebody's doing and nobody's to undo.
 			m.finished(t, itself)
 		}()
-		err := m.run(ctx, t, url)
+		// Live radio that drops is fetched again as the same track (resume.go).
+		var err error
+		for tries := 0; ; {
+			began := time.Now()
+			err = m.run(ctx, t, url)
+			if !resume(ctx, err, time.Since(began), &tries) {
+				break
+			}
+		}
 		if err != nil && ctx.Err() == nil {
 			slog.Error("playing media failed", "err", err)
 			t.failed = err
@@ -667,7 +677,7 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 			// the speaker is free to take it yet.
 			if !arrived && t.heard != nil {
 				arrived = true
-				close(t.heard)
+				t.heardOnce.Do(func() { close(t.heard) })
 			}
 			// Read ahead of the wait by one chunk, so the answer does not wait on the speaker; the
 			// queue still takes no more than it has room for.
