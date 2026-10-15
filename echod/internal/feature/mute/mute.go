@@ -301,10 +301,13 @@ var (
 )
 
 // following keeps it to one watch, and followUntil is when that watch ends: a hold during it moves
-// the end on rather than starting a second one.
+// the end on rather than starting a second one. The end is kept as a span from followEpoch, which
+// carries the monotonic clock, not as a wall-clock time: the clock set by NTP after boot, a step of
+// seconds, ended the watch early and left the switch saying live over a set latch (#153).
 var (
 	following   atomic.Bool
-	followUntil atomic.Int64
+	followUntil atomic.Int64 // nanoseconds after followEpoch
+	followEpoch = time.Now()
 )
 
 // followHold publishes whatever the line does during and after a hold.
@@ -312,17 +315,19 @@ func (m *Mute) followHold() {
 	if m.line == nil {
 		return
 	}
-	followUntil.Store(time.Now().Add(followFor).UnixNano())
-	until := func() time.Time { return time.Unix(0, followUntil.Load()) }
+	followUntil.Store(int64(time.Since(followEpoch) + followFor))
 	for following.CompareAndSwap(false, true) {
-		m.follow(until, followPoll)
+		m.follow(followEnd, followPoll)
 		following.Store(false)
 		// A hold that came in as the watch was ending moved the end on, and found it still running.
-		if !time.Now().Before(until()) {
+		if !time.Now().Before(followEnd()) {
 			return
 		}
 	}
 }
+
+// followEnd is when the watch ends, on the monotonic clock.
+func followEnd() time.Time { return followEpoch.Add(time.Duration(followUntil.Load())) }
 
 // follow publishes the line whenever it differs from the switch, looking every poll until until has
 // passed.

@@ -2,6 +2,7 @@ package mute
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -188,6 +189,19 @@ func TestASecondHoldExtendsTheWatch(t *testing.T) {
 
 	if w.count() != 1 || !w.sw.Get() {
 		t.Errorf("published %d times, switch says %v; want once, muted", w.count(), w.sw.Get())
+	}
+}
+
+// The watch's end is on the monotonic clock, so the wall clock set after boot (NTP stepping it by
+// seconds) neither ends the watch early nor keeps it on.
+func TestTheWatchEndIsMonotonic(t *testing.T) {
+	followUntil.Store(int64(time.Since(followEpoch) + time.Second))
+	end := followEnd()
+	if !strings.Contains(end.String(), " m=") {
+		t.Fatalf("the watch's end %v carries no monotonic reading", end)
+	}
+	if d := time.Until(end); d <= 0 || d > time.Second {
+		t.Fatalf("the watch ends in %v, want within a second", d)
 	}
 }
 
