@@ -90,3 +90,14 @@ func TestCutName(t *testing.T) {
 		t.Errorf("a cut before a space came back %q", got)
 	}
 }
+
+// A name with nothing a slug keeps falls back to the default name's slug with the end of the MAC
+// address; any other name is its own slug.
+func TestSlugOr(t *testing.T) {
+	if got := SlugOr("Living Room", "00:11:22:aa:bb:cc"); got != "living-room" {
+		t.Errorf("SlugOr = %q, want living-room", got)
+	}
+	if got, want := SlugOr("Кухня", "00:11:22:aa:bb:cc"), Slug(NameFromMAC("00:11:22:aa:bb:cc")); got != want || !strings.HasSuffix(got, "-aabbcc") {
+		t.Errorf("SlugOr of an all-Cyrillic name = %q, want %q", got, want)
+	}
+}

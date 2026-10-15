@@ -1179,3 +1179,22 @@ func TestSuperviseSaysEachStart(t *testing.T) {
 		t.Errorf("started %d times, said %d", n, starts)
 	}
 }
+
+// The receivers' hostname is the name's slug with -media, as before, for any name a slug keeps
+// something of; only a name with nothing a slug keeps falls back, to the default name with the end of
+// the MAC address rather than a "techo5" every such device shared.
+func TestTheMediaHostname(t *testing.T) {
+	const mac = "00:11:22:aa:bb:cc"
+	for name, want := range map[string]string{
+		"Kitchen":               "kitchen-media",
+		"Küche Echo":            "k-che-echo-media",
+		strings.Repeat("a", 60): strings.Repeat("a", 57) + "-media",
+	} {
+		if got := mediaHost(name, mac); got != want {
+			t.Errorf("mediaHost(%q) = %q, want %q", name, got, want)
+		}
+	}
+	if got := mediaHost("Кухня", mac); !strings.HasSuffix(got, "-aabbcc-media") || len(got) > 63 {
+		t.Errorf("an all-Cyrillic name's hostname is %q", got)
+	}
+}

@@ -225,11 +225,7 @@ func (a *API) Start(ctx context.Context) error {
 // Greek, Cyrillic or Chinese, say) falls back to the name the device would have had with none, which
 // carries the end of its MAC address, so two such devices are still two nodes.
 func nodeName(name, mac string) string {
-	slug := layout.Slug(name)
-	if slug == "" {
-		slug = layout.Slug(layout.NameFromMAC(mac))
-	}
-	return strings.TrimRight(layout.CutName(slug, layout.LabelMax), "-")
+	return strings.TrimRight(layout.CutName(layout.SlugOr(name, mac), layout.LabelMax), "-")
 }
 
 // subDevices groups entities onto pages of their own, since Home Assistant puts every entity a device has

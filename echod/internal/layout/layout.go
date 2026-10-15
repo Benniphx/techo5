@@ -252,6 +252,16 @@ func CutName(name string, n int) string {
 	return strings.TrimRight(name[:cut], " ")
 }
 
+// SlugOr is name's Slug, or, for a name with nothing in it a slug keeps (one in Greek, Cyrillic or
+// Chinese, say), the slug of the name the device has with none set (NameFromMAC), which carries the end
+// of its MAC address: never empty, and two such devices still differ.
+func SlugOr(name, mac string) string {
+	if slug := Slug(name); slug != "" {
+		return slug
+	}
+	return Slug(NameFromMAC(mac))
+}
+
 // Slug turns a display name into a node name: the mDNS hostname and the ESPHome node's own name.
 // "Living Room" becomes "living-room". It is not what an entity id is built from — see EntitySlug.
 func Slug(name string) string {
