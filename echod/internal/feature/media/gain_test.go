@@ -87,3 +87,23 @@ func TestSpeakerGainUndoesWriteWhenSaveFails(t *testing.T) {
 		t.Fatalf("failed save did not restore amplifier: %v", applied)
 	}
 }
+
+// A gain control built before the card was up is shown once the mixer says the amplifier is there,
+// not hidden for the life of the process.
+func TestSpeakerGainShowsOnceTheCardIsSure(t *testing.T) {
+	there := false
+	was := gainAvailable
+	gainAvailable = func() bool { return there }
+	t.Cleanup(func() { gainAvailable = was })
+	p := &Player{gain: &esphome.Number{}, gainApply: func(int) error { return nil }}
+	if p.SpeakerGainAvailable() {
+		t.Fatal("shown before the card was sure")
+	}
+	there = true
+	if !p.SpeakerGainAvailable() {
+		t.Fatal("not shown once the card was sure")
+	}
+	if (&Player{}).SpeakerGainAvailable() {
+		t.Fatal("a player with no gain control showed one")
+	}
+}

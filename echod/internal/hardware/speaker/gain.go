@@ -49,6 +49,19 @@ var GainAvailable = func() bool {
 	return ok
 }
 
+// GainPossible is whether the amplifier's gain control may be there: GainAvailable's sure yes, or
+// not sure yet on a board that may have the amplifier. It never walks the mixer, so the media player
+// can build its gain control while the card is not up yet, and a late sure yes still finds the saved
+// gain waiting (SetSpeakerGain) and the control there.
+var GainPossible = func() bool {
+	gainSeen.mu.Lock()
+	defer gainSeen.mu.Unlock()
+	if gainSeen.sure {
+		return gainSeen.ok
+	}
+	return mayHaveTAS5805M && tas5805mListed(i2cDevices)
+}
+
 var gainSeen struct {
 	mu       sync.Mutex
 	ok, sure bool
@@ -121,26 +134,33 @@ func writeSpeakerGain(m gainMixer, db int) error {
 	return m.Set(c, uint32(gainUnity+db))
 }
 
-// SetSpeakerGain writes the amplifier directly. Before Start it remembers the
-// requested gain; Run reapplies it before any audio, including after service restarts.
+// SetSpeakerGain writes the amplifier directly. Before Start, or while the card
+// is not up and the control not yet sure to be there (GainPossible), it remembers
+// the requested gain; Run reapplies it before any audio, including after service
+// restarts, once GainAvailable is sure.
 func (p *Player) SetSpeakerGain(db int) error {
 	if db < 0 || db > config.SpeakerGainMax {
 		return fmt.Errorf("speaker gain must be between 0 and %d dB", config.SpeakerGainMax)
 	}
-	if !GainAvailable() {
-		return fmt.Errorf("speaker gain is not supported on this amplifier")
+	if !GainPossible() {
+		return errNoGain
 	}
 	p.gainMu.Lock()
 	defer p.gainMu.Unlock()
-	_, m := p.device()
-	if m != nil {
-		if err := writeSpeakerGain(m, db); err != nil {
-			return err
+	if _, m := p.device(); m != nil {
+		if GainAvailable() {
+			if err := writeSpeakerGain(m, db); err != nil {
+				return err
+			}
+		} else if !GainPossible() {
+			return errNoGain
 		}
 	}
 	p.gainDB = db
 	return nil
 }
+
+var errNoGain = fmt.Errorf("speaker gain is not supported on this amplifier")
 
 func (p *Player) applySpeakerGain() error {
 	p.gainMu.Lock()

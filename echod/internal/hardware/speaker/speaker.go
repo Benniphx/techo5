@@ -552,6 +552,10 @@ func (p *Player) Run(ctx context.Context) error {
 	out := p.Output()
 	p.apply(initSequence)
 	p.route()
+	// Written on every start, even at 0 dB: 110 (0 dB) is the TAS5805M driver's own default (probe
+	// sets its vol to 110, and every unmute writes that cached vol to the chip), so at 0 dB this
+	// writes what is already there. But the driver keeps the last level written across a restart of
+	// this service, so the saved gain, 0 dB included (settings reset, say), is written over it.
 	if GainAvailable() {
 		if err := p.applySpeakerGain(); err != nil {
 			slog.Error("restoring speaker gain failed, continuing playback", "err", err)

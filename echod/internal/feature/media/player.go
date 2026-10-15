@@ -323,7 +323,10 @@ func build() *Player {
 	p.quiet = newQuiet()
 	p.night = newNight()
 	p.layers = noiseLayers()
-	if speaker.GainAvailable() {
+	// Built wherever the amplifier may be (GainPossible), not only where the mixer has already said
+	// so: the card may not be up yet as this builds, and the saved gain is restored then all the same,
+	// for the speaker to write once it is sure. Whether it is there is asked again where it is shown.
+	if speaker.GainPossible() {
 		p.gain = &esphome.Number{
 			Base: esphome.Base{ObjectID: "speaker_gain", Name: "Speaker gain",
 				Icon: "mdi:volume-plus", Category: esphome.CategoryConfig,
@@ -510,7 +513,9 @@ func (p *Player) SetHASounds(on bool) {
 func (p *Player) Entities() []esphome.Entity {
 	out := []esphome.Entity{p.mp, p.jack, p.resampling, p.onTurn, p.duck, p.asp, p.bass, p.treble,
 		p.quiet, p.night, p.nearMiss, p.haSounds, p.sleep.sel}
-	if p.gain != nil {
+	// Asked as the entities are listed (once, as the API starts): the mixer if it opens by then,
+	// which leaves out a board that turned out not to have the amplifier, or still may have it.
+	if p.gain != nil && (speaker.GainAvailable() || speaker.GainPossible()) {
 		out = append(out, p.gain)
 	}
 	if speaker.HasJack {
@@ -604,6 +609,8 @@ func (p *Player) Restore(c config.Config) {
 	slog.Info("restored", "what", p.duck.ObjectID, "using", c.Media.DuckDB)
 
 	want := c.Speaker.ASPWanted()
+	// Before or after the tuning makes no difference to the amplifier: SetASP only switches the
+	// tuning in the write loop, and nothing else writes the amplifier's gain control.
 	if p.gain != nil {
 		db := max(0, min(c.Speaker.GainDB, config.SpeakerGainMax))
 		if err := p.gainApply(db); err != nil {

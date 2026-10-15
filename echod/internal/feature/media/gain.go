@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 )
 
 func (p *Player) commandSpeakerGain(v float32) {
@@ -22,7 +23,13 @@ func (p *Player) commandSpeakerGain(v float32) {
 
 // SpeakerGain is separate from the volume slider and tone controls. It affects
 // all sound from the internal amplifier, including replies, alarms and radio.
-func (p *Player) SpeakerGainAvailable() bool { return p.gain != nil }
+// SpeakerGainAvailable is asked fresh each time: a card not up as the player was
+// built may have said so since (speaker.GainAvailable keeps a sure answer, and
+// asks the mixer until then).
+func (p *Player) SpeakerGainAvailable() bool { return p.gain != nil && gainAvailable() }
+
+// gainAvailable is speaker.GainAvailable; a variable for the tests.
+var gainAvailable = func() bool { return speaker.GainAvailable() }
 
 func (p *Player) SpeakerGain() int {
 	if p.gain == nil {

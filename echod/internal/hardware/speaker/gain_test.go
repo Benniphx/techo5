@@ -85,9 +85,7 @@ func TestSpeakerGainRejectsUnsupportedControls(t *testing.T) {
 }
 
 func TestSpeakerGainIsQueuedBeforeStart(t *testing.T) {
-	was := GainAvailable
-	GainAvailable = func() bool { return true }
-	t.Cleanup(func() { GainAvailable = was })
+	gainThere(t, true, true)
 	p := &Player{}
 	if err := p.SetSpeakerGain(5); err != nil {
 		t.Fatal(err)
@@ -104,9 +102,7 @@ func TestSpeakerGainIsQueuedBeforeStart(t *testing.T) {
 // service and repeatedly restart it. Cancel at the first wait after mixer setup;
 // an unopened mixer forces the same error branch as a failed amplifier write.
 func TestSpeakerRunContinuesAfterGainRestoreFails(t *testing.T) {
-	was := GainAvailable
-	GainAvailable = func() bool { return true }
-	t.Cleanup(func() { GainAvailable = was })
+	gainThere(t, true, true)
 	for _, db := range []int{0, 5} {
 		p := New()
 		p.pb = &alsa.Playback{}
@@ -218,5 +214,55 @@ func TestSpeakerGainAsksAgainUntilSure(t *testing.T) {
 	openErr = nil
 	if !GainAvailable() || !GainAvailable() || opened != 2 {
 		t.Fatalf("the card once up: opened %d times, want 2", opened)
+	}
+}
+
+// gainThere stands in for the mixer: whether the gain control may be there, and whether it is.
+func gainThere(t *testing.T, possible, available bool) {
+	wasP, wasA := GainPossible, GainAvailable
+	GainPossible = func() bool { return possible }
+	GainAvailable = func() bool { return available }
+	t.Cleanup(func() { GainPossible, GainAvailable = wasP, wasA })
+}
+
+// A gain set while the card is not up yet, the control not sure to be there, is kept for Run to write
+// once it is sure, rather than refused and the saved gain lost; a board that cannot have the
+// amplifier refuses it.
+func TestSpeakerGainIsKeptUntilTheCardIsSure(t *testing.T) {
+	gainThere(t, true, false)
+	p := &Player{}
+	if err := p.SetSpeakerGain(4); err != nil || p.gainDB != 4 {
+		t.Fatalf("a gain set before the card was up: err %v, kept %d", err, p.gainDB)
+	}
+	gainThere(t, false, false)
+	if err := p.SetSpeakerGain(2); err == nil || p.gainDB != 4 {
+		t.Fatalf("a board without the amplifier took a gain: err %v, kept %d", err, p.gainDB)
+	}
+}
+
+// GainPossible is a sure answer once there is one, and until then whether the board may have the
+// amplifier, without opening the mixer.
+func TestSpeakerGainPossibleBeforeSure(t *testing.T) {
+	wasDir, wasOpen := i2cDevices, openGainMixer
+	t.Cleanup(func() {
+		i2cDevices, openGainMixer = wasDir, wasOpen
+		gainSeen.ok, gainSeen.sure = false, false
+	})
+	i2cDevices = filepath.Join(t.TempDir(), "absent")
+	openGainMixer = func() (gainMixerCloser, error) {
+		t.Fatal("GainPossible opened the mixer")
+		return nil, nil
+	}
+	gainSeen.ok, gainSeen.sure = false, false
+	if GainPossible() != mayHaveTAS5805M {
+		t.Errorf("not sure yet: possible %v, want %v", GainPossible(), mayHaveTAS5805M)
+	}
+	gainSeen.ok, gainSeen.sure = true, true
+	if !GainPossible() {
+		t.Error("a sure yes was not possible")
+	}
+	gainSeen.ok = false
+	if GainPossible() {
+		t.Error("a sure no was possible")
 	}
 }

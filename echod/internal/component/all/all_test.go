@@ -8,7 +8,12 @@ import (
 	esphome "github.com/ygelfand/go-esphome-device"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 )
+
+// The machine the tests run on has no amplifier, but may have an I2C bus that cannot say so: the
+// speaker gain is left out, as on a unit whose mixer has said it has none.
+func init() { speaker.GainPossible = func() bool { return false } }
 
 // registered is the base inventory of entities, by object id.
 //
