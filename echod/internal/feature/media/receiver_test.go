@@ -485,42 +485,61 @@ func TestAPausedPhoneIsReadOn(t *testing.T) {
 	}
 }
 
-// After a pause, a phone that sends on without a break is taken not to have paused; one that stops,
-// even briefly, did, and its playing again later is not counted against it.
+// After the phone took a pause, a phone that sends on without a break is taken not to have paused; one
+// that stops, even briefly, did, and its playing again later is not counted against it.
 func TestAPhoneSendingOnAfterAPause(t *testing.T) {
 	at := time.Unix(1000, 0)
 	step := 20 * time.Millisecond
-	run := func(on *sendingOn, from, to time.Duration, audio bool) bool {
+	run := func(on *sendingOn, taken time.Time, from, to time.Duration, audio bool) bool {
 		ignored := false
 		for d := from; d <= to; d += step {
-			ignored = on.heard(true, at.Add(d), audio) || ignored
+			ignored = on.heard(true, taken, at.Add(d), audio) || ignored
 		}
 		return ignored
 	}
 
 	var on sendingOn
-	if run(&on, 0, sendingIgnored-step, true) {
+	if run(&on, at, 0, sendingIgnored-step, true) {
 		t.Error("taken as ignored before sendingIgnored had gone by")
 	}
-	if !run(&on, sendingIgnored, sendingIgnored+step, true) {
+	if !run(&on, at, sendingIgnored, sendingIgnored+step, true) {
 		t.Error("a phone sending on without a break was not taken as ignoring the pause")
 	}
 
 	on = sendingOn{}
-	run(&on, 0, 300*time.Millisecond, true) // the last of what it had in flight
-	if run(&on, 300*time.Millisecond+sendingBreak, 4*time.Second, true) {
+	run(&on, at, 0, 300*time.Millisecond, true) // the last of what it had in flight
+	if run(&on, at, 300*time.Millisecond+sendingBreak, 4*time.Second, true) {
 		t.Error("a phone that stopped, then played again, was taken as ignoring the pause")
 	}
 
 	on = sendingOn{}
-	run(&on, 0, 100*time.Millisecond, true)
-	on.heard(true, at.Add(time.Second), false) // a read that waited out its deadline
-	if run(&on, time.Second, 4*time.Second, true) {
+	run(&on, at, 0, 100*time.Millisecond, true)
+	on.heard(true, at, at.Add(time.Second), false) // a read that waited out its deadline
+	if run(&on, at, time.Second, 4*time.Second, true) {
 		t.Error("a phone that went quiet was taken as ignoring the pause")
 	}
 
-	if on.heard(false, at.Add(5*time.Second), true) || !on.since.IsZero() {
+	if on.heard(false, at, at.Add(5*time.Second), true) || !on.since.IsZero() {
 		t.Error("playing again here did not start over")
+	}
+
+	// The pause waited behind another command, and the phone took it 3 s after the pause here: it plays
+	// on until then, which is not ignoring it, and is measured from the take.
+	on = sendingOn{}
+	if run(&on, time.Time{}, 0, 3*time.Second, true) {
+		t.Error("taken as ignored before the phone took the pause")
+	}
+	took := at.Add(3 * time.Second)
+	if run(&on, took, 3*time.Second, 3*time.Second+sendingIgnored-step, true) {
+		t.Error("taken as ignored before sendingIgnored had gone by since the phone took the pause")
+	}
+	if !run(&on, took, 3*time.Second+sendingIgnored, 3*time.Second+sendingIgnored+step, true) {
+		t.Error("a phone sending on after it took the pause was not taken as ignoring it")
+	}
+	on = sendingOn{}
+	run(&on, time.Time{}, 0, 3*time.Second, true)
+	if run(&on, took, 3*time.Second+sendingBreak, 6*time.Second, true) {
+		t.Error("a phone that stopped as it took the pause was taken as ignoring it")
 	}
 }
 
@@ -534,19 +553,21 @@ func TestAPhoneThatIgnoresAPauseEndsItsTrack(t *testing.T) {
 	name := BluetoothPrefix + "Phone (plays on)"
 	newSender(t, name, true)
 	s := NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
+	p := &Player{stream: s}
 	src := &flowSrc{closed: make(chan struct{}), loud: true}
 	s.PlayPCM(name, src, speaker.Rate, 2)
 	waitUntil(t, "a first read", func() bool { return src.reads.Load() > 0 })
-	s.Pause()
+	p.Pause()
 	waitUntil(t, "the track to end", func() bool { return s.Receiving() == "" })
 
 	name = BluetoothPrefix + "Phone (sends silence)"
 	newSender(t, name, true)
 	s = NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
+	p = &Player{stream: s}
 	src = &flowSrc{closed: make(chan struct{})}
 	s.PlayPCM(name, src, speaker.Rate, 2)
 	waitUntil(t, "a first read", func() bool { return src.reads.Load() > 0 })
-	s.Pause()
+	p.Pause()
 	time.Sleep(400 * time.Millisecond)
 	if s.Receiving() != name {
 		t.Error("the track of a phone sending silence after the pause ended")
@@ -556,14 +577,41 @@ func TestAPhoneThatIgnoresAPauseEndsItsTrack(t *testing.T) {
 	name = BluetoothPrefix + "Phone (stops)"
 	newSender(t, name, true)
 	s = NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
+	p = &Player{stream: s}
 	quiet := newQuietSrc()
 	s.PlayPCM(name, quiet, speaker.Rate, 2)
 	<-quiet.reads
-	s.Pause()
+	p.Pause()
 	quiet.quiet <- struct{}{} // it stopped: the read waits out its deadline
 	time.Sleep(300 * time.Millisecond)
 	if s.Receiving() != name {
 		t.Error("the track of a phone that took the pause ended")
 	}
 	s.Stop()
+}
+
+// A phone slow to take a pause plays on until it does: its track is not ended for that, and the time
+// it is given to stop runs from when it took the pause.
+func TestAPhoneSlowToTakeAPauseIsGivenItsTime(t *testing.T) {
+	was := sendingIgnored
+	sendingIgnored = 200 * time.Millisecond
+	t.Cleanup(func() { sendingIgnored = was })
+
+	name := BluetoothPrefix + "Phone (slow to take it)"
+	snd := newSlowSender(t, name, true)
+	s := NewStream(speaker.NewDriver(speaker.New()), speaker.New(), func() {}, func(string) {})
+	p := &Player{stream: s}
+	src := &flowSrc{closed: make(chan struct{}), loud: true}
+	s.PlayPCM(name, src, speaker.Rate, 2)
+	waitUntil(t, "a first read", func() bool { return src.reads.Load() > 0 })
+	p.Pause()
+	if got := snd.next(t); got != TransportPause {
+		t.Fatalf("asked %v, want a pause", got)
+	}
+	time.Sleep(4 * sendingIgnored) // the phone plays on, the pause not reached it yet
+	if s.Receiving() != name {
+		t.Fatal("the track ended before the phone took the pause")
+	}
+	snd.answer() // it takes the pause, and still plays on
+	waitUntil(t, "the track to end", func() bool { return s.Receiving() == "" })
 }

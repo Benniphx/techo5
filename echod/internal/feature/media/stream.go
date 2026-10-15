@@ -77,6 +77,10 @@ type Stream struct {
 	holds  int
 	paused bool
 
+	// pauseTaken is when the sender of the received track took the listener's pause (pauseTook), zero
+	// until it has: a pause waits for its turn to reach the sender, and can take seconds to.
+	pauseTaken time.Time
+
 	// duckHeld is whether the duck was the thing that suspended, which only happens when the setting
 	// says pause. Ending the duck must not release a hold that a reply put there.
 	duckHeld bool
@@ -364,6 +368,7 @@ func (m *Stream) Pause() {
 		return
 	}
 	m.paused = true
+	m.pauseTaken = time.Time{}
 	m.block()
 	ours := m.holds == 0
 	live := m.track.received && strings.HasPrefix(m.track.item, BluetoothPrefix) &&

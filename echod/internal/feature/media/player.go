@@ -1244,8 +1244,9 @@ func receiverControl(name string) func(Transport) func() bool {
 }
 
 // tellSender passes t on to the sender of the received track named from, after whatever was passed on
-// before it (senderQueue). A pause the sender does not take ends the track here instead, as for a
-// sender no pause reaches (StopOnPause), unless something has played it again meanwhile.
+// before it (senderQueue). A pause the sender takes is marked taken then (pauseTook). A pause the
+// sender does not take ends the track here instead, as for a sender no pause reaches (StopOnPause),
+// unless something has played it again meanwhile.
 func (p *Player) tellSender(from string, t Transport) {
 	ctl := receiverControl(from)
 	if ctl == nil {
@@ -1254,6 +1255,9 @@ func (p *Player) tellSender(from string, t Transport) {
 	ask := ctl(t) // the sender there now, not whichever is by the time the ask's turn comes
 	p.toSender.put(t, func() {
 		if ask() {
+			if t == TransportPause {
+				p.stream.pauseTook(from, time.Now()) // what a phone playing on is measured from (sendingOn)
+			}
 			return
 		}
 		slog.Info("the sender of a received track was not reached", "from", from, "transport", t)

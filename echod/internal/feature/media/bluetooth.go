@@ -102,11 +102,28 @@ func (m *Stream) Receiving() string {
 	return m.track.item
 }
 
-// pausedOn is whether t is the track loaded and the listener has it paused.
-func (m *Stream) pausedOn(t *track) bool {
+// pausedOn is whether t is the track loaded and the listener has it paused, and when its sender took
+// that pause: zero until it has (pauseTook).
+func (m *Stream) pausedOn(t *track) (paused bool, taken time.Time) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.track == t && m.paused
+	if m.track != t || !m.paused {
+		return false, time.Time{}
+	}
+	return true, m.pauseTaken
+}
+
+// pauseTook is the sender of the received track named name taking the listener's pause, now. Only the
+// first word of it counts, and only while that track is loaded and paused.
+func (m *Stream) pauseTook(name string, now time.Time) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.track != nil && m.track.received && m.track.item == name && m.paused && m.pauseTaken.IsZero() {
+		m.pauseTaken = now
+	}
 }
 
 // receive reads what the remote sends and queues it, until the remote goes quiet or the track is
@@ -137,7 +154,8 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 			whole = len(in) - len(in)%(conv.channels*2)
 			samples = conv.run(in[:whole])
 		}
-		if phone && receiverControl(t.item) != nil && on.heard(m.pausedOn(t), time.Now(), audible(samples)) {
+		if paused, taken := m.pausedOn(t); phone && receiverControl(t.item) != nil &&
+			on.heard(paused, taken, time.Now(), audible(samples)) {
 			// It took the pause and went on playing: the wrong player was asked, or an app that does not
 			// listen. Paused here it would play to nobody for good; it ends, as for a pause not taken.
 			if m.stopPaused(t.item) {
@@ -167,7 +185,7 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 			// A sender paused along with the track sends nothing until it plays again (ReceiverControl):
 			// the track waits for it, paused, rather than ending, until its receiver says the sender has
 			// gone (ReceiverGone).
-			if receiverControl(t.item) != nil && m.pausedOn(t) {
+			if paused, _ := m.pausedOn(t); receiverControl(t.item) != nil && paused {
 				continue
 			}
 			slog.Info("received audio went quiet", "item", t.item)
@@ -181,8 +199,8 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 }
 
 // sendingBreak is the shortest break in what a phone sends that says it stopped: it sends a packet
-// every few tens of milliseconds while it plays. sendingIgnored is how long after a pause one that
-// sends on without such a break is taken not to have paused; a variable for the tests.
+// every few tens of milliseconds while it plays. sendingIgnored is how long after the phone took a
+// pause one that sends on without such a break is taken not to have paused; a variable for the tests.
 const sendingBreak = 500 * time.Millisecond
 
 var sendingIgnored = 2 * time.Second
@@ -204,21 +222,36 @@ func audible(samples []int16) bool {
 // sendingOn watches a phone's track paused here for the phone going on playing as if it had not
 // paused. One that paused stops within moments, or sends silence until it lets its stream go (a Pixel
 // does for three seconds or so), and anything audible after a break is it playing again, which its
-// Status follows.
+// Status follows. It is measured from when the phone took the pause, not from the pause here: the
+// pause waits its turn behind whatever the phone was asked before (senderQueue) and can take seconds
+// to reach it, and a phone plays on until it does. A pause the phone never takes ends the track
+// anyway (tellSender), and one from the phone itself (ReceiverPaused) is not doubted.
 type sendingOn struct {
-	since, last time.Time // the pause, as first seen, and the last audio since
-	broke       bool      // a break since the pause: the phone did stop
+	paused time.Time // the pause, as first seen here
+	since  time.Time // the phone taking it, zero until it has
+	last   time.Time // the last audio since the pause
+	broke  bool      // a break since the phone took it: the phone did stop
 }
 
-// heard takes one read, at now, audible or not, while the track is paused here or not, and says
-// whether the phone has played on without a break for sendingIgnored since the pause.
-func (s *sendingOn) heard(paused bool, now time.Time, audio bool) bool {
+// heard takes one read, at now, audible or not, while the track is paused here or not, with when the
+// phone took the pause (zero until it has), and says whether the phone has played on without a break
+// for sendingIgnored since it took it.
+func (s *sendingOn) heard(paused bool, taken, now time.Time, audio bool) bool {
 	if !paused {
 		*s = sendingOn{}
 		return false
 	}
-	if s.since.IsZero() {
-		s.since, s.last = now, now
+	if s.paused.IsZero() {
+		s.paused, s.last = now, now
+	}
+	if taken.IsZero() {
+		if audio {
+			s.last = now
+		}
+		return false
+	}
+	if !s.since.Equal(taken) {
+		s.since, s.broke = taken, false
 	}
 	if !audio || now.Sub(s.last) >= sendingBreak {
 		s.broke = true
