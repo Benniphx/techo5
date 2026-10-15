@@ -60,6 +60,14 @@ REPO = 'HuskerMinion/techo5'
 # The LineageOS kernel commit TECHO5's kernel is rebuilt from: the vendor modules only load on it.
 # All three boards run this same commit, which is why one daemon and one installer serve them.
 KERNEL_RELEASE = '4.9.337-g8d928c5176cc'
+# The LineageOS release with that kernel, per board: the 2026-09-04 build. A later one is built from a
+# later commit, with another kernel configuration, and its vendor modules do not fit TECHO5's kernel.
+LINEAGE_RELEASE = {
+    'cronos': 'lineage-18.1-cronos-v0.4',
+    'checkers': 'lineage-18.1-checkers-v0.7',
+    'crown': 'lineage-18.1-crown-v0.5',
+}
+LINEAGE_ZIP = 'lineage-18.1-20260904-UNOFFICIAL-%s.zip'
 WIFI_MODULE = 'vendor/lib/modules/mt76x8_wlan.ko'
 
 # The boards this installs on, as `getprop ro.product.device` reports them. They share the SoC, the
@@ -252,14 +260,23 @@ def install_lineage(adb, zip_path):
     note('LineageOS installed from TWRP (not started)')
 
 
-def check_lineage_driver(adb):
+def lineage_hint(board):
+    """Which LineageOS build TECHO5 needs on this board, and where to get it."""
+    tag = LINEAGE_RELEASE[board]
+    return ('TECHO5 needs LineageOS %s (%s), whose kernel its own is built from; a newer LineageOS is not '
+            'supported yet. Get it from https://github.com/amazon-oss/releases/releases/tag/%s and run '
+            'this again from TWRP with --lineage-zip %s, or install it in TWRP and start it once'
+            % (tag.rsplit('-', 1)[1], LINEAGE_ZIP % board, tag, LINEAGE_ZIP % board))
+
+
+def check_lineage_driver(adb, board):
     """The Wi-Fi driver on the LineageOS system partition is built for the kernel TECHO5's is rebuilt
     from, which is what the running-kernel check says on a unit that started LineageOS."""
     out = adb.sh('mkdir -p /tmp/t5sys && mount -o ro /dev/block/mmcblk0p12 /tmp/t5sys && '
                  'grep -a -o "vermagic=[^ ]*" /tmp/t5sys/system/%s | head -1; umount /tmp/t5sys' % WIFI_MODULE)
     if 'vermagic=%s' % KERNEL_RELEASE not in out:
-        fail('the LineageOS system this zip installed has a Wi-Fi driver for %s, not %s: use the LineageOS '
-             '18.1 build the getting started guide links' % (out.strip() or 'no kernel it names', KERNEL_RELEASE))
+        fail('the LineageOS system this zip installed has a Wi-Fi driver for %s, not %s. %s'
+             % (out.strip() or 'no kernel it names', KERNEL_RELEASE, lineage_hint(board)))
     note('Wi-Fi driver built for kernel %s' % KERNEL_RELEASE)
 
 
@@ -383,7 +400,7 @@ def main():
     else:
         kr = adb.sh('uname -r')
         if kr != KERNEL_RELEASE:
-            fail('%s runs kernel %s, not %s: install the LineageOS 18.1 build the getting started guide links' % (a.serial, kr, KERNEL_RELEASE))
+            fail('%s runs kernel %s, not %s. %s' % (a.serial, kr, KERNEL_RELEASE, lineage_hint(dev)))
         note('%s, LineageOS kernel %s' % (dev, kr))
     wifi = None
     if a.wifi:
@@ -465,7 +482,7 @@ def main():
         ])
         step('LineageOS, for its drivers')
         install_lineage(adb, a.lineage_zip)
-        check_lineage_driver(adb)
+        check_lineage_driver(adb, dev)
         if not os.path.exists(los_boot):
             # Through a .partial kept only when whole, as on the LineageOS path: this is the image the way
             # back flashes, and a short one kept for good would be skipped on every later run.

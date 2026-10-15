@@ -105,11 +105,19 @@ board is called out — `checkers`, `cronos`, `crown`.
    has the details.
 2. **Install LineageOS 18.1.** Follow
    [[ROM][UNOFFICIAL][11][cronos] LineageOS 18.1 for the Echo Show 5 (2021)](https://xdaforums.com/t/rom-unofficial-11-cronos-lineageos-18-1-for-the-amazon-echo-show-5-2021.4772598/).
-   Use a current build (0.4 or later; earlier ones lose audio after a few days). A **1st gen** takes
-   R0rt1z2's `checkers` build of the same LineageOS, dated 2026-09-04 or later: TECHO5's kernel is
-   rebuilt from that source, and the installer checks the version before it does anything. A **Show 8**
-   takes R0rt1z2's `crown` build of the same LineageOS:
+   **Use the 2026-09-04 build, not the newest:** `cronos` v0.4,
+   [lineage-18.1-20260904-UNOFFICIAL-cronos.zip](https://github.com/amazon-oss/releases/releases/tag/lineage-18.1-cronos-v0.4)
+   (earlier ones lose audio after a few days). A **1st gen** takes R0rt1z2's `checkers` build of the
+   same LineageOS, v0.7
+   ([lineage-18.1-20260904-UNOFFICIAL-checkers.zip](https://github.com/amazon-oss/releases/releases/tag/lineage-18.1-checkers-v0.7)).
+   A **Show 8** takes R0rt1z2's `crown` build, v0.5
+   ([lineage-18.1-20260904-UNOFFICIAL-crown.zip](https://github.com/amazon-oss/releases/releases/tag/lineage-18.1-crown-v0.5));
+   its guide is
    [[ROM][UNOFFICIAL][11][crown] LineageOS 18.1 for the Amazon Echo Show 8 (2019)](https://xdaforums.com/t/rom-unofficial-11-crown-lineageos-18-1-for-the-amazon-echo-show-8-2019.4766709/).
+   TECHO5's kernel is rebuilt from the kernel of exactly that build, and LineageOS's Wi-Fi and Bluetooth
+   drivers only load on the kernel they were built with. The builds of 2026-10-14 (`cronos` v0.5,
+   `checkers` v0.8, `crown` v0.6) have a newer kernel and are not supported yet; the installer checks
+   the version before it does anything.
    *Check:* LineageOS boots.
 3. **Prepare LineageOS:** join your Wi-Fi, then in Settings → About → tap Build number seven times,
    and in Developer options turn on **USB debugging**.
