@@ -29,10 +29,22 @@ import (
 const nameLimit = 31
 
 // hiddenRune is a character a name must not hold: a control character (Unicode's Cc), which shows as
-// nothing or a box and some programs stop at, or one that turns the text's direction (the bidi
-// embeddings, overrides and isolates), which makes what is shown differ from what is stored.
+// nothing or a box and some programs stop at; one that turns the text's direction (the bidi marks,
+// embeddings, overrides and isolates), which makes what is shown differ from what is stored; or one
+// that takes no room (the zero-width space, joiners, word joiner and byte order mark), which makes two
+// names that look the same different.
 func hiddenRune(r rune) bool {
-	return unicode.Is(unicode.Cc, r) || (r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069')
+	switch {
+	case unicode.Is(unicode.Cc, r):
+		return true
+	case r >= '\u202a' && r <= '\u202e', r >= '\u2066' && r <= '\u2069':
+		return true // embeddings, overrides, isolates
+	case r == '\u200e', r == '\u200f', r == '\u061c':
+		return true // left-to-right, right-to-left and Arabic letter marks
+	case r >= '\u200b' && r <= '\u200d', r == '\u2060', r == '\ufeff':
+		return true // zero-width space, non-joiner, joiner, word joiner, byte order mark
+	}
+	return false
 }
 
 // rename writes the new name and restarts, since the name is announced when the daemon starts.
@@ -49,7 +61,7 @@ func rename(to string, acknowledged bool) string {
 	case strings.ContainsAny(to, "\n\r\t"):
 		return "a name is one line"
 	case strings.IndexFunc(to, hiddenRune) >= 0:
-		return "a name cannot hold control or text-direction characters"
+		return "a name cannot hold control, text-direction or invisible characters"
 	case to == config.Get().Device.Name:
 		return "that is already its name"
 	case !acknowledged:
