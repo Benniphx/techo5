@@ -24,4 +24,8 @@ var codes = map[uint16]Name{
 // 8's FocalTech lists KEY_POWER (116, the mute button's code) among its gesture keys: on the 2nd gen,
 // read off the unit 2026-10-14, next to the letter and arrow gestures. A gesture read as a button would
 // toggle the mute, so the touchscreen is left to the touch package.
-var notButtons = map[string]bool{"fts_ts": true}
+//
+// On the 2nd gen Show 8's mainline kernel the MT6358 PMIC's keys driver (mtk-pmic-keys) reports its
+// power key as KEY_POWER too. The mute button there is KEY_MICMUTE in gpio-keys, so the PMIC's 116 is
+// never the mute, and is not read.
+var notButtons = map[string]bool{"fts_ts": true, "mtk-pmic-keys": true}

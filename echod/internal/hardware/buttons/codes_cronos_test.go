@@ -16,3 +16,16 @@ func TestShowMuteCodes(t *testing.T) {
 		t.Errorf("%d codes, want 4: %v", len(codes), codes)
 	}
 }
+
+// Devices that declare the mute's code but are not the mute button: the FocalTech touchscreen's
+// gestures and the 2nd gen Show 8's PMIC power key on mainline. The real buttons are read.
+func TestShowNotButtons(t *testing.T) {
+	for name, want := range map[string]bool{
+		"fts_ts": true, "mtk-pmic-keys": true,
+		"gpio-keys": false, "gpio-privacy-button": false, "goodix-ts": false,
+	} {
+		if notButtons[name] != want {
+			t.Errorf("notButtons[%q] = %v, want %v", name, notButtons[name], want)
+		}
+	}
+}
