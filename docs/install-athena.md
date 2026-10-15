@@ -36,8 +36,8 @@ Known limits:
 
 ## Before you start
 
-- **Unlock the unit with saiyaku-athena** (by Rortiz, R0rt1z2 on XDA; the thread for the Echo Show 8
-  2nd gen). It needs Fire OS 7080 (PS7574.1.7080N): update the Show to the latest Fire OS first. The
+- **Unlock the unit with saiyaku-athena** (by R0rt1z2, with bengris32 and FieryFlames), from the XDA
+  thread [[UNLOCK][ROOT][TWRP][UNBRICK] Amazon Echo Show 8 2nd Gen - 2021 (athena)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/). It needs Fire OS 7080 (PS7574.1.7080N): update the Show to the latest Fire OS first. The
   unlock can take several tries; that's normal. When it's done, the unit has TWRP in `recovery`.
 - **Never write `tee1`, `lk` or the preloader.** That is where the unlock lives, and writing any of
   them bricks the unit. The installer only ever writes `system` and `boot`, and checks each by name

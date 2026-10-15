@@ -33,6 +33,11 @@ param(
     # techo5-system-athena-<version>.img.gz and named in the signed manifest for install-athena.py.
     # Refused if it carries an SSH key.
     [string]$AthenaImage = '',
+    # The athena boot image (tools/linux/athena/kernel/build.sh's boot-athena.img: TECHO5's mainline
+    # kernel), published as techo5-boot-athena-<version>.img and named in the signed manifest for
+    # install-athena.py. Refused unless check-boot.py passes it with its amp tuning slot empty: the
+    # tuning is Amazon's and is filled in from each unit's own backup, never shipped.
+    [string]$AthenaBoot = '',
     # The release signing key (ed25519 seed, base64). Devices take a manifest only with its signature, so
     # a release cannot be published without it. Keep it off every repository and backed up: $env:TECHO5_SIGN_KEY.
     [string]$SignKey = $env:TECHO5_SIGN_KEY,
@@ -158,6 +163,13 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "$AthenaImage carries an SSH key: build it with mkstore.sh -k none" }
         $named = Join-Path $bin "techo5-system-athena-$Version.img.gz"
         Copy-Item $AthenaImage $named -Force
+        $bootAssets += $named
+    }
+    if ($AthenaBoot) {
+        python (Join-Path $PSScriptRoot 'linux/athena/kernel/check-boot.py') $AthenaBoot
+        if ($LASTEXITCODE -ne 0) { throw "$AthenaBoot is not a clean athena boot image (check-boot.py): its tuning slot must be empty" }
+        $named = Join-Path $bin "techo5-boot-athena-$Version.img"
+        Copy-Item $AthenaBoot $named -Force
         $bootAssets += $named
     }
     $athenaRootfsNamed = $null
