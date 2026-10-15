@@ -213,7 +213,9 @@ func (s *Sensor) startIIO() error {
 	if err != nil {
 		return fmt.Errorf("ambient: %w", err)
 	}
+	s.mu.Lock()
 	s.iio = t
+	s.mu.Unlock()
 	slog.Info("light sensor on", "device", t.dir, "period", period, "integration", t.itime,
 		"gain", t.gains[t.gain])
 	return nil
@@ -221,7 +223,7 @@ func (s *Sensor) startIIO() error {
 
 // runIIO polls the sensor every period. Every reading refreshes Current; Lux fires only when the
 // rounded value changes, as the hwmsensor path only hears of changes.
-func (s *Sensor) runIIO(ctx context.Context) error {
+func (s *Sensor) runIIO(ctx context.Context, t *tcs3400) error {
 	tick := time.NewTicker(period)
 	defer tick.Stop()
 	failed := 0
@@ -231,7 +233,7 @@ func (s *Sensor) runIIO(ctx context.Context) error {
 			return nil
 		case <-tick.C:
 		}
-		lux, ok, err := s.iio.sample()
+		lux, ok, err := t.sample()
 		if err != nil {
 			// The driver answers EIO when a cycle is late; a run of them means it is gone.
 			if failed++; failed >= 10 {

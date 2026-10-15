@@ -15,6 +15,7 @@ package ambient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -116,26 +117,36 @@ func (s *Sensor) seed(abs func(code uint16) (input.AbsInfo, error)) (float64, bo
 }
 
 func (s *Sensor) Close() error {
-	if s.iio != nil {
-		s.iio = nil
+	s.mu.Lock()
+	t, dev := s.iio, s.dev
+	s.iio, s.dev = nil, nil
+	s.mu.Unlock()
+	if t != nil {
 		return nil
 	}
 	_ = os.WriteFile(misc+"/alsactive", []byte("0"), 0o644)
-	if s.dev == nil {
+	if dev == nil {
 		return nil
 	}
-	err := s.dev.Close()
-	s.dev = nil
-	return err
+	return dev.Close()
 }
 
+// errNotOpen is Run's answer when Close came first.
+var errNotOpen = errors.New("ambient: the sensor is not open")
+
 // Run reads until ctx is canceled. The read blocks in the kernel, so cancellation closes the node
-// from the side and lets the read fail.
+// from the side and lets the read fail. What it reads is taken once, at the start: a Close that comes
+// first, or while it runs, leaves it nothing to read rather than a nil sensor.
 func (s *Sensor) Run(ctx context.Context) error {
-	if s.iio != nil {
-		return s.runIIO(ctx)
+	s.mu.Lock()
+	t, dev := s.iio, s.dev
+	s.mu.Unlock()
+	if t != nil {
+		return s.runIIO(ctx, t)
 	}
-	dev := s.dev
+	if dev == nil {
+		return errNotOpen
+	}
 	stop := context.AfterFunc(ctx, func() { _ = dev.Close() })
 	defer stop()
 

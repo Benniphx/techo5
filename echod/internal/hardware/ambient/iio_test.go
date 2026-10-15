@@ -3,6 +3,8 @@
 package ambient
 
 import (
+	"context"
+	"errors"
 	"math"
 	"os"
 	"path/filepath"
@@ -217,5 +219,38 @@ func TestListenersHearOnlyChanges(t *testing.T) {
 	d.record(0)
 	if n != 1 {
 		t.Errorf("a first reading of 0 was not heard")
+	}
+}
+
+// Close before Run, or during it, leaves Run nothing to read rather than a nil sensor to read from.
+func TestCloseBeforeOrDuringRun(t *testing.T) {
+	fakeIIO(t)
+	open := func() *Sensor {
+		tcs, err := openTCS3400()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &Sensor{iio: tcs}
+	}
+
+	s := open()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Run(context.Background()); !errors.Is(err, errNotOpen) {
+		t.Errorf("Run after Close: %v, want %v", err, errNotOpen)
+	}
+
+	s = open()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- s.Run(ctx) }()
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	// Either Run took the sensor before Close and polled it until canceled, or Close came first.
+	if err := <-done; err != nil && !errors.Is(err, errNotOpen) {
+		t.Errorf("Run with Close under it: %v", err)
 	}
 }
