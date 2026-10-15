@@ -36,8 +36,8 @@ Known limits:
 
 ## Before you start
 
-- **Unlock the unit with saiyaku-athena** (by R0rt1z2, with bengris32 and FieryFlames), from the XDA
-  thread [[UNLOCK][ROOT][TWRP][UNBRICK] Amazon Echo Show 8 2nd Gen - 2021 (athena)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/). It needs Fire OS 7080 (PS7574.1.7080N): update the Show to the latest Fire OS first. The
+- **Unlock the unit with saiyaku-athena** (by R0rt1z2 with bengris32 and FieryFlames; see
+  [Credits](#credits)), from the XDA thread [[UNLOCK][ROOT][TWRP][UNBRICK] Amazon Echo Show 8 2nd Gen - 2021 (athena)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/). It needs Fire OS 7080 (PS7574.1.7080N): update the Show to the latest Fire OS first. The
   unlock can take several tries; that's normal. When it's done, the unit has TWRP in `recovery`.
 - **Never write `tee1`, `lk` or the preloader.** That is where the unlock lives, and writing any of
   them bricks the unit. The installer only ever writes `system` and `boot`, and checks each by name
@@ -66,24 +66,29 @@ What it does, each step checked before the next:
 1. **Checks.** adb sees the unit in TWRP as root; the unit says it is an athena; its partition table
    is the one the installer knows (`boot` p20, `system` p21, `userdata` p23, the unlock's `tee1_real`
    p3 and `lk_real` p18, and the rest). The screen is the one TECHO5's kernel drives. Anything else
-   stops it before a single write. `userdata` can be mounted.
-2. **Backup.** Every partition except `cache` and `userdata`, plus the `boot0` and `boot1` areas, into
-   `backups/<serial>/partitions/`, each compared with the sha256 the unit computes of its own copy.
-   Skipped when a backup with `p20-boot.img` and `p21-system.img` is already there, so the first
-   backup (Fire OS's) is the one that stays.
+   stops it before a single write. `userdata` can be mounted (read-only, when TWRP hasn't mounted it
+   already). Nothing is unmounted yet.
+2. **Backup.** Every partition except `cache` and `userdata` into `backups/<serial>/partitions/`, each
+   compared with the sha256 the unit computes of its own copy. The `boot0` and `boot1` areas (the
+   preloader's) are not in it: TWRP links them to `/dev/null`, so they can't be read from TWRP. The
+   installer never writes them either. Skipped when a backup with `p20-boot.img` and `p21-system.img`
+   is already there, so the first backup (Fire OS's) is the one that stays.
 3. **Images.** The store image must be ext4 labeled `techo5-store` and fit `system`. The boot image
    must be TECHO5's, as released: its header checks out and its tuning slot is empty.
 4. **Speaker tuning.** See [The speaker tuning](#the-speaker-tuning). Stops if the tuning isn't one it
    knows.
-5. **Write.** Asked once (type `ERASE`). First `system`, then `boot`. Each image goes to TWRP's RAM
-   disk, is checked by sha256, written (the node is checked to be the partition with the right name
-   right before every write) and read back from the flash. A read back that doesn't match is written
-   again once; a second mismatch stops with the unit still in TWRP. `system` goes first because
-   TECHO5's store also starts under Amazon's kernel, so a unit stopped between the two still runs.
+5. **Write.** Asked once (type `ERASE`). Up to here nothing on the unit has been written. Then
+   `system` and `boot` are unmounted if TWRP had them mounted, and written: first `system`, then
+   `boot`. Each image goes to TWRP's RAM disk, is checked by sha256, written (the node is checked to
+   be the partition with the right name right before every write) and read back from the flash. A
+   read back that doesn't match is written again once; a second mismatch stops with the unit still
+   in TWRP. `system` goes first because TECHO5's store also starts under Amazon's kernel, so a unit
+   stopped between the two still runs.
 6. **Settings** in `userdata/techo5`: the name (a unit that has one keeps it), the Home Assistant key
    (a unit that has one keeps it, so Home Assistant keeps the device; a copy goes to
    `backups/<serial>/home-assistant.key`), an SSH key (`--ssh-key`, which also turns SSH on) and a
-   Wi-Fi network (`--wifi`; only the WPA key reaches the unit, never the passphrase).
+   Wi-Fi network (`--wifi`; only the WPA key reaches the unit, never the passphrase). The network is
+   added to the ones the unit has saved; a saved one with the same name is replaced.
 7. **First boot.** TWRP restarts the unit. The first boot grows the store to fill the partition (see
    below), then starts slot `a`. The installer watches the USB serial console for the daemon (up to
    five minutes; `--no-watch` skips this).
@@ -95,6 +100,10 @@ and writes nothing to the unit.
 
 Without `--wifi`, the unit takes the network Fire OS saved. If there is none, pick one on the Show's
 own screen.
+
+With `--wifi`, the network is added to any the unit already has from an earlier install; the others
+stay. On a first install that also means Fire OS's saved networks aren't taken: the unit uses the
+one you gave.
 
 ### Add it to Home Assistant
 
@@ -207,6 +216,11 @@ the rescue environment (USB serial and RNDIS at 172.16.42.1).
 A new kernel comes with a new boot image: run the installer again from TWRP. It keeps the name, the
 Home Assistant key and the first backup.
 
+## The USB cable is a root shell
+
+As on the other Shows, the USB cable gives a root shell: the USB serial console has no password,
+in normal running and in rescue. Anyone who can plug into the unit can get root on it.
+
 ## The way back to Fire OS
 
 `vendor`, `recovery` and the unlock are as they were. Only `boot` and `system` changed, and their
@@ -227,6 +241,14 @@ Fire OS replaces TWRP with Amazon's recovery the first time it starts. If you wa
 afterward, write `p7-recovery.img` from the same backup to `recovery` with mtkclient
 (`mtk w recovery p7-recovery.img`, the unit in its download mode).
 
+Back on Fire OS, keep the unit away from Fire OS updates if you want to come back to TECHO5 later
+(for example, don't set it up on Wi-Fi, or keep it off the network). An update might remove the
+unlock or TWRP. That's a guess, not something tested, but there's no reason to find out.
+
+If the installer says the backup is not a Fire OS backup, it was made with TECHO5 already on the
+unit. Its `p20-boot.img` and `p21-system.img` are TECHO5's: use the backup made before the first
+install instead.
+
 ## Amazon's kernel instead
 
 `--kernel amazon` keeps Amazon's 32-bit kernel on `boot` and writes only `system`. Use it on a unit
@@ -240,3 +262,10 @@ python3 tools/install-athena.py --kernel amazon --name Kitchen
 The same store image works under both kernels. If `boot` holds TECHO5's kernel, the installer stops:
 write `p20-boot.img` back first (see the way back above). To go back to Fire OS from this path,
 restore `p21-system.img` only.
+
+## Credits
+
+The unlock, saiyaku-athena and kaeru, is by R0rt1z2 with bengris32 and FieryFlames (jackmthws),
+with thanks to nuno407 for the META mode idea:
+[XDA thread](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/).
+The Linux port is by HuskerMinion.
