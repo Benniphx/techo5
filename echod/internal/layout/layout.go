@@ -231,6 +231,27 @@ func Color(productID2, serial string) string {
 	}
 }
 
+// LabelMax is the most a DNS label holds, in bytes. An mDNS service's instance name is one label, so
+// the device's name advertised as one (AirPlay, Spotify Connect, Sendspin, announcements) has to fit
+// it: a name of 31 characters outside ASCII can take 124 bytes.
+const LabelMax = 63
+
+// CutName is name cut to at most n bytes, at a character boundary, so what is left is still the
+// characters it started with. A name that fits comes back as it is.
+func CutName(name string, n int) string {
+	if len(name) <= n {
+		return name
+	}
+	cut := 0
+	for i := range name {
+		if i > n {
+			break
+		}
+		cut = i
+	}
+	return strings.TrimRight(name[:cut], " ")
+}
+
 // Slug turns a display name into a node name: the mDNS hostname and the ESPHome node's own name.
 // "Living Room" becomes "living-room". It is not what an entity id is built from — see EntitySlug.
 func Slug(name string) string {

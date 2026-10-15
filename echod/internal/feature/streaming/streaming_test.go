@@ -1121,6 +1121,26 @@ func TestSpotifyArgs(t *testing.T) {
 	if !strings.Contains(j, "--name Kitchen") || !strings.Contains(j, "--onevent /s") || !strings.Contains(j, "--cache /c") {
 		t.Errorf("args %v", args)
 	}
+	// A long name in two-byte letters is cut to fit its mDNS instance name, one DNS label.
+	long := strings.Repeat("ü", 31)
+	args, _ = spotifyArgs(long, "/c", "/s", "")
+	if i := slices.Index(args, "--name"); i < 0 || len(args[i+1]) > 63 || !strings.HasPrefix(long, args[i+1]) {
+		t.Errorf("a long name went to librespot as %q", args[i+1])
+	}
+}
+
+// AirPlay's name is cut to fit the RAOP instance name, the device id and @ before it in one DNS label.
+func TestAirPlayNameFitsALabel(t *testing.T) {
+	long := strings.Repeat("ü", 31)
+	if got := airplayName(long); len("AABBCCDDEEFF@"+got) > 63 || !strings.HasPrefix(long, got) || got == "" {
+		t.Errorf("airplayName = %q, %d bytes", got, len(got))
+	}
+	if got := airplayName("Kitchen"); got != "Kitchen" {
+		t.Errorf("a short name came back %q", got)
+	}
+	if c := shairportConf(long, "/run/x"); strings.Contains(c, long) {
+		t.Error("shairport-sync was given the name uncut")
+	}
 }
 
 // The volume pipe is made only for a librespot that takes volumes; one that cannot be made is none,

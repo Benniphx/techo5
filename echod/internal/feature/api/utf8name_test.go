@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
@@ -25,5 +26,20 @@ func TestNonUTF8NameBreaksDeviceInfo(t *testing.T) {
 	}
 	if _, err := proto.Marshal(&esapi.DeviceInfoResponse{Name: "k-che-echo", FriendlyName: utf8}); err != nil {
 		t.Fatalf("a UTF-8 friendly name: %v", err)
+	}
+}
+
+// A name with nothing a slug keeps still gives the node a name, unique to the device; any name gives
+// one that fits a DNS label.
+func TestNodeNameIsNeverEmpty(t *testing.T) {
+	if got := nodeName("Кухня", "00:11:22:aa:bb:cc"); got == "" || !strings.HasSuffix(got, "-aabbcc") {
+		t.Errorf("an all-Cyrillic name gave node %q, want the default name's with the MAC's end", got)
+	}
+	if got := nodeName("Living Room", "00:11:22:aa:bb:cc"); got != "living-room" {
+		t.Errorf("node %q, want living-room", got)
+	}
+	long := strings.Repeat("ab ", 40)
+	if got := nodeName(long, ""); len(got) > layout.LabelMax || strings.HasSuffix(got, "-") || got == "" {
+		t.Errorf("a long name gave node %q", got)
 	}
 }
