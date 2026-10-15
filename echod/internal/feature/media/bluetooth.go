@@ -113,6 +113,13 @@ func (m *Stream) pausedOn(t *track) (paused bool, taken time.Time) {
 	return true, m.pauseTaken
 }
 
+// senderPausedOn is whether t is the track loaded and its sender paused it on its own (ReceiverPaused).
+func (m *Stream) senderPausedOn(t *track) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.track == t && m.paused && m.bySender
+}
+
 // pauseSeq is which pause is in effect, or was last (pauses), for pauseTook to tell its answer by.
 func (m *Stream) pauseSeq() uint64 {
 	if m == nil {
@@ -146,6 +153,7 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 	var carry []byte
 	phone := strings.HasPrefix(t.item, BluetoothPrefix)
 	var on sendingOn
+	var again playingAgain
 	for {
 		// A phone is read on while the track is held up, and what it sends goes (offered): left unread,
 		// what a phone that plays again sends piles up in bluez-alsa until it overflows, and the track
@@ -179,6 +187,9 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 				slog.Info("a phone went on playing after it took a pause; its track here ends", "item", t.item)
 				return nil
 			}
+		}
+		if phone && m.senderPlays != nil && again.heard(m.senderPausedOn(t), time.Now(), audible(samples)) {
+			m.senderPlays(t.item)
 		}
 		if n > 0 {
 			if keepsWhileHeld(t.item) {
@@ -277,6 +288,40 @@ func (s *sendingOn) heard(paused bool, taken, now time.Time, audio bool) bool {
 		s.last = now
 	}
 	return !s.broke && now.Sub(s.since) >= sendingIgnored
+}
+
+// sendingAgain is how long a phone that paused on its own has to send audible audio, without a break
+// of sendingBreak, to be taken as playing again: longer than the sounds a phone sends between songs
+// with its music paused (an iPhone's keyboard clicks and notification sounds go over A2DP too, and
+// start its stream), shorter than anyone waits for music they started. A variable for the tests.
+var sendingAgain = 1500 * time.Millisecond
+
+// playingAgain watches a phone's track the phone paused on its own for the phone playing again
+// without its Status saying so: sendingAgain of audible audio with no break of sendingBreak in it. A
+// pause from here is not watched: only a play from the phone says it means to play here again.
+type playingAgain struct {
+	since time.Time // the start of the audible run, zero with none
+	last  time.Time // the last audible read in it
+}
+
+// heard takes one read, at now, audible or not, while the track is paused by the phone or not, and
+// says whether the phone has now played for sendingAgain without a break.
+func (a *playingAgain) heard(senderPaused bool, now time.Time, audio bool) bool {
+	if !senderPaused {
+		*a = playingAgain{}
+		return false
+	}
+	if !audio {
+		if !a.last.IsZero() && now.Sub(a.last) >= sendingBreak {
+			*a = playingAgain{}
+		}
+		return false
+	}
+	if a.since.IsZero() || now.Sub(a.last) >= sendingBreak {
+		a.since = now
+	}
+	a.last = now
+	return now.Sub(a.since) >= sendingAgain
 }
 
 // toSpeaker turns what a remote sends (mono or stereo, at its own rate: phones pick 44.1 or 48 kHz)

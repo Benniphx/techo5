@@ -616,22 +616,28 @@ func TestAPhoneSlowToTakeAPauseIsGivenItsTime(t *testing.T) {
 	waitUntil(t, "the track to end", func() bool { return s.Receiving() == "" })
 }
 
-// A sender that paused on its own and sends again without saying it plays (ReceiverSending) plays
-// again here, rather than waiting paused; a pause from here stays, even once the phone says it paused.
+// A sender that paused on its own and is heard playing again without saying so (senderPlaysAgain)
+// plays again here, rather than waiting paused, and listeners are told; a pause from here stays, even
+// once the phone says it paused.
 func TestASenderSendingAgainAfterItsOwnPausePlays(t *testing.T) {
 	const name = BluetoothPrefix + "Pixel (sends again)"
 	snd := newSender(t, name, true)
 	p, s := receivedPlayer(name)
 
 	p.ReceiverPaused(name, true)
-	p.ReceiverSending("Spotify")
+	p.senderPlaysAgain("Spotify")
 	if _, paused := s.Playing(); !paused {
 		t.Fatal("another sender sending played the track")
 	}
+	var told []string
+	p.OnReceiverPlays.Listen(func(item string) { told = append(told, item) })
 	stopped := p.stoppedAt.Load()
-	p.ReceiverSending(name)
+	p.senderPlaysAgain(name)
 	if playing, _ := s.Playing(); !playing {
 		t.Fatal("the sender sending again after its own pause left the track paused")
+	}
+	if len(told) != 1 || told[0] != name {
+		t.Errorf("told %v, want the track's name once", told)
 	}
 	if p.stoppedAt.Load() == stopped {
 		t.Error("the sender playing again left a stop from before it to end the track (stoppedFor)")
@@ -643,13 +649,64 @@ func TestASenderSendingAgainAfterItsOwnPausePlays(t *testing.T) {
 		t.Fatalf("asked %v, want a pause", got)
 	}
 	p.ReceiverPaused(name, true) // the phone saying it took the pause from here
-	p.ReceiverSending(name)
+	p.senderPlaysAgain(name)
 	if _, paused := s.Playing(); !paused {
 		t.Fatal("a pause from here was undone by the phone sending")
 	}
-	p.ReceiverSending(name) // nothing new: still the listener's pause
+	p.senderPlaysAgain(name) // nothing new: still the listener's pause
 	if _, paused := s.Playing(); !paused {
 		t.Fatal("a pause from here was undone by the phone sending")
+	}
+	if len(told) != 1 {
+		t.Errorf("told %v, want nothing more for a pause from here", told)
+	}
+}
+
+// A phone that paused on its own is taken as playing again only after sendingAgain of audible audio
+// without a break: a click or a notification sound, which starts its stream too, is not music.
+func TestAPhonePlaysAgainOnlyAfterSustainedAudio(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	at := func(ms int) time.Time { return t0.Add(time.Duration(ms) * time.Millisecond) }
+	var a playingAgain
+
+	// A notification: a second of sound, then silence.
+	for ms := 0; ms <= 1000; ms += 20 {
+		if a.heard(true, at(ms), true) {
+			t.Fatalf("a second of sound at %d ms was taken as playing", ms)
+		}
+	}
+	for ms := 1020; ms <= 1600; ms += 20 {
+		a.heard(true, at(ms), false)
+	}
+	// Music: sound without a break, past sendingAgain from its own start.
+	start := 1620
+	played := -1
+	for ms := start; ms <= start+2000; ms += 20 {
+		if a.heard(true, at(ms), true) {
+			played = ms
+			break
+		}
+	}
+	if played < start+int(sendingAgain/time.Millisecond) {
+		t.Fatalf("taken as playing at %d ms, want %v after %d", played, sendingAgain, start)
+	}
+	// Short quiet reads inside the music are not a break.
+	var b playingAgain
+	for ms := 0; ms <= 1600; ms += 20 {
+		quiet := ms%200 == 100
+		if b.heard(true, at(ms), !quiet) && ms < 1500 {
+			t.Fatalf("taken as playing at %d ms", ms)
+		}
+	}
+	if !b.heard(true, at(1620), true) {
+		t.Error("music with short quiet reads in it was not taken as playing")
+	}
+	// Not paused by the phone: nothing is watched.
+	var c playingAgain
+	for ms := 0; ms <= 3000; ms += 20 {
+		if c.heard(false, at(ms), true) {
+			t.Fatal("a track not paused by the phone was taken as played again")
+		}
 	}
 }
 

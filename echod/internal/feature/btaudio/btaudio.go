@@ -710,9 +710,6 @@ func (f *Feature) refresh() {
 func (f *Feature) receive(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) bool {
 	item := media.BluetoothPrefix + displayName(d)
 	if media.Get().Receiving() == item {
-		// Sending again to its track left paused: a phone that paused on its own and played again
-		// without saying so plays here again too. A pause from here stays (ReceiverSending).
-		media.Get().ReceiverSending(item)
 		return true
 	}
 	s, err := al.OpenRead(p)
@@ -751,6 +748,9 @@ func stepFor(level int) int {
 func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 	f.levelOnce.Do(func() {
 		media.Get().OnLevel.Listen(f.handLevel)
+		// A phone that paused on its own heard playing again: its track plays, and is no longer kept
+		// for the phone's half hour.
+		media.Get().OnReceiverPlays.Listen(func(item string) { f.keep(item, false) })
 		media.Get().OnStop.Listen(func(struct{}) {
 			f.mu.Lock()
 			clear(f.displaced) // stopped here: no phone takes the speaker back after that

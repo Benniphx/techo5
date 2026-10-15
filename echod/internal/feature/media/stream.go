@@ -83,9 +83,13 @@ type Stream struct {
 
 	// pauses counts the pauses that took effect, so a sender's late answer to one pause is not taken
 	// as its answer to a later one (pauseTook). bySender is the pause in effect being the sender's own
-	// (ReceiverPaused), not the listener's here (ReceiverSending).
+	// (ReceiverPaused), not the listener's here (senderPlaysAgain).
 	pauses   uint64
 	bySender bool
+
+	// senderPlays is told a received track's sender that paused on its own is heard playing again
+	// (playingAgain); nil leaves it paused. Set once, before anything plays.
+	senderPlays func(name string)
 
 	// duckHeld is whether the duck was the thing that suspended, which only happens when the setting
 	// says pause. Ending the duck must not release a hold that a reply put there.

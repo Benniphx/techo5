@@ -202,6 +202,11 @@ type Player struct {
 	// that something may have, not what, and fires for much that changes nothing - an announcement too
 	// - so a listener works out for itself whether anything did, on the far side of a channel.
 	OnNowPlaying hook.Hook[struct{}]
+
+	// OnReceiverPlays fires with a received track's name when its sender, having paused on its own,
+	// is heard playing again without saying so (senderPlaysAgain). Listeners must not block: it runs
+	// on the goroutine reading the sender's audio.
+	OnReceiverPlays hook.Hook[string]
 }
 
 var (
@@ -458,6 +463,7 @@ func build() *Player {
 		p.applyTone()
 	}
 	p.stream = NewStream(speaker.Sound(), speaker.Get(), p.refresh, p.OnEnd.Emit)
+	p.stream.senderPlays = p.senderPlaysAgain
 	p.stream.handOff = handOff
 
 	// Volume acts on every tap and on every repeat, so a held button ramps.
@@ -1368,15 +1374,17 @@ func (p *Player) ReceiverPaused(name string, paused bool) {
 	p.stream.Unpause()
 }
 
-// ReceiverSending is the sender of the received track named name starting to send again, with no word
-// that it plays (ReceiverPaused): a phone that paused on its own and played again without its Status
-// saying so. The track plays again with it, rather than waiting paused for the phone's half hour. A
-// pause from here (the listener's) is left as it is: the phone was asked to pause, and only a play
-// says it means to play here again. A track by any other name, or not paused, is left as it is.
-func (p *Player) ReceiverSending(name string) {
+// senderPlaysAgain is the sender of the received track named name heard playing again (sendingAgain
+// of music, playingAgain), with no word that it plays (ReceiverPaused): a phone that paused on its
+// own and played again without its Status saying so. The track plays again with it, rather than
+// waiting paused for the phone's half hour, and OnReceiverPlays says so. A pause from here (the
+// listener's) is left as it is: the phone was asked to pause, and only a play says it means to play
+// here again. A track by any other name, or not paused, is left as it is.
+func (p *Player) senderPlaysAgain(name string) {
 	if p.stream.unpauseIf(func(t *track, bySender bool) bool { return t.received && t.item == name && bySender }) {
 		p.stoppedAt.Add(1)
-		slog.Info("a sender that paused on its own is sending again; its track plays", "from", name)
+		slog.Info("a sender that paused on its own is playing again; its track plays", "from", name)
+		p.OnReceiverPlays.Emit(name)
 	}
 }
 
