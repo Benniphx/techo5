@@ -1259,11 +1259,12 @@ func (p *Player) tellSender(from string, t Transport) {
 	if ctl == nil {
 		return
 	}
-	ask := ctl(t) // the sender there now, not whichever is by the time the ask's turn comes
+	ask := ctl(t)              // the sender there now, not whichever is by the time the ask's turn comes
+	seq := p.stream.pauseSeq() // the pause this asks for, should the answer come after another
 	p.toSender.put(t, func() {
 		if ask() {
 			if t == TransportPause {
-				p.stream.pauseTook(from, time.Now()) // what a phone playing on is measured from (sendingOn)
+				p.stream.pauseTook(from, seq, time.Now()) // what a phone playing on is measured from (sendingOn)
 			}
 			return
 		}
@@ -1360,11 +1361,23 @@ func (p *Player) ReceiverPaused(name string, paused bool) {
 		return
 	}
 	if paused {
-		p.stream.Pause()
+		p.stream.senderPause()
 		return
 	}
 	p.stoppedAt.Add(1)
 	p.stream.Unpause()
+}
+
+// ReceiverSending is the sender of the received track named name starting to send again, with no word
+// that it plays (ReceiverPaused): a phone that paused on its own and played again without its Status
+// saying so. The track plays again with it, rather than waiting paused for the phone's half hour. A
+// pause from here (the listener's) is left as it is: the phone was asked to pause, and only a play
+// says it means to play here again. A track by any other name, or not paused, is left as it is.
+func (p *Player) ReceiverSending(name string) {
+	if p.stream.unpauseIf(func(t *track, bySender bool) bool { return t.received && t.item == name && bySender }) {
+		p.stoppedAt.Add(1)
+		slog.Info("a sender that paused on its own is sending again; its track plays", "from", name)
+	}
 }
 
 // Resume picks a paused track up again, and a received track's sender with it (ReceiverControl).

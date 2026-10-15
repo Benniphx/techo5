@@ -81,6 +81,12 @@ type Stream struct {
 	// until it has: a pause waits for its turn to reach the sender, and can take seconds to.
 	pauseTaken time.Time
 
+	// pauses counts the pauses that took effect, so a sender's late answer to one pause is not taken
+	// as its answer to a later one (pauseTook). bySender is the pause in effect being the sender's own
+	// (ReceiverPaused), not the listener's here (ReceiverSending).
+	pauses   uint64
+	bySender bool
+
 	// duckHeld is whether the duck was the thing that suspended, which only happens when the setting
 	// says pause. Ending the duck must not release a hold that a reply put there.
 	duckHeld bool
@@ -334,7 +340,7 @@ func (m *Stream) start(t *track) (*track, context.Context) {
 	m.asks++
 	t.ask = m.asks
 	previous := m.track
-	m.track, m.paused, m.rewind = t, false, nil
+	m.track, m.paused, m.bySender, m.rewind = t, false, false, nil
 	if m.holds == 0 {
 		m.unblock()
 	} else {
@@ -357,7 +363,13 @@ func (m *Stream) start(t *track) (*track, context.Context) {
 // skip it. A phone's over Bluetooth that is told of the pause (ReceiverControl) is the exception: the
 // phone stops where it is and plays on from there, so what was queued here is a tail it plays again
 // after a gap, the time the phone takes to start sending once more. It is dropped instead.
-func (m *Stream) Pause() {
+func (m *Stream) Pause() { m.pause(false) }
+
+// senderPause is Pause for the received track's sender pausing on its own (ReceiverPaused). A track
+// the listener already paused stays the listener's pause.
+func (m *Stream) senderPause() { m.pause(true) }
+
+func (m *Stream) pause(bySender bool) {
 	if m == nil {
 		return
 	}
@@ -367,7 +379,8 @@ func (m *Stream) Pause() {
 		m.mu.Unlock()
 		return
 	}
-	m.paused = true
+	m.paused, m.bySender = true, bySender
+	m.pauses++
 	m.pauseTaken = time.Time{}
 	m.block()
 	ours := m.holds == 0
@@ -388,23 +401,28 @@ func (m *Stream) Pause() {
 }
 
 // Unpause carries on from where Pause stopped.
-func (m *Stream) Unpause() {
+func (m *Stream) Unpause() { m.unpauseIf(nil) }
+
+// unpauseIf is Unpause if ok, given the track loaded and whether its pause is the sender's own, says
+// so, looked at in the same hold of mu; it says whether it unpaused.
+func (m *Stream) unpauseIf(ok func(t *track, bySender bool) bool) bool {
 	if m == nil {
-		return
+		return false
 	}
 
 	m.mu.Lock()
-	if m.track == nil || !m.paused {
+	if m.track == nil || !m.paused || (ok != nil && !ok(m.track, m.bySender)) {
 		m.mu.Unlock()
-		return
+		return false
 	}
-	m.paused = false
+	m.paused, m.bySender = false, false
 	if m.holds == 0 {
 		m.unblock()
 	}
 	m.mu.Unlock()
 
 	m.changed()
+	return true
 }
 
 // Stop ends the track. There is nothing to come back to afterwards.
@@ -433,7 +451,7 @@ func (m *Stream) stopIf(ok func(t *track, paused bool) bool) bool {
 		return false
 	}
 	m.asks++
-	m.track, m.paused, m.rewind = nil, false, nil
+	m.track, m.paused, m.bySender, m.rewind = nil, false, false, nil
 	m.forget()
 	m.unblock()
 	m.mu.Unlock()
@@ -577,7 +595,7 @@ func (m *Stream) finished(t *track, itself bool) {
 		m.mu.Unlock()
 		return
 	}
-	m.track, m.paused, m.rewind = nil, false, nil
+	m.track, m.paused, m.bySender, m.rewind = nil, false, false, nil
 	m.forget()
 	m.unblock()
 	m.mu.Unlock()

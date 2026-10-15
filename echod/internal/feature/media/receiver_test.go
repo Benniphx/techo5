@@ -615,3 +615,69 @@ func TestAPhoneSlowToTakeAPauseIsGivenItsTime(t *testing.T) {
 	snd.answer() // it takes the pause, and still plays on
 	waitUntil(t, "the track to end", func() bool { return s.Receiving() == "" })
 }
+
+// A sender that paused on its own and sends again without saying it plays (ReceiverSending) plays
+// again here, rather than waiting paused; a pause from here stays, even once the phone says it paused.
+func TestASenderSendingAgainAfterItsOwnPausePlays(t *testing.T) {
+	const name = BluetoothPrefix + "Pixel (sends again)"
+	snd := newSender(t, name, true)
+	p, s := receivedPlayer(name)
+
+	p.ReceiverPaused(name, true)
+	p.ReceiverSending("Spotify")
+	if _, paused := s.Playing(); !paused {
+		t.Fatal("another sender sending played the track")
+	}
+	stopped := p.stoppedAt.Load()
+	p.ReceiverSending(name)
+	if playing, _ := s.Playing(); !playing {
+		t.Fatal("the sender sending again after its own pause left the track paused")
+	}
+	if p.stoppedAt.Load() == stopped {
+		t.Error("the sender playing again left a stop from before it to end the track (stoppedFor)")
+	}
+	snd.none(t)
+
+	p.Pause()
+	if got := snd.next(t); got != TransportPause {
+		t.Fatalf("asked %v, want a pause", got)
+	}
+	p.ReceiverPaused(name, true) // the phone saying it took the pause from here
+	p.ReceiverSending(name)
+	if _, paused := s.Playing(); !paused {
+		t.Fatal("a pause from here was undone by the phone sending")
+	}
+	p.ReceiverSending(name) // nothing new: still the listener's pause
+	if _, paused := s.Playing(); !paused {
+		t.Fatal("a pause from here was undone by the phone sending")
+	}
+}
+
+// A sender's late answer to an earlier pause is not taken as its answer to a later one: the pause
+// here, a play and another pause while the first was being asked, and the first answered then.
+func TestALateAnswerIsNotALaterPausesAnswer(t *testing.T) {
+	const name = BluetoothPrefix + "Pixel (slow to answer)"
+	snd := newSlowSender(t, name, true)
+	p, s := receivedPlayer(name)
+	taken := func() time.Time {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.pauseTaken
+	}
+
+	p.Transport(TransportToggle)
+	if got := snd.next(t); got != TransportPause {
+		t.Fatalf("asked %v, want a pause", got)
+	}
+	p.Transport(TransportToggle) // play, waiting
+	p.Transport(TransportToggle) // pause, in its place
+	snd.answer()                 // the first pause, answered late
+	if got := snd.next(t); got != TransportPause {
+		t.Fatalf("asked %v, want the second pause", got)
+	}
+	if !taken().IsZero() {
+		t.Fatal("the first pause's answer was taken as the second's")
+	}
+	snd.answer()
+	waitUntil(t, "the second pause to be taken", func() bool { return !taken().IsZero() })
+}

@@ -113,15 +113,28 @@ func (m *Stream) pausedOn(t *track) (paused bool, taken time.Time) {
 	return true, m.pauseTaken
 }
 
-// pauseTook is the sender of the received track named name taking the listener's pause, now. Only the
-// first word of it counts, and only while that track is loaded and paused.
-func (m *Stream) pauseTook(name string, now time.Time) {
+// pauseSeq is which pause is in effect, or was last (pauses), for pauseTook to tell its answer by.
+func (m *Stream) pauseSeq() uint64 {
+	if m == nil {
+		return 0
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pauses
+}
+
+// pauseTook is the sender of the received track named name taking the listener's pause seq (pauseSeq
+// as it was asked), now. Only the first word of it counts, and only while that track is loaded and
+// paused by that same pause: an answer to an earlier pause, late behind a play and another pause, is
+// not this one's.
+func (m *Stream) pauseTook(name string, seq uint64, now time.Time) {
 	if m == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.track != nil && m.track.received && m.track.item == name && m.paused && m.pauseTaken.IsZero() {
+	if m.track != nil && m.track.received && m.track.item == name && m.paused && m.pauses == seq &&
+		m.pauseTaken.IsZero() {
 		m.pauseTaken = now
 	}
 }
