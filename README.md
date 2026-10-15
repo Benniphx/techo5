@@ -286,6 +286,32 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 | Calling | Alexa calling and Drop In | Phone calls through your own SIP provider (TLS and SRTP), placed from Home Assistant or by voice, answered on the screen; device to device calls in the house |
 | Shopping, skills | Yes | **No.** Those are Alexa cloud services |
 
+## How well does it hear?
+
+| Device | Mics |
+|---|:---:|
+| Echo Show 5, 1st and 2nd gen | 2 |
+| Echo Show 8, 1st gen | 4 |
+| Echo Spot | 4 |
+| Echo Dot, 2nd gen | 7 |
+
+The Dot's seven are a ring of six plus one in the middle, the best array of the bunch.
+
+The wake word runs on the device itself. After that, what you say goes to your Home Assistant
+pipeline, so misheard words are mostly down to the speech to text you have set up in HA, not the
+mics. There's echo cancellation too, so it can hear you over its own music.
+
+You can tune a lot of it from Home Assistant: **Microphone gain**, **Microphone mixing** (all
+averaged, center mic only, delay and sum, or beamformer), **Microphone noise reduction**,
+**Microphone echo cancellation** and the **Wake word threshold**. The defaults are what worked best
+in my testing, but every room is different.
+
+On my Show 5 it hears me fine from across the room without raising my voice. With music playing I
+have to raise my voice, and sometimes still need to tap the screen or a button to get it to hear me.
+
+Amazon's own voice processing chip isn't used, so it's not going to match Alexa at its best. It's a
+lot better than it was a month ago though, and still getting better.
+
 ## Install
 
 **New to this? Start with [Getting started](docs/getting-started.md)**: every step from a stock Echo
