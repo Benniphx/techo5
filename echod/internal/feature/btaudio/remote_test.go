@@ -3,9 +3,12 @@
 package btaudio
 
 import (
+	"fmt"
 	"time"
 
 	"testing"
+
+	"github.com/godbus/dbus/v5"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluez"
@@ -182,8 +185,8 @@ func TestPlayerChangesAreFollowedInOrderWithoutBlocking(t *testing.T) {
 	f := &Feature{}
 	done := make(chan struct{})
 	go func() {
-		for _, st := range []string{"paused", "playing", "paused"} {
-			f.followPlayer(bluez.PlayerStatus{Status: st})
+		for i, st := range []string{"paused", "playing", "paused"} { // three phones'
+			f.followPlayer(bluez.PlayerStatus{Device: dbus.ObjectPath(fmt.Sprintf("/dev%d", i)), Status: st})
 		}
 		close(done)
 	}()
@@ -202,5 +205,46 @@ func TestPlayerChangesAreFollowedInOrderWithoutBlocking(t *testing.T) {
 		case <-time.After(5 * time.Second):
 			t.Fatalf("%s was never followed", want)
 		}
+	}
+}
+
+// A phone's changes waiting behind a stalled one give way to its latest, so the queue stays one change
+// for each phone however long following stalls; another phone's change keeps its place.
+func TestWaitingPlayerChangesAreOneForEachPhone(t *testing.T) {
+	release, stalled := make(chan struct{}), make(chan struct{})
+	got := make(chan bluez.PlayerStatus, 16)
+	was := followed
+	followed = func(_ *Feature, st bluez.PlayerStatus) {
+		if st.Status == "stalls" {
+			close(stalled)
+			<-release
+		}
+		got <- st
+	}
+	t.Cleanup(func() { followed = was })
+	f := &Feature{}
+	f.followPlayer(bluez.PlayerStatus{Device: "/a", Status: "stalls"})
+	<-stalled // under way, not waiting
+	for _, st := range []bluez.PlayerStatus{{Device: "/a", Status: "paused"}, {Device: "/b", Status: "paused"},
+		{Device: "/a", Status: "playing"}, {Device: "/a", Status: "paused"}} {
+		f.followPlayer(st)
+	}
+	f.statusMu.Lock()
+	waiting := len(f.statuses)
+	f.statusMu.Unlock()
+	close(release)
+	want := []bluez.PlayerStatus{{Device: "/a", Status: "stalls"}, {Device: "/b", Status: "paused"}, {Device: "/a", Status: "paused"}}
+	for _, w := range want {
+		select {
+		case st := <-got:
+			if st != w {
+				t.Fatalf("followed %+v, want %+v", st, w)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%+v was never followed", w)
+		}
+	}
+	if waiting > 2 {
+		t.Errorf("%d changes waiting, want one for each phone", waiting)
 	}
 }

@@ -5,6 +5,7 @@ package btaudio
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -81,9 +82,12 @@ var followed = (*Feature).playerChanged
 // followPlayer hands st on to be followed on a goroutine of its own, after the changes heard before it
 // and in the order they came, and returns at once: it is heard on the BlueZ signal goroutine, whose
 // listeners must not block (bluez.Adapter.PlayerChanged), and following a pause tells Home Assistant
-// the media player's state, a write to the network that can stall.
+// the media player's state, a write to the network that can stall. A change still waiting for the same
+// phone gives way to st, which goes to the back: the latest is what the phone is doing, and with Home
+// Assistant stalled the queue holds one change for each phone at most rather than growing.
 func (f *Feature) followPlayer(st bluez.PlayerStatus) {
 	f.statusMu.Lock()
+	f.statuses = slices.DeleteFunc(f.statuses, func(w bluez.PlayerStatus) bool { return w.Device == st.Device })
 	f.statuses = append(f.statuses, st)
 	if f.following {
 		f.statusMu.Unlock()
