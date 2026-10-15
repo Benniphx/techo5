@@ -149,7 +149,11 @@ func (m *Stream) receive(ctx context.Context, t *track, src PCMSource, conv *toS
 	for {
 		// A phone is read on while the track is held up, and what it sends goes (offered): left unread,
 		// what a phone that plays again sends piles up in bluez-alsa until it overflows, and the track
-		// plays again with a piece of it missing, half a second in.
+		// plays again with a piece of it missing, half a second in. The same goes for a hold that is not
+		// a pause (a reply, a timer, an announcement): the phone plays on through it, so what it sends
+		// meanwhile is dropped and the music comes back where the phone has got to, as live audio does.
+		// Left unread instead (as before), it came back late by however much bluez-alsa held, after a
+		// gap where the rest overflowed, and stayed that far behind the phone for the rest of the track.
 		if !phone || !m.held() {
 			if err := m.wait(ctx); err != nil {
 				return err
