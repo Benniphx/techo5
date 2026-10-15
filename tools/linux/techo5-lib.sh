@@ -581,6 +581,23 @@ t5_bt_native() {
 	command -v btmgmt >/dev/null || { log "bt: no btmgmt"; return 1; }
 	a=$(t5_bt_idme_addr | sed 's/../&:/g; s/:$//' | tr a-f A-F)
 	[ -n "$a" ] || { log "bt: no factory address in idme; keeping the controller's own"; return 0; }
+	# The driver's first setup can still be running when hci0 appears (athena's MT7663 registers
+	# 8 s after boot, after Wi-Fi), and mgmt opened during it left hci0 out of mgmt's index list for
+	# good (unit 1, 2026-10-15). So nothing talks mgmt for 3 s after hci0 appears; if mgmt still does
+	# not list it, the driver is bound again once, which lists it (seen on the unit).
+	sleep 3
+	t5_bt_listed() { n=0; while [ $n -lt 10 ]; do timeout 3 btmgmt info 2>/dev/null | grep -q '^hci0:' && return 0; sleep 1; n=$((n+1)); done; return 1; }
+	if ! t5_bt_listed; then
+		f=$(basename "$(readlink -f /sys/class/bluetooth/hci0/device 2>/dev/null)")
+		d=$(readlink -f "/sys/bus/sdio/devices/$f/driver" 2>/dev/null)
+		if [ -n "$f" ] && [ -d "$d" ]; then
+			log "bt: hci0 not listed by mgmt; binding $f again"
+			echo "$f" > "$d/unbind"; sleep 2; echo "$f" > "$d/bind"
+			n=0; while [ $n -lt 20 ] && [ ! -d /sys/class/bluetooth/hci0 ]; do sleep 1; n=$((n+1)); done
+			sleep 3
+			t5_bt_listed || log "bt: hci0 still not listed by mgmt"
+		fi
+	fi
 	# The kernel powers hci0 up once to set it up and off again two seconds later; until then
 	# the index is busy or powered, and the address is refused. Tried for up to 15 seconds.
 	n=0
@@ -589,6 +606,9 @@ t5_bt_native() {
 		[ "$cur" = "$a" ] && { log "bt: factory address in place"; return 0; }
 		timeout 3 btmgmt -i hci0 power off >/dev/null 2>&1
 		timeout 5 btmgmt -i hci0 public-addr "$a" >/dev/null 2>&1
+		# The kernel programs a new address on the next power-on; without one the check above
+		# only passed when something else happened to power hci0 up in time.
+		timeout 5 btmgmt -i hci0 power on >/dev/null 2>&1
 		sleep 1; n=$((n+1))
 	done
 	log "bt: the factory address was not taken; keeping the controller's own"
