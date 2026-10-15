@@ -521,10 +521,14 @@ t5_bt_up() {
 	# is a loudspeaker (major 4, audio/video; minor 5, loudspeaker). btmgmt takes the minor as the
 	# class byte, shifted left two bits: 5 is 20. Given 5 it refused (Invalid Parameters), and the
 	# Shows went out as miscellaneous devices. The Spot's Broadcom took a phone the same way, without
-	# the Shows' -p192-keys (a Pixel played to it on a unit 2026-10-14).
+	# the Shows' -p192-keys (a Pixel played to it on a unit 2026-10-14). bluetoothd's main.conf says
+	# loudspeaker too (mkrootfs.sh), so each new hci0 comes up as one before anything here runs.
 	command -v bluealsa >/dev/null && bluealsa -p a2dp-source -p a2dp-sink >> "$logdir/bluealsa.log" 2>&1 &
-	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
-	log "bt: hci0 up; bluetoothd and bluealsa started"
+	# Tried until it takes: written once, it could meet the kernel still adding bluez-alsa's services
+	# (Busy), and a phone that paired then remembers the device as having no type (#105).
+	n=0; while [ $n -lt 5 ] && ! t5_bt_class; do sleep 1; n=$((n+1)); done
+	[ $n -lt 5 ] || log "bt: the loudspeaker class did not take"
+	log "bt: hci0 up; bluetoothd and bluealsa started; class $(timeout 3 btmgmt info 2>/dev/null | sed -n 's/.*class \(0x[0-9a-f]*\).*/\1/p' | head -1)"
 	return 0
 }
 
@@ -544,13 +548,17 @@ t5_bt_again() {
 	n=0
 	while [ $n -lt 12 ]; do
 		[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] || return 0
-		timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded && break
+		t5_bt_class && break
 		sleep 5
 		n=$((n+1))
 	done
 	timeout 5 btmgmt discov off >/dev/null 2>&1
 	sleep 5
 	[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] || return 0
-	timeout 5 btmgmt class 4 20 >/dev/null 2>&1
+	t5_bt_class
 	timeout 5 btmgmt discov off >/dev/null 2>&1
 }
+
+# t5_bt_class: say the device is a loudspeaker (major 4, audio/video; minor 5, given to btmgmt as the
+# class byte: 20), and report whether the controller took it.
+t5_bt_class() { timeout 5 btmgmt class 4 20 2>/dev/null | grep -q succeeded; }
