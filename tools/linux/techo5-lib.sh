@@ -550,10 +550,12 @@ t5_bt_idme_addr() { t5_idme_mac bt_mac_addr; }
 
 # t5_idme_mac <field>: a 12-hex-digit address from idme, from /proc/idme on Amazon's kernels or read
 # off the eMMC's second boot partition where /proc/idme is missing (athena on mainline), or nothing.
+# Only the value's hex digits count, as t5_wifi_mac always took them: whatever else idme pads or
+# separates it with (NULs, a newline, colons) is dropped before twelve digits are required.
 t5_idme_mac() {
 	field=$1
 	if [ -r "/proc/idme/$field" ]; then
-		v=$(tr -d '\n\0 ' < "/proc/idme/$field")
+		v=$(tr -dc '0-9A-Fa-f' < "/proc/idme/$field")
 	else
 		dev=${T5_IDME_DEV:-/dev/mmcblk0boot1}
 		v=
@@ -566,7 +568,7 @@ t5_idme_mac() {
 			case "$size" in ''|*[!0-9]*) return 0;; esac
 			[ "$size" -le 4096 ] || return 0
 			if [ "$name" = "$field" ]; then
-				v=$(dd if="$dev" bs=1 skip=$((off + 28)) count="$size" 2>/dev/null | tr -d '\n\0 ')
+				v=$(dd if="$dev" bs=1 skip=$((off + 28)) count="$size" 2>/dev/null | tr -dc '0-9A-Fa-f')
 				break
 			fi
 			off=$((off + 28 + size)); i=$((i + 1))
