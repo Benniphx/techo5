@@ -18,6 +18,11 @@ import (
 // that is the only one Home Assistant accepts from a device; docs/actions.md has the fields.
 const TurnEvent = "esphome.techo5_voice"
 
+// LegacyTurnEvent is the same turn as EchoLocal reported it, which its Home Assistant integration
+// reads for its logbook lines and its activity view. It goes out unchanged beside TurnEvent, with
+// EchoLocal's fields and values, and is left out of the docs: TurnEvent is the one to build on.
+const LegacyTurnEvent = "esphome.echolocal_turn"
+
 // Version is bumped when a field changes meaning, so a reader that does not know a version can ignore
 // it rather than guess.
 const Version = "1"
@@ -47,9 +52,9 @@ const (
 // is often a paragraph, and far short of what the wire allows: every event goes into the recorder.
 const textLimit = 1000
 
-// queued is how many finished turns may wait for a Home Assistant that has stopped reading. Turns are
-// seconds apart, so a full queue is a connection that is gone, and the newest is dropped.
-const queued = 8
+// queued is how many events, two to a turn, may wait for a Home Assistant that has stopped reading.
+// Turns are seconds apart, so a full queue is a connection that is gone, and the newest is dropped.
+const queued = 16
 
 // Turn is one turn as it happens. Each phase stamps when it began and nothing is worked out until the
 // turn closes, so the arithmetic lives in one place instead of at every boundary.
@@ -64,8 +69,10 @@ type Turn struct {
 	heard string
 	reply string
 
-	// failure is what went wrong, for a turn that ends in an error.
-	failure string
+	// failure is what went wrong, for a turn that ends in an error, and timedOut whether that was the
+	// device giving up rather than Home Assistant reporting an error.
+	failure  string
+	timedOut bool
 
 	// audio is seconds of recording kept for this turn, zero when none was.
 	audio float64
@@ -117,8 +124,7 @@ func (t *Turn) Replying(text string) {
 	t.at(&t.replying)
 }
 
-// Fails says what went wrong, for the turn about to end in an error: Home Assistant's error code, or
-// timeout.
+// Fails says what went wrong, for the turn about to end in an error: Home Assistant's error code.
 func (t *Turn) Fails(code string) {
 	if t == nil {
 		return
@@ -129,10 +135,21 @@ func (t *Turn) Fails(code string) {
 	t.failure = code
 }
 
+// TimesOut says the turn is about to end because the device gave up waiting.
+func (t *Turn) TimesOut() {
+	if t == nil {
+		return
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.failure, t.timedOut = "timeout", true
+}
+
 // Ends closes the turn and reports it. Only the first call counts: several things can notice a turn is
 // over, and the one that noticed first is the one that timed it.
 //
-// The event is sent from a goroutine of its own. Ending is on the voice loop, and a write to a
+// The events are sent from a goroutine of their own. Ending is on the voice loop, and a write to a
 // connection that has died waits out its timeout; the next wake must not.
 func (t *Turn) Ends(how Ending) {
 	if t == nil {
@@ -145,11 +162,12 @@ func (t *Turn) Ends(how Ending) {
 		return
 	}
 	t.ended = time.Now()
-	fields := t.fields(how)
+	fields, legacy := t.fields(how), t.legacy(how)
 	t.mu.Unlock()
 
 	fields["device"] = config.Get().Device.Name
 	post(component.Event{Name: TurnEvent, Data: fields})
+	post(component.Event{Name: LegacyTurnEvent, Data: legacy})
 }
 
 var (
@@ -232,6 +250,45 @@ func (t *Turn) fields(how Ending) map[string]string {
 	if how == Failed && t.failure != "" {
 		out["error"] = component.Fit(t.failure)
 	}
+	t.durations(out, "reply_ms")
+	return out
+}
+
+// legacy is the event's data as EchoLocal sent it: an outcome rather than an ending and a trigger,
+// the reply's time as speak_ms, and text cut only at what an event can carry.
+func (t *Turn) legacy(how Ending) map[string]string {
+	outcome := "completed"
+	switch {
+	case how == NoSpeech || how == Canceled:
+		outcome = "cancelled" // spelled so on purpose: EchoLocal's readers match on it
+	case how == Failed && t.timedOut:
+		outcome = "timeout"
+	case how == Failed:
+		outcome = "failed"
+	}
+
+	out := map[string]string{
+		"version": Version,
+		"id":      t.id,
+		"slot":    strconv.Itoa(t.slot),
+		"outcome": outcome,
+	}
+	if t.word != "" {
+		out["wake_word"] = component.FitEvent(t.word)
+	}
+	if t.heard != "" {
+		out["heard"] = component.FitEvent(t.heard)
+	}
+	if t.reply != "" {
+		out["reply"] = component.FitEvent(t.reply)
+	}
+	t.durations(out, "speak_ms")
+	return out
+}
+
+// durations adds what both events share: the recording kept, and how long each phase took, the reply's
+// under the key given.
+func (t *Turn) durations(out map[string]string, replyKey string) {
 	if t.audio > 0 {
 		out["audio_seconds"] = strconv.FormatFloat(t.audio, 'f', 1, 64)
 	}
@@ -244,7 +301,7 @@ func (t *Turn) fields(how Ending) map[string]string {
 	}{
 		{"listen_ms", t.listening},
 		{"think_ms", t.thinking},
-		{"reply_ms", t.replying},
+		{replyKey, t.replying},
 	}
 
 	for i, mark := range marks {
@@ -263,7 +320,6 @@ func (t *Turn) fields(how Ending) map[string]string {
 			out[mark.key] = strconv.FormatInt(ms, 10)
 		}
 	}
-	return out
 }
 
 // fit shortens a transcript or a reply to textLimit characters.

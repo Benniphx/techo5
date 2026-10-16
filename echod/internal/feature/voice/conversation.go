@@ -702,7 +702,7 @@ func (c *conversation) turnEvent(e event) {
 		case phaseThinking:
 			slog.Warn("gave up waiting for an answer", "slot", c.slot+1, "after", wakeword.MaxThink(c.slot))
 		}
-		c.turn.Fails("timeout")
+		c.turn.TimesOut()
 		c.idle("timed out", activity.Failed)
 		c.trouble()
 	}

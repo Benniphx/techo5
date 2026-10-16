@@ -9,12 +9,21 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 )
 
-// caught collects the events a turn fires, so a test can read what Home Assistant would have.
-func caught(t *testing.T) chan component.Event {
+// caught collects the events a turn fires under name, so a test can read what Home Assistant would
+// have.
+func caught(t *testing.T, name ...string) chan component.Event {
 	t.Helper()
 
+	want := TurnEvent
+	if len(name) > 0 {
+		want = name[0]
+	}
 	got := make(chan component.Event, 8)
-	cancel := component.Fire.Listen(func(e component.Event) { got <- e })
+	cancel := component.Fire.Listen(func(e component.Event) {
+		if e.Name == want {
+			got <- e
+		}
+	})
 	t.Cleanup(cancel)
 
 	return got
@@ -30,9 +39,6 @@ func one(t *testing.T, got chan component.Event) map[string]string {
 	case e = <-got:
 	case <-time.After(2 * time.Second):
 		t.Fatal("no event fired")
-	}
-	if e.Name != TurnEvent {
-		t.Errorf("fired %q, want %q", e.Name, TurnEvent)
 	}
 	select {
 	case extra := <-got:
@@ -173,5 +179,60 @@ func TestNoTurnIsSafeToMark(t *testing.T) {
 	case e := <-got:
 		t.Errorf("fired %v, want none", e.Data)
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// EchoLocal's integration reads the old event for its logbook and activity view, so it goes out as it
+// always did beside the new one: its own name, outcome rather than ended, speak_ms, and no trigger.
+func TestTheEchoLocalEventGoesOutAsBefore(t *testing.T) {
+	for _, tc := range []struct {
+		how     Ending
+		timeout bool
+		failure string
+		outcome string
+	}{
+		{how: Answered, outcome: "completed"},
+		{how: NoSpeech, outcome: "cancelled"},
+		{how: Canceled, outcome: "cancelled"},
+		{how: Failed, failure: "intent-failed", outcome: "failed"},
+		{how: Failed, timeout: true, outcome: "timeout"},
+	} {
+		newer, older := caught(t), caught(t, LegacyTurnEvent)
+
+		turn := Get().Begin(1, "hey jarvis", WakeWord)
+		turn.Listening()
+		turn.Heard("what time is it")
+		time.Sleep(2 * time.Millisecond)
+		turn.Replying("It's noon.")
+		time.Sleep(2 * time.Millisecond)
+		if tc.failure != "" {
+			turn.Fails(tc.failure)
+		}
+		if tc.timeout {
+			turn.TimesOut()
+		}
+		turn.Ends(tc.how)
+
+		data, legacy := one(t, newer), one(t, older)
+		if legacy["outcome"] != tc.outcome || data["ended"] != string(tc.how) {
+			t.Errorf("%s: outcome %q, want %q; ended %q", tc.how, legacy["outcome"], tc.outcome, data["ended"])
+		}
+		if legacy["id"] != data["id"] || legacy["version"] != "1" || legacy["slot"] != "1" ||
+			legacy["wake_word"] != "hey jarvis" || legacy["heard"] != "what time is it" || legacy["reply"] != "It's noon." {
+			t.Errorf("%s: the old event's fields are %v", tc.how, legacy)
+		}
+		if legacy["speak_ms"] == "" || data["reply_ms"] == "" {
+			t.Errorf("%s: speak_ms %q, reply_ms %q", tc.how, legacy["speak_ms"], data["reply_ms"])
+		}
+		for _, key := range []string{"ended", "trigger", "error", "device", "reply_ms"} {
+			if _, ok := legacy[key]; ok {
+				t.Errorf("%s: the old event carries the new field %s", tc.how, key)
+			}
+		}
+		for _, key := range []string{"outcome", "speak_ms"} {
+			if _, ok := data[key]; ok {
+				t.Errorf("%s: the new event carries the old field %s", tc.how, key)
+			}
+		}
 	}
 }
