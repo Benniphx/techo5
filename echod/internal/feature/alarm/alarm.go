@@ -574,6 +574,21 @@ func (a *Alarms) CancelSnoozes() bool {
 	return true
 }
 
+// dropSnooze drops the snooze of the alarm with this ID, if there is one.
+func (a *Alarms) dropSnooze(id string) {
+	key := "snooze:" + id
+	a.mu.Lock()
+	before := len(a.snoozed)
+	a.snoozed = slices.DeleteFunc(a.snoozed, func(x source) bool { return x.key == key })
+	dropped, saved := len(a.snoozed) != before, snoozeList(a.snoozed)
+	a.mu.Unlock()
+	if !dropped {
+		return
+	}
+	saveSnoozes(saved)
+	slog.Info("snooze canceled with its alarm", "id", id)
+}
+
 // Snooze silences a ringing alarm and rings it again after the snooze length set on the device.
 func (a *Alarms) Snooze() bool { return a.SnoozeFor(0) }
 
@@ -745,21 +760,28 @@ func devices(s string) []string {
 	return out
 }
 
-// Put saves an alarm on the device as given.
+// Put saves an alarm on the device as given. Turning an alarm off drops its snooze too (#159): a
+// snooze pressed by mistake is undone the way a phone's is, by turning the alarm off, and on again if
+// it should ring tomorrow.
 func (a *Alarms) Put(al config.Alarm) error {
+	wasOn := slices.ContainsFunc(config.Get().Alarms.List, func(x config.Alarm) bool { return x.ID == al.ID && x.On })
 	if err := config.Set().Alarms().Put(al); err != nil {
 		return err
+	}
+	if wasOn && !al.On {
+		a.dropSnooze(al.ID)
 	}
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil
 }
 
-// Delete removes an alarm set on the device.
+// Delete removes an alarm set on the device, and its snooze with it.
 func (a *Alarms) Delete(id string) error {
 	if err := config.Set().Alarms().Delete(id); err != nil {
 		return err
 	}
+	a.dropSnooze(id)
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil
