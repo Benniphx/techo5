@@ -538,6 +538,9 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 				r.weatherIcon(s.weather.Condition, ix+weatherMark/2, y-r.s(12), weatherMark)
 				ix += weatherMark + r.s(14)
 			}
+			// Kept left of the divider, as the date is: a long condition would otherwise run into the
+			// events, which go further down without the row.
+			line = r.clipTo(r.small, line, col-r.s(50)-ix)
 			r.text(r.small, line, ix, y, dim)
 			r.setWeatherAt(image.Rect(box.Min.X, y-r.s(40), ix+r.width(r.small, line), y+r.s(14)))
 		}
