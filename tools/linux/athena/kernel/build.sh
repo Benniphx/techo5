@@ -152,4 +152,42 @@ cp .config "$OUT/kernel.config"
 python3 "$HERE/mkfwcpio.py" "$STAGE" "$OUT/ramdisk.cpio.gz" $RAMDISK_FILES
 python3 "$HERE/pack.py" "$OUT/Image.gz" "$OUT/athena.dtb" "$OUT/ramdisk.cpio.gz" "$OUT/boot-athena.img"
 python3 "$HERE/check-boot.py" "$OUT/boot-athena.img"
-cd "$OUT" && sha256sum boot-athena.img Image.gz athena.dtb ramdisk.cpio.gz kernel.config > SHA256SUMS && cat SHA256SUMS
+
+# 7. The source, for the GPL: the whole patched tree this image was built from, with the build's
+# configuration in it as techo5-athena.config, and nothing the build made. Reproducible like the
+# image: entries sorted by name, owned by 0:0, all at the build's timestamp, one xz thread.
+SRCNAME=linux-$KVER-techo5-athena
+SRCTAR=$OUT/$SRCNAME-source.tar.xz
+PKG=$WORK/source-pkg
+rm -rf "$PKG" && mkdir -p "$PKG"
+cp -a "$KTREE" "$PKG/$SRCNAME"
+make -s -C "$PKG/$SRCNAME" distclean
+# distclean leaves the kernel images behind (seen in v1.2.16's source tarball)
+rm -f "$PKG/$SRCNAME"/arch/arm64/boot/Image "$PKG/$SRCNAME"/arch/arm64/boot/Image.gz
+cp "$OUT/kernel.config" "$PKG/$SRCNAME/techo5-athena.config"
+tar -C "$PKG" --sort=name --mtime="$KBUILD_BUILD_TIMESTAMP" --owner=0 --group=0 --numeric-owner \
+	--mode='go-w,a+rX' --format=gnu -cf - "$SRCNAME" | xz -T1 -6 > "$SRCTAR.part"
+mv "$SRCTAR.part" "$SRCTAR"
+# Nothing of the computer it was built on: no path of this build, and no home directory or user name
+# that kernel.org's own tarball does not already have (it has a few /home/ in documentation). The
+# kernel.org tarball is fetched for that when KTREE stood in for it.
+fetch "$KURL" "$CACHE/linux-$KVER.tar.xz" "$KSHA256"
+esc() { printf '%s' "$1" | sed 's/[][\.*^$+?(){}|]/\\&/g'; }
+pat="/home/|relbuild|$(esc "$WORK")|$(esc "$KTREE")"
+for n in "$(id -un)" "${USER:-}" "${SUDO_USER:-}"; do
+	case "$n" in ""|root|techo5) ;; *) pat="$pat|\b$(esc "$n")\b";; esac
+done
+count() { grep -aoiE "$pat" | tr 'A-Z' 'a-z' | sort | uniq -c; }
+ours=$(tar -xJOf "$SRCTAR" | count || true)
+theirs=$(tar -xJOf "$CACHE/linux-$KVER.tar.xz" | count || true)
+names=$(tar -tJf "$SRCTAR" | grep -iE "$pat" || true)
+if [ -n "$names" ] || [ "$ours" != "$theirs" ]; then
+	echo "$SRCTAR carries something of this computer:" >&2
+	echo "  kernel.org's: $theirs" >&2; echo "  ours: $ours" >&2
+	[ -z "$names" ] || echo "  in names: $(echo "$names" | head -5)" >&2
+	exit 1
+fi
+python3 "$HERE/check-source.py" --config "$OUT/kernel.config" "$SRCTAR" "$OUT/boot-athena.img"
+rm -rf "$PKG"
+
+cd "$OUT" && sha256sum boot-athena.img Image.gz athena.dtb ramdisk.cpio.gz kernel.config "$SRCNAME-source.tar.xz" > SHA256SUMS && cat SHA256SUMS

@@ -33,6 +33,7 @@ below in order, builds `Image.gz` and the DTB, packs the boot image and checks i
 | `boot-athena.img` | the boot image (header v1, kernel + DTB, firmware ramdisk) |
 | `Image.gz`, `athena.dtb`, `ramdisk.cpio.gz` | the parts |
 | `kernel.config` | the full configuration used |
+| `linux-6.18.56-techo5-athena-source.tar.xz` | the whole patched source tree the image was built from, with `kernel.config` in it as `techo5-athena.config`: what a release publishes beside the boot image, for the GPL. Built reproducibly, checked for anything of the build computer (paths, user names) and by `check-source.py` |
 | `SHA256SUMS` | |
 
 Environment: `WORK`, `OUT`, `JOBS`, `CROSS_COMPILE` and `KTREE` (use an unpacked linux-6.18.56 tree
