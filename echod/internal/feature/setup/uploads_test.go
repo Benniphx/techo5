@@ -10,9 +10,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
-	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/detect/assets"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/buttons"
@@ -68,6 +69,16 @@ func wav(rate, channels, ms int) string {
 	return b.String()
 }
 
+// refused is a row's upload sent back to the tab with the reason, which says this when it is not "".
+func refused(w *httptest.ResponseRecorder, says string) bool {
+	loc, err := url.Parse(w.Header().Get("Location"))
+	if w.Code != http.StatusSeeOther || err != nil {
+		return false
+	}
+	q := loc.Query()
+	return q.Get("tab") == "sound" && q.Get("problem") != "" && strings.Contains(q.Get("problem"), says)
+}
+
 // ownSoundsHere points the sounds folder at the test's own.
 func ownSoundsHere(t *testing.T) string {
 	t.Helper()
@@ -108,22 +119,22 @@ func TestASoundIsSentFromThePage(t *testing.T) {
 		}
 	}
 	for _, name := range []string{"../failure", "failure.wav", "/tmp/x", "", "alarm"} {
-		if w := send(up(c.Value, name, good, c)); w.Code != http.StatusBadRequest {
-			t.Errorf("sound %q: %d", name, w.Code)
+		if w := send(up(c.Value, name, good, c)); !refused(w, "") {
+			t.Errorf("sound %q: %d %s", name, w.Code, w.Header().Get("Location"))
 		}
 	}
-	if w := send(up(c.Value, "failure", wav(44100, 2, 200), c)); w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "48 kHz") {
-		t.Errorf("a file at another rate: %d %q", w.Code, w.Body.String())
+	if w := send(up(c.Value, "failure", wav(44100, 2, 200), c)); !refused(w, "48 kHz") {
+		t.Errorf("a file at another rate: %d %s", w.Code, w.Header().Get("Location"))
 	}
-	if w := send(up(c.Value, "failure", good+strings.Repeat("x", speaker.MaxOwnUpload), c)); w.Code != http.StatusBadRequest {
-		t.Errorf("a file over the limit: %d", w.Code)
+	if w := send(up(c.Value, "failure", good+strings.Repeat("x", speaker.MaxOwnUpload), c)); !refused(w, "") {
+		t.Errorf("a file over the limit: %d %s", w.Code, w.Header().Get("Location"))
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Fatalf("kept %d files from requests that were refused", len(entries))
 	}
 
-	if w := send(up(c.Value, "failure", good, c)); w.Code != http.StatusNoContent {
-		t.Fatalf("a good sound: %d %q", w.Code, w.Body.String())
+	if w := send(up(c.Value, "failure", good, c)); w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/setup?saved=1&tab=sound" {
+		t.Fatalf("a good sound: %d %s", w.Code, w.Header().Get("Location"))
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "failure.wav")); err != nil || string(b) != good {
 		t.Errorf("kept as failure.wav: %v", err)
@@ -135,7 +146,7 @@ func TestASoundIsSentFromThePage(t *testing.T) {
 	w := httptest.NewRecorder()
 	soundsSection(w, "tok")
 	body := w.Body.String()
-	for _, want := range []string{"Sounds of your own", `value="failure"`, "/setup/sound", "16-bit, 48 kHz", "Use the device's own"} {
+	for _, want := range []string{"Sounds of your own", `value="failure"`, "/setup/sound", "16-bit, 48 kHz", "Use the device's own", `enctype="multipart/form-data"`, ">Upload</button>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the page has no %q", want)
 		}
@@ -189,8 +200,20 @@ func TestAWakeWordIsSentFromThePage(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	dir := ownModels(t)
 	f, c := letInPage(t)
-	reconnects := 0
-	t.Cleanup(component.Reconnect.Listen(func(struct{}) { reconnects++ }))
+	var reconnects atomic.Int32
+	was := whenIdle
+	whenIdle = &idleReconnect{busy: func() bool { return false }, emit: func() { reconnects.Add(1) }, look: time.Millisecond}
+	t.Cleanup(func() { whenIdle = was })
+	// settled waits for the reconnect asked for to have happened.
+	settled := func(want int32) bool {
+		for range 1000 {
+			if reconnects.Load() >= want {
+				break
+			}
+			time.Sleep(time.Millisecond)
+		}
+		return reconnects.Load() == want
+	}
 	send := func(r *http.Request) *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		f.serve(w, r)
@@ -226,16 +249,16 @@ func TestAWakeWordIsSentFromThePage(t *testing.T) {
 	if w := send(up(c.Value, `{"type":"micro","wake_word":"Okay Nabu","micro":{}}`, model, c)); w.Code != http.StatusBadRequest {
 		t.Errorf("a model over the image's own: %d", w.Code)
 	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 1 || reconnects != 0 {
-		t.Fatalf("kept %d files, reconnected %d times, from requests that were refused", len(entries)-1, reconnects)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || !settled(0) {
+		t.Fatalf("kept %d files, reconnected %d times, from requests that were refused", len(entries)-1, reconnects.Load())
 	}
 
 	w := send(up(c.Value, manifest, model, c))
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "hey_b_computer_b") {
 		t.Fatalf("a good model: %d %q", w.Code, w.Body.String())
 	}
-	if reconnects != 1 {
-		t.Errorf("reconnected %d times, want once so Home Assistant sees it", reconnects)
+	if !settled(1) {
+		t.Errorf("reconnected %d times, want once so Home Assistant sees it", reconnects.Load())
 	}
 	if _, err := os.Stat(filepath.Join(dir, "hey_b_computer_b.tflite")); err != nil {
 		t.Error(err)
@@ -272,7 +295,7 @@ func TestAWakeWordIsSentFromThePage(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dir, "okay_nabu.tflite")); err != nil {
 		t.Errorf("the image's model is gone: %v", err)
 	}
-	if entries, _ := os.ReadDir(dir); len(entries) != 1 || reconnects != 2 {
-		t.Errorf("%d files left, %d reconnects", len(entries), reconnects)
+	if entries, _ := os.ReadDir(dir); len(entries) != 1 || !settled(2) {
+		t.Errorf("%d files left, %d reconnects", len(entries), reconnects.Load())
 	}
 }

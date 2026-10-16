@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wake"
@@ -17,8 +16,8 @@ import (
 // custom_wake_words folder and a restart of Home Assistant.
 //
 // Home Assistant learns what the device can hear only when it asks, which it does as it connects, so
-// a model added or removed here is followed by a reconnect: the satellite's Wake word list has it a
-// few seconds later rather than at the next restart of either side.
+// a model added or removed here is followed by a reconnect once the device is idle (reconnect.go): the
+// satellite's Wake word list has it soon after rather than at the next restart of either side.
 
 // models is the device's wake word library; a test has one of its own.
 var models = wake.Lib
@@ -49,9 +48,9 @@ func wakeWordsSection(w http.ResponseWriter, token string) {
 	 <input id="wwmodel" type="file" accept=".tflite"></div></div>
 	 <p><button type="button" id="wwsend">Add wake word</button></p>
 	 <p id="wwsays" class="note">A microWakeWord model: the two files with the same name, for example
-	  <code>echo.json</code> and <code>echo.tflite</code>. The phrase in the .json is what it is called. Home
-	  Assistant reconnects to the device to see it, which takes a few seconds; then choose it above or in
-	  the device's Wake word list in Home Assistant.</p>
+	  <code>echo.json</code> and <code>echo.tflite</code>. The phrase in the .json is what it is called. It can be
+	  chosen above straight away. Home Assistant picks it up once the device is idle, usually within
+	  seconds, and then has it in the device's Wake word list.</p>
 	 <script>
 	 document.getElementById('wwsend').addEventListener('click', async () => {
 	   const say = document.getElementById('wwsays');
@@ -124,7 +123,7 @@ func (f *Feature) wakeWordUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.used()
-	component.Reconnect.Emit(struct{}{}) // so Home Assistant asks again what the device can hear
+	whenIdle.ask() // so Home Assistant asks again what the device can hear
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	fmt.Fprintf(w, "%s (%s)", m.Phrase, m.ID)
@@ -143,6 +142,6 @@ func removeWakeWord(r *http.Request) string {
 	if err := models().RemoveOwn(id); err != nil {
 		return err.Error()
 	}
-	component.Reconnect.Emit(struct{}{})
+	whenIdle.ask()
 	return ""
 }
