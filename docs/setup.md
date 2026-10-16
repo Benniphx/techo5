@@ -585,6 +585,16 @@ has rung, so delete it instead, or cancel the snoozes: the Snoozed row on the sc
 on the setup page. An alarm followed from a Home Assistant helper works the same way when its on/off
 switch is turned off.
 
+**Wake with light** lights the room for a while before an alarm: the screen on a Show or a Spot, the
+light ring on a Dot. Set the default on the Alarms card or the setup page, and give an alarm its own
+in its editor (5 to 30 minutes, or off). Once an alarm with a wake light rings, the light stays at
+full while it rings and while it is snoozed. When you stop it, the light stays at full until the
+next alarm if that alarm's own wake light has already started; otherwise it goes off. So with half
+an hour of light, alarms at 8:00 and 8:30 are one light from 7:30 until the second is stopped, and
+an 8:00 alarm snoozed until 8:36 carries the light on to a 9:05 alarm. **Wake light brightness**
+(percent) and **Wake light color** (like `#ff9b1a`, empty while off) show it in Home Assistant, for
+room lights to follow; see [docs/actions.md](actions.md#follow-the-wake-light).
+
 ## 8. Settings lock
 
 A **settings lock** (Show and Spot, off by default) is a PIN the device asks for before its settings
