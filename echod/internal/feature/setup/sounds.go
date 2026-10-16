@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log/slog"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
@@ -14,6 +16,9 @@ import (
 // is kept, so a file that would only play the stock sound in its place is refused with the reason
 // instead. Nothing is converted here: the device has no converter on every model, and a page that
 // says what format it needs is better than one that works on some devices only.
+//
+// Each row is a plain form with an Upload button, so it works without script and the page comes back
+// saying what happened, as every save does. A sound is small enough to send as it is.
 
 // soundTitles is what each sound is called on the page, and when it plays.
 var soundTitles = map[string][2]string{
@@ -30,7 +35,7 @@ var soundTitles = map[string][2]string{
 func soundsSection(w http.ResponseWriter, token string) {
 	fmt.Fprint(w, `<fieldset><legend>Sounds of your own</legend>
 	 <p class="note" style="margin-top:0">A recording of your own plays in place of the device's sound. Play
-	  tries what plays now, quietly.</p>`)
+	  tries what plays now, quietly. To change one, choose a file beside it and press Upload.</p>`)
 	for _, name := range speaker.OwnSounds() {
 		title := soundTitles[name]
 		has, problem := speaker.OwnState(name)
@@ -47,8 +52,15 @@ func soundsSection(w http.ResponseWriter, token string) {
 		hidden(w, token, "sound-play", "sound")
 		fmt.Fprintf(w, `<input type="hidden" name="sound" value="%s"><button type="submit" class="quiet">Play</button></form>`,
 			html.EscapeString(name))
-		fmt.Fprintf(w, `<input type="file" accept=".wav,audio/wav" class="soundfile" style="width:auto;flex:1;min-width:12rem"
-		 data-sound="%s" aria-label="Send a recording for %s">`, html.EscapeString(name), html.EscapeString(title[0]))
+		// The token comes first and the sound's name next, ahead of the file: the order the fields are in
+		// is the order the browser sends them, and the order the device reads them in.
+		fmt.Fprintf(w, `<form method="post" action="/setup/sound" enctype="multipart/form-data"
+		 style="margin:0;display:flex;gap:.5rem;flex:1;flex-wrap:wrap;align-items:center">
+		 <input type="hidden" name="token" value="%s"><input type="hidden" name="sound" value="%s">
+		 <input type="file" name="file" accept=".wav,audio/wav" required style="width:auto;flex:1;min-width:12rem"
+		  aria-label="A recording for %s">
+		 <button type="submit" class="quiet">Upload</button></form>`,
+			html.EscapeString(token), html.EscapeString(name), html.EscapeString(title[0]))
 		if has {
 			fmt.Fprint(w, `<form method="post" action="/setup/save" style="margin:0">`)
 			hidden(w, token, "sound-remove", "sound")
@@ -57,29 +69,15 @@ func soundsSection(w http.ResponseWriter, token string) {
 		}
 		fmt.Fprint(w, `</div>`)
 	}
-	fmt.Fprintf(w, `<p id="soundsays" class="note">A WAVE (.wav) file, 16-bit, 48 kHz, mono or stereo, at most 10
-	  seconds. Other formats are not converted here; ffmpeg makes one from anything:
+	fmt.Fprint(w, `<p class="note">A WAVE (.wav) file, 16-bit, 48 kHz, mono or stereo, at most 10 seconds.
+	  Other formats are not converted here; ffmpeg makes one from anything:
 	  <code>ffmpeg -i chime.mp3 -ac 1 -ar 48000 -c:a pcm_s16le chime.wav</code>. Keep the wake sound short: the
-	  device listens for the request only once it has played.</p>
-	 <script>
-	 document.querySelectorAll('.soundfile').forEach(el => el.addEventListener('change', async (ev) => {
-	   const say = document.getElementById('soundsays');
-	   const f = ev.target.files[0];
-	   if (!f) return;
-	   say.textContent = 'Sending ' + f.name + '...';
-	   const fd = new FormData(); fd.append('token', %q); fd.append('sound', ev.target.dataset.sound); fd.append('file', f, 'sound.wav');
-	   try {
-	     const r = await fetch('/setup/sound', {method: 'POST', body: fd});
-	     say.textContent = r.ok ? f.name + ' kept.' : await r.text();
-	     if (r.ok) setTimeout(() => location.reload(), 1200);
-	   } catch (e) { say.textContent = 'It could not be sent.'; }
-	 }));
-	 </script></fieldset>`, token)
+	  device listens for the request only once it has played.</p></fieldset>`)
 }
 
-// sound takes one recording from the page's script: the token, then which sound it is for, then the
-// file. The token is checked before anything else is read, and the file is never read past the most a
-// sound can be.
+// sound takes one recording from a row's form: the token, then which sound it is for, then the file.
+// The token is checked before anything else is read, and the file is never read past the most a sound
+// can be. The page comes back to the tab, saying whether it was kept and if not why, as a save does.
 func (f *Feature) sound(w http.ResponseWriter, r *http.Request) {
 	token, in := f.session(r)
 	if !in {
@@ -108,33 +106,38 @@ func (f *Feature) sound(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "that did not come from this page", http.StatusForbidden)
 		return
 	}
-	// Which sound is a name from the list, looked up there; what the browser called its file is not
-	// read at all.
-	p, err = mr.NextPart()
-	if err != nil || p.FormName() != "sound" {
-		http.Error(w, "no sound was named", http.StatusBadRequest)
+	problem := receiveSound(mr)
+	if problem == "" {
+		f.used()
+		http.Redirect(w, r, back("sound", "saved", "1"), http.StatusSeeOther)
 		return
+	}
+	slog.Warn("setup page: a sound was refused", "problem", problem)
+	http.Redirect(w, r, back("sound", "problem", problem), http.StatusSeeOther)
+}
+
+// receiveSound reads which sound, then the file, and keeps it; what went wrong, or "". Which sound is
+// a name from the list, looked up there; what the browser called its file is not read at all.
+func receiveSound(mr *multipart.Reader) string {
+	p, err := mr.NextPart()
+	if err != nil || p.FormName() != "sound" {
+		return "no sound was named"
 	}
 	name, err := io.ReadAll(io.LimitReader(p, 64))
 	if err != nil {
-		http.Error(w, "no sound was named", http.StatusBadRequest)
-		return
+		return "no sound was named"
 	}
 	if _, ok := soundTitles[string(name)]; !ok {
-		http.Error(w, "that is not one of the sounds", http.StatusBadRequest)
-		return
+		return "that is not one of the sounds"
 	}
 	p, err = mr.NextPart()
 	if err != nil || p.FormName() != "file" {
-		http.Error(w, "no file was sent", http.StatusBadRequest)
-		return
+		return "no file was sent"
 	}
 	if err := speaker.SaveOwn(string(name), p); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return err.Error()
 	}
-	f.used()
-	w.WriteHeader(http.StatusNoContent)
+	return ""
 }
 
 func playSound(r *http.Request) string {
