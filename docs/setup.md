@@ -579,7 +579,8 @@ A new or changed file plays the next time its sound does, with no restart, and d
 stock sound back. A file the device cannot play leaves the stock sound playing, and the log says why.
 
 Alarms and timers work by voice, on the screen, and from Home Assistant. See
-[docs/actions.md](actions.md) for all of them.
+[docs/actions.md](actions.md) for all of them. Snoozed by mistake? Turn the alarm off, and its snooze
+goes with it; turn it back on and it rings at its next time.
 
 ## 8. Settings lock
 
