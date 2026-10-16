@@ -39,6 +39,11 @@ param(
     # install-athena.py. Refused unless check-boot.py passes it with its amp tuning slot empty: the
     # tuning is Amazon's and is filled in from each unit's own backup, never shipped.
     [string]$AthenaBoot = '',
+    # The source of that kernel, for the GPL: build.sh's out/linux-<kver>-techo5-athena-source.tar.xz,
+    # published as linux-<kver>-techo5-athena-<version>-source.tar.xz. Required whenever a kernel ships
+    # (-AthenaBoot, which an athena rootfs carrying a kernel needs), and refused unless check-source.py
+    # finds it the patched tree, with the configuration the boot image's kernel carries.
+    [string]$AthenaKernelSource = '',
     # The release signing key (ed25519 seed, base64). Devices take a manifest only with its signature, so
     # a release cannot be published without it. Keep it off every repository and backed up: $env:TECHO5_SIGN_KEY.
     [string]$SignKey = $env:TECHO5_SIGN_KEY,
@@ -112,6 +117,24 @@ if ($AthenaRootfs) {
     } else {
         Write-Warning "$AthenaRootfs carries no kernel: updates leave each unit's kernel as it is"
     }
+}
+# A kernel is published only with its source (the GPL), and the source must be what built it.
+if ($AthenaBoot -and -not $AthenaKernelSource) {
+    throw "-AthenaBoot needs -AthenaKernelSource: build.sh's out/linux-<kver>-techo5-athena-source.tar.xz, for the GPL"
+}
+if ($AthenaKernelSource -and -not $AthenaBoot) { throw "-AthenaKernelSource goes with the -AthenaBoot it is the source of" }
+$athenaSourceName = $null
+if ($AthenaKernelSource) {
+    $chk = @((Join-Path $PSScriptRoot 'linux/athena/kernel/check-source.py'))
+    # build.sh's kernel.config beside the image is compared too, when it is there.
+    $cfg = Join-Path (Split-Path -Parent (Resolve-Path $AthenaBoot)) 'kernel.config'
+    if (Test-Path -LiteralPath $cfg -PathType Leaf) { $chk += @('--config', $cfg) }
+    $out = @(python @chk $AthenaKernelSource $AthenaBoot)
+    $out | ForEach-Object { Write-Host $_ }
+    if ($LASTEXITCODE -ne 0) { throw "$AthenaKernelSource is not the source of $AthenaBoot (check-source.py)" }
+    $kver = ($out | Where-Object { $_ -match '^kver (\d+\.\d+\.\d+)$' } | Select-Object -Last 1) -replace '^kver ', ''
+    if (-not $kver) { throw "check-source.py named no kernel version" }
+    $athenaSourceName = "linux-$kver-techo5-athena-$Version-source.tar.xz"
 }
 if (-not $SignKey -or -not (Test-Path $SignKey)) { throw "no release signing key: set TECHO5_SIGN_KEY or pass -SignKey" }
 $repo = 'HuskerMinion/techo5'
@@ -225,6 +248,12 @@ if ($DotRootfs) { $args += $DotRootfs }
 if ($athenaRootfsNamed) { $args += $athenaRootfsNamed }
 $args += $bootAssets
 $args += $agentAssets
+# Before SHA256SUMS is made from this list, so the sums cover the source too.
+if ($athenaSourceName) {
+    $named = Join-Path $bin $athenaSourceName
+    Copy-Item $AthenaKernelSource $named -Force
+    $args += $named
+}
 # SHA256SUMS: for checking a download by hand. No installer reads it — the signed manifest covers
 # every file one of them fetches, and an unsigned list of checksums is no check against whoever served
 # the files it describes.
