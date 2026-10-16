@@ -4,19 +4,23 @@
 // never touched: a kernel fix reached a unit only through the installer. So the athena rootfs carries
 // the kernel it was tested with (the released boot image, its tuning slot empty), and once that slot
 // has proved itself (committed good) the kernel goes to the boot partition the way the installer puts
-// it there: the unit's own amp tuning, taken from the kernel it runs now, in the slot, the header id
-// made again.
+// it there: the unit's own amp tuning, taken from the boot partition as it is, in the slot, the header
+// id made again.
 //
-// A new kernel is on trial, as a new slot is: it has three boots to reach a daemon that settles.
-// Every boot takes a try (Boot); a daemon that settles commits it (Settled). One that runs out of
-// tries puts the previous boot image back, which is kept for that, and is not written again. A kernel
-// that hangs before any of this runs cannot be caught here; the only way back from one is the way the
-// unit was installed (mtkclient), so kernels are tested on units before they are released.
+// A new kernel is on trial, as a new slot is: it has three boots to settle, which boot.sh decides (the
+// daemon up five minutes, with a network and the hardware that comes up late). Every boot takes a try
+// (Boot); one that settles commits it (Settled). One that runs out of tries puts the previous boot
+// image back, which is kept for that, and is not written again. A kernel that never gets as far as
+// boot.sh (a hang or a panic before it, an /init that cannot find the store) cannot be caught here;
+// the only way back from one is the way the unit was installed (mtkclient), so kernels are tested on
+// units before they are released.
 //
 // The state is a directory on the data partition, which every slot shares:
 //
 //	state       trial <tries> <written sha256> <written length> <shipped sha256>
-//	            | good <written sha256> <shipped sha256>
+//	            | good <written sha256> <written length> <shipped sha256>
+//	            | failed <shipped sha256>   (the previous kernel could not be put back: nothing more
+//	                                         is done until someone looks; Restore, or the installer)
 //	prev.img    the boot partition's image before the last write (its own length)
 //	prev.sha256 its sha256
 //	bad         shipped kernels that failed their trial, one sha256 a line
@@ -55,14 +59,33 @@ var Default = Paths{
 var Log = func(format string, a ...any) { fmt.Fprintf(os.Stderr, "kernel: "+format+"\n", a...) }
 
 type state struct {
-	kind    string // "", "trial" or "good"
+	kind    string // "", "trial", "good" or "failed"
 	tries   int
 	written string
 	length  int
 	shipped string
 }
 
+// OnTrial is whether a kernel is on trial now: a system update waits until it is over, so that a bad
+// kernel does not take a new slot down with it (update.installRootfs).
+func OnTrial(p Paths) bool {
+	s, err := p.readState()
+	return err == nil && s.kind == "trial"
+}
+
 func (p Paths) file(name string) string { return filepath.Join(p.Dir, name) }
+
+func isSum(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return false
+		}
+	}
+	return true
+}
 
 func (p Paths) readState() (state, error) {
 	b, err := os.ReadFile(p.file("state"))
@@ -73,16 +96,28 @@ func (p Paths) readState() (state, error) {
 		return state{}, err
 	}
 	f := strings.Fields(string(b))
+	num := func(s string, lo, hi int) (int, bool) {
+		n, err := strconv.Atoi(s)
+		return n, err == nil && n >= lo && n <= hi
+	}
+	const maxLen = 64 << 20
 	switch {
 	case len(f) == 5 && f[0] == "trial":
-		t, err1 := strconv.Atoi(f[1])
-		n, err2 := strconv.Atoi(f[3])
-		if err1 != nil || err2 != nil {
-			break
+		t, ok1 := num(f[1], 0, Tries)
+		n, ok2 := num(f[3], 1, maxLen)
+		if ok1 && ok2 && isSum(f[2]) && isSum(f[4]) {
+			return state{kind: "trial", tries: t, written: f[2], length: n, shipped: f[4]}, nil
 		}
-		return state{kind: "trial", tries: t, written: f[2], length: n, shipped: f[4]}, nil
-	case len(f) == 3 && f[0] == "good":
+	case len(f) == 4 && f[0] == "good":
+		n, ok := num(f[2], 1, maxLen)
+		if ok && isSum(f[1]) && isSum(f[3]) {
+			return state{kind: "good", written: f[1], length: n, shipped: f[3]}, nil
+		}
+	case len(f) == 3 && f[0] == "good" && isSum(f[1]) && isSum(f[2]):
+		// Written before good carried the length (the first test builds): no shortcut in Apply.
 		return state{kind: "good", written: f[1], shipped: f[2]}, nil
+	case len(f) == 2 && f[0] == "failed" && isSum(f[1]):
+		return state{kind: "failed", shipped: f[1]}, nil
 	}
 	return state{}, fmt.Errorf("state file says %q", strings.TrimSpace(string(b)))
 }
@@ -93,18 +128,24 @@ func (p Paths) writeState(s state) error {
 	case "trial":
 		line = fmt.Sprintf("trial %d %s %d %s", s.tries, s.written, s.length, s.shipped)
 	case "good":
-		line = fmt.Sprintf("good %s %s", s.written, s.shipped)
+		line = fmt.Sprintf("good %s %d %s", s.written, s.length, s.shipped)
+	case "failed":
+		line = "failed " + s.shipped
 	default:
 		err := os.Remove(p.file("state"))
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
+		}
+		if err == nil {
+			syncDir(p.Dir)
 		}
 		return err
 	}
 	return writeFile(p.file("state"), []byte(line+"\n"))
 }
 
-// writeFile writes atomically: a temporary file, synced, renamed over the old one.
+// writeFile writes atomically and durably: a temporary file, synced, renamed over the old one, and
+// the directory synced, so that a power cut leaves the old file or the new one.
 func writeFile(path string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -116,16 +157,31 @@ func writeFile(path string, b []byte) error {
 	}
 	if _, err := f.Write(b); err != nil {
 		f.Close()
+		os.Remove(tmp)
 		return err
 	}
 	if err := f.Sync(); err != nil {
 		f.Close()
+		os.Remove(tmp)
 		return err
 	}
 	if err := f.Close(); err != nil {
+		os.Remove(tmp)
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	syncDir(filepath.Dir(path))
+	return nil
+}
+
+func syncDir(dir string) {
+	if d, err := os.Open(dir); err == nil {
+		_ = d.Sync()
+		d.Close()
+	}
 }
 
 func (p Paths) bad() map[string]bool {
@@ -138,6 +194,9 @@ func (p Paths) bad() map[string]bool {
 }
 
 func (p Paths) markBad(shipped string) error {
+	if shipped == "" || p.bad()[shipped] {
+		return nil
+	}
 	b, _ := os.ReadFile(p.file("bad"))
 	return writeFile(p.file("bad"), append(b, []byte(shipped+"\n")...))
 }
@@ -218,6 +277,9 @@ func Status(p Paths) string {
 		fmt.Fprintf(&b, "state: on trial, %d boots left; written %s, shipped %s\n", s.tries, s.written, s.shipped)
 	case s.kind == "good":
 		fmt.Fprintf(&b, "state: good; written %s, shipped %s\n", s.written, s.shipped)
+	case s.kind == "failed":
+		fmt.Fprintf(&b, "state: FAILED: kernel %s failed its trial and the previous one could not be put back; "+
+			"nothing more is written (restore, or the installer)\n", s.shipped)
 	default:
 		b.WriteString("state: none (no kernel written by an update)\n")
 	}
@@ -261,30 +323,32 @@ func Boot(p Paths) (reboot bool, err error) {
 		return false, err
 	}
 	if err := p.restore(); err != nil {
-		return false, err
+		Log("THE PREVIOUS KERNEL COULD NOT BE PUT BACK: %v; leaving the boot partition as it is", err)
+		return false, errors.Join(err, p.writeState(state{kind: "failed", shipped: s.shipped}))
 	}
 	return true, p.writeState(state{})
 }
 
-// Settled commits a kernel on trial: the daemon has run long enough on it.
+// Settled commits a kernel on trial: it has run long enough, with what it drives working.
 func Settled(p Paths) error {
 	s, err := p.readState()
 	if err != nil || s.kind != "trial" {
 		return err
 	}
 	Log("the kernel settled; it is good")
-	return p.writeState(state{kind: "good", written: s.written, shipped: s.shipped})
+	return p.writeState(state{kind: "good", written: s.written, length: s.length, shipped: s.shipped})
 }
 
 // Apply writes the slot's kernel to the boot partition when it holds another one. reboot says it was
-// written, and the unit should boot into it now. Nothing is written while a kernel is on trial, for a
-// kernel that failed, or when the tuning in the running kernel is not one the installer knows.
+// written, and the unit should boot into it now. Nothing is written while a kernel is on trial or
+// after a failed restore, for a kernel that failed, or when the tuning in the boot partition is not
+// one the installer knows.
 func Apply(p Paths) (reboot bool, err error) {
 	s, err := p.readState()
 	if err != nil {
 		return false, err
 	}
-	if s.kind == "trial" {
+	if s.kind == "trial" || s.kind == "failed" {
 		return false, nil
 	}
 	img, sum, ok, err := p.shipped()
@@ -299,6 +363,10 @@ func Apply(p Paths) (reboot bool, err error) {
 	if err != nil {
 		return false, err
 	}
+	// The kernel this wrote and committed is still there: up to date, whatever else holds.
+	if s.kind == "good" && s.shipped == sum && s.length > 0 && len(part) >= s.length && sha(part[:s.length]) == s.written {
+		return false, nil
+	}
 	cur, err := parseImage(part)
 	if err != nil {
 		return false, fmt.Errorf("the boot partition: %w", err)
@@ -308,14 +376,14 @@ func Apply(p Paths) (reboot bool, err error) {
 	}
 	table, err := cur.table()
 	if err != nil {
-		return false, fmt.Errorf("the running kernel's amp tuning: %w", err)
+		return false, fmt.Errorf("the boot partition's amp tuning: %w", err)
 	}
 	if table == nil {
-		return false, errors.New("the running kernel's amp tuning slot is empty; run the installer")
+		return false, errors.New("the boot partition's amp tuning slot is empty; run the installer")
 	}
 	name, known := knownTables[sha(table)]
 	if !known {
-		return false, fmt.Errorf("the running kernel's amp tuning (%s) is not one the installer knows", sha(table))
+		return false, fmt.Errorf("the boot partition's amp tuning (%s) is not one the installer knows", sha(table))
 	}
 	if same, err := cur.withTable(nil); err == nil && bytes.Equal(same, img) {
 		return false, nil // up to date
@@ -339,15 +407,42 @@ func Apply(p Paths) (reboot bool, err error) {
 	if err := p.writeState(trial); err != nil {
 		return false, err
 	}
+	// Everything about the trial is on the disk before the boot partition changes.
+	syncAll()
 	Log("writing the slot's kernel %s with this unit's amp tuning (%s)", sum, name)
 	if err := p.writeBoot(filled); err != nil {
 		Log("the write failed (%v); putting the previous kernel back", err)
 		if rerr := p.restore(); rerr != nil {
-			return false, fmt.Errorf("writing the kernel: %v; and putting the previous one back: %w", err, rerr)
+			Log("THE PREVIOUS KERNEL COULD NOT BE PUT BACK: %v", rerr)
+			return false, errors.Join(fmt.Errorf("writing the kernel: %w", err),
+				fmt.Errorf("putting the previous one back: %w", rerr),
+				p.writeState(state{kind: "failed", shipped: sum}))
 		}
 		return false, errors.Join(fmt.Errorf("writing the kernel: %w", err), p.writeState(s))
 	}
 	return true, nil
+}
+
+// Restore puts the kept previous kernel back by hand (from the USB shell, say): a kernel that settled
+// but does not work. The kernel the slot carries is marked bad, so it is not written again.
+func Restore(p Paths) error {
+	s, err := p.readState()
+	if err != nil {
+		return err
+	}
+	if err := p.restore(); err != nil {
+		return err
+	}
+	if s.shipped != "" {
+		if err := p.markBad(s.shipped); err != nil {
+			return err
+		}
+	} else if _, sum, ok, err := p.shipped(); err == nil && ok {
+		if err := p.markBad(sum); err != nil {
+			return err
+		}
+	}
+	return p.writeState(state{})
 }
 
 // restore writes the kept previous image back, after checking it is the one kept.

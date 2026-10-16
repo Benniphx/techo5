@@ -217,17 +217,23 @@ the rescue environment (USB serial and RNDIS at 172.16.42.1).
 
 The athena rootfs carries the kernel it was tested with. Once a new slot has committed, it checks
 the kernel on `boot`. If that's a different one, it writes the new kernel the way the installer
-does, with the unit's own speaker tuning taken from the kernel it's running, and reboots into it.
-So an update can take two reboots.
+does, with the unit's own speaker tuning taken from `boot`, and reboots into it. So an update can
+take two reboots. The second one comes about five minutes after the first, and it doesn't wait for
+music or a timer to finish.
 
-A new kernel is on trial too. It has three boots to reach a daemon that runs for five minutes. If it
-never gets there, the unit writes the previous kernel back (it keeps a copy in
-`/data/techo5-linux/kernel`) and never tries that kernel again. `techo5 tools kernel status` shows
-where it is.
+A new kernel is on trial too. It has three boots to settle: the daemon up for five minutes, with a
+network address and a default route, and the sound card and backlight there. If it never gets
+there, the unit writes the previous kernel back (it keeps a copy in `/data/techo5-linux/kernel`)
+and never tries that kernel again. A system update waits while a kernel is on trial.
 
-One thing this can't catch: a kernel that hangs before Linux is up. The way back from that is the
-way the unit was unlocked (mtkclient). Kernels are tested on units before they are released for this
-reason.
+- `/usr/local/bin/techo5 tools kernel status` shows where it is.
+- `/usr/local/bin/techo5 tools kernel restore` puts the previous kernel back by hand and reboots,
+  for a kernel that settled but doesn't work right. Run it from the USB shell.
+
+What this can't catch: anything that stops the unit before TECHO5's boot script runs. That's a
+kernel that hangs or panics early, or one that can't find the eMMC. A power cut during the second
+the kernel is being written is the same. The way back from those is the way the unit was unlocked
+(mtkclient). Kernels are tested on units before they are released for this reason.
 
 Running the installer again from TWRP still works too. It keeps the name, the Home Assistant key
 and the first backup.

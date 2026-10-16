@@ -94,6 +94,21 @@ func newKernelCmd() *cobra.Command {
 			return nil
 		},
 	}
-	c.AddCommand(status, boot, settled, apply)
+	restore := &cobra.Command{
+		Use:   "restore",
+		Short: "Put the kernel the last update replaced back (from the USB shell), and never write this one again",
+		RunE: func(*cobra.Command, []string) error {
+			p, err := paths()
+			if err != nil {
+				return err
+			}
+			if err := kernel.Restore(p); err != nil {
+				return err
+			}
+			kernel.Log("the previous kernel is back; rebooting into it")
+			return reboot()
+		},
+	}
+	c.AddCommand(status, boot, settled, apply, restore)
 	return c
 }

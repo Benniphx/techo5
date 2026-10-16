@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+
+	"github.com/HuskerMinion/techo5/echod/internal/update/kernel"
 )
 
 // On the Linux image the daemon is not a file to swap but part of a root filesystem in one of
@@ -47,6 +49,11 @@ func installRootfs(ctx context.Context, m Manifest, progress func(float32)) erro
 	}
 	if err := b.valid(m.Version, key); err != nil {
 		return err
+	}
+	// A kernel on trial (athena, update/kernel) has its tries to use first: a new slot on trial with it
+	// would share its boots, and a bad kernel would take the slot down with it.
+	if kernel.OnTrial(kernel.Default) {
+		return fmt.Errorf("update: a new kernel is on trial; %s waits until it is over", m.Version)
 	}
 	if err := os.MkdirAll(rootfsDir, 0o755); err != nil {
 		return err

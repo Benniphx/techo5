@@ -59,38 +59,43 @@ func parseImage(data []byte) (*image, error) {
 	if im.version > 2 {
 		return nil, fmt.Errorf("header version %d", im.version)
 	}
-	p := int(im.page)
-	im.kernelAt = p
-	im.ramdiskAt = im.kernelAt + pad(int(im.kernelSize), p)
-	im.secondAt = im.ramdiskAt + pad(int(im.ramdiskSize), p)
-	end := im.secondAt + int(im.secondSz)
-	if end > len(data) {
-		return nil, fmt.Errorf("%d bytes, shorter than its header says (%d)", len(data), end)
+	// Sizes and offsets are the image's word, checked against its length in 64 bits before any of
+	// them is used: on the device an int is 32 bits, and a u32 near 4 GiB would turn negative.
+	n := int64(len(data))
+	p := int64(im.page)
+	pad64 := func(v int64) int64 { return (v + p - 1) / p * p }
+	kernelAt := p
+	ramdiskAt := kernelAt + pad64(int64(im.kernelSize))
+	secondAt := ramdiskAt + pad64(int64(im.ramdiskSize))
+	end := secondAt + int64(im.secondSz)
+	if end > n {
+		return nil, fmt.Errorf("%d bytes, shorter than its header says (%d)", n, end)
 	}
-	im.extent = im.secondAt + pad(int(im.secondSz), p)
+	extent := secondAt + pad64(int64(im.secondSz))
+	var dtbo, dtb []byte
 	if im.version >= 1 {
-		size := int(u(1632))
-		off := int(binary.LittleEndian.Uint64(data[1636:]))
+		size := int64(u(1632))
+		off := binary.LittleEndian.Uint64(data[1636:])
 		if size > 0 {
-			if off < 0 || off+size > len(data) {
+			if off > uint64(n) || size > n-int64(off) {
 				return nil, errors.New("ends inside its recovery dtbo")
 			}
-			im.dtbo = data[off : off+size]
-			im.extent = max(im.extent, pad(off+size, p))
+			dtbo = data[int64(off) : int64(off)+size]
+			extent = max(extent, pad64(int64(off)+size))
 		}
 	}
 	if im.version >= 2 {
-		size := int(u(1648))
-		at := im.secondAt + pad(int(im.secondSz), p) + pad(len(im.dtbo), p)
-		if at+size > len(data) {
+		size := int64(u(1648))
+		at := secondAt + pad64(int64(im.secondSz)) + pad64(int64(len(dtbo)))
+		if at > n || size > n-at {
 			return nil, errors.New("ends inside its dtb")
 		}
-		im.dtb = data[at : at+size]
-		im.extent = max(im.extent, pad(at+size, p))
+		dtb = data[at : at+size]
+		extent = max(extent, pad64(at+size))
 	}
-	if im.extent > len(data) {
-		im.extent = len(data)
-	}
+	im.kernelAt, im.ramdiskAt, im.secondAt = int(kernelAt), int(ramdiskAt), int(secondAt)
+	im.dtbo, im.dtb = dtbo, dtb
+	im.extent = int(min(extent, n))
 	return im, nil
 }
 
@@ -186,12 +191,17 @@ func checkShipped(data []byte) (*image, error) {
 	if !im.idOK() {
 		return nil, errors.New("its header id does not match its contents")
 	}
-	t, err := im.table()
+	at, err := im.slotAt()
 	if err != nil {
 		return nil, err
 	}
-	if t != nil {
-		return nil, errors.New("its amp tuning slot is already filled")
+	// Empty as the installer means it (check_techo5_boot): nothing after the magic, not even a length
+	// of zero with something left behind it, which would never compare equal to a filled slot emptied
+	// and so be written again after every boot.
+	for _, b := range im.data[at+len(slotMagic) : at+slotSize] {
+		if b != 0 {
+			return nil, errors.New("its amp tuning slot is not empty")
+		}
 	}
 	if im.extent != len(data) {
 		return nil, fmt.Errorf("%d bytes after the image's end", len(data)-im.extent)

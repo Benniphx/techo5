@@ -96,6 +96,20 @@ foreach ($t in @($Rootfs, $AthenaRootfs) | Where-Object { $_ }) {
 if ($AthenaRootfs) {
     $board = (& tar -xzOf $AthenaRootfs ./etc/techo5/device.conf) -match '^T5_BOARD=' | Select-Object -Last 1
     if ($board -ne 'T5_BOARD=athena') { throw "$AthenaRootfs is not an athena rootfs (device.conf: '$board'); build it with DEVICE_OVERLAY=tools/linux/athena/overlay" }
+    # The athena rootfs carries the kernel it was tested with, which goes to the boot partition once
+    # the slot is good (echod/internal/update/kernel). It must be this release's boot image: another
+    # would move a freshly installed unit to a different kernel five minutes after its first boot.
+    $kernelSum = & tar -xzOf $AthenaRootfs ./usr/share/techo5/kernel/boot-athena.img.sha256 2>$null
+    if ($AthenaBoot) {
+        if (-not $kernelSum) { throw "$AthenaRootfs carries no kernel: build it with KERNEL_IMAGE=$AthenaBoot (deploy-rootfs.sh), or updates never bring units this kernel" }
+        $want = (Get-FileHash -Algorithm SHA256 $AthenaBoot).Hash.ToLower()
+        $got = (("$kernelSum".Trim()) -split '\s+')[0].ToLower()
+        if ($got -ne $want) { throw "$AthenaRootfs carries kernel $got, but -AthenaBoot is $want: build the rootfs with KERNEL_IMAGE=$AthenaBoot" }
+    } elseif ($kernelSum) {
+        Write-Warning "$AthenaRootfs carries a kernel but this release publishes no -AthenaBoot: units will move to the rootfs's kernel, new installs start on an older one"
+    } else {
+        Write-Warning "$AthenaRootfs carries no kernel: updates leave each unit's kernel as it is"
+    }
 }
 if (-not $SignKey -or -not (Test-Path $SignKey)) { throw "no release signing key: set TECHO5_SIGN_KEY or pass -SignKey" }
 $repo = 'HuskerMinion/techo5'

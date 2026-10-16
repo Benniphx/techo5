@@ -21,6 +21,9 @@ func dropCache(f *os.File) {
 	}
 }
 
+// syncAll flushes every filesystem, the data partition's journal with the rest.
+func syncAll() { unix.Sync() }
+
 // BootDevice is the eMMC partition named boot (mmcblk0p20 on athena's mainline kernel).
 func BootDevice() (string, error) {
 	ms, _ := filepath.Glob("/sys/class/block/mmcblk*p*/uevent")

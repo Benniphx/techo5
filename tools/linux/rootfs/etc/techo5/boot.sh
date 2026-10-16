@@ -281,6 +281,14 @@ TRIAL_TIMEOUT=${TRIAL_TIMEOUT:-900}
 # amp tuning (`techo5 tools kernel`, echod/internal/update/kernel). A new kernel is on trial as a new
 # slot is: every boot takes a try, a daemon that settles commits it, and one that never settles
 # reboots at TRIAL_TIMEOUT to use up a try; out of tries, the previous kernel is put back.
+# Settled means more for a kernel than for a slot: Wi-Fi, the sound card and the backlight are the
+# kernel's, and a kernel that keeps the daemon up without a network could never be updated again. So
+# it also needs an address with a default route, and every HW_WAIT device.
+t5_kernel_works() {
+	ip route show default 2>/dev/null | grep -q default || return 1
+	for p in ${HW_WAIT:-}; do [ -e "$p" ] || return 1; done
+	return 0
+}
 if [ -n "${KERNEL_UPDATE:-}" ]; then
 	/usr/local/bin/techo5 tools kernel boot >> /run/boot.log 2>&1
 	(
@@ -294,7 +302,7 @@ if [ -n "${KERNEL_UPDATE:-}" ]; then
 				started=$(awk '{print int($22/100)}' /proc/$pid/stat 2>/dev/null)
 				# The slot trial above commits at this same moment: wait for the slot to be good.
 				if [ -n "$started" ] && [ $((now-started)) -ge $TRIAL_SETTLE ] &&
-					[ "$(cat /store/slots/$s.state 2>/dev/null)" = good ]; then
+					[ "$(cat "/store/slots/$s.state" 2>/dev/null)" = good ] && t5_kernel_works; then
 					/usr/local/bin/techo5 tools kernel settled >> /run/boot.log 2>&1
 					cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
 					/usr/local/bin/techo5 tools kernel apply >> /run/boot.log 2>&1

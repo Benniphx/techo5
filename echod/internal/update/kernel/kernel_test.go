@@ -310,3 +310,142 @@ func TestTheInstallersFill(t *testing.T) {
 		t.Fatal("emptying the installer's image does not give the released one back")
 	}
 }
+
+// Sizes near 4 GiB (on the device an int is 32 bits) are refused, not a panic.
+func TestHugeSizesAreRefused(t *testing.T) {
+	img := mkImage(t, "x", nil)
+	for _, at := range []int{8, 16, 24, 1632, 1648} {
+		b := bytes.Clone(img)
+		binary.LittleEndian.PutUint32(b[at:], 0xffffffff)
+		if at == 1648 {
+			binary.LittleEndian.PutUint32(b[40:], 2)
+		}
+		if _, err := parseImage(b); err == nil {
+			t.Errorf("a size of 0xffffffff at %d was taken", at)
+		}
+	}
+	b := bytes.Clone(img)
+	binary.LittleEndian.PutUint32(b[1632:], 16)
+	binary.LittleEndian.PutUint64(b[1636:], 0xfffffffffffffff0)
+	if _, err := parseImage(b); err == nil {
+		t.Error("a dtbo offset near 2^64 was taken")
+	}
+}
+
+// A shipped kernel whose empty slot has something left after its zero length is refused, as the
+// installer refuses it: it would never be up to date, and would be written after every boot.
+func TestAShippedSlotMustBeAllZeros(t *testing.T) {
+	s := mkImage(t, "new", nil)
+	im, _ := parseImage(s)
+	at, _ := im.slotAt()
+	s[at+slotHead+10] = 1
+	im, _ = parseImage(s)
+	copy(s[headerID:], im.computedID())
+	if _, err := checkShipped(s); err == nil {
+		t.Fatal("a slot with bytes after a zero length was taken for empty")
+	}
+}
+
+// Committed and still there: nothing more is written, even if the image would not compare equal.
+func TestAGoodKernelStillThereIsUpToDate(t *testing.T) {
+	r := newRig(t, mkImage(t, "old", tableB), mkImage(t, "new", nil))
+	if _, err := Apply(r.p); err != nil {
+		t.Fatal(err)
+	}
+	if err := Settled(r.p); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := r.p.readState()
+	if st.kind != "good" || st.length == 0 {
+		t.Fatalf("state %+v", st)
+	}
+	before := r.boot()
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply = %v, %v", w, err)
+	}
+	if !bytes.Equal(before, r.boot()) {
+		t.Fatal("a good kernel still on the partition was written again")
+	}
+}
+
+// A restore that cannot be made ends the trial as failed: no more tries (so no reboots), nothing
+// written again, said in the status, the kernel listed bad once.
+func TestARestoreThatFailsEndsInFailed(t *testing.T) {
+	r := newRig(t, mkImage(t, "old", tableB), mkImage(t, "new", nil))
+	if _, err := Apply(r.p); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(r.p.file("prev.img"))
+	for i := 0; i < Tries; i++ {
+		Boot(r.p)
+	}
+	if again, err := Boot(r.p); again || err == nil {
+		t.Fatalf("Boot = %v, %v; want an error and no reboot", again, err)
+	}
+	if !strings.HasPrefix(r.state(), "failed ") {
+		t.Fatalf("state %q", r.state())
+	}
+	if OnTrial(r.p) {
+		t.Error("a failed kernel is still on trial")
+	}
+	for i := 0; i < 3; i++ {
+		if again, err := Boot(r.p); again || err != nil {
+			t.Fatalf("a boot after the failure = %v, %v", again, err)
+		}
+	}
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply after the failure = %v, %v", w, err)
+	}
+	b, _ := os.ReadFile(r.p.file("bad"))
+	if n := strings.Count(string(b), "\n"); n != 1 {
+		t.Errorf("bad has %d lines", n)
+	}
+	if !strings.Contains(Status(r.p), "FAILED") {
+		t.Error("status does not say it failed")
+	}
+}
+
+// Restore by hand puts the previous kernel back and marks the slot's one bad.
+func TestRestoreByHand(t *testing.T) {
+	old := mkImage(t, "old", tableB)
+	shipped := mkImage(t, "new", nil)
+	r := newRig(t, old, shipped)
+	if _, err := Apply(r.p); err != nil {
+		t.Fatal(err)
+	}
+	if !OnTrial(r.p) {
+		t.Fatal("not on trial after Apply")
+	}
+	if err := Settled(r.p); err != nil {
+		t.Fatal(err)
+	}
+	if err := Restore(r.p); err != nil {
+		t.Fatal(err)
+	}
+	if !r.holds(old) || r.state() != "" || !r.p.bad()[sha(shipped)] {
+		t.Fatalf("after Restore: old back %v, state %q, bad %v", r.holds(old), r.state(), r.p.bad())
+	}
+}
+
+// A state file that does not say what this writes is an error, not a number taken on trust.
+func TestAStrangeStateIsAnError(t *testing.T) {
+	r := newRig(t, mkImage(t, "old", tableB), mkImage(t, "new", nil))
+	z := strings.Repeat("a", 64)
+	for _, s := range []string{
+		"trial -1 " + z + " 100 " + z, "trial 2 " + z + " -5 " + z, "trial 9 " + z + " 100 " + z,
+		"trial 2 xyz 100 " + z, "good " + z + " 0 " + z, "nonsense",
+	} {
+		os.MkdirAll(r.p.Dir, 0o755)
+		os.WriteFile(r.p.file("state"), []byte(s+"\n"), 0o644)
+		if _, err := r.p.readState(); err == nil {
+			t.Errorf("%q was read", s)
+		}
+		if _, err := Boot(r.p); err == nil {
+			t.Errorf("Boot on %q went on", s)
+		}
+	}
+	os.WriteFile(r.p.file("state"), []byte("good "+z+" "+z+"\n"), 0o644)
+	if st, err := r.p.readState(); err != nil || st.kind != "good" {
+		t.Errorf("the old good form: %+v, %v", st, err)
+	}
+}
