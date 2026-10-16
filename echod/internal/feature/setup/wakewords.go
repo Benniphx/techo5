@@ -127,7 +127,7 @@ func (f *Feature) wakeWordUpload(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "the .tflite did not arrive whole", http.StatusBadRequest)
 		return
 	}
-	m, err := models().AddOwn(manifest, model)
+	m, err := models().AddOwn(manifest, model, listening)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

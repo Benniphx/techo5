@@ -377,10 +377,11 @@ func OwnID(phrase string) string {
 }
 
 // AddOwn keeps a model sent from the page and its manifest, and reports the model as the device now
-// has it. The same phrase sent again replaces the one sent before; a phrase whose id is already taken
-// by a model the page did not send is refused, so the image's own models and Home Assistant's are
-// never overwritten from here.
-func (l *Library) AddOwn(manifestJSON, model []byte) (Model, error) {
+// has it. The same phrase sent again replaces the one sent before, unless a slot is listening for it
+// (RemoveOwn says how that is known): the engine has the old one loaded and would go on running it. A
+// phrase whose id is already taken by a model the page did not send is refused, so the image's own
+// models and Home Assistant's are never overwritten from here.
+func (l *Library) AddOwn(manifestJSON, model []byte, listening func(id string) bool) (Model, error) {
 	m, err := CheckOwn(manifestJSON, model)
 	if err != nil {
 		return Model{}, err
@@ -394,13 +395,20 @@ func (l *Library) AddOwn(manifestJSON, model []byte) (Model, error) {
 	defer l.muOwn.Unlock()
 
 	var own int
+	var replacing bool
 	for _, have := range l.Ours() {
 		if have.ID == m.ID && !have.Uploaded {
 			return Model{}, fmt.Errorf("the device already has a wake word called %s that did not come from this page; change the phrase in the .json", m.ID)
 		}
+		if have.ID == m.ID {
+			replacing = true
+		}
 		if have.Uploaded && have.ID != m.ID {
 			own++
 		}
+	}
+	if replacing && l.inUse(m.ID, listening) {
+		return Model{}, errors.New("the device is listening for the wake word this replaces; choose another first, then send it again")
 	}
 	if own >= MaxOwnModels {
 		return Model{}, fmt.Errorf("the device already keeps %d wake words sent from this page; remove one first", own)
@@ -435,17 +443,30 @@ func (l *Library) AddOwn(manifestJSON, model []byte) (Model, error) {
 		return Model{}, err
 	}
 
-	// The manifest goes first, so that the moment the model is there to be listed, what it says about
-	// itself is too.
 	ctmp, err := writeTemp(l.dir, config)
 	if err != nil {
 		return Model{}, err
 	}
 	defer os.Remove(ctmp)
-	if err := os.Rename(ctmp, filepath.Join(l.dir, m.ID+".json")); err != nil {
+
+	// The model goes first and the manifest after it, the reverse of a removal (remove): a manifest is
+	// what says the page sent a model, and one put in place for a model that then failed to follow would
+	// say it of whatever is under that id. The model being replaced is kept until the manifest is in, and
+	// put back if it does not go in, so a failure leaves the one sent before as it was.
+	path := modelPath(l.dir, m.ID)
+	var old []byte
+	if replacing {
+		if old, err = os.ReadFile(path); err != nil {
+			return Model{}, err
+		}
+	}
+	if err := rename(tmp, path); err != nil {
 		return Model{}, err
 	}
-	if err := os.Rename(tmp, modelPath(l.dir, m.ID)); err != nil {
+	if err := rename(ctmp, filepath.Join(l.dir, m.ID+".json")); err != nil {
+		if restore := putBack(l.dir, path, old); restore != nil {
+			slog.Error("putting back the wake word a failed upload replaced failed", "id", m.ID, "err", restore)
+		}
 		return Model{}, err
 	}
 
@@ -457,6 +478,22 @@ func (l *Library) AddOwn(manifestJSON, model []byte) (Model, error) {
 
 // ErrListening is what changing a model a slot is listening for fails with.
 var ErrListening = errors.New("the device is listening for that wake word; choose another first")
+
+// rename is os.Rename; a test has one that fails.
+var rename = os.Rename
+
+// putBack restores the model at path to what it was, old, or takes it away if there was none.
+func putBack(dir, path string, old []byte) error {
+	if old == nil {
+		return os.Remove(path)
+	}
+	tmp, err := writeTemp(dir, old)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp)
+	return os.Rename(tmp, path)
+}
 
 // RemoveOwn deletes a model the page sent. Anything else is refused: the image's own come back at the
 // next start anyway, and Home Assistant's are cache that Purge already looks after. So is one a slot is
