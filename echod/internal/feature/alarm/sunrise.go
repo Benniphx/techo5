@@ -1,6 +1,7 @@
 package alarm
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"time"
@@ -161,18 +162,33 @@ func SunriseLevel(progress float64) float64 {
 // sunriseColor is the ring's color as the light comes up: the deep red of the first minutes, then
 // orange, then a warm white, scaled by how far up it is.
 func sunriseColor(progress float64) led.Color {
-	lvl := SunriseLevel(progress)
-	r := 255.0
+	return sunriseHue(progress).scaled(SunriseLevel(progress))
+}
+
+// hue is a color before it is dimmed, 0 to 255 a channel.
+type hue struct{ r, g, b float64 }
+
+// sunriseHue is the light's color at progress at full strength: what sunriseColor dims to the level,
+// and what Home Assistant is told beside the level, for a lamp that takes the two apart.
+func sunriseHue(progress float64) hue {
 	g := 40 + 200*math.Min(progress*1.15, 1)
 	b := 10 + 180*math.Max(progress-0.45, 0)/0.55
+	return hue{r: 255, g: g, b: math.Min(b, 235)}
+}
+
+func (h hue) scaled(lvl float64) led.Color {
 	scale := func(v float64) uint8 { return uint8(math.Min(math.Max(v*lvl, 0), 255)) }
-	return led.Color{R: scale(r), G: scale(g), B: scale(math.Min(b, 235))}
+	return led.Color{R: scale(h.r), G: scale(h.g), B: scale(h.b)}
+}
+
+func (h hue) hex() string {
+	c := h.scaled(1)
+	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
 }
 
 // sunriseRing paints the ring for the light before an alarm, and clears it when there is none. It
 // reports whether the light is on, so the caller knows to come back sooner.
-func (a *Alarms) sunriseRing(now time.Time) bool {
-	p := a.SunriseProgress(now)
+func (a *Alarms) sunriseRing(p float64) bool {
 	if p <= 0 {
 		if a.lighting {
 			a.sun.Clear()
@@ -183,4 +199,40 @@ func (a *Alarms) sunriseRing(now time.Time) bool {
 	a.lighting = true
 	a.sun.Paint(led.Solid(sunriseColor(p)))
 	return true
+}
+
+// lightEvery is how often Home Assistant hears the wake light change while it comes up: often enough
+// for a lamp in the room to follow it, not every repaint. Coming on and going off are told at once.
+const lightEvery = 5 * time.Second
+
+// lightTold is what Home Assistant was last told of the wake light; the scheduler's alone.
+type lightTold struct {
+	at      time.Time
+	percent int
+	color   string
+	once    bool
+}
+
+// tellLight puts the wake light's brightness and color in Home Assistant, at most every lightEvery
+// while it changes. Off is 0 and no color.
+func (a *Alarms) tellLight(p float64, now time.Time) {
+	percent, color := lightState(p)
+	t := a.told
+	if t.once && percent == t.percent && color == t.color {
+		return
+	}
+	if t.once && (percent > 0) == (t.percent > 0) && now.Sub(t.at) < lightEvery {
+		return
+	}
+	a.lightLevel.Set(float32(percent))
+	a.lightColor.Set(color)
+	a.told = lightTold{at: now, percent: percent, color: color, once: true}
+}
+
+// lightState is the wake light at p as Home Assistant has it: percent of full and a color as #rrggbb.
+func lightState(p float64) (percent int, color string) {
+	if p <= 0 {
+		return 0, ""
+	}
+	return int(math.Round(SunriseLevel(p) * 100)), sunriseHue(p).hex()
 }

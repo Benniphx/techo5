@@ -216,6 +216,8 @@ var registered = []string{
 	"wake_clips_by_kind",
 	"wake_effect_1",
 	"wake_effect_2",
+	"wake_light_brightness",
+	"wake_light_color",
 	"wake_threshold_1",
 	"wake_threshold_2",
 	"wake_tone_1",

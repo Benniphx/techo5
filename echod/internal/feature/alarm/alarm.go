@@ -119,6 +119,12 @@ type Alarms struct {
 	// alarm's window; under mu.
 	bridge bridge
 
+	// lightLevel and lightColor are the wake light in Home Assistant, for lamps in the room to follow;
+	// told is what they last said.
+	lightLevel *esphome.Sensor
+	lightColor *esphome.TextSensor
+	told       lightTold
+
 	// sound and snoozeFor are the ring's settings in Home Assistant; the screen sets them too.
 	sound     *esphome.Select
 	snoozeFor *esphome.Number
@@ -167,6 +173,9 @@ func build() *Alarms {
 		sun:  led.Get().Claim(led.PriorityTimer),
 		wake: make(chan struct{}, 1),
 	}
+	// The wake light as it is now, for a lamp in the room to follow (sunrise.go).
+	a.lightLevel = &esphome.Sensor{Base: esphome.Base{ObjectID: "wake_light_brightness", Name: "Wake light brightness", Icon: "mdi:weather-sunset-up"}, Unit: "%"}
+	a.lightColor = &esphome.TextSensor{Base: esphome.Base{ObjectID: "wake_light_color", Name: "Wake light color", Icon: "mdi:palette"}}
 	// Stops whatever is ringing, a timer as much as an alarm. The object id stays "alarm_stop" from
 	// when it only stopped alarms, so automations that press it keep working.
 	a.stop = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_stop", Name: "Stop alarm or timer", Icon: "mdi:alarm-off"}, OnPress: func() {
@@ -204,7 +213,7 @@ func build() *Alarms {
 func (a *Alarms) Name() string { return "alarms" }
 
 func (a *Alarms) Entities() []esphome.Entity {
-	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.snoozeFor, a.ringVol}
+	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.snoozeFor, a.ringVol, a.lightLevel, a.lightColor}
 }
 
 func (a *Alarms) Restore(c config.Config) {
@@ -367,9 +376,11 @@ func (a *Alarms) Run(ctx context.Context) error {
 			wait = max(time.Until(at), 50*time.Millisecond)
 		}
 		// The light before an alarm is repainted often enough that it rises rather than steps.
-		if a.sunriseRing(now) {
+		light := a.SunriseProgress(now)
+		if a.sunriseRing(light) {
 			wait = min(wait, sunriseEvery)
 		}
+		a.tellLight(light, now)
 		select {
 		case <-ctx.Done():
 			a.Stop()
