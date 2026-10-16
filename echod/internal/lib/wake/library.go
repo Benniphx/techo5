@@ -36,7 +36,8 @@ type Library struct {
 	// muOwn keeps two models sent from the setup page at once from both counting the same room, and a
 	// removal from deleting a model a selection is about to load (own.go).
 	muOwn sync.Mutex
-	// selecting is the ids the latest selection asked for (Ensure). Guarded by muOwn.
+	// selecting is the ids the latest selection asked for (Ensure), then the ones it loaded (Loaded).
+	// Guarded by muOwn.
 	selecting []string
 }
 
@@ -184,6 +185,15 @@ func (l *Library) Ensure(ids []string) []Model {
 		l.Reload()
 	}
 	return l.Ours()
+}
+
+// Loaded is the selection over: ids is what the engine took of what Ensure was asked for. A model it
+// refused is in no slot, so it is free to be removed or replaced from the setup page again; it used to
+// count as in use until the next selection.
+func (l *Library) Loaded(ids []string) {
+	l.muOwn.Lock()
+	l.selecting = slices.Clone(ids)
+	l.muOwn.Unlock()
 }
 
 // uploaded is whether the model with this id was sent from the setup page. Home Assistant offering one

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -35,11 +36,16 @@ const maxDeckBody = 128 << 10
 // cookieName is the session a press hands out.
 const cookieName = "techo5_setup"
 
+// sweptUploads is the sweep of what sound uploads a power cut stopped left behind, made once a process.
+// The supervisor runs Run again after it fails, and by then the page may be open with an upload half
+// written under its temporary name: a sweep at every Run would delete it from under its writer.
+var sweptUploads sync.Once
+
 // Run closes the page when it has been left alone, and keeps Home Assistant's switch honest.
 func (f *Feature) Run(ctx context.Context) error {
 	// The first thing at a start, before the page can be opened to send one: what an upload a power cut
 	// stopped left behind. The wake word library sweeps its own as it is made.
-	speaker.SweepUploads()
+	sweptUploads.Do(speaker.SweepUploads)
 
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
