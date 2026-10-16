@@ -256,6 +256,34 @@ func TestAModelBeingListenedForIsNotRemoved(t *testing.T) {
 	}
 }
 
+// A model a selection asked for and the engine refused is in no slot, so once the selection is over it
+// can be removed and sent again. It used to count as in use until the next selection.
+func TestAModelTheEngineRefusedIsNotInUse(t *testing.T) {
+	l := NewLibrary(t.TempDir())
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	l.Ensure([]string{"okay_nabu", "hey_computer"})
+	l.Loaded([]string{"okay_nabu"})
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
+		t.Errorf("refused by the engine, it cannot be sent again: %v", err)
+	}
+	if err := l.RemoveOwn("hey_computer", nil); err != nil {
+		t.Errorf("refused by the engine, it cannot be removed: %v", err)
+	}
+
+	// One the engine took stays in use.
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
+		t.Fatal(err)
+	}
+	l.Ensure([]string{"hey_computer"})
+	l.Loaded([]string{"hey_computer"})
+	if err := l.RemoveOwn("hey_computer", nil); !errors.Is(err, ErrListening) {
+		t.Errorf("removed while the engine has it loaded: %v", err)
+	}
+}
+
 // Sending the same phrase again replaces the model, except while a slot is listening for it: the engine
 // has the old one loaded, and would go on running it under the new one's name.
 func TestAModelBeingListenedForIsNotReplaced(t *testing.T) {
