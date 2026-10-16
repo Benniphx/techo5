@@ -294,14 +294,8 @@ func Parse(b []byte) (m *Model, err error) {
 				return nil, fmt.Errorf("tflite: operator %d has opcode index %d of %d", j, idx, codes.len())
 			}
 			ct := codes.table(idx)
-			code := Op(ct.i32f(opcodeBuiltin, 0))
-			if code == 0 {
-				// Models written before builtin_code widened to int32 carry the code in the
-				// deprecated byte field, and ADD is genuinely zero in both.
-				code = Op(ct.u8f(opcodeDeprecatedBuiltin, 0))
-			}
 			o := &OpDesc{
-				Op:      code,
+				Op:      opcode(ct),
 				Custom:  ct.str(opcodeCustom),
 				Inputs:  ot.vec(operatorInputs, 4).ints(),
 				Outputs: ot.vec(operatorOutputs, 4).ints(),
@@ -318,6 +312,18 @@ func Parse(b []byte) (m *Model, err error) {
 		return nil, errors.New("tflite: model has no subgraphs")
 	}
 	return m, nil
+}
+
+// opcode is the builtin an OperatorCode names. Models written before builtin_code widened to int32
+// carry the code in the deprecated byte field only, so that one counts when builtin_code is absent from
+// the table, and not when it is there and zero: ADD is genuinely zero, and the engine that runs the
+// model (microwakeword's interpreter) reads it the same way. Taking a zero for absent made a model
+// that is ADD to the engine some other op here.
+func opcode(ct table) Op {
+	if ct.slot(opcodeBuiltin) != 0 {
+		return Op(ct.i32f(opcodeBuiltin, 0))
+	}
+	return Op(ct.u8f(opcodeDeprecatedBuiltin, 0))
 }
 
 // buffer returns the constant data for a tensor, or nil when the tensor is computed.
