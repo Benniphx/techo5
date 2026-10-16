@@ -76,10 +76,11 @@ func (f *Feature) ended(url string) {
 	time.AfterFunc(resumeAfter, func() { f.putBack(station, url, own, gen) })
 }
 
-// mediaBusy is whether the player has something playing or paused; a variable for the tests.
+// mediaBusy is whether the player has something playing or paused, its own or a remote's (Music
+// Assistant over Sendspin); a variable for the tests.
 var mediaBusy = func() bool {
 	playing, paused := media.Get().Playing()
-	return playing || paused
+	return playing || paused || media.Get().ExternalPlaying()
 }
 
 // putBack starts station again after its stream (url) ended by itself: one this device played itself
@@ -115,6 +116,18 @@ func (f *Feature) stillWanted(station, url string, gen uint64) bool {
 func (f *Feature) forgetStation() {
 	f.asked, f.claiming, f.claimName, f.stationURL = "", false, "", ""
 	f.stationGen++
+}
+
+// stopped is the player stopped somewhere. A station is over and nothing is put back on; but a claim
+// still fresh is a station being started right now (a favorites script may stop the player before it
+// plays), so that one is kept and only a put-back on its way is called off. Under f.mu.
+func (f *Feature) stopped() {
+	if f.claiming && time.Since(f.claimAt) < f.claimFor {
+		f.stationGen++
+		f.stationURL = ""
+		return
+	}
+	f.forgetStation()
 }
 
 // playingOwn is a stream this device is about to play itself, for station name, through media's

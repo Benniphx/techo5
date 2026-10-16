@@ -71,13 +71,18 @@ func SaveStation(name, addr string) error {
 	return SetOwnStations(append(own, config.Station{Name: name, URL: addr}))
 }
 
-// playOwn starts one of the device's own stations by name; false when it is not one of them.
-func (f *Feature) playOwn(name string) bool {
+// playOwn starts one of the device's own stations by name; false when it is not one of them. gen,
+// when given, is the station generation it was started in (play): a Stop since then wins.
+func (f *Feature) playOwn(name string, gen *uint64) bool {
 	for _, s := range OwnStations() {
 		if s.Name != name {
 			continue
 		}
 		f.mu.Lock()
+		if gen != nil && f.stationGen != *gen {
+			f.mu.Unlock()
+			return true
+		}
 		f.chosen, f.listed, f.listedAt = name, "", time.Time{}
 		// Asked for again here, for the way in that is not Play (the action button, PlayOwn): live
 		// radio either way, put back on when it drops.

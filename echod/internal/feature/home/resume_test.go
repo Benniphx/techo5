@@ -412,3 +412,49 @@ func TestAStationThatDidNotPlayLeavesNoName(t *testing.T) {
 		t.Errorf("a station that did not play left name %q, address %q", f.urlName, f.ownURL)
 	}
 }
+
+// A station the voice assistant asked for that never made a sound is forgotten: its end is not put
+// back on.
+func TestAStationThatDidNotPlayIsNotPutBack(t *testing.T) {
+	old := playURLChecked
+	t.Cleanup(func() { playURLChecked = old })
+	f := &Feature{}
+	playURLChecked = func(url string, _ time.Duration) error {
+		// The stream is taken for the station as it starts, then fails.
+		f.liveURL(url)
+		return errors.New("nothing arrived")
+	}
+	if err := f.PlayStreamChecked("KXYZ", "http://p/gone", time.Second); err == nil {
+		t.Fatal("a station that did not play said it did")
+	}
+	if f.stillWanted("KXYZ", "http://p/gone", f.stationGen) {
+		t.Error("a station that never played is still to be put back on")
+	}
+}
+
+// A stop while a station is being started here (its claim still fresh) keeps the claim, so the
+// stream that follows is still live radio; it only calls off a put-back on its way. A stop later
+// forgets the station.
+func TestAStopWhileAStationStartsKeepsTheClaim(t *testing.T) {
+	f := &Feature{}
+	f.mu.Lock()
+	f.askStation("KXYZ")
+	gen := f.stationGen
+	f.stopped()
+	claiming, asked := f.claiming, f.asked
+	f.mu.Unlock()
+	if !claiming || asked != "KXYZ" {
+		t.Fatalf("a stop while the station starts dropped it: claiming %v, asked %q", claiming, asked)
+	}
+	if f.stationGen == gen {
+		t.Error("a stop did not call off a put-back on its way")
+	}
+	f.mu.Lock()
+	f.claimAt = time.Now().Add(-time.Hour)
+	f.stopped()
+	asked = f.asked
+	f.mu.Unlock()
+	if asked != "" {
+		t.Errorf("a stop long after the station started kept it: %q", asked)
+	}
+}

@@ -303,7 +303,7 @@ func Get() *Feature {
 		// the station is over, and a put-back on its way is not made.
 		media.Get().OnStop.Listen(func(struct{}) {
 			shared.mu.Lock()
-			shared.forgetStation()
+			shared.stopped()
 			shared.mu.Unlock()
 		})
 		media.Get().OnEnd.Listen(shared.ended)
@@ -783,6 +783,7 @@ func (f *Feature) play(station string, gen *uint64) {
 		return
 	}
 	f.askStation(station)
+	g := f.stationGen
 	f.mu.Unlock()
 
 	source := radioSource()
@@ -791,7 +792,7 @@ func (f *Feature) play(station string, gen *uint64) {
 		source = config.RadioLocal
 	}
 	if source == config.RadioOwn {
-		if f.playOwn(station) {
+		if f.playOwn(station, &g) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
 		} else {

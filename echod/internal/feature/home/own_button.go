@@ -36,7 +36,7 @@ func (f *Feature) PlayOwn(name string) bool {
 	if name == "" {
 		return false
 	}
-	if !f.playOwn(name) {
+	if !f.playOwn(name, nil) {
 		slog.Warn("home: no station of that name is kept on this device", "station", name)
 		return false
 	}
@@ -96,6 +96,9 @@ func (f *Feature) PlayStreamChecked(name, url string, within time.Duration) erro
 		// Nothing of it plays: its name does not stay on what plays, and its end is not put back.
 		if f.ownURL == url {
 			f.urlName, f.ownURL = "", ""
+		}
+		if f.asked == name {
+			f.forgetStation()
 		}
 		f.mu.Unlock()
 	}
