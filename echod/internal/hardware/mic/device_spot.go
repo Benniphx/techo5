@@ -44,6 +44,9 @@ const MediaService = "vendor.audio-hal"
 // the Echo Spot's vendor partition holds a different one.
 const VendorBeamformer = false
 
+// vendorBeamformerSkipped is false: the Spot was never offered it, so there is nothing to say.
+const vendorBeamformerSkipped = false
+
 // resetsOnMute is false: the mute here leaves the converter alone.
 func resetsOnMute() bool { return false }
 
