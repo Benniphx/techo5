@@ -77,6 +77,7 @@ var registered = []string{
 	"keep_recordings_1",
 	"keep_recordings_2",
 	"keep_wake_clips",
+	"last_boot",
 	"last_heard",
 	"last_reply",
 	"last_wake_score",

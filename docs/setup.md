@@ -641,6 +641,8 @@ that the old connection is gone. To go back to DHCP, choose **Automatic**.
 ## More
 
 - [Dashboards](dashboards.md): Home Assistant dashboards on the screen.
+- [A dashboard for your devices](ha-dashboard.md): controls and health sensors for every device in
+  Home Assistant, and a script that stops them all.
 - [Phone calls](phone.md) through your own SIP provider.
 - [Actions](actions.md): everything Home Assistant can ask the device to do, with examples.
 
