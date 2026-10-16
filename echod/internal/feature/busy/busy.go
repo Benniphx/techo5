@@ -235,6 +235,10 @@ func RingsNow(path string) bool {
 		return false
 	}
 	return ringsIn(string(b), up, func(pid string) bool {
+		// Digits only, as boot.sh checks it: anything else is no process of ours.
+		if pid == "" || strings.Trim(pid, "0123456789") != "" {
+			return false
+		}
 		comm, err := os.ReadFile("/proc/" + pid + "/comm")
 		return err == nil && strings.TrimSpace(string(comm)) == "techo5"
 	})
