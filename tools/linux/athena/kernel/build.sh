@@ -106,6 +106,7 @@ python3 "$P/patch-btmtksdio-late-register.py" "$KTREE"
 python3 "$P/patch-mt7663s-firmware-hold.py" "$KTREE"
 python3 "$P/patch-display.py" "$KTREE"
 python3 "$P/patch-tas5805m-dsp-slot.py" "$KTREE"
+python3 "$P/patch-cci-sram.py" "$KTREE"
 
 # 4. Configuration
 cd "$KTREE"
@@ -119,7 +120,9 @@ for want in 'CONFIG_SND_SOC_MT8183_ATHENA=y' 'CONFIG_SND_SOC_TAS5805M=y' 'CONFIG
 		'CONFIG_BT_MTKSDIO=y' 'CONFIG_MT7663S=y' 'CONFIG_DRM_MEDIATEK=y' \
 		'CONFIG_DRM_PANEL_ILITEK_ILI9881C=y' 'CONFIG_MTK_IOMMU=y' 'CONFIG_DRM_FBDEV_EMULATION=y' \
 		'CONFIG_EXTRA_FIRMWARE=""' 'CONFIG_BLK_DEV_INITRD=y' 'CONFIG_RD_GZIP=y' \
-		'CONFIG_INITRAMFS_SOURCE=""' 'CONFIG_LOCALVERSION="-techo5-athena"'; do
+		'CONFIG_INITRAMFS_SOURCE=""' 'CONFIG_LOCALVERSION="-techo5-athena"' \
+		'CONFIG_ARM_MEDIATEK_CPUFREQ=y' 'CONFIG_ARM_MEDIATEK_CCI_DEVFREQ=y' 'CONFIG_MTK_SOC_THERMAL=y' \
+		'CONFIG_THERMAL_DEFAULT_GOV_POWER_ALLOCATOR=y'; do
 	grep -qxF "$want" .config || { echo "config check failed: $want" >&2; exit 1; }
 done
 # The Wi-Fi firewall (rootfs usr/local/sbin/techo5-firewall) and the video decoder's fence
