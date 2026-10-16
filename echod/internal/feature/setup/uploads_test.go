@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -326,5 +328,37 @@ func TestASoundStoppedAtTheLimitIsTooBig(t *testing.T) {
 	problem := receiveSound(multipart.NewReader(body, mw.Boundary()))
 	if !strings.Contains(problem, "too big") || !strings.Contains(problem, fmt.Sprintf("%d KB", speaker.MaxOwnUpload>>10)) {
 		t.Errorf("problem is %q", problem)
+	}
+}
+
+// What sound uploads a power cut stopped left behind is swept at the first Run only: Run again, as the
+// supervisor does after a failure, would delete an upload the open page is writing.
+func TestUnfinishedSoundUploadsAreSweptOnce(t *testing.T) {
+	dir := ownSoundsHere(t)
+	sweptUploads = sync.Once{}
+	t.Cleanup(func() { sweptUploads = sync.Once{} })
+	half := filepath.Join(dir, ".upload-1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	f := build()
+
+	if err := os.WriteFile(half, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(half); !os.IsNotExist(err) {
+		t.Errorf("the first Run left what a power cut stopped: %v", err)
+	}
+
+	if err := os.WriteFile(half, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(half); err != nil {
+		t.Errorf("Run again deleted an upload under way: %v", err)
 	}
 }
