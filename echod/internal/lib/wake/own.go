@@ -455,9 +455,15 @@ func (l *Library) AddOwn(manifestJSON, model []byte) (Model, error) {
 	return got, nil
 }
 
+// ErrListening is what changing a model a slot is listening for fails with.
+var ErrListening = errors.New("the device is listening for that wake word; choose another first")
+
 // RemoveOwn deletes a model the page sent. Anything else is refused: the image's own come back at the
-// next start anyway, and Home Assistant's are cache that Purge already looks after.
-func (l *Library) RemoveOwn(id string) error {
+// next start anyway, and Home Assistant's are cache that Purge already looks after. So is one a slot is
+// listening for, by listening (the saved selection) or by a selection under way (Ensure): the engine
+// has it loaded, and the device would go on listening for a word it no longer lists. The check is made
+// under muOwn, which a selection takes too, so one cannot slip in between the check and the delete.
+func (l *Library) RemoveOwn(id string, listening func(id string) bool) error {
 	if !safename.OK(id) {
 		return errors.New("that is not one of the wake words sent from this page")
 	}
@@ -468,12 +474,21 @@ func (l *Library) RemoveOwn(id string) error {
 	if !ok || !m.Uploaded {
 		return errors.New("that is not one of the wake words sent from this page")
 	}
+	if l.inUse(id, listening) {
+		return ErrListening
+	}
 	if err := remove(l.dir, m); err != nil {
 		return err
 	}
 	l.Reload()
 	slog.Info("wake word sent from the setup page removed", "id", m.ID, "phrase", m.Phrase)
 	return nil
+}
+
+// inUse is whether a slot is listening for the model, or a selection under way asks for it. Held with
+// muOwn.
+func (l *Library) inUse(id string, listening func(id string) bool) bool {
+	return slices.Contains(l.selecting, id) || listening != nil && listening(id)
 }
 
 // uploadPrefix starts the name of a model or manifest being written (writeTemp).

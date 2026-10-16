@@ -67,6 +67,16 @@ func wakeWordsSection(w http.ResponseWriter, token string) {
 	 </script></fieldset>`, token)
 }
 
+// listening is whether a slot is listening for the model, as the selection was last saved.
+func listening(id string) bool {
+	for _, s := range config.Get().Wake.Slots(wakeword.Slots) {
+		if s.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // wakeWordUpload takes a model from the page's script: the token, then the .json, then the .tflite,
 // each read no further than the most it may be. The names the browser gives the files are not read.
 func (f *Feature) wakeWordUpload(w http.ResponseWriter, r *http.Request) {
@@ -130,16 +140,10 @@ func (f *Feature) wakeWordUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 // removeWakeWord takes away one sent from the page. One a slot is listening for stays until another
-// is chosen: the engine has it loaded, and the device would go on listening for a word it no longer
-// lists.
+// is chosen (RemoveOwn).
 func removeWakeWord(r *http.Request) string {
 	id := r.PostFormValue("id")
-	for _, s := range config.Get().Wake.Slots(wakeword.Slots) {
-		if s.ID == id {
-			return "the device is listening for that wake word; choose another first"
-		}
-	}
-	if err := models().RemoveOwn(id); err != nil {
+	if err := models().RemoveOwn(id, listening); err != nil {
 		return err.Error()
 	}
 	whenIdle.ask()

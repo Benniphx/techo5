@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,7 +77,7 @@ func TestAWakeWordFromTheSetupPage(t *testing.T) {
 		t.Errorf("a purge deleted %d models sent from the page", gone)
 	}
 
-	if err := l.RemoveOwn("hey_computer"); err != nil {
+	if err := l.RemoveOwn("hey_computer", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(l.Ours()) != 0 {
@@ -144,7 +145,7 @@ func TestOnlyWhatThePageSentIsThePagesToChange(t *testing.T) {
 		t.Errorf("a phrase that would replace the image's model: %v", err)
 	}
 	for _, id := range []string{"okay_nabu", "", "..", "../okay_nabu", "x/../../okay_nabu", `..\okay_nabu`, "nothing_here"} {
-		if err := l.RemoveOwn(id); err == nil {
+		if err := l.RemoveOwn(id, nil); err == nil {
 			t.Errorf("%q was removed", id)
 		}
 	}
@@ -221,5 +222,30 @@ func TestAnUnfinishedUploadIsSweptAtStart(t *testing.T) {
 	}
 	if strings.Join(left, " ") != "okay_nabu.json okay_nabu.tflite" {
 		t.Errorf("left %v", left)
+	}
+}
+
+// A model a slot is listening for is not removed, whether the slot has it as saved or a selection that
+// asks for it is under way: the check and the delete are one step under the library's lock, which a
+// selection takes too, so neither can come between them.
+func TestAModelBeingListenedForIsNotRemoved(t *testing.T) {
+	l := NewLibrary(t.TempDir())
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t)); err != nil {
+		t.Fatal(err)
+	}
+
+	saved := func(id string) bool { return id == "hey_computer" }
+	if err := l.RemoveOwn("hey_computer", saved); !errors.Is(err, ErrListening) {
+		t.Errorf("removed while a slot listens for it: %v", err)
+	}
+
+	l.Ensure([]string{"okay_nabu", "hey_computer"})
+	if err := l.RemoveOwn("hey_computer", nil); !errors.Is(err, ErrListening) {
+		t.Errorf("removed while a selection asks for it: %v", err)
+	}
+
+	l.Ensure([]string{"okay_nabu"})
+	if err := l.RemoveOwn("hey_computer", nil); err != nil {
+		t.Errorf("once nothing asks for it: %v", err)
 	}
 }
