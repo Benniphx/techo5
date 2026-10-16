@@ -8,8 +8,8 @@ zeros (Fire OS logs a DEVAPC access violation on efuse_top too). So the thermal 
 calibration and used its defaults, which put the readings off by several degrees. LK copies the
 efuse into the device tree at boot, as /chosen "atag,devinfo" (little-endian words: a size and a
 tag, then the efuse words), which is where MediaTek's own kernels read it. The three calibration
-words are words 101-103 of that property: they decode to a valid calibration in the same layout
-and range as the values Fire OS logs ([Thermal/TZ/CPU][cal]).
+words are words 101-103 of that property: on unit 1 all twelve fields decode to exactly the values
+Fire OS logged for that unit ([Thermal/TZ/CPU][cal]), and unit 2 has its own in the same range.
 
 Only used when all three efuse words are zero and the property is there, so a board whose efuse
 reads normally is not affected.
