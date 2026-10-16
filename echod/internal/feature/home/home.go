@@ -122,7 +122,8 @@ type Feature struct {
 
 	// radar is the rain map; see radar.go.
 	radar   radarState
-	url     string // the stream playing, from the media player
+	url     string    // the stream playing, from the media player
+	urlAt   time.Time // when it started
 	urlName string // its station name once found
 
 	// asked is the last station this device asked to play and askedAt when, which is what a dropped
@@ -142,6 +143,10 @@ type Feature struct {
 	claimFor   time.Duration
 	claimedAt  time.Time
 	ownURL     string
+	// claimByScript is a claim made because the station script turned on (stationStarted), and
+	// byScript a stream taken for a station that way: the name the text gives may still be the station
+	// before, so a name arriving just after replaces it, and the stream is put back by its url.
+	claimByScript, byScript bool
 	// stationGen counts the stations asked for and forgotten, so a put-back waiting its seconds can
 	// tell a Stop or another station came in between (putBack).
 	stationGen uint64
@@ -319,6 +324,7 @@ func Get() *Feature {
 func (f *Feature) played(url string) {
 	f.mu.Lock()
 	f.url, f.urlName, f.chosen = url, "", ""
+	f.urlAt = time.Now()
 	if f.listed != "" && time.Since(f.listedAt) < listedFor {
 		f.urlName, f.listed = f.listed, ""
 		f.mu.Unlock()
@@ -469,6 +475,11 @@ func (f *Feature) want(h config.Home) {
 	}
 	if h.Radio.Now != "" {
 		keys = append(keys, hastate.Key{Entity: h.Radio.Now})
+	}
+	// The script that plays a station: it turns on whenever a station is started with it, from here
+	// or anywhere in the house (stationStarted), the same station again too, which changes no text.
+	if s := h.Radio.Service; strings.HasPrefix(s, "script.") {
+		keys = append(keys, hastate.Key{Entity: s})
 	}
 	others := make(map[string]bool, len(keys))
 	for _, k := range keys {

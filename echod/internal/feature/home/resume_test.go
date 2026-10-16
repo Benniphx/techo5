@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"slices"
@@ -8,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ygelfand/go-esphome-device/api"
+
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 )
 
 // What may be put back on and what may not. A device that restarts what somebody just stopped is
@@ -453,5 +457,211 @@ func TestAStopWhileAStationStartsKeepsTheClaim(t *testing.T) {
 	f.mu.Unlock()
 	if asked != "" {
 		t.Errorf("a stop long after the station started kept it: %q", asked)
+	}
+}
+
+// A station Home Assistant names a moment after its stream started (a station started by voice) is
+// that stream: taken for live radio, made live in the player, and put back on when it ends. But not a
+// stream that started long before the name, a phone's audio, or the stream already taken for one.
+func TestAStationNamedJustAfterItsStreamStartedIsThatStream(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Radio(config.Radio{Now: "input_text.last_station"}); err != nil {
+		t.Fatal(err)
+	}
+	marked := make(chan string, 4)
+	old := markLive
+	markLive = func(url string) bool { marked <- url; return true }
+	t.Cleanup(func() { markLive = old })
+	named := func(f *Feature, v string) {
+		f.stationStarted(hastate.Update{Key: hastate.Key{Entity: "input_text.last_station"}, Value: v})
+	}
+	startedAgo := func(f *Feature, url string, ago time.Duration) {
+		f.mu.Lock()
+		f.url, f.urlAt = url, time.Now().Add(-ago)
+		f.mu.Unlock()
+	}
+
+	f := &Feature{}
+	startedAgo(f, "http://ha.invalid/api/esphome/ffmpeg_proxy/x/1.wav", time.Second)
+	named(f, "WXYZ")
+	select {
+	case u := <-marked:
+		if u != "http://ha.invalid/api/esphome/ffmpeg_proxy/x/1.wav" {
+			t.Fatalf("marked %q live, want the stream that had just started", u)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the stream that had just started was not made live")
+	}
+	f.mu.Lock()
+	asked, station := f.asked, f.stationURL
+	f.mu.Unlock()
+	if asked != "WXYZ" || station != "http://ha.invalid/api/esphome/ffmpeg_proxy/x/1.wav" {
+		t.Fatalf("asked %q, station url %q", asked, station)
+	}
+	if !f.liveURL("http://ha.invalid/api/esphome/ffmpeg_proxy/x/1.wav") {
+		t.Error("the same stream fetched again is not live")
+	}
+	if !f.stillWanted("WXYZ", "http://ha.invalid/api/esphome/ffmpeg_proxy/x/1.wav", f.stationGen) {
+		t.Error("the station's end would not be put back on")
+	}
+
+	for name, start := range map[string]func(f *Feature){
+		"a stream that started long before the name": func(f *Feature) { startedAgo(f, "http://p/song", time.Minute) },
+		"a phone's audio": func(f *Feature) { startedAgo(f, media.BluetoothPrefix+"Pixel", time.Second) },
+		"nothing playing": func(*Feature) {},
+	} {
+		f := &Feature{}
+		start(f)
+		named(f, "WXYZ")
+		select {
+		case u := <-marked:
+			t.Errorf("%s: %q was made live", name, u)
+		case <-time.After(50 * time.Millisecond):
+		}
+		f.mu.Lock()
+		claiming, station := f.claiming, f.stationURL
+		f.mu.Unlock()
+		if station != "" || !claiming {
+			t.Errorf("%s: station url %q, claiming %v; want the next stream claimed instead", name, station, claiming)
+		}
+	}
+}
+
+// The station script turning on is a station started, though the house's text did not change (the
+// same station again, or a script that never writes it): the stream that just started is taken for it,
+// or, with none yet, the next one is; the station is the one the text names. Its turning off, and a
+// station service that is not a script, are nothing.
+func TestTheStationScriptStartingIsAStationStarted(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	const text, script = "input_text.script_test_last_station", "script.script_test_play_station"
+	if err := config.Set().Home().Radio(config.Radio{Now: text, Service: script}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hastate.Get().Handle(context.Background(), nil,
+		&api.HomeAssistantStateResponse{EntityId: text, State: "WXYZ"}); err != nil {
+		t.Fatal(err)
+	}
+	marked := make(chan string, 4)
+	old := markLive
+	markLive = func(url string) bool { marked <- url; return true }
+	t.Cleanup(func() { markLive = old })
+	run := func(f *Feature, v string) {
+		f.stationStarted(hastate.Update{Key: hastate.Key{Entity: script}, Value: v})
+	}
+
+	// The stream came first.
+	f := &Feature{}
+	f.url, f.urlAt = "http://ha.invalid/api/esphome/ffmpeg_proxy/x/a.wav", time.Now().Add(-time.Second)
+	run(f, "on")
+	select {
+	case u := <-marked:
+		if u != "http://ha.invalid/api/esphome/ffmpeg_proxy/x/a.wav" {
+			t.Fatalf("marked %q", u)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the stream that had just started was not made live")
+	}
+	f.mu.Lock()
+	if f.asked != "WXYZ" || f.stationURL != "http://ha.invalid/api/esphome/ffmpeg_proxy/x/a.wav" {
+		t.Errorf("asked %q, station url %q", f.asked, f.stationURL)
+	}
+	f.mu.Unlock()
+
+	// The script came first.
+	f = &Feature{}
+	run(f, "on")
+	if !f.liveURL("http://ha.invalid/api/esphome/ffmpeg_proxy/x/b.wav") {
+		t.Fatal("the stream after the station script started was not taken for live radio")
+	}
+	f.mu.Lock()
+	if f.asked != "WXYZ" {
+		t.Errorf("asked %q, want the station the text names", f.asked)
+	}
+	f.mu.Unlock()
+
+	// Turning off, and a service that is not a script.
+	f = &Feature{}
+	run(f, "off")
+	if f.liveURL("http://ha.invalid/api/esphome/ffmpeg_proxy/x/c.wav") {
+		t.Error("the script turning off armed a claim")
+	}
+	if err := config.Set().Home().Radio(config.Radio{Now: text, Service: "media_player.somewhere"}); err != nil {
+		t.Fatal(err)
+	}
+	f = &Feature{}
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: "media_player.somewhere"}, Value: "on"})
+	if f.liveURL("http://ha.invalid/api/esphome/ffmpeg_proxy/x/d.wav") {
+		t.Error("a station service that is not a script armed a claim")
+	}
+}
+
+// The station script starting reads the text as it is, which may still name the station before; a
+// name arriving just after is the one, and the stream goes back on by its url whatever it is called.
+func TestALaterNameReplacesTheOneTheScriptFound(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	const text, script = "input_text.later_test_last_station", "script.later_test_play_station"
+	if err := config.Set().Home().Radio(config.Radio{Now: text, Service: script}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hastate.Get().Handle(context.Background(), nil,
+		&api.HomeAssistantStateResponse{EntityId: text, State: "KOLD"}); err != nil {
+		t.Fatal(err)
+	}
+	old := markLive
+	markLive = func(string) bool { return true }
+	t.Cleanup(func() { markLive = old })
+	const url = "http://ha.invalid/api/esphome/ffmpeg_proxy/x/new.wav"
+
+	// The script first, then its stream, then the new name.
+	f := &Feature{}
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: script}, Value: "on"})
+	if !f.liveURL(url) {
+		t.Fatal("the stream after the script was not taken for the station")
+	}
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: text}, Value: "WNEW"})
+	f.mu.Lock()
+	asked, own := f.asked, f.ownURL
+	f.mu.Unlock()
+	if asked != "WNEW" {
+		t.Errorf("asked %q, want the name that arrived after", asked)
+	}
+	if own != url {
+		t.Errorf("own url %q: the station would be put back by a name, not its url", own)
+	}
+
+	// The script first, its new name before the stream.
+	f = &Feature{}
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: script}, Value: "on"})
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: text}, Value: "WNEW"})
+	if !f.liveURL(url) {
+		t.Fatal("the stream was not taken for the station")
+	}
+	f.mu.Lock()
+	asked = f.asked
+	f.mu.Unlock()
+	if asked != "WNEW" {
+		t.Errorf("asked %q, want the name that arrived before the stream", asked)
+	}
+}
+
+// A stream that is not Home Assistant's (this device's own, a camera's sound) is not adopted when the
+// station script starts somewhere in the house.
+func TestOnlyHomeAssistantsStreamIsAdopted(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	const script = "script.adopt_test_play_station"
+	if err := config.Set().Home().Radio(config.Radio{Service: script}); err != nil {
+		t.Fatal(err)
+	}
+	marked := make(chan string, 1)
+	old := markLive
+	markLive = func(u string) bool { marked <- u; return true }
+	t.Cleanup(func() { markLive = old })
+	f := &Feature{}
+	f.url, f.urlAt = "http://camera.invalid/sound.wav", time.Now()
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: script}, Value: "on"})
+	select {
+	case u := <-marked:
+		t.Fatalf("%q was adopted", u)
+	case <-time.After(50 * time.Millisecond):
 	}
 }

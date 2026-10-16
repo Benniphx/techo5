@@ -71,7 +71,7 @@ func TestATrackThatIsNotAStationIsNotFetchedAgainWhenItEnds(t *testing.T) {
 	if n := hits.Load(); n != 1 {
 		t.Errorf("a track that ended cleanly was fetched %d times, want once", n)
 	}
-	if tr.live {
+	if tr.live.Load() {
 		t.Error("a track that is not a station was taken for live radio")
 	}
 }
@@ -84,7 +84,7 @@ func TestAClipAfterTheRadioIsPlayedOnce(t *testing.T) {
 	liveOnly(t, station)
 	s := liveStream(t)
 	radio := s.play(station, false)
-	if !radio.live {
+	if !radio.live.Load() {
 		t.Fatal("the station was not taken for live radio")
 	}
 	tr := s.play(clip, false)
@@ -104,8 +104,8 @@ func TestASwitchGoesByTheNewTrack(t *testing.T) {
 	first := s.play(a, false)
 	second := s.play(b, false)
 	waitDone(t, second)
-	if !first.live || second.live {
-		t.Errorf("live: first %t, second %t; want true, false", first.live, second.live)
+	if !first.live.Load() || second.live.Load() {
+		t.Errorf("live: first %t, second %t; want true, false", first.live.Load(), second.live.Load())
 	}
 	if n := asked.Load(); n != 2 {
 		t.Errorf("the radio feature was asked %d times for two tracks", n)
@@ -137,4 +137,31 @@ func TestALiveStationThatEndsIsFetchedAgain(t *testing.T) {
 		defer mu.Unlock()
 		return ended == 1
 	})
+}
+
+// A station Home Assistant started, and named only as its stream had started, is live from then on:
+// MarkLive takes the track playing now, and only that one.
+func TestATrackMarkedLiveAsItStartsIsLive(t *testing.T) {
+	station := overStream(t)
+	other, _ := endingStream(t)
+	liveOnly(t) // the radio feature knows of no station as the track starts
+	s := liveStream(t)
+	tr := s.play(station, false)
+	if tr.live.Load() {
+		t.Fatal("the track was live before it was marked")
+	}
+	if s.markLive(other) || tr.live.Load() {
+		t.Fatal("marking another url made the track playing live")
+	}
+	if !s.markLive(station) || !tr.live.Load() {
+		t.Fatal("the track playing was not made live")
+	}
+	next := s.play(other, false)
+	waitDone(t, next)
+	if s.markLive(station) {
+		t.Fatal("a track no longer playing was marked live")
+	}
+	if s.markLive(other) {
+		t.Fatal("a track that has ended was marked live")
+	}
 }

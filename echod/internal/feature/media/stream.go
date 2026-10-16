@@ -13,6 +13,7 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -121,9 +122,10 @@ type track struct {
 	cancel context.CancelFunc
 	// received is audio a remote is sending (PlayPCM), not a url or a generator.
 	received bool
-	// live is a url the radio feature said is a live station when it started (SetLive): fetched again
-	// when it drops, and given up on sooner when it goes quiet (resume.go). Set before it runs.
-	live bool
+	// live is a url the radio feature said is a live station when it started (SetLive), or as it
+	// started (MarkLive): fetched again when it drops, and given up on sooner when it goes quiet
+	// (resume.go).
+	live atomic.Bool
 
 	// heard closes when the track's first samples go to the speaker, and done when it has stopped for
 	// good, with failed saying why if it failed: how a caller that has to answer whether it is playing
@@ -263,7 +265,9 @@ func (m *Stream) play(url string, handOff bool) *track {
 	}
 
 	live := liveURL(url)
-	t, ctx := m.start(&track{item: url, heard: make(chan struct{}), done: make(chan struct{}), handOff: handOff, live: live})
+	t := &track{item: url, heard: make(chan struct{}), done: make(chan struct{}), handOff: handOff}
+	t.live.Store(live)
+	t, ctx := m.start(t)
 	slog.Info("playing media", "url", url, "live", live)
 
 	safe.Go("media", func() {
@@ -286,7 +290,7 @@ func (m *Stream) play(url string, handOff bool) *track {
 		for {
 			began := time.Now()
 			err = m.run(ctx, t, url)
-			if !resume(ctx, t.live, err, time.Since(began), &again) {
+			if !resume(ctx, t.live.Load(), err, time.Since(began), &again) {
 				break
 			}
 		}
@@ -348,6 +352,27 @@ func (m *Stream) Noise() []string {
 		return nil
 	}
 	return m.track.sounds
+}
+
+// markLive makes the track playing now live radio (track.live), if it is url and still playing: the
+// radio feature found out it is a station only as it started (MarkLive). It says whether it was.
+func (m *Stream) markLive(url string) bool {
+	if m == nil || url == "" {
+		return false
+	}
+	m.mu.Lock()
+	t := m.track
+	m.mu.Unlock()
+	if t == nil || t.item != url {
+		return false
+	}
+	select {
+	case <-t.done:
+		return false
+	default:
+	}
+	t.live.Store(true)
+	return true
 }
 
 // start makes a track the one being played, dropping whatever was.
@@ -642,10 +667,13 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	fetch, giveUp := context.WithCancel(ctx)
 	defer giveUp()
 	// Live radio is fetched again when it drops (resume.go), so a station gone quiet is given up on
-	// sooner than a track would be: the sooner it is fetched again, the shorter the gap.
-	limit := stall
-	if t.live {
-		limit = liveStall
+	// sooner than a track would be: the sooner it is fetched again, the shorter the gap. Asked at every
+	// read, since a track can be found to be a station after it has started (MarkLive).
+	limit := func() time.Duration {
+		if t.live.Load() {
+			return liveStall
+		}
+		return stall
 	}
 
 	req, err := http.NewRequestWithContext(fetch, http.MethodGet, url, nil)
@@ -664,12 +692,13 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	}
 
 	body := bufio.NewReaderSize(resp.Body, chunk)
-	watchdog := time.AfterFunc(limit, giveUp) // an MP3's first frame is read here, before the loop's own
+	waited := limit()
+	watchdog := time.AfterFunc(waited, giveUp) // an MP3's first frame is read here, before the loop's own
 	src, err := pcmSource(body, resp.Header.Get("Content-Type"))
 	watchdog.Stop()
 	if err != nil {
 		if fetch.Err() != nil && ctx.Err() == nil {
-			return fmt.Errorf("nothing arrived for %s", limit)
+			return fmt.Errorf("nothing arrived for %s", waited)
 		}
 		return err
 	}
@@ -679,7 +708,8 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	for {
 		// Armed only around the read: a track waiting for a turn to finish is not stalled, and
 		// counting that time would end it for being interrupted.
-		watchdog := time.AfterFunc(limit, giveUp)
+		waited = limit()
+		watchdog := time.AfterFunc(waited, giveUp)
 		n, err := io.ReadFull(src, buf)
 		watchdog.Stop()
 
@@ -702,7 +732,7 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 		case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 			return m.settle(ctx)
 		case fetch.Err() != nil && ctx.Err() == nil:
-			return fmt.Errorf("nothing arrived for %s", limit)
+			return fmt.Errorf("nothing arrived for %s", waited)
 		default:
 			return err
 		}
