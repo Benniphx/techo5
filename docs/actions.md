@@ -253,6 +253,8 @@ actions:
         {{ [c[1:3] | int(base=16), c[3:5] | int(base=16), c[5:7] | int(base=16)] }}
 ```
 
+**Replace `office` with your device's own prefix, and `light.bedroom` with your light.**
+
 ## Voice request events
 
 Each finished voice request (a turn: wake, listen, answer) fires `esphome.techo5_voice` on Home
@@ -294,6 +296,17 @@ actions:
 Events do not show in the logbook by themselves. To keep a line there for each request, add an
 automation that triggers on `esphome.techo5_voice` with no `event_data` and runs `logbook.log` with
 `name: "{{ trigger.event.data.device }}"` and `message: "heard {{ trigger.event.data.heard | default('nothing') }}, {{ trigger.event.data.ended }}"`.
+
+Beside it, each request also fires `esphome.echolocal_turn`, the same request as EchoLocal reported
+it, for EchoLocal's Home Assistant integration. Home Assistant's recorder keeps both events in its
+database. If you don't use EchoLocal's integration, leave that one out in `configuration.yaml`:
+
+```yaml
+recorder:
+  exclude:
+    event_types:
+      - esphome.echolocal_turn
+```
 
 ## Set a reminder
 

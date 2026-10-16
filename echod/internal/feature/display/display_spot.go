@@ -432,6 +432,9 @@ func (d *Display) command(s esphome.LightState) {
 	d.apply(s.On, pct, true)
 }
 
+// wakeLight is the light before an alarm as this face shows it: all of it, here.
+func (d *Display) wakeLight(now time.Time) float64 { return sunriseProgress(now) }
+
 func (d *Display) apply(on bool, pct int, save bool) {
 	presence.Hush() // the screen's own light is about to change; the camera is not to take it for somebody
 	pct = min(max(pct, 0), 100)
@@ -829,6 +832,12 @@ func (d *Display) gesture(g touch.Gesture) {
 		// A finished turn's words: a tap puts them away rather than starting another turn.
 		if d.answerUp(time.Now()) {
 			d.clearAnswer()
+			return
+		}
+		// The wake light's face, held at full after an alarm with nothing ringing: a tap lets it go, as
+		// stop does (#161). While it is only coming up before an alarm, the tap is the clock's as ever.
+		if tapLetsGoOfLight(time.Now()) {
+			d.wake()
 			return
 		}
 		d.mu.Lock()

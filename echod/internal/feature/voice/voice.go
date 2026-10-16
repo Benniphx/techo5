@@ -274,6 +274,12 @@ func (v *Voice) Interrupt() {
 	}
 	if !speaker.Sound().Busy() && !ring.IsSounding() {
 		if playing, _ := media.Get().Playing(); !playing {
+			// Nothing audible, but the wake light held at full after an alarm (#161) is the device
+			// plainly doing something, and stop is what somebody waking under it says to turn it off.
+			if ring.Release() {
+				slog.Info("stop word with nothing sounding: the held wake light let go")
+				return
+			}
 			slog.Debug("stop word ignored, nothing to stop")
 			return
 		}
@@ -313,8 +319,11 @@ func (v *Voice) Stop() bool {
 		media.Get().Pause()
 		return true
 	}
-	// Last: a reminder left on the screen, with nothing else going on, is what the press was for.
-	return ring.End()
+	// Last: a reminder left on the screen, with nothing else going on, is what the press was for. And
+	// the wake light held at full after an alarm (#161), which nothing above stops: reaching for stop
+	// with nothing sounding lets it go, as Stop in Home Assistant does.
+	ended := ring.End()
+	return ring.Release() || ended
 }
 
 // ActionHold is holding the action button, which reaches the second assistant. Holding does not

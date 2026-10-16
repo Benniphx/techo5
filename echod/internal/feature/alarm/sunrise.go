@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/led"
 )
 
@@ -67,14 +68,15 @@ type bridge struct {
 // after its time, not at it, and the light must not drop for that moment.
 const bridgeGrace = time.Minute
 
-// holds is whether the alarm b waits for is still coming: still armed, still at that time. One turned
-// off, deleted or moved lets the light go.
+// holds is whether the alarm b waits for is still coming: still armed, still at that time, and with
+// its window still open. One turned off, deleted or moved lets the light go, and so does a clock set
+// back hours, which would otherwise hold the light for all of them.
 func (b bridge) holds(sources []source, now time.Time) bool {
 	if b.key == "" || now.After(b.at.Add(bridgeGrace)) {
 		return false
 	}
 	for _, s := range sources {
-		if s.key != b.key || s.sunrise <= 0 {
+		if s.key != b.key || s.sunrise <= 0 || b.at.Sub(now) > time.Duration(s.sunrise)*time.Minute {
 			continue
 		}
 		if at, ok := s.next(b.at); ok && at.Equal(b.at) {
@@ -162,19 +164,22 @@ func sunriseAt(sources []source, now time.Time) float64 {
 }
 
 // endLight is a lit ring ending for good at now, stopped rather than snoozed: the light is held for
-// the next alarm whose window is already open, or let go.
-func (a *Alarms) endLight(sources []source, now time.Time) {
+// the next alarm whose window is already open, or let go. It reports whether that changed the hold,
+// for the caller to save it (saveBridge).
+func (a *Alarms) endLight(sources []source, now time.Time) bool {
 	b := bridgeFrom(sources, now)
 	a.mu.Lock()
+	changed := a.bridge.key != b.key || !a.bridge.at.Equal(b.at)
 	a.bridge = b
 	a.mu.Unlock()
 	if b.key != "" {
 		slog.Info("wake light held for the next alarm", "key", b.key, "at", b.at.Format("15:04"))
 	}
+	return changed
 }
 
-// dropBridge lets go of the light held for the next alarm, for a stop pressed with nothing ringing:
-// somebody who presses Stop wants the light off. That alarm's own ramp still comes up as it would
+// dropBridge lets go of the light held for the next alarm, for a stop with nothing ringing: somebody
+// who says or presses stop wants the light off. That alarm's own ramp still comes up as it would
 // have. It reports whether there was a bridge.
 func (a *Alarms) dropBridge() bool {
 	a.mu.Lock()
@@ -182,10 +187,53 @@ func (a *Alarms) dropBridge() bool {
 	a.bridge = bridge{}
 	a.mu.Unlock()
 	if had {
+		a.saveBridge()
 		slog.Info("wake light held for the next alarm let go")
 		a.poke()
 	}
 	return had
+}
+
+// LetGoOfLight lets go of the wake light held at full, for a stop on the device with nothing sounding
+// (#161): the stop word, the action button, a tap on the screen. Both holds go, the one for the next
+// alarm (dropBridge) and the one a lit snooze keeps, but the snooze itself stays and rings as it
+// would have, only with the room left as it is until then: a stop with nothing ringing never canceled
+// a snooze on the device. Stop in Home Assistant does that as well. It reports whether anything held
+// the light.
+func (a *Alarms) LetGoOfLight() bool {
+	bridged := a.dropBridge()
+	a.mu.Lock()
+	unlit := false
+	for i := range a.snoozed {
+		if a.snoozed[i].lit {
+			a.snoozed[i].lit, unlit = false, true
+		}
+	}
+	a.mu.Unlock()
+	if unlit {
+		a.saveSnoozes()
+		slog.Info("wake light held for a snooze let go")
+		a.poke()
+		a.Changed.Emit(struct{}{})
+	}
+	return bridged || unlit
+}
+
+// saveBridge writes down the alarm the light is held for, so a restart while it waits keeps the light
+// up as a snooze does. Called when the hold begins or is let go; call it without a.mu held.
+func (a *Alarms) saveBridge() {
+	a.saveMu.Lock()
+	defer a.saveMu.Unlock()
+	a.mu.Lock()
+	b := a.bridge
+	a.mu.Unlock()
+	var held *config.Held
+	if b.key != "" {
+		held = &config.Held{Key: b.key, At: b.at}
+	}
+	if err := config.Set().Alarms().Held(held); err != nil {
+		slog.Warn("saving the held wake light failed", "err", err)
+	}
 }
 
 // SunriseLevel is the fraction of full brightness the ramp asks for, eased so most of the change

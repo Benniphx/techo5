@@ -26,6 +26,11 @@ type Alarms struct {
 	// as the process restarting, and means the same thing whatever the clock did in between.
 	Snoozed []Snooze `json:"snoozed,omitempty"`
 
+	// Held is the alarm the wake light is held at full for, after a ring with a wake light ended
+	// inside that alarm's window (#161), so a restart in between keeps the light up as a snooze keeps
+	// it. Nothing for none.
+	Held *Held `json:"held,omitempty"`
+
 	// Sound is what an alarm rings with, by name; empty is the first of the speaker's alarm sounds.
 	Sound string `json:"sound,omitempty"`
 
@@ -132,6 +137,12 @@ type Snooze struct {
 	At    time.Time `json:"at"`
 	// Lit is a snooze of an alarm that had a wake light, which stays on at full until it rings again.
 	Lit bool `json:"lit,omitempty"`
+}
+
+// Held is the alarm the wake light waits for at full: Key is the alarm, At the moment it rings.
+type Held struct {
+	Key string    `json:"key"`
+	At  time.Time `json:"at"`
 }
 
 const (
@@ -257,6 +268,16 @@ func (w AlarmsWriter) SnoozeMinutes(n int) error {
 // and never on a tick: the whole config is marshalled and fsynced on every set.
 func (w AlarmsWriter) Snoozed(list []Snooze) error {
 	return w.st.Update(func(c *Config) { c.Alarms.Snoozed = slices.Clone(list) })
+}
+
+// Held sets the alarm the wake light is held for, nil for none. Like Snoozed, it is written when the
+// hold begins or is let go, never on a tick.
+func (w AlarmsWriter) Held(h *Held) error {
+	if h != nil {
+		c := *h
+		h = &c
+	}
+	return w.st.Update(func(c *Config) { c.Alarms.Held = h })
 }
 
 // SunriseMinutes sets how long before an alarm the screen starts to light; nothing for not at all.

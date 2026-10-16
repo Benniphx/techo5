@@ -615,10 +615,13 @@ in its editor (5 to 30 minutes, or off). Once an alarm with a wake light rings, 
 full while it rings and while it is snoozed. When you stop it, the light stays at full until the
 next alarm if that alarm's own wake light has already started; otherwise it goes off. So with half
 an hour of light, alarms at 8:00 and 8:30 are one light from 7:30 until the second is stopped, and
-an 8:00 alarm snoozed until 8:36 carries the light on to a 9:05 alarm. Pressing **Stop alarm or
-timer** in Home Assistant with nothing ringing turns a held light off. **Wake light brightness**
-(percent) and **Wake light color** (like `#ff9b1a`, empty while off) show it in Home Assistant, for
-room lights to follow; see [docs/actions.md](actions.md#follow-the-wake-light).
+an 8:00 alarm snoozed until 8:36 carries the light on to a 9:05 alarm. A stop with nothing ringing
+turns a held light off: the stop word, the action button, a tap on the light's page, or **Stop alarm
+or timer** in Home Assistant. On the device a snoozed alarm still comes back, just without the light
+held until then; Home Assistant's Stop cancels the snoozes as well. Turning a Show's screen off while
+the light is held keeps it off until that light is over or the next alarm rings. **Wake light
+brightness** (percent) and **Wake light color** (like `#ff9b1a`, empty while off) show it in Home
+Assistant, for room lights to follow; see [docs/actions.md](actions.md#follow-the-wake-light).
 
 ## 8. Settings lock
 

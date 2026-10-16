@@ -40,6 +40,7 @@ func init() {
 	// time a button can be pressed this is already in place.
 	ring.Silences(func() bool { return Get().Stop() })
 	ring.Snoozes(func(minutes int) bool { return Get().SnoozeFor(minutes) })
+	ring.Releases(func() bool { return Get().LetGoOfLight() })
 }
 
 const (
@@ -254,6 +255,21 @@ func (a *Alarms) Restore(c config.Config) {
 
 	if len(live) != len(c.Alarms.Snoozed) {
 		a.saveSnoozes()
+	}
+
+	// The light held for the next alarm comes back too, so a restart while it waits does not drop the
+	// room to wherever that alarm's ramp is (#161). Only while it still holds: an alarm turned off,
+	// moved or gone by while the device was down lets it go, as it would have with the device up.
+	if h := c.Alarms.Held; h != nil {
+		b := bridge{key: h.Key, at: h.At}
+		if b.holds(a.sources(now), now) {
+			a.mu.Lock()
+			a.bridge = b
+			a.mu.Unlock()
+			slog.Info("wake light held for the next alarm, as it was", "key", b.key, "at", b.at.Format("15:04"))
+		} else {
+			a.saveBridge()
+		}
 	}
 }
 
@@ -523,7 +539,9 @@ func (a *Alarms) rang() {
 	// or lets it go. A snoozed one holds it through its snooze instead.
 	if r != nil && r.lit && !r.snoozed {
 		now := time.Now()
-		a.endLight(a.sources(now), now)
+		if a.endLight(a.sources(now), now) {
+			a.saveBridge()
+		}
 	}
 	// A snoozed ring has said so already, and rings again later; any other end is a stop.
 	if r != nil && !r.snoozed {

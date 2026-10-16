@@ -405,3 +405,128 @@ func TestWhatHoldsTheLight(t *testing.T) {
 		}
 	}
 }
+
+// A stop on the device with nothing sounding lets go of the light a lit snooze holds, and leaves the
+// snooze to ring as it would have (#161); and of the light held for the next alarm, saved or not.
+func TestADeviceStopLetsTheHeldLightGo(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", Label: "Wake up", At: time.Now(), lit: true}
+	a.silence = func() {}
+	a.mu.Unlock()
+	if !a.SnoozeFor(9) {
+		t.Fatal("nothing to snooze")
+	}
+	a.rang()
+	if got := a.SunriseProgress(time.Now()); got != 1 {
+		t.Fatalf("while it is snoozed the light is %.2f, want full", got)
+	}
+	if !a.LetGoOfLight() {
+		t.Fatal("a stop found no light held by the snooze")
+	}
+	if got := a.SunriseProgress(time.Now()); got != 0 {
+		t.Errorf("after a stop the snoozed light is %.2f, want off", got)
+	}
+	if v := a.View(time.Now()); len(v.Snoozed) != 1 {
+		t.Errorf("after a stop there are %d snoozes, want the one still coming", len(v.Snoozed))
+	}
+	if s := config.Get().Alarms.Snoozed; len(s) != 1 || s[0].Lit {
+		t.Errorf("the saved snooze is %+v, want it kept without the light", s)
+	}
+	if a.LetGoOfLight() {
+		t.Error("a second stop found the light still held")
+	}
+	a.CancelSnoozes()
+
+	// The light held for an alarm twenty minutes off, with half an hour of light.
+	next := time.Now().Add(20 * time.Minute)
+	al, err := a.Set(next.Hour(), next.Minute(), config.DaysEvery, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	al.Sunrise = 30
+	if err := a.Put(al); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now(), lit: true}
+	a.mu.Unlock()
+	a.rang()
+	if h := config.Get().Alarms.Held; h == nil || h.Key != al.ID {
+		t.Fatalf("the held light was saved as %+v, want the next alarm", h)
+	}
+	if !a.LetGoOfLight() {
+		t.Fatal("a stop found no light held for the next alarm")
+	}
+	if got := a.SunriseProgress(time.Now()); got >= 1 {
+		t.Error("after a stop the light is still held at full")
+	}
+	if h := config.Get().Alarms.Held; h != nil {
+		t.Errorf("after a stop the saved held light is %+v, want none", h)
+	}
+}
+
+// The light held for the next alarm survives a restart while it still holds, and not otherwise.
+func TestTheHeldLightComesBackAfterARestart(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	next := time.Now().Add(20 * time.Minute)
+	al, err := a.Set(next.Hour(), next.Minute(), config.DaysEvery, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	al.Sunrise = 30
+	if err := a.Put(al); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now(), lit: true}
+	a.mu.Unlock()
+	a.rang()
+
+	again := build()
+	again.Restore(config.Get())
+	if got := again.SunriseProgress(time.Now()); got != 1 {
+		t.Errorf("after a restart the held light is %.2f, want full", got)
+	}
+
+	// Saved for an alarm since turned off, it does not come back, and the saved copy goes.
+	al.On = false
+	if err := config.Set().Alarms().Put(al); err != nil {
+		t.Fatal(err)
+	}
+	third := build()
+	third.Restore(config.Get())
+	if got := third.SunriseProgress(time.Now()); got != 0 {
+		t.Errorf("after a restart with that alarm off the light is %.2f, want off", got)
+	}
+	if h := config.Get().Alarms.Held; h != nil {
+		t.Errorf("a held light that no longer holds is still saved: %+v", h)
+	}
+
+	// A saved config from before there was a held light restores with nothing held.
+	if err := config.Set().Alarms().Held(nil); err != nil {
+		t.Fatal(err)
+	}
+	fourth := build()
+	fourth.Restore(config.Get())
+	if fourth.bridge.key != "" {
+		t.Errorf("with nothing saved the light is held for %q", fourth.bridge.key)
+	}
+}
+
+// A clock set back hours does not hold the light for all of them: the bridged alarm's window has to
+// be open still.
+func TestTheBridgeLetsGoWhenTheClockGoesBack(t *testing.T) {
+	at := time.Date(2026, 10, 16, 8, 30, 0, 0, time.UTC)
+	s := []source{{key: "b", hour: 8, min: 30, days: config.DaysEvery, sunrise: 30}}
+	b := bridge{key: "b", at: at}
+	if !b.holds(s, at.Add(-30*time.Minute)) {
+		t.Error("the bridge let go with its alarm's window open")
+	}
+	if b.holds(s, at.Add(-3*time.Hour)) {
+		t.Error("with the clock three hours back the bridge still holds")
+	}
+}
