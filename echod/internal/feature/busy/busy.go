@@ -221,3 +221,43 @@ func (b *Busy) Run(ctx context.Context) error {
 		}
 	}
 }
+
+// RingsNow is the boot script's last look, for a reboot that is already on its way (the kernel update
+// writes the kernel, then reboots): whether a fresh marker at path says something rings now or within
+// the minute. A marker more than staleAfter old, or whose pid is not a live daemon, says nothing.
+func RingsNow(path string) bool {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	up, err := uptime()
+	if err != nil {
+		return false
+	}
+	return ringsIn(string(b), up, func(pid string) bool {
+		comm, err := os.ReadFile("/proc/" + pid + "/comm")
+		return err == nil && strings.TrimSpace(string(comm)) == "techo5"
+	})
+}
+
+// staleAfter is how old a marker may be and still be believed: the daemon writes it every few seconds.
+const staleAfter = 60
+
+func ringsIn(marker string, up int64, alive func(pid string) bool) bool {
+	var pid string
+	at := int64(-1)
+	rings := false
+	for _, l := range strings.Split(marker, "\n") {
+		switch {
+		case strings.HasPrefix(l, "pid "):
+			pid = strings.TrimPrefix(l, "pid ")
+		case strings.HasPrefix(l, "at "):
+			if n, err := strconv.ParseInt(strings.TrimPrefix(l, "at "), 10, 64); err == nil {
+				at = n
+			}
+		case l == "ring" || l == "soon":
+			rings = true
+		}
+	}
+	return rings && at >= 0 && up-at <= staleAfter && pid != "" && alive(pid)
+}

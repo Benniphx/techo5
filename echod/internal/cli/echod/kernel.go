@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/HuskerMinion/techo5/echod/internal/feature/busy"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/update/kernel"
 )
@@ -100,6 +102,11 @@ func newKernelCmd() *cobra.Command {
 				return err
 			}
 			if written {
+				// boot.sh looked just before this, but writing takes a while: an alarm or timer that
+				// started meanwhile, or is about to, is let finish first (not forever).
+				for end := time.Now().Add(10 * time.Minute); busy.RingsNow(busy.Path) && time.Now().Before(end); {
+					time.Sleep(2 * time.Second)
+				}
 				kernel.Log("rebooting into the new kernel")
 				return reboot()
 			}

@@ -84,3 +84,26 @@ func TestUptime(t *testing.T) {
 		t.Fatalf("uptime = %d, %v", up, err)
 	}
 }
+
+func TestRingsIn(t *testing.T) {
+	alive := func(pid string) bool { return pid == "1234" }
+	for _, c := range []struct {
+		name   string
+		marker string
+		up     int64
+		want   bool
+	}{
+		{"ringing", "pid 1234\nat 100\nring\n", 110, true},
+		{"due within the minute", "pid 1234\nat 100\nsoon\nalarm\n", 110, true},
+		{"only music", "pid 1234\nat 100\nmedia\n", 110, false},
+		{"a minute old", "pid 1234\nat 100\nring\n", 160, true},
+		{"stale", "pid 1234\nat 100\nring\n", 161, false},
+		{"daemon gone", "pid 999\nat 100\nring\n", 110, false},
+		{"no time", "pid 1234\nring\n", 110, false},
+		{"empty", "", 110, false},
+	} {
+		if got := ringsIn(c.marker, c.up, alive); got != c.want {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
