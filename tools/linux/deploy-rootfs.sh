@@ -54,6 +54,12 @@ done
 
 [ -n "$HOST" ] || [ -n "$KEEP" ] || { echo "HOST is not set: HOST=<the device's address> $0 ..., or $0 --out rootfs.tar.gz" >&2; exit 1; }
 [ -z "$KEEP" ] || [ -z "$ONDEVICE" ] || { echo "--out builds on this computer; it does not go with --on-device" >&2; exit 1; }
+# A tarball kept with --out is one to publish or install from: without the wake word models, a unit
+# that starts from it answers to no word at all. Sending a build to a unit of one's own may skip them.
+if [ -n "$KEEP" ] && ! ls "$INPUTS"/models/*.tflite >/dev/null 2>&1; then
+	echo "no wake word models in $INPUTS/models: fetch them (tools/fetch-inputs.py) before building a rootfs with --out" >&2
+	exit 1
+fi
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 # The version is stamped into the daemon and reported to Home Assistant, which offers an update
 # whenever it differs from a release's, without asking which is newer. So the default has to rank:
