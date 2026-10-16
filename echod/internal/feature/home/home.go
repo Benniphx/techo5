@@ -132,11 +132,16 @@ type Feature struct {
 
 	// claiming is a station asked for whose stream has not started yet, and stationURL the url that
 	// started for the last one: what plays from it is live radio (liveURL).
-	// claimAt is when the claim was made, and claimedAt when a stream was last taken for one.
+	// claimName is the station claimed for, claimAt when the claim was made and claimFor how long it
+	// holds, and claimedAt when a stream was last taken for one. ownURL is the last stream this device
+	// played itself for a station (playingOwn).
 	claiming   bool
 	stationURL string
+	claimName  string
 	claimAt    time.Time
+	claimFor   time.Duration
 	claimedAt  time.Time
+	ownURL     string
 
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
@@ -837,8 +842,7 @@ func (f *Feature) Stop() {
 	media.Get().Stop()
 	f.mu.Lock()
 	f.chosen = ""
-	// The station is over: nothing that plays after it is put back on or taken for it (resume.go).
-	f.asked, f.claiming, f.stationURL = "", false, ""
+	f.forgetStation()
 	f.mu.Unlock()
 	f.Changed.Emit(struct{}{})
 	f.pokeMeta()

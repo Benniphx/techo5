@@ -54,6 +54,7 @@ func (f *Feature) ended(url string) {
 		f.resumed = 0
 	}
 	tries := f.resumed
+	own := url == f.ownURL
 	f.mu.Unlock()
 
 	if url != playing || station == "" {
@@ -71,15 +72,42 @@ func (f *Feature) ended(url string) {
 
 	slog.Info("radio: the stream ended by itself, putting it back on",
 		"station", station, "try", tries+1)
-	time.AfterFunc(resumeAfter, func() {
-		// Anything that started in the meantime is what somebody wanted instead.
-		f.mu.Lock()
-		still := f.url == playing
-		f.mu.Unlock()
-		if still {
-			f.Play(station)
-		}
-	})
+	time.AfterFunc(resumeAfter, func() { f.putBack(station, url, own) })
+}
+
+// putBack starts station again after its stream (url) ended by itself: one this device played itself
+// (own) from the same url, one Home Assistant played by asking for it again. Anything that started in
+// the meantime is what somebody wanted instead, and a Stop meanwhile is somebody wanting nothing.
+func (f *Feature) putBack(station, url string, own bool) {
+	if !f.stillWanted(station, url) {
+		return
+	}
+	if own {
+		f.PlayStream(station, url)
+		return
+	}
+	f.Play(station)
+}
+
+// stillWanted is whether station, whose stream url ended, is still to be put back on: nothing else
+// has started, and the station has not been stopped or replaced by another asked for.
+func (f *Feature) stillWanted(station, url string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.url == url && f.asked == station && f.stationURL == url
+}
+
+// forgetStation is the station over (Stop): nothing that plays after it is put back on or taken for it.
+// Under f.mu.
+func (f *Feature) forgetStation() {
+	f.asked, f.claiming, f.claimName, f.stationURL = "", false, "", ""
+}
+
+// playingOwn is a stream this device is about to play itself, for station name, through media's
+// PlayURL: what plays now, as a stream Home Assistant sends is (played), so its end can be put back on
+// as theirs can. Under f.mu.
+func (f *Feature) playingOwn(name, url string) {
+	f.url, f.urlName, f.ownURL = url, name, url
 }
 
 // liveClaim is how long after a station is asked for the next stream to start is taken to be it: the
@@ -87,10 +115,19 @@ func (f *Feature) ended(url string) {
 // that starts later than that, with nothing asked for since, is something else.
 const liveClaim = 20 * time.Second
 
+// stationClaim is liveClaim for a station Home Assistant names as started (stationStarted): shorter,
+// since the name is the whole house's, and a station started for another room names itself too.
+const stationClaim = 5 * time.Second
+
 // askStation is a station being asked for: what the next stream to start is (liveURL). Under f.mu.
 func (f *Feature) askStation(station string) {
 	f.asked, f.askedAt = station, time.Now()
-	f.claiming, f.claimAt = true, f.askedAt
+	f.claim(station, liveClaim)
+}
+
+// claim takes the next stream to start within claimFor for station (liveURL). Under f.mu.
+func (f *Feature) claim(station string, claimFor time.Duration) {
+	f.claiming, f.claimName, f.claimAt, f.claimFor = true, station, time.Now(), claimFor
 }
 
 // unask is a station asked for that will not start after all (it is not on the list, or Home
@@ -120,7 +157,7 @@ func (f *Feature) stationStarted(u hastate.Update) {
 	if time.Since(f.claimedAt) < liveClaim {
 		return
 	}
-	f.claiming, f.claimAt = true, time.Now()
+	f.claim(u.Value, stationClaim)
 }
 
 // liveURL says whether url, as its track starts, is a live station (media.SetLive): the first stream
@@ -130,8 +167,11 @@ func (f *Feature) stationStarted(u hastate.Update) {
 func (f *Feature) liveURL(url string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.claiming && time.Since(f.claimAt) < liveClaim {
+	if f.claiming && time.Since(f.claimAt) < f.claimFor {
 		f.claiming, f.stationURL, f.claimedAt = false, url, time.Now()
+		// The station this is: one started from Home Assistant becomes the one put back on when its
+		// stream ends (ended), rather than whatever was asked for here before it.
+		f.asked, f.askedAt = f.claimName, f.claimedAt
 		return true
 	}
 	f.claiming = false

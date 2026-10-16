@@ -57,6 +57,7 @@ func (f *Feature) PlayStream(name, url string) bool {
 	f.mu.Lock()
 	f.chosen, f.listed, f.listedAt = name, "", time.Time{}
 	f.askStation(name)
+	f.playingOwn(name, url)
 	f.mu.Unlock()
 	slog.Info("home: playing a station from the setup page", "station", name)
 	media.Get().PlayURL(url)
@@ -75,6 +76,7 @@ func (f *Feature) PlayStreamChecked(name, url string, within time.Duration) erro
 	f.mu.Lock()
 	f.chosen, f.listed, f.listedAt = name, "", time.Time{}
 	f.askStation(name)
+	f.playingOwn(name, url)
 	f.mu.Unlock()
 	slog.Info("home: playing a station, checked", "station", name)
 	f.Changed.Emit(struct{}{})

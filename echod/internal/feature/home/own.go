@@ -80,6 +80,7 @@ func (f *Feature) playOwn(name string) bool {
 		}
 		f.mu.Lock()
 		f.chosen, f.listed, f.listedAt = name, "", time.Time{}
+		f.playingOwn(name, s.URL)
 		f.mu.Unlock()
 		slog.Info("home: playing a station kept on the device", "station", name)
 		media.Get().PlayURL(s.URL)

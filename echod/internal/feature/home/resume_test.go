@@ -191,3 +191,102 @@ func TestAStationStartedFromHomeAssistantIsLive(t *testing.T) {
 		t.Error("a station's name arriving after its stream armed a claim for the next one")
 	}
 }
+
+// A Stop in the seconds before a put-back cancels it, as does another station asked for meanwhile.
+func TestAStopCancelsAPutBack(t *testing.T) {
+	f := &Feature{}
+	f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now(), "http://p/1"
+	if !f.stillWanted("KXYZ", "http://p/1") {
+		t.Fatal("a station that dropped with nothing else going on is not to be put back")
+	}
+	f.mu.Lock()
+	f.forgetStation()
+	f.mu.Unlock()
+	if f.stillWanted("KXYZ", "http://p/1") {
+		t.Error("a station stopped before its put-back is still put back")
+	}
+	f.mu.Lock()
+	f.asked, f.stationURL = "KABC", "http://p/1"
+	f.mu.Unlock()
+	if f.stillWanted("KXYZ", "http://p/1") {
+		t.Error("a station replaced by another asked for is still put back")
+	}
+}
+
+// A station started from Home Assistant is the one put back on when its stream ends, not one asked for
+// on the device before it.
+func TestAStationStartedFromHomeAssistantIsTheOnePutBack(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Radio(config.Radio{Now: "input_text.last_station"}); err != nil {
+		t.Fatal(err)
+	}
+	f := &Feature{}
+	f.mu.Lock()
+	f.askStation("KABC")
+	f.askedAt = time.Now().Add(-time.Hour)
+	f.claiming = false
+	f.mu.Unlock()
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: "input_text.last_station"}, Value: "KXYZ"})
+	if !f.liveURL("http://p/2") {
+		t.Fatal("the stream of a station started from Home Assistant was not taken for it")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.asked != "KXYZ" {
+		t.Errorf("the station to put back is %q, want the one Home Assistant started", f.asked)
+	}
+}
+
+// The claim made for a name in the house-wide "last station" text holds only seconds; one asked for on
+// the device holds longer.
+func TestTheClaimForAStationStartedFromHomeAssistantIsShort(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Radio(config.Radio{Now: "input_text.last_station"}); err != nil {
+		t.Fatal(err)
+	}
+	started := func(f *Feature, ago time.Duration) {
+		f.stationStarted(hastate.Update{Key: hastate.Key{Entity: "input_text.last_station"}, Value: "KXYZ"})
+		f.mu.Lock()
+		f.claimAt = time.Now().Add(-ago)
+		f.mu.Unlock()
+	}
+	f := &Feature{}
+	started(f, stationClaim-time.Second)
+	if !f.liveURL("http://p/1") {
+		t.Error("a stream just after Home Assistant named a station was not taken for it")
+	}
+	f = &Feature{}
+	started(f, stationClaim+time.Second)
+	if f.liveURL("http://p/1") {
+		t.Error("a stream long after Home Assistant named a station was taken for it")
+	}
+	f = &Feature{}
+	f.mu.Lock()
+	f.askStation("KABC")
+	f.claimAt = time.Now().Add(-stationClaim - time.Second)
+	f.mu.Unlock()
+	if !f.liveURL("http://p/2") {
+		t.Error("a station asked for on the device lost its claim as soon as one named by Home Assistant")
+	}
+}
+
+// A station the device plays itself (its own, one from the setup page, one the voice assistant found)
+// is put back on when its stream ends by itself, as one Home Assistant sends is.
+func TestAStationTheDevicePlaysItselfIsPutBack(t *testing.T) {
+	f := &Feature{}
+	f.mu.Lock()
+	f.askStation("KXYZ")
+	f.playingOwn("KXYZ", "http://p/own")
+	f.mu.Unlock()
+	if !f.liveURL("http://p/own") {
+		t.Fatal("the device's own station was not taken for live radio")
+	}
+	f.ended("http://p/own")
+	f.mu.Lock()
+	tried := f.resumed
+	f.forgetStation() // the put-back itself would play; it is the decision that is tested
+	f.mu.Unlock()
+	if tried != 1 {
+		t.Errorf("a station the device played itself was put back %d times, want once", tried)
+	}
+}
