@@ -2,11 +2,13 @@ package activity
 
 import (
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
 // caught collects the events a turn fires under name, so a test can read what Home Assistant would
@@ -121,9 +123,6 @@ func TestAWholeTurnReportsEveryPhase(t *testing.T) {
 	if _, ok := data["error"]; ok {
 		t.Errorf("an answered turn carries an error: %q", data["error"])
 	}
-	if _, ok := data["device"]; !ok {
-		t.Error("no device field")
-	}
 }
 
 // A transcript or a reply is kept short enough for the recorder, and a mark says it was cut.
@@ -233,6 +232,121 @@ func TestTheEchoLocalEventGoesOutAsBefore(t *testing.T) {
 			if _, ok := data[key]; ok {
 				t.Errorf("%s: the new event carries the old field %s", tc.how, key)
 			}
+		}
+	}
+}
+
+// ownSender gives the test a sender of its own with this send and room for n events, and puts the
+// device's back after.
+func ownSender(t *testing.T, n int, send func(component.Event)) *sender {
+	t.Helper()
+	s := &sender{outbox: make(chan component.Event, n), send: send}
+	was := events
+	events = s
+	t.Cleanup(func() { events = was })
+	return s
+}
+
+// Ending a turn never waits on Home Assistant. With the sender stuck on a dead connection, Ends still
+// returns at once, the queue fills to its room, and what comes after that is dropped: the newest, so
+// what is already waiting goes out in order once the connection is back.
+func TestEndsNeverWaitsForASenderThatIsStuck(t *testing.T) {
+	started, release := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	var sent []string
+	s := ownSender(t, 2, func(e component.Event) {
+		mu.Lock()
+		first := len(sent) == 0
+		sent = append(sent, e.Name+" "+e.Data["id"])
+		mu.Unlock()
+		if first {
+			close(started)
+			<-release // the write to a connection that has died
+		}
+	})
+
+	one := Get().Begin(1, "hey jarvis", WakeWord)
+	begun := time.Now()
+	one.Ends(Answered)
+	<-started // the first event is being sent, and stuck; the second waits in the queue
+	two := Get().Begin(1, "hey jarvis", WakeWord)
+	two.Ends(Answered) // its first event fills the queue, its second is dropped
+	if took := time.Since(begun); took > time.Second {
+		t.Errorf("ending two turns took %v with the sender stuck", took)
+	}
+	if n := len(s.outbox); n != cap(s.outbox) {
+		t.Errorf("%d events wait, want the queue full at %d", n, cap(s.outbox))
+	}
+
+	close(release)
+	deadline := time.After(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(sent)
+		mu.Unlock()
+		if n == 3 {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("%d events went out, want 3", n)
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	want := []string{TurnEvent + " " + one.ID(), LegacyTurnEvent + " " + one.ID(), TurnEvent + " " + two.ID()}
+	if strings.Join(sent, ",") != strings.Join(want, ",") {
+		t.Errorf("sent %v, want %v", sent, want)
+	}
+}
+
+// One event that panics on its way out is that event lost, not the sender: the turns after it are
+// still reported.
+func TestTheSenderOutlivesAPanic(t *testing.T) {
+	got := make(chan component.Event, 4)
+	panicked := false
+	ownSender(t, 4, func(e component.Event) {
+		if !panicked {
+			panicked = true
+			panic("the connection went away mid-write")
+		}
+		got <- e
+	})
+
+	Get().Begin(1, "hey jarvis", WakeWord).Ends(Answered)
+	select {
+	case e := <-got:
+		if e.Name != LegacyTurnEvent {
+			t.Errorf("sent %s after the panic, want the turn's other event", e.Name)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("nothing went out after the panic")
+	}
+	Get().Begin(1, "hey jarvis", WakeWord).Ends(Answered)
+	select {
+	case <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the next turn was not reported")
+	}
+}
+
+// The device field says which device a turn was on, and is left out when the device has no name.
+func TestTheDeviceFieldIsLeftOutWithoutAName(t *testing.T) {
+	was := config.Get().Device
+	t.Cleanup(func() { config.Started(was) })
+
+	for _, name := range []string{"", "Office"} {
+		got := caught(t)
+		config.Started(config.Device{Name: name})
+		Get().Begin(1, "hey jarvis", WakeWord).Ends(Answered)
+		device, ok := one(t, got)["device"]
+		if name == "" && ok {
+			t.Errorf("an unnamed device sent device %q", device)
+		}
+		if name != "" && device != name {
+			t.Errorf("device is %q, want %q", device, name)
 		}
 	}
 }
