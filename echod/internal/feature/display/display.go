@@ -25,6 +25,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -143,6 +144,10 @@ type Display struct {
 	lightMu sync.Mutex
 	// sunriseLit is the light before an alarm having been on at the last settle tick (autobright.go).
 	sunriseLit bool
+	// lightOff is the screen turned off by somebody while the wake light was held at full after an
+	// alarm (#161): the panel stays off for that light, and its page and level stay away if the panel
+	// is lit again some other way (wakeLight). The light ring, if any, is the alarm's and stays.
+	lightOff atomic.Bool
 
 	view   voice.State
 	viewAt time.Time
@@ -535,6 +540,9 @@ func (d *Display) apply(on bool, pct int, save bool) {
 		d.nightDark = false
 	}
 	d.mu.Unlock()
+	if save && !on {
+		d.turnedOff(time.Now())
+	}
 	d.relight(true)
 
 	d.light.Set(esphome.LightState{On: on, Brightness: float32(pct) / 100, ColorMode: esphome.ColorModeBrightness})
@@ -588,7 +596,7 @@ func (d *Display) relight(jump bool) {
 	}
 	// The light before an alarm takes the backlight over while it runs: it starts under anything the
 	// room would otherwise ask for and ends at the screen's own brightness.
-	if p := sunriseProgress(time.Now()); p > 0 && d.on {
+	if p := d.wakeLight(time.Now()); p > 0 && d.on {
 		target = float64(d.ceiling) * screen.BacklightMax / 100 * sunriseLevel(p)
 	}
 	if jump || d.level == 0 {
@@ -1517,6 +1525,32 @@ func (d *Display) ceilingOrDefault() int {
 // night puts the screen out inside the night window once nothing has happened for a while, and
 // brings it back when the window ends. It reports true when it changed the screen, so the frame
 // is redrawn from the new state.
+// wakeLight is the light before an alarm as this screen shows it: sunriseProgress, or nothing once
+// somebody turned the screen off while the light was held after an alarm (lightOff). Turned off is
+// what they wanted, and the light coming back on the panel by itself undid it a moment later.
+func (d *Display) wakeLight(now time.Time) float64 {
+	if d.lightOff.Load() {
+		return 0
+	}
+	return sunriseProgress(now)
+}
+
+// turnedOff is the screen turned off by somebody (apply, saved). While the wake light is held at full
+// after an alarm it stays off for that light (#161).
+func (d *Display) turnedOff(now time.Time) {
+	if _, _, ok := sunriseHold(now); ok && !d.lightOff.Swap(true) {
+		slog.Info("screen: turned off under the held wake light; it stays off for this light")
+	}
+}
+
+// lightOffOver lets the screen show the wake light again once the light it was turned off under is
+// over: gone altogether, or an alarm ringing, after which any light held is a new one.
+func (d *Display) lightOffOver(now time.Time, alarmRinging bool) {
+	if d.lightOff.Load() && (alarmRinging || sunriseProgress(now) == 0) {
+		d.lightOff.Store(false)
+	}
+}
+
 func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	in := nightNow(now)
 	d.showNightMode(in)
@@ -1547,7 +1581,7 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// and whoever is asking is standing at the device.
 		// A talk through a camera is a conversation at the door: the screen it needs stays lit.
 		// And a video: somebody asked for it to be watched.
-		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
+		lift := phone.Get().Busy() || talkback.Get().Busy() || d.wakeLight(now) > 0 || wifiUp || setup.Get().Waiting()
 		// A video playing keeps the screen as it is: lit at the night light's level if it came on at
 		// night (frame), not put out under it.
 		// A page Home Assistant asked for keeps it while it is up (askedAtNight).
@@ -1978,9 +2012,11 @@ func (d *Display) frame() time.Duration {
 			on = true
 		}
 	}
-	if !on && sunriseProgress(now) > 0 {
+	d.lightOffOver(now, ring.alarm != nil)
+	if !on && d.wakeLight(now) > 0 {
 		// The light before an alarm: the panel comes on dim and rises, so the room is lit before the
-		// sound starts. relight decides how much of the screen's brightness it is using.
+		// sound starts. relight decides how much of the screen's brightness it is using. Not once
+		// somebody turned the screen off while it was held after an alarm (lightOff).
 		d.apply(true, d.ceilingOrDefault(), false)
 		on = true
 	}
@@ -1999,7 +2035,7 @@ func (d *Display) frame() time.Duration {
 	sheetUp, wifiUp := d.sheet, d.wifiOpen
 	d.mu.Unlock()
 	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen() ||
-		sunriseProgress(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp || video.Get().State().Active()
+		d.wakeLight(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp || video.Get().State().Active()
 	if d.awayTick(now, on, busy, night) {
 		d.mu.Lock()
 		on = d.on
@@ -2186,7 +2222,7 @@ func (d *Display) frame() time.Duration {
 	s.nowPlaying = wants && !d.putAway(s.radio, wants, s.playing)
 	d.mu.Lock()
 	// Not under the sunrise light, which draws no strip: taps on a strip nobody can see would still act.
-	if wants && d.stripDue(now, s.radio, s.nowPlaying) && sunriseProgress(now) == 0 {
+	if wants && d.stripDue(now, s.radio, s.nowPlaying) && d.wakeLight(now) == 0 {
 		s.nowPlaying, s.strip = false, true
 	}
 	s.faved = d.favedKey != "" && d.favedKey == s.radio.Title+"\x00"+s.radio.Now
@@ -2252,7 +2288,7 @@ func (d *Display) frame() time.Duration {
 	s.missed = missedNote(now, false)
 
 	if boring {
-		s.sunrise, s.sunriseFace = sunriseProgress(now), config.Get().Alarms.SunriseFace
+		s.sunrise, s.sunriseFace = d.wakeLight(now), config.Get().Alarms.SunriseFace
 		// The weather art only where it will be seen: not under the night clock or the light before an
 		// alarm, which take the whole screen, where composing it each second is work for nothing.
 		artSeen := !s.redClock && s.sunrise == 0

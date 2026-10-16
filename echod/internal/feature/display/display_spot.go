@@ -432,6 +432,9 @@ func (d *Display) command(s esphome.LightState) {
 	d.apply(s.On, pct, true)
 }
 
+// wakeLight is the light before an alarm as this face shows it: all of it, here.
+func (d *Display) wakeLight(now time.Time) float64 { return sunriseProgress(now) }
+
 func (d *Display) apply(on bool, pct int, save bool) {
 	presence.Hush() // the screen's own light is about to change; the camera is not to take it for somebody
 	pct = min(max(pct, 0), 100)
