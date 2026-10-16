@@ -104,9 +104,11 @@ if ($AthenaRootfs) {
         if (-not $kernelSum) { throw "$AthenaRootfs carries no kernel: build it with KERNEL_IMAGE=$AthenaBoot (deploy-rootfs.sh), or updates never bring units this kernel" }
         $want = (Get-FileHash -Algorithm SHA256 $AthenaBoot).Hash.ToLower()
         $got = (("$kernelSum".Trim()) -split '\s+')[0].ToLower()
-        if ($got -ne $want) { throw "$AthenaRootfs carries kernel $got, but -AthenaBoot is $want: build the rootfs with KERNEL_IMAGE=$AthenaBoot" }
+        if ($got -ne $want) { throw "$AthenaRootfs carries kernel $got, but -AthenaBoot is ${want}: build the rootfs with KERNEL_IMAGE=$AthenaBoot" }
     } elseif ($kernelSum) {
-        Write-Warning "$AthenaRootfs carries a kernel but this release publishes no -AthenaBoot: units will move to the rootfs's kernel, new installs start on an older one"
+        # Units would move to a kernel this release neither publishes nor gives the source of, and new
+        # installs would start on an older one.
+        throw "$AthenaRootfs carries a kernel but this release publishes no -AthenaBoot: give the boot image it was built with (and -AthenaKernelSource)"
     } else {
         Write-Warning "$AthenaRootfs carries no kernel: updates leave each unit's kernel as it is"
     }
