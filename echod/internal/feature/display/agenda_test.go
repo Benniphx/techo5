@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -147,28 +148,38 @@ func TestDashboardNextTap(t *testing.T) {
 	}
 }
 
-// The Dashboard's next events say when: the time today, "Tmrw" and the time tomorrow, and the weekday
-// after that, the time beside it when there is one.
+// The Dashboard's next events say when: the day, "Today" or from tomorrow on the short weekday (never
+// "Tomorrow"), and apart the time, none for an all-day event; one under way is "Now". In the screen's
+// language: Spanish says "Hoy", "Ahora" and "Mié".
 func TestDashWhen(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	t.Cleanup(func() { _ = config.Set().Screen().Language("") })
 	now := time.Date(2026, 10, 6, 10, 0, 0, 0, time.Local) // a Tuesday
 	at := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.Local) }
 	day := func(d int) hass.Event { return hass.Event{Start: at(d, 0), End: at(d+1, 0), AllDay: true} }
 	timed := func(d, h int) hass.Event { return hass.Event{Start: at(d, h), End: at(d, h+1)} }
+	hhm := func(t time.Time) string { return strings.TrimSpace(clockText(t)) }
 	for _, c := range []struct {
-		e    hass.Event
-		want string
+		lang      string
+		e         hass.Event
+		day, time string
 	}{
-		{timed(6, 9), "Now"},
-		{timed(6, 15), clockText(at(6, 15))},
-		{day(6), "Today"},
-		{timed(7, 9), "Tmrw " + clockText(at(7, 9))},
-		{day(7), "Tomorrow"},
-		{timed(8, 15), "Thu " + clockText(at(8, 15))},
-		{day(10), "Sat"},
+		{"", timed(6, 9), "Now", ""},
+		{"", timed(6, 15), "Today", hhm(at(6, 15))},
+		{"", day(6), "Today", ""},
+		{"", timed(7, 9), "Wed", hhm(at(7, 9))},
+		{"", day(7), "Wed", ""},
+		{"", timed(8, 15), "Thu", hhm(at(8, 15))},
+		{"", day(10), "Sat", ""},
+		{"es", timed(6, 9), "Ahora", ""},
+		{"es", timed(6, 15), "Hoy", hhm(at(6, 15))},
+		{"es", day(7), "Mié", ""},
 	} {
-		if got := dashWhen(c.e, now); got != c.want {
-			t.Errorf("%v: %q, want %q", c.e.Start, got, c.want)
+		if err := config.Set().Screen().Language(c.lang); err != nil {
+			t.Fatal(err)
+		}
+		if d, h := dashWhen(c.e, now); d != c.day || h != c.time {
+			t.Errorf("%q %v: %q %q, want %q %q", c.lang, c.e.Start, d, h, c.day, c.time)
 		}
 	}
 }
