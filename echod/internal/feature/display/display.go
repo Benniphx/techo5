@@ -39,6 +39,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/deck"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/doorbell"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/firmware"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
@@ -134,12 +135,23 @@ type Display struct {
 	weatherFx *esphome.Switch
 	lang      *esphome.Select
 
-	mu      sync.Mutex
-	on      bool
-	ceiling int // percent Home Assistant asked for
-	autoOn  bool
-	level   float64 // backlight actually applied, 0..BacklightMax, as a running average
-	settled bool    // level has reached the target; settle steps it there between readings
+	mu sync.Mutex
+	// Update dialog state, protected by mu.
+	updateActive     bool
+	updateProgress   float32
+	updatePhase      string
+	updateTarget     string
+	updateMessage    string
+	updateErrorUntil time.Time
+	// updateDismissed is a tap having put the dialog away while the install carries on; updateSeen
+	// is when the installer last reported anything, so a stuck one can time the dialog out.
+	updateDismissed bool
+	updateSeen      time.Time
+	on              bool
+	ceiling         int // percent Home Assistant asked for
+	autoOn          bool
+	level           float64 // backlight actually applied, 0..BacklightMax, as a running average
+	settled         bool    // level has reached the target; settle steps it there between readings
 	// lightMu makes each relight one step, from working out the level to writing it.
 	lightMu sync.Mutex
 	// sunriseLit is the light before an alarm having been on at the last settle tick (autobright.go).
@@ -349,6 +361,9 @@ type Display struct {
 	// that of the canvas over them, and vp the frames themselves (video_shared.go).
 	videoUntil    time.Time
 	videoOnScreen bool
+	// videoLive is the video page painting its own frames over the canvas (video.go), so the update
+	// dialog drawn on the canvas underneath it is not on the screen: updateShown asks this.
+	videoLive     bool
 	videoTried    uint64
 	videoPainting bool
 	videoOver     image.Rectangle
@@ -829,13 +844,31 @@ func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
 // gesture is a finger on the panel. A dark screen only lights up; otherwise a tap is the action
 // button and a vertical swipe the volume.
 func (d *Display) gesture(g touch.Gesture) {
+	now := time.Now()
+	// A ring or a call is never behind the update dialog: it is not drawn over them, and a tap has to
+	// be able to stop the ring or work the call. So they are looked for before the dialog takes a tap.
+	ringingOrCall := d.ringing(now).any() || phone.Get().State().Phase != phone.Idle
 	d.mu.Lock()
+	updateVisible := d.updateShown(now)
 	on := d.on
+	d.touchedAt = now
+	if updateVisible && on && !ringingOrCall {
+		// The dialog is not modal: a tap puts it away and the install carries on. A swipe or a hold
+		// does nothing rather than reaching the page behind it. A screen that is off still falls
+		// through to light up: there is no dialog drawn on it to dismiss.
+		dismiss := g.Kind == touch.Tap
+		if dismiss {
+			d.updateDismissed = true
+		}
+		d.mu.Unlock()
+		slog.Info("touch", "gesture", g.String(), "update dismissed", dismiss)
+		if dismiss {
+			d.wake()
+		}
+		return
+	}
 	d.mu.Unlock()
 	slog.Info("touch", "gesture", g.String())
-	d.mu.Lock()
-	d.touchedAt = time.Now()
-	d.mu.Unlock()
 	// A notification that came up at night waits for a touch (releaseNotice), but not for one that
 	// stops a ring: that one is for the alarm. The touch that releases it only releases: whoever
 	// touched the screen has not seen the card yet, so it is not a tap on anything.
@@ -1619,6 +1652,7 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	d.showNightMode(in)
 	d.mu.Lock()
 	dark, touched, viewAt, wifiUp, asked := d.nightDark, d.touchedAt, d.viewAt, d.wifiOpen, d.askedUp(now)
+	updateVisible := d.updateShown(now)
 	d.mu.Unlock()
 	if !in {
 		d.mu.Lock()
@@ -1648,7 +1682,8 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		// A video playing keeps the screen as it is: lit at the night light's level if it came on at
 		// night (frame), not put out under it.
 		// A page Home Assistant asked for keeps it while it is up (askedAtNight).
-		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle ||
+		active := updateVisible || view.Phase != "idle" ||
+			now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle ||
 			video.Get().State().Active() || asked
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
@@ -1968,6 +2003,90 @@ func (d *Display) OpenSheet(name string) bool {
 	return true
 }
 
+// updateStale is how long the update dialog waits with no word from the installer before it drops
+// itself: if Install dies after the dialog goes up, its "done" never comes, and this is what keeps a
+// dialog that can never finish from staying until echod restarts.
+const updateStale = 3 * time.Minute
+
+// clearUpdateLocked forgets the update dialog entirely, for a message that has been up long enough
+// or an install that has gone quiet. Caller holds d.mu.
+func (d *Display) clearUpdateLocked() {
+	d.updateActive = false
+	d.updateProgress = 0
+	d.updatePhase = ""
+	d.updateTarget = ""
+	d.updateMessage = ""
+	d.updateErrorUntil = time.Time{}
+	d.updateDismissed = false
+}
+
+// updateShown reports whether the update dialog is on the screen: an install running, or a failure
+// still inside its window, unless a tap has put it away. Caller holds d.mu.
+func (d *Display) updateShown(now time.Time) bool {
+	if d.updateDismissed {
+		return false
+	}
+	// What the panel blends over the canvas is not the canvas: a live video's frames are painted over
+	// it, so the dialog drawn there is not on the screen. Counting it as up would take the first tap
+	// on the picture for a dialog nobody can see, and leave the picture's own swipes dead for the
+	// whole install. It comes back once the video is gone.
+	if d.videoLive {
+		return false
+	}
+	return d.updateActive || (d.updateMessage != "" && now.Before(d.updateErrorUntil))
+}
+
+// expireUpdateLocked forgets the update dialog when a failure's message has been up long enough, or
+// when the installer has gone quiet for updateStale: if Install dies after the dialog goes up, its
+// "done" never comes, and this is what keeps a dialog that can never finish from staying until echod
+// restarts. Caller holds d.mu.
+func (d *Display) expireUpdateLocked(now time.Time) {
+	if !d.updateErrorUntil.IsZero() && !now.Before(d.updateErrorUntil) {
+		d.clearUpdateLocked()
+	}
+	if d.updateActive && !d.updateSeen.IsZero() && now.Sub(d.updateSeen) > updateStale {
+		slog.Warn("screen: update dialog dropped, no word from the installer",
+			"since", now.Sub(d.updateSeen).Round(time.Second))
+		d.clearUpdateLocked()
+	}
+}
+
+// updateChanged receives firmware progress and wakes the renderer when it changes.
+func (d *Display) updateChanged(active bool, progress float32, phase, target, message string) {
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+
+	now := time.Now()
+	d.mu.Lock()
+	// A new install shows itself again even if the last dialog was tapped away, and so does an error,
+	// which is the very thing the dialog was there to say.
+	if (!d.updateActive && active) || (!active && message != "") {
+		d.updateDismissed = false
+	}
+	d.updateActive = active
+	d.updateProgress = progress
+	d.updatePhase = phase
+	d.updateTarget = target
+	d.updateMessage = message
+	d.updateSeen = now
+
+	d.updateErrorUntil = time.Time{}
+	if !active && message != "" {
+		// Show the failure long enough to read without trapping the user on the dialog.
+		d.updateErrorUntil = now.Add(12 * time.Second)
+	}
+	d.mu.Unlock()
+
+	// The panel is left as it is. An install that starts while the screen is off — the night's, or
+	// one Home Assistant turned off — must not light it, least of all at full brightness in a bedroom
+	// at 4am; it shows when the screen is next on. The dialog itself is drawn by the frame loop.
+	d.wake()
+}
+
 func (d *Display) wake() {
 	select {
 	case d.poke <- struct{}{}:
@@ -1983,6 +2102,7 @@ func (d *Display) Start(context.Context) error {
 	}
 	d.dev = dev
 	d.r = newRenderer(dev.Canvas())
+	firmware.Get().SetProgressListener(d.updateChanged)
 	w, h := dev.Size()
 	d.mu.Lock()
 	d.wide = w > 1000 || h > 1000
@@ -2039,6 +2159,11 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 
 	now := time.Now()
+
+	d.mu.Lock()
+	d.expireUpdateLocked(now)
+	d.mu.Unlock()
+
 	d.popupTick(now)
 	ring := d.ringing(now)
 	call := phone.Get().State()
@@ -2096,8 +2221,9 @@ func (d *Display) frame() time.Duration {
 	}
 	d.mu.Lock()
 	sheetUp, wifiUp := d.sheet, d.wifiOpen
+	updateVisible := d.updateShown(now)
 	d.mu.Unlock()
-	busy := view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen() ||
+	busy := updateVisible || view.Phase != "idle" || call.Phase != phone.Idle || ring.any() || reminding || sheetUp || pinIsOpen() ||
 		d.wakeLight(now) > 0 || d.popupUp() != nil || setup.Get().Waiting() || wifiUp || video.Get().State().Active()
 	if d.awayTick(now, on, busy, night) {
 		d.mu.Lock()
@@ -2105,11 +2231,27 @@ func (d *Display) frame() time.Duration {
 		d.mu.Unlock()
 	}
 	if !config.Get().Screen.Welcomed {
-		d.r.welcome(scene{now: now})
+		// The welcome card ignores a stale deck and draws its own frame; the update dialog still goes
+		// over it, or the screen would look normal while every tap was taken by an invisible dialog.
+		sc := scene{now: now}
+		d.r.welcome(sc)
+		d.mu.Lock()
+		sc.updateActive = d.updateShown(now)
+		sc.updateProgress = d.updateProgress
+		sc.updatePhase = d.updatePhase
+		sc.updateTarget = d.updateTarget
+		sc.updateMessage = d.updateMessage
+		d.mu.Unlock()
+		if sc.updateActive {
+			d.r.updateOverlay(sc)
+		}
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
 		d.answerShots()
+		if sc.updateActive {
+			return 250 * time.Millisecond
+		}
 		return time.Second
 	}
 	if !on && !video.Get().State().Active() {
@@ -2204,6 +2346,11 @@ func (d *Display) frame() time.Duration {
 	s.bt = btaudio.Get().State()
 	d.mu.Lock()
 	s.showSheet = d.sheet
+	s.updateActive = updateVisible
+	s.updateProgress = d.updateProgress
+	s.updatePhase = d.updatePhase
+	s.updateTarget = d.updateTarget
+	s.updateMessage = d.updateMessage
 	s.pin = pinNow(now)
 	// The network address page is one of the settings, opened from them and going back to them: the
 	// lock stays open behind it.
@@ -2416,7 +2563,9 @@ func (d *Display) frame() time.Duration {
 		slog.Warn("presenting the frame failed", "err", err)
 	}
 	d.answerShots()
-
+	if s.updateActive {
+		return 250 * time.Millisecond
+	}
 	if d.r.flipBusy(time.Now()) {
 		return flipFrame // a card is flipping: the night's flip clock, or the Flip clock style
 	}
