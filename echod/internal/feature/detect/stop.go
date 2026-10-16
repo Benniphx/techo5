@@ -163,24 +163,30 @@ func newKeepClipsEntity(d *Detect) *esphome.Switch {
 		},
 	}
 	sw.OnCommand = func(on bool) {
+		d.clipsSave.Lock()
+		defer d.clipsSave.Unlock()
+		// Turned off, the recorder stops first: nothing is kept while a save that is slow to fail runs.
+		if !on && d.clips != nil {
+			d.clips.enable(false)
+		}
 		if err := saveKeepClips(on); err != nil {
 			slog.Error("saving keep wake clips failed", "err", err)
 			if on {
 				return
 			}
-			// Turned off, the clips go all the same, and the off holds past a restart: it is recorded
-			// on its own and the save tried again until it holds (clipsoff.go).
+			// The clips went all the same, and the off holds past a restart: it is recorded on its own
+			// and the save tried again until it holds (clipsoff.go).
 			if err := markClipsOff(); err != nil {
 				slog.Error("recording keep wake clips off failed too", "err", err)
 			}
-			defer d.saveClipsOff()
+			d.retryClipsOffLater()
 		} else {
 			clearClipsOff()
 		}
 		sw.Set(on)
 		slog.Info("setting changed", "setting", sw.ObjectID, "using", on)
-		if d.clips != nil {
-			d.clips.enable(on)
+		if on && d.clips != nil {
+			d.clips.enable(true)
 		}
 	}
 	return sw
