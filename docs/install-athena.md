@@ -221,8 +221,8 @@ does, with the unit's own speaker tuning taken from `boot`, and reboots into it.
 take two reboots. The second one comes about five minutes after the first, once the unit isn't
 busy: it waits while an alarm or timer is ringing, while it's hearing or answering a voice request,
 during a call, while music or an announcement is playing, while the wake light is on, and when an
-alarm is due within 30 minutes. After two hours of waiting it only waits for a ring to stop, so a
-unit that is never idle still gets its kernel.
+alarm is due within 30 minutes. After two hours of waiting it only waits for a ring to stop, or for
+an alarm or timer due within the minute, so a unit that is never idle still gets its kernel.
 
 A new kernel is on trial too. It has three boots to settle: the daemon up for five minutes, with a
 network address and a default route, and the sound card and backlight there. A boot that doesn't
