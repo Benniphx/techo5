@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -86,6 +87,9 @@ type Engine struct {
 	// Assistant's engine can tell apart (see voice's confirm).
 	Candidate   func(slot int) float64
 	OnCandidate func(slot int, peak float64)
+	// OnFrame sees every frame the detector scores, with the engine's lock held: it must only copy
+	// (clips.go).
+	OnFrame func(frame []int16)
 
 	// OnReady runs once per slot, the first time its model produces a score. That is the first moment
 	// the wake word could be detected at all: these are streaming models with a window to fill, and
@@ -119,6 +123,10 @@ type slot struct {
 	holding  bool
 	holdEnds time.Time
 	crossing float64
+	// crossCutoff is the cutoff the crossing was judged against. By the time the hold ends the wake tone
+	// is playing, and a threshold read then carries the canceller's slack (thresholdFor), which is not
+	// what the word had to reach.
+	crossCutoff float64
 
 	// candidate is an utterance over Candidate and under the threshold so far: when it went over, and
 	// the highest it has reached.
@@ -388,6 +396,9 @@ func (e *Engine) score(frame []int16, source *mic.Source) {
 	if e.quiet || e.paused {
 		return
 	}
+	if e.OnFrame != nil {
+		e.OnFrame(frame)
+	}
 
 	// Always feed. These are streaming models: a gap in the input is a gap in their history, and the
 	// next utterance gets scored from a cold state. The refractory below suppresses reporting, not
@@ -452,9 +463,9 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 		}
 
 		slog.Info("wake detected", "slot", n+1, "id", s.model.ID, "peak", s.peak,
-			"crossing", s.crossing, "cutoff", cutoff, "dropped", source.Dropped())
+			"crossing", s.crossing, "cutoff", s.crossCutoff, "dropped", source.Dropped())
 		if e.OnScored != nil {
-			i, peak := n, s.peak
+			i, peak, cutoff := n, s.peak, s.crossCutoff
 			safe.Go("wake scored", func() { e.OnScored(i, peak, cutoff) })
 		}
 		s.holding, s.peak = false, 0
@@ -485,7 +496,7 @@ func (e *Engine) judge(n int, s *slot, score float64, now time.Time, source *mic
 
 	// Feedback fires now; the peak is only for the log, and the slot settles when the hold ends.
 	s.holding, s.holdEnds = true, now.Add(Hold)
-	s.crossing, s.peak = score, score
+	s.crossing, s.peak, s.crossCutoff = score, score, cutoff
 
 	if e.OnDetect != nil {
 		generation := e.generation
@@ -532,6 +543,24 @@ func (e *Engine) candidate(n int, s *slot, score, cutoff float64, now time.Time)
 	slog.Info("wake candidate", "slot", n+1, "id", s.model.ID, "peak", peak, "asked_from", bound, "cutoff", cutoff)
 	if e.OnCandidate != nil {
 		safe.Go("wake candidate", func() { e.OnCandidate(n, peak) })
+	}
+}
+
+// Settle holds every slot's detections back for d from now, but the spared ones, while scoring goes
+// on: for a sound of the device's own about to play into microphones that cannot yet tell it from the
+// room. A hold already running for longer is kept.
+func (e *Engine) Settle(d time.Duration, spared ...int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	until := time.Now().Add(d)
+	for i := range e.slots {
+		if slices.Contains(spared, i) {
+			continue
+		}
+		if e.slots[i].quiet.Before(until) {
+			e.slots[i].quiet = until
+		}
 	}
 }
 

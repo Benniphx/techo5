@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
@@ -22,8 +24,28 @@ import (
 // On a device that has never met a Home Assistant there is nothing to think about at all, and naming
 // one before it is handed to somebody is exactly what this is for.
 
-// nameLimit is what the installer allows too: one line, short enough for the screen.
+// nameLimit is what the installer allows too, in characters rather than bytes: one line, short enough for
+// the screen.
 const nameLimit = 31
+
+// hiddenRune is a character a name must not hold: a control character (Unicode's Cc), which shows as
+// nothing or a box and some programs stop at; one that turns the text's direction (the bidi marks,
+// embeddings, overrides and isolates), which makes what is shown differ from what is stored; or one
+// that takes no room (the zero-width space, joiners, word joiner and byte order mark), which makes two
+// names that look the same different.
+func hiddenRune(r rune) bool {
+	switch {
+	case unicode.Is(unicode.Cc, r):
+		return true
+	case r >= '\u202a' && r <= '\u202e', r >= '\u2066' && r <= '\u2069':
+		return true // embeddings, overrides, isolates
+	case r == '\u200e', r == '\u200f', r == '\u061c':
+		return true // left-to-right, right-to-left and Arabic letter marks
+	case r >= '\u200b' && r <= '\u200d', r == '\u2060', r == '\ufeff':
+		return true // zero-width space, non-joiner, joiner, word joiner, byte order mark
+	}
+	return false
+}
 
 // rename writes the new name and restarts, since the name is announced when the daemon starts.
 // It reports what was wrong, or empty when the device is on its way back up.
@@ -32,10 +54,14 @@ func rename(to string, acknowledged bool) string {
 	switch {
 	case to == "":
 		return "the device needs a name"
-	case len(to) > nameLimit:
+	case !utf8.ValidString(to):
+		return "a name has to be UTF-8 text"
+	case utf8.RuneCountInString(to) > nameLimit:
 		return "a name is at most 31 characters"
 	case strings.ContainsAny(to, "\n\r\t"):
 		return "a name is one line"
+	case strings.IndexFunc(to, hiddenRune) >= 0:
+		return "a name cannot hold control, text-direction or invisible characters"
 	case to == config.Get().Device.Name:
 		return "that is already its name"
 	case !acknowledged:

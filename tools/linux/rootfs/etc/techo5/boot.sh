@@ -91,7 +91,14 @@ log "slot $(cat /run/techo5/slot 2>/dev/null || echo '?'): $(cat /etc/techo5-rel
 # from wherever this unit already has it (the installer puts it there; a unit coming from an image
 # that carried it adopts it from a slot), and appears at /vendor in every slot.
 VMOD=${WIFI_MODULE#/vendor/}
-if [ ! -e "/store/vendor/$VMOD" ]; then
+# A unit whose own vendor partition holds them (VENDOR_DEV, device.conf: athena) mounts it read-only
+# at /vendor as it is, and nothing is copied into the store.
+if [ -n "${VENDOR_DEV:-}" ] && ! mountpoint -q /vendor; then
+	mount -t ext4 -o ro,noatime "$VENDOR_DEV" /vendor && log "vendor tree: $VENDOR_DEV at /vendor" ||
+		log "vendor tree: mounting $VENDOR_DEV failed"
+fi
+[ -n "${FIRMWARE_PATH:-}" ] && printf %s "$FIRMWARE_PATH" > /sys/module/firmware_class/parameters/path 2>/dev/null
+if [ -z "${VENDOR_DEV:-}" ] && [ ! -e "/store/vendor/$VMOD" ]; then
 	src=
 	for d in /vendor /store/slots/a/vendor /store/slots/b/vendor; do
 		[ -e "$d/$VMOD" ] && { src=$d; break; }
@@ -120,8 +127,13 @@ fi
 # --- Screen: the daemon paints it (feature/display); the bootloader's logo stays until then.
 # `fbprobe -hold 1m` is still there for a bare-panel check from the console.
 
-# --- Root shell on USB serial (techo5-console attaches to it).
+# --- Root shell on USB serial (techo5-console attaches to it), and RNDIS where USB_RNDIS is set.
 t5_usb_acm
+t5_usb_net
+# Bring-up SSH (BENCH_SSH_KEYS, device.conf: athena): keys only, from that directory, over USB and Wi-Fi.
+if [ -n "${BENCH_SSH_KEYS:-}" ] && [ -s "$BENCH_SSH_KEYS/authorized_keys" ]; then
+	t5_dropbear $LOGDIR/dropbear -s -D "$BENCH_SSH_KEYS" -P /run/dropbear-bench.pid
+fi
 
 # --- Inbound on Wi-Fi closed except what the device serves, before there is any network
 # (usr/local/sbin/techo5-firewall).
@@ -130,7 +142,15 @@ t5_usb_acm
 # --- Network. Credentials: the file on userdata, first written from Android's saved network.
 t5_wifi_conf $LOGDIR/wpa_supplicant.conf
 export UDHCPC_SCRIPT=/etc/techo5/udhcpc.sh
+# Modules the Wi-Fi driver needs loaded first (WIFI_PRE_MODULES, device.conf: athena's prealloc).
+for m in ${WIFI_PRE_MODULES:-}; do
+	n=$(basename "$m" .ko | tr - _)
+	grep -q "^$n " /proc/modules || insmod "$m" 2>/tmp/insmod.err || log "wifi: insmod $m failed: $(cat /tmp/insmod.err)"
+done
 t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
+# Networks written into the file by hand reach a supplicant that started without any
+# (WIFI_CONF_WATCH, device.conf: athena).
+[ "${WIFI_CONF_WATCH:-}" = 1 ] && t5_wifi_watch $LOGDIR/wpa_supplicant.conf
 
 # SSH is echod's (feature/security): off unless switched on, and only with a key on userdata.
 if [ -n "$IP" ]; then
@@ -214,6 +234,13 @@ t5_bt_up "$BT_MODULE" /var/log
 		t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
 	done
 ) &
+
+# --- Hardware that comes up late (HW_WAIT, device.conf: athena on mainline, whose sound card and
+# backlight probe ~11 s into the boot): the daemon opens them once, at its start, so it waits here.
+for p in ${HW_WAIT:-}; do
+	n=0; while [ $n -lt 30 ] && [ ! -e "$p" ]; do sleep 1; n=$((n+1)); done
+	if [ -e "$p" ]; then log "hardware: $p after ${n}s"; else log "hardware: no $p after 30s"; fi
+done
 
 # --- Slot trial: this slot is committed once the daemon has been running for
 # five minutes without a restart — the same evidence the daemon itself takes

@@ -227,23 +227,31 @@ automation that wants to know too.
   playing, including the song's address (some servers put a login token in it, as with any DLNA
   speaker). With **Video** and **DLNA video** on as well (Show and Spot), it takes videos too
   ([Video](video.md)).
-- **A phone over Bluetooth (new).** On the Show and the Dot, the **Bluetooth phone** switch, in Home
-  Assistant, lets a phone play to the device as to any Bluetooth speaker. For two minutes the device
-  can be found and paired with, with no scan for speakers, and a phone connects from its own
-  Bluetooth settings, a new one or one paired before; on the Dot the ring pulses blue meanwhile. Once
-  the phone's audio is up the window closes, the phone is remembered, and the switch stays on while
-  it is connected: turning it off disconnects the phone. The **Bluetooth audio** sensor names the
-  connected phone, as the phone calls itself (often with its owner's name), and a phone paired in
-  pairing mode shows there and turns the switch on too. A phone that went away may not come back by
-  itself: it can connect from its own Bluetooth settings, and **Bluetooth reconnect phone** calls the
-  remembered phones until one answers. Anyone nearby can pair while the switch is on, as in pairing
-  mode, and a phone that joined stays remembered, so **Bluetooth forget phones** forgets every phone
-  and keeps the speakers and earbuds. On the Dot a phone may not get in while the Dot is connected to
-  a Bluetooth speaker. Tried on a Dot and a Show.
+- **A phone over Bluetooth (new).** On the Show, the Spot and the Dot, the **Bluetooth phone**
+  switch, in Home Assistant, lets a phone play to the device as to any Bluetooth speaker. For two
+  minutes the device can be found and paired with, with no scan for speakers, and a phone connects
+  from its own Bluetooth settings, a new one or one paired before; on the Dot the ring pulses blue
+  meanwhile. Once the phone's audio is up the window closes, the phone is remembered, and the switch
+  stays on while it is connected: turning it off disconnects the phone. The **Bluetooth audio**
+  sensor names the connected phone, as the phone calls itself (often with its owner's name), and a
+  phone paired in pairing mode shows there and turns the switch on too. A phone that went away may
+  not come back by itself: it can connect from its own Bluetooth settings, and **Bluetooth reconnect
+  phone** calls the remembered phones until one answers. Anyone nearby can pair while the switch is
+  on, as in pairing mode, and a phone that joined stays remembered, so **Bluetooth forget phones**
+  forgets every phone and keeps the speakers and earbuds. On the Dot a phone may not get in while
+  the Dot is connected to a Bluetooth speaker. Tried on a Dot, a Show and a Spot.
+  **Turn the Bluetooth proxy off** on a device a phone plays to: the proxy keeps scanning on the same
+  radio, and the phone's sound stutters or drops while it does (#105).
 - **Bluetooth, the rest of it (new).** A phone playing to the device has one volume, the device's: its
   volume slider moves the device's volume, and the device's buttons and Home Assistant move the
-  slider (night volume still caps a raise from the phone). With two phones, the last to start playing
-  has the speaker, and the first takes it back when the second stops, if it is still playing; not
+  slider (night volume still caps a raise from the phone). Pause and play on the device, by voice or
+  from Home Assistant, reach the phone over Bluetooth, and so do next and previous on the screen of
+  a Show or a Spot; a pause or a play on the phone is followed here, so the song picks up where it
+  was paused whichever side plays it again, for half an hour after the pause. A phone still playing
+  when something other than a phone takes the speaker (Music Assistant, AirPlay, Spotify Connect,
+  DLNA, the radio) is paused, and playing it again on the phone takes the speaker back. With two
+  phones, the last to start playing has the speaker, and the first takes it back when the second
+  stops, if it is still playing; not
   after AirPlay, Spotify Connect or Music Assistant played, or after a stop on the device. While
   earbuds or a speaker are connected, a phone's audio goes on to them. A short rising tone says a
   Bluetooth device connected and a falling one that it went, except in quiet hours and during a
@@ -291,9 +299,14 @@ the Spot too, in its settings.
 
 ### Night
 
-- **Night hours**: when the screen dims by itself. **At night** picks dark, a faint glow, or a clock
-  alone. During the night only a call wakes the screen, or a tap when **Tap on the clock** is set to
-  *Dashboard*, which opens the dashboard ([docs/dashboards.md](dashboards.md)).
+- **Night hours**: when the night starts and ends. **At night** picks what the night does: on a Show,
+  dark, a faint glow, or a clock alone; on a Spot, dimmed, a clock alone, or dark. The clock alone is the
+  night clock, the time in dim red on black (**Night clock** picks *Red*, *Red LED* or *Flip*), with
+  **Night light brightness** in Home Assistant setting how bright it is. During the night only a call
+  wakes a Show's screen, or a tap when **Tap on the clock** is set to *Dashboard*, which opens the
+  dashboard ([docs/dashboards.md](dashboards.md)). On a Spot a tap lights the screen, dimmed, and a
+  press and hold lights it and opens the ring menu; the night clock comes back, or the screen goes off
+  again, after a minute and a half. A Spot with no hours set has a night of 10 PM to 7 AM.
 - **Night mode** switch in Home Assistant: start or end the night now, from a bedtime automation for
   example. Set Night hours to **Controlled by Home Assistant** to leave the night to the switch alone.
   See [Turning the night on from an automation](actions.md#turning-the-night-on-from-an-automation).
@@ -308,8 +321,8 @@ the Spot too, in its settings.
 - **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
-  from the bottom), *World* (the time here and in other places), *Agenda* (today's and tomorrow's
-  events beside the time) and *Glow* (soft colors drifting behind the time). Swipe left or right
+  from the bottom), *World* (the time here and in other places), *Agenda* (the coming week's
+  events beside the time, each day under its heading) and *Glow* (soft colors drifting behind the time). Swipe left or right
   across the clock for the next style or the one before; its name shows for a moment, and a swipe
   the other way puts the last style back. The night clock keeps its own look. Also in Home Assistant
   and on the setup page's Screen & Photos tab.
@@ -381,7 +394,8 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   device. The mute button and the lens shutter stop it, and then the screen is left as it is. On a
   Show 8 or 1st gen Show 5 with a boot image older than v1.0.1, a quick tap of the mute button to
   unmute leaves the camera switched off inside Amazon's kernel: **hold the mute button for a second**
-  (it chimes and stays unmuted) and the camera, presence and camera stills come back, or restart.
+  (it chimes and stays unmuted; if it mutes instead, tap it to unmute) and the camera, presence and
+  camera stills come back, or restart.
   The v1.0.1 boot image fixes it ([updating the boot image](install.md#updating-the-boot-image)); with
   it, holding the button mutes like a tap. The 2nd gen Show 5 is not affected.
 - **Gestures** (Show and Spot, experimental, off by default; the **Gestures** switch in Home
@@ -392,6 +406,18 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   times a second, which costs a little more than presence alone.
 
 ## 7. Voice
+
+**Speaker gain** is an optional amplifier boost on Show 5 2nd gen units with a TI TAS5805M.
+It appears beside the speaker controls in Settings → **Sound**, on the setup page under
+**Sound & Voice**, and in Home Assistant's **Playback** configuration. Units with another
+amplifier do not offer it. The setting is saved and restored before audio starts, including
+after reboots and software updates.
+
+The default is **0 dB**, the amplifier's normal gain. Choose 0 to reset it, or raise it in
+1 dB steps up to +6 dB. This boosts all internal-speaker audio, including voice, music and
+alarms; the usual volume and night volume still work. Higher gain can distort or crackle,
+especially at high volume or with raised bass or treble. Start low and reduce the boost if
+that happens; +6 dB is a setting limit, not a guarantee of clean output on every track.
 
 Under Settings → **Sound**, or on the device's Assist satellite in Home Assistant:
 
@@ -404,6 +430,12 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
 - **Wake word on Home Assistant** and **Confirm wake with Home Assistant** (both off by default):
   let Home Assistant's own wake word engine listen as well as the device, or check a wake the device
   wasn't sure of. See [Wake word on Home Assistant](#wake-word-on-home-assistant) below.
+- **Wake**, a button for each wake word, and **Cancel request**, in Home Assistant. Wake starts
+  listening for that assistant, as its wake word would. Cancel request ends a request that is
+  running, listening, thinking or replying, as a tap on the action button does, and with it
+  anything else playing at that moment, like an announcement. With no request running it does
+  nothing. The device's Assist satellite says whether one is running, so a tile can show it and start
+  or stop it.
 - **Quiet hours** and **Do not disturb**.
 
 On the setup page (Sound & Voice) or in Home Assistant, **Night volume** turns the device down to that
@@ -428,6 +460,43 @@ yourself ([training-wake-word.md](training-wake-word.md) covers how, other langu
    only shows up after a restart; reloading the device's ESPHome entry is not enough.
 3. Pick the new wake word in the device's **Wake word** list, on the Assist satellite in Home
    Assistant. The device downloads it from Home Assistant and keeps it.
+
+### Wake word clips
+
+For training a wake word model of your own on what your room really says and hears, the device can
+keep short clips of the wake word itself. Turn on **Keep wake clips** in Home Assistant, on the
+device's microphone (for example "Office microphone"). It is off by default, and set for each device.
+
+While it is on, the device keeps the four seconds of audio up to each of these, sorted by kind:
+
+- **wake**: a wake not taken as a mistake (below) within 30 seconds. Mostly the word said on purpose,
+  but not always: a false wake followed by talk, from a TV that kept going, for example, lands here too.
+- **mistake**: a wake with nothing said after it, so most likely a false wake.
+- **noise**: a wake followed only by what speech-to-text writes for noise ("Thank you."). Mostly false
+  wakes too, but listen first: somebody may have said the word.
+- **nearmiss**: a word that scored at least 0.5 but stayed under the threshold. Somebody not being
+  heard, or a sound like the word; listen to each before using it.
+
+Each clip comes with its score, the threshold it was judged against, the wake word model and the time
+in UTC. The device keeps the newest 100 of each kind (about 51 MB at most) and deletes the oldest as
+new ones come in. Nothing is kept during a call, the intercom or a talk through a camera, for a few
+seconds after one starts or ends, or for a few seconds after the stop word. A clip of less than a second
+of audio (just after a mute, for example) isn't kept either. **Wake clips** and **Wake clips by kind** show how many there are.
+
+**Turning Keep wake clips off deletes every clip on the device.** Copy off the ones you want first:
+while it is off, the actions below answer with an error. If the device can't save the setting (a
+full or failing state folder), the clips are deleted all the same, but the next start finds the switch
+still on and keeps clips again: turn it off once more after the restart.
+
+To get them off the device, call the `wake_clips` action to list them and `wake_clip_audio` to fetch
+each one, the same way kept voice recordings are fetched; see [actions.md](actions.md#list-saved-wake-word-clips).
+With SSH on, they're also in `wake-clips/` in the device's state folder (`/data/misc/techo5`, or
+`/data/misc/echolocal` on a Dot), one folder for each kind. Each `.wav` has a `.json` beside it with the
+same details, and the file name holds the time, the assistant, the score and the threshold:
+`20261012-213301-123-s1-p0.79-c0.90.wav` (UTC, to the millisecond).
+
+The clips are what the microphones heard in your room. They stay on the device until you copy them
+off; keep them on your own machine.
 
 ### Wake word on Home Assistant
 
@@ -498,7 +567,9 @@ The timer and mute files play where **Home Assistant sounds** is on, and an alar
 Home Assistant sound plays `timer_finished.wav` either way. A file has to be 16-bit, at
 48 kHz, mono or stereo, and at most 10 seconds long. It plays at the level it was recorded at, as the
 stock sounds do. Keep the wake sound short: the device listens for the request only once the wake
-sound fades, so a long one cuts off the first words. ffmpeg converts anything else:
+sound fades, so a long one cuts off the first words. The wake word is not acted on while the unmute
+sound plays and for a moment after, so the device does not take its own sound for the word: a long
+`mute_switch_off.wav` keeps it deaf for as long. ffmpeg converts anything else:
 
 ```sh
 ffmpeg -i chime.flac -ac 1 -ar 48000 -c:a pcm_s16le wake_word_triggered.wav
@@ -508,7 +579,11 @@ A new or changed file plays the next time its sound does, with no restart, and d
 stock sound back. A file the device cannot play leaves the stock sound playing, and the log says why.
 
 Alarms and timers work by voice, on the screen, and from Home Assistant. See
-[docs/actions.md](actions.md) for all of them.
+[docs/actions.md](actions.md) for all of them. Snoozed by mistake? Turn the alarm off, and its snooze
+goes with it; turn it back on and it rings at its next time. A one-time alarm is already off once it
+has rung, so delete it instead, or cancel the snoozes: the Snoozed row on the screen, or Cancel snoozes
+on the setup page. An alarm followed from a Home Assistant helper works the same way when its on/off
+switch is turned off.
 
 ## 8. Settings lock
 

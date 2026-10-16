@@ -99,6 +99,8 @@ cp "$ROOT/bin/techo5-ffmpeg-arm" "$STAGE/bin/techo5-ffmpeg"
 echo "== ffmpeg: sha256 $(sha256sum "$ROOT/bin/techo5-ffmpeg-arm" | cut -d' ' -f1)"
 cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
 [ "$BUILD_TAGS" = spot ] && sed -i '/^shairport-sync/d' "$STAGE/tools/packages-rootfs.txt"
+# EXTRA_PACKAGES: Alpine packages a device needs on top of the list (athena: busybox-extras, for udhcpd).
+[ -n "${EXTRA_PACKAGES:-}" ] && printf '%s\n' $EXTRA_PACKAGES >> "$STAGE/tools/packages-rootfs.txt"
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"
 [ -n "$DEVICE_OVERLAY" ] && cp -r "$DEVICE_OVERLAY/." "$STAGE/overlay/"
 cp "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz "$STAGE/inputs/"

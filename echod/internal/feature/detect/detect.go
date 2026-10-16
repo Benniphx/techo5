@@ -19,6 +19,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/led"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wake"
 	"github.com/HuskerMinion/techo5/echod/internal/service"
 )
@@ -39,6 +40,21 @@ type Detect struct {
 
 	// score is the last wake's peak, for setting the threshold by: see newScoreEntity.
 	score *esphome.Sensor
+
+	// clipsTotal and clipsKinds are how many wake clips the device keeps, and keepClips is Keep wake
+	// clips, which turns the recorder on: see clips.go.
+	clipsTotal *esphome.Sensor
+	clipsKinds *esphome.TextSensor
+	keepClips  *esphome.Switch
+	clips      *clips
+	// clipsSave is held while Keep wake clips is saved, or an off that was not saved is tried again, so
+	// a retry's look and its save cannot straddle the switch being turned on (clipsoff.go).
+	// clipsOffRetrying is whether that retry runs, and clipsFails and clipsLogged how often it has
+	// failed in a row and when that was last logged. All under clipsSave.
+	clipsSave        sync.Mutex
+	clipsOffRetrying bool
+	clipsFails       int
+	clipsLogged      time.Time
 
 	// onHA is Home Assistant's wake word engine: see onha.go.
 	onHA onHAEntities
@@ -84,6 +100,24 @@ func thresholdFor(slot int, base func(int) float64, stop float64, canceling bool
 		t = max(t-playingSlack, slackFloor)
 	}
 	return t
+}
+
+// settleTail is how long past the unmute sound detections stay held: the echo of its last notes,
+// and the canceller letting go of them.
+const settleTail = 300 * time.Millisecond
+
+// unmuteSettle is how long detections are held after an unmute: as long as the unmute sound plays,
+// and settleTail after. The sound plays straight into the wake words as they come back cold from
+// the mute, while the canceller is starting and the threshold already has the playing slack taken
+// off, and it was heard as the word (a wake at 0.716 against 0.70, nothing said). Its length is the
+// sound's own: two seconds for Home Assistant's, less for the classic notes, up to ten for a
+// recording of the owner's.
+func unmuteSettle() time.Duration {
+	d := settleTail
+	for _, n := range speaker.MuteSound(false) {
+		d += time.Duration(n.Ms) * time.Millisecond
+	}
+	return d
 }
 
 func newDetect() *Detect {
@@ -168,9 +202,31 @@ func newDetect() *Detect {
 	// the word is landing. One it did not confirm is not shown: it opened nothing.
 	voice.Confirmed.Listen(func(c voice.Confirmation) { d.score.Set(float32(c.Peak)) })
 
+	// After every other hook it chains onto is in place.
+	d.clipsTotal, d.clipsKinds = newClipsEntities()
+	d.keepClips = newKeepClipsEntity(d)
+	d.clips = startClips(e, func(total int, kinds string) {
+		d.clipsTotal.Set(float32(total))
+		d.clipsKinds.Set(kinds)
+	})
+
 	// A cut microphone hands on silence, and running the models over it is work that cannot find
 	// anything. The engines go down with the microphones and come back with them.
-	mute.Get().Changed.Listen(e.Quiet)
+	mute.Get().Changed.Listen(func(muted bool) {
+		e.Quiet(muted)
+		// The stop word is spared while an alarm or timer rings: it has to stop when told, and the sound
+		// could otherwise hold it for as long as ten seconds. With nothing ringing it settles too, or
+		// the unmute sound could be heard as "stop" and cut itself short, and music with it.
+		if !muted {
+			settle := unmuteSettle()
+			if ring.IsSounding() {
+				e.Settle(settle, StopSlot)
+			} else {
+				e.Settle(settle)
+			}
+			slog.Info("wake words settling after unmute", "for", settle)
+		}
+	})
 	e.OnReady = d.busy.scored
 
 	// The engine loads on every start, including a restart. Home Assistant only pushes a selection when
@@ -207,6 +263,9 @@ func (d *Detect) Start(ctx context.Context) error { return d.engine.Start(ctx) }
 func (d *Detect) Run(ctx context.Context) error { return d.engine.Run(ctx) }
 
 func (d *Detect) Close() error { return d.engine.Close() }
+
+// Actions are the wake clips' (clips.go).
+func (d *Detect) Actions() []*esphome.Action { return d.clips.actions() }
 
 // load puts one wake word in each slot and reports the ids that came up. Whatever the engine refuses
 // is left out, so Home Assistant reverts that slot rather than showing a wake word the device is not

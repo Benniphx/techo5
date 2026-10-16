@@ -2,6 +2,8 @@
 
 package mic
 
+import "github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
+
 // The Echo Spot (rook) capture path: four microphones on two TLV320AIC3101 converters (ADC_A and
 // ADC_B), through an FPGA on SPI into amzn-mt-spi-pcm. The 4-mic kernel build fixes the frame at six
 // channels, so the device opens only as 16 kHz, S24_3LE, 6 channels: ch0 to ch3 the microphones, ch4
@@ -44,3 +46,9 @@ const VendorBeamformer = false
 
 // resetsOnMute is false: the mute here leaves the converter alone.
 func resetsOnMute() bool { return false }
+
+// openDevice is the one capture device, which carries the loopback beside the microphones.
+func openDevice() (capture, error) { return openPlain() }
+
+// setBoardGain is false: the gain is the converters' own PGA controls (applyGain).
+func setBoardGain(*alsa.Mixer, int) bool { return false }

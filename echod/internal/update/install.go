@@ -163,8 +163,15 @@ func copyTo(from, to string) error {
 // architecture when it boots from slots, a binary otherwise. A release made for another device (the
 // Show's, seen from a Dot) is then not offered at all, rather than offered and failing on install.
 func (m Manifest) Serves() bool {
-	if slotSystem() {
-		_, ok := m.Rootfs[arch]
+	return m.serves(slotSystem())
+}
+
+// serves is Serves with the question of whether this device boots from slots answered, so a test can
+// ask it for either. A slot device is served by a rootfs under its own key (rootfsArch: the 2nd gen
+// Show 8's is not the other Shows'), never by the binary alone.
+func (m Manifest) serves(slots bool) bool {
+	if slots {
+		_, ok := m.Rootfs[rootfsArch()]
 		return ok
 	}
 	_, err := m.For(arch)

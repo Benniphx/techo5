@@ -144,11 +144,25 @@ const (
 // DRAMHold is unused on the Dot: its DL1 driver's SRAM ring works.
 const DRAMHold = ""
 
+// startFull is off on the Dot: its kernel and DL1 driver are not the Show's, and it has no report of
+// the restart storm the Show's had (paths_cronos.go).
+const startFull = false
+
+// softRef is off: the card's own loopback is the echo reference.
+const softRef = false
+
+// openSequence is empty: the playback device opens with the card as the kernel left it.
+var openSequence []kctl
+
 // MediaService is the init service that owns Android's audio HAL on Fire OS.
 const MediaService = "media"
 
 // AmpSwitch gates the speaker.
 const AmpSwitch = "Ext_Speaker_Amp_Switch"
+
+// mayHaveTAS5805M is whether a board of this build can carry the TAS5805M amplifier (GainAvailable):
+// the Dot plays through its TLV320AIC32x4 and an external amplifier gated by AmpSwitch.
+const mayHaveTAS5805M = false
 
 // OutputBoost is make-up gain on the output; the Dot's vendor tuning already carries its own.
 const OutputBoost = 1.0
@@ -179,3 +193,11 @@ const HasJack = true
 // HasBoth is whether the speaker and the jack can play at once, and so the Both choice. Not here:
 // the routes have not been tried together on this board.
 const HasBoth = false
+
+// PlaybackDevice is the codec's playback PCM, which the card takes at Rate as it is: hwRate is Rate
+// and nothing is trimmed after the volume (see paths_cronos.go for the board where neither holds).
+const (
+	PlaybackDevice = 23
+	hwRate         = Rate
+	hwTrimDB       = 0.0
+)

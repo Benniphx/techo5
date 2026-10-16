@@ -23,6 +23,22 @@ param(
     # The Echo Dot 2's rootfs tarball (techo5-dot: tools/linux/build-dot-rootfs.ps1). A Dot booting from
     # slots is offered a release only when it carries this; the Dot binary is built every time.
     [string]$DotRootfs = '',
+    # The Echo Show 8 2nd gen (athena) rootfs tarball: deploy-rootfs.sh --out with
+    # DEVICE_OVERLAY=tools/linux/athena/overlay EXTRA_PACKAGES=busybox-extras. athena runs the Show's
+    # binary but boots this rootfs of its own, the same on both kernels it can run: TECHO5's mainline
+    # one (the default) and Amazon's (install-athena.py --kernel amazon, with its vendor partition). It
+    # is keyed arm-athena in the manifest and published as techo5-rootfs-athena-<version>.tar.gz. An athena is offered a
+    # release only when it carries this; the other Shows never take it.
+    [string]$AthenaRootfs = '',
+    # The athena store image for new units (tools/linux/athena/mkstore.sh -k none, gzipped), published as
+    # techo5-system-athena-<version>.img.gz and named in the signed manifest for install-athena.py.
+    # Refused if it carries an SSH key.
+    [string]$AthenaImage = '',
+    # The athena boot image (tools/linux/athena/kernel/build.sh's boot-athena.img: TECHO5's mainline
+    # kernel), published as techo5-boot-athena-<version>.img and named in the signed manifest for
+    # install-athena.py. Refused unless check-boot.py passes it with its amp tuning slot empty: the
+    # tuning is Amazon's and is filled in from each unit's own backup, never shipped.
+    [string]$AthenaBoot = '',
     # The release signing key (ed25519 seed, base64). Devices take a manifest only with its signature, so
     # a release cannot be published without it. Keep it off every repository and backed up: $env:TECHO5_SIGN_KEY.
     [string]$SignKey = $env:TECHO5_SIGN_KEY,
@@ -65,10 +81,21 @@ if (-not $Agents -and -not $NoAgents) {
 if (($PrebuiltArm -and -not $PrebuiltArmDot) -or ($PrebuiltArmDot -and -not $PrebuiltArm)) {
     throw "PrebuiltArm and PrebuiltArmDot must be given together"
 }
+# install-athena.py's default install writes both the store image and the boot image from the same
+# release: one without the other would leave new units with nothing to install.
+if (($AthenaImage -and -not $AthenaBoot) -or ($AthenaBoot -and -not $AthenaImage)) {
+    throw "AthenaImage and AthenaBoot must be given together: install-athena.py needs both from one release"
+}
 # A root filesystem must not carry LineageOS's vendor tree: it is Amazon's and the chip makers', not ours to
 # publish. Each unit mounts its own (tools/linux/rootfs/etc/techo5/boot.sh).
-foreach ($t in @($Rootfs) | Where-Object { $_ }) {
+foreach ($t in @($Rootfs, $AthenaRootfs) | Where-Object { $_ }) {
     if (& tar -tzf $t | Where-Object { $_ -match '^(\./)?vendor/.' } | Select-Object -First 1) { throw "$t carries a vendor tree; build it without VENDOR_TGZ" }
+}
+# Each Show rootfs says which board it is for (etc/techo5/device.conf, T5_BOARD); the athena store
+# installs only athena's.
+if ($AthenaRootfs) {
+    $board = (& tar -xzOf $AthenaRootfs ./etc/techo5/device.conf) -match '^T5_BOARD=' | Select-Object -Last 1
+    if ($board -ne 'T5_BOARD=athena') { throw "$AthenaRootfs is not an athena rootfs (device.conf: '$board'); build it with DEVICE_OVERLAY=tools/linux/athena/overlay" }
 }
 if (-not $SignKey -or -not (Test-Path $SignKey)) { throw "no release signing key: set TECHO5_SIGN_KEY or pass -SignKey" }
 $repo = 'HuskerMinion/techo5'
@@ -133,6 +160,29 @@ try {
         Copy-Item $img.Path $named -Force
         $bootAssets += $named
     }
+    # athena's store image: what install-athena.py writes to a new unit's system partition. The rescue
+    # environment on it takes SSH keys from the image (root/.ssh/authorized_keys), so a published one
+    # must carry none; a key line in the image is an "ssh-<type> AAAA" string anywhere in its blocks.
+    if ($AthenaImage) {
+        $hasKey = "import gzip,re,sys; f=gzip.open(sys.argv[1],'rb'); tail=b''`nwhile True:`n    b=f.read(1<<20)`n    if not b: break`n    if re.search(rb'(ssh-(ed25519|rsa|dss)|ecdsa-sha2-nistp\d+) AAAA', tail+b): sys.exit(1)`n    tail=b[-64:]"
+        python -c $hasKey $AthenaImage
+        if ($LASTEXITCODE -ne 0) { throw "$AthenaImage carries an SSH key: build it with mkstore.sh -k none" }
+        $named = Join-Path $bin "techo5-system-athena-$Version.img.gz"
+        Copy-Item $AthenaImage $named -Force
+        $bootAssets += $named
+    }
+    if ($AthenaBoot) {
+        python (Join-Path $PSScriptRoot 'linux/athena/kernel/check-boot.py') $AthenaBoot
+        if ($LASTEXITCODE -ne 0) { throw "$AthenaBoot is not a clean athena boot image (check-boot.py): its tuning slot must be empty" }
+        $named = Join-Path $bin "techo5-boot-athena-$Version.img"
+        Copy-Item $AthenaBoot $named -Force
+        $bootAssets += $named
+    }
+    $athenaRootfsNamed = $null
+    if ($AthenaRootfs) {
+        $athenaRootfsNamed = Join-Path $bin "techo5-rootfs-athena-$Version.tar.gz"
+        Copy-Item $AthenaRootfs $athenaRootfsNamed -Force
+    }
 
     Write-Host "== manifest"
     $from = "https://github.com/$repo/releases/download/$Version"
@@ -142,6 +192,7 @@ try {
         '-out', (Join-Path $bin 'manifest.json'), '-sign-key', $SignKey)
     if ($Rootfs) { $mk += @('-rootfs-arm', $Rootfs) }
     if ($DotRootfs) { $mk += @('-rootfs-arm-dot', $DotRootfs) }
+    if ($athenaRootfsNamed) { $mk += @('-rootfs-arm-athena', $athenaRootfsNamed) }
     # Under the signature, not just in SHA256SUMS: install-show.py writes a boot image to a unit, and
     # nothing signs SHA256SUMS, so whatever could serve a substituted list could serve the image too.
     foreach ($a in $bootAssets + $agentAssets) { $mk += @('-asset', $a) }
@@ -155,6 +206,7 @@ $args = @('release', 'create', $Version, (Join-Path $bin 'echod-arm'), (Join-Pat
     (Join-Path $bin 'manifest.json.sig'), '--repo', $repo, '--title', $Version, '--notes', $Notes)
 if ($Rootfs) { $args += $Rootfs }
 if ($DotRootfs) { $args += $DotRootfs }
+if ($athenaRootfsNamed) { $args += $athenaRootfsNamed }
 $args += $bootAssets
 $args += $agentAssets
 # SHA256SUMS: for checking a download by hand. No installer reads it — the signed manifest covers
@@ -204,7 +256,7 @@ if (-not $devVersion -or (Test-VersionNewer $Version $devVersion)) {
 # re-running this. SHA256SUMS is checked too, so what people verify by hand stays complete.
 $published = @(& gh release view $Version --repo $repo --json assets -q '.assets[].name')
 $named = @((Get-Content (Join-Path $bin 'manifest.json') -Raw | ConvertFrom-Json).assets.PSObject.Properties.Name)
-$unsigned = @($published | Where-Object { ($_ -like 'techo5-boot-*' -or $_ -like 'techo5-deck-*') -and $named -notcontains $_ })
+$unsigned = @($published | Where-Object { ($_ -like 'techo5-boot-*' -or $_ -like 'techo5-deck-*' -or $_ -like 'techo5-system-*') -and $named -notcontains $_ })
 if ($unsigned) {
     throw "published, but these are not named in the signed manifest and nothing will trust them: $($unsigned -join ', ')"
 }

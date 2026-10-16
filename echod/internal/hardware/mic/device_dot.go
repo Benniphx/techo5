@@ -2,6 +2,8 @@
 
 package mic
 
+import "github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
+
 // The Echo Dot 2 (biscuit) capture codec accepts one format only: 16 kHz, S24_3LE, 9 channels.
 const (
 	Channels      = 9
@@ -40,3 +42,9 @@ const VendorBeamformer = true
 
 // resetsOnMute is false: the mute here leaves the converter alone.
 func resetsOnMute() bool { return false }
+
+// openDevice is the one capture device, which carries the loopback beside the microphones.
+func openDevice() (capture, error) { return openPlain() }
+
+// setBoardGain is false: the gain is the converters' own PGA controls (applyGain).
+func setBoardGain(*alsa.Mixer, int) bool { return false }

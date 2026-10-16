@@ -124,6 +124,9 @@ const ModelDir = StateDir + "/models"
 // A variable rather than a constant so that a test can keep recordings somewhere harmless.
 var RecordingDir = StateDir + "/recordings"
 
+// WakeClipDir holds the kept wake word clips, a folder for each kind (feature/detect, clips.go).
+var WakeClipDir = StateDir + "/wake-clips"
+
 // MAC normalizes an address into the form Home Assistant compares against, and reports "" for
 // anything that would not identify a device. idme writes twelve hex digits with no separators.
 func MAC(raw string) string {
@@ -153,7 +156,11 @@ func MAC(raw string) string {
 func FactoryMAC() (string, error) {
 	raw, err := os.ReadFile(MACPath)
 	if err != nil {
-		return "", fmt.Errorf("reading the factory MAC: %w", err)
+		v, ok := idmeFallback("mac_addr")
+		if !ok {
+			return "", fmt.Errorf("reading the factory MAC: %w", err)
+		}
+		raw = []byte(v)
 	}
 	mac := MAC(string(raw))
 	if mac == "" {
@@ -177,12 +184,14 @@ func NameFromMAC(mac string) string {
 	return DefaultName + " " + s[len(s)-6:]
 }
 
-// Idme reads a factory identity field from /proc/idme, empty on any error. These are written at
+// Idme reads a factory identity field from /proc/idme (on the 2nd gen Show 8's mainline kernel,
+// from the eMMC: idmeFallback), empty on any error. These are written at
 // manufacture and never change, so a caller reads once and holds it.
 func Idme(name string) string {
 	raw, err := os.ReadFile("/proc/idme/" + name)
 	if err != nil {
-		return ""
+		v, _ := idmeFallback(name)
+		return v
 	}
 	return strings.TrimSpace(string(raw))
 }
@@ -226,6 +235,37 @@ func Color(productID2, serial string) string {
 	default:
 		return unknown
 	}
+}
+
+// LabelMax is the most a DNS label holds, in bytes. An mDNS service's instance name is one label, so
+// the device's name advertised as one (AirPlay, Spotify Connect, Sendspin, announcements) has to fit
+// it: a name of 31 characters outside ASCII can take 124 bytes.
+const LabelMax = 63
+
+// CutName is name cut to at most n bytes, at a character boundary, so what is left is still the
+// characters it started with. A name that fits comes back as it is.
+func CutName(name string, n int) string {
+	if len(name) <= n {
+		return name
+	}
+	cut := 0
+	for i := range name {
+		if i > n {
+			break
+		}
+		cut = i
+	}
+	return strings.TrimRight(name[:cut], " ")
+}
+
+// SlugOr is name's Slug, or, for a name with nothing in it a slug keeps (one in Greek, Cyrillic or
+// Chinese, say), the slug of the name the device has with none set (NameFromMAC), which carries the end
+// of its MAC address: never empty, and two such devices still differ.
+func SlugOr(name, mac string) string {
+	if slug := Slug(name); slug != "" {
+		return slug
+	}
+	return Slug(NameFromMAC(mac))
 }
 
 // Slug turns a display name into a node name: the mDNS hostname and the ESPHome node's own name.

@@ -82,8 +82,9 @@ already running TECHO5: turn on its SSH switch in Home Assistant with a key sent
 have no SFTP server, which `scp` uses by default since OpenSSH 9, so `-O` asks for the old way:
 
 ```
-scp -O bin/echod-arm root@<address>:/tmp/echod-test
-ssh root@<address> 'mount --bind /tmp/echod-test /usr/local/bin/techo5 && killall techo5'
+DEVICE=192.168.x.y   # the device's IP address
+scp -O bin/echod-arm root@$DEVICE:/tmp/echod-test
+ssh root@$DEVICE 'mount --bind /tmp/echod-test /usr/local/bin/techo5 && killall techo5'
 ```
 
 ## 4. The root filesystem

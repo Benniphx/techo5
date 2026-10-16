@@ -72,9 +72,6 @@ func init() {
 // round one would want its own.
 const hasEqualizer = true
 
-// hasNightSwitch is whether Home Assistant can turn the night on and off here (Night mode).
-const hasNightSwitch = true
-
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second
@@ -250,6 +247,11 @@ type Display struct {
 	// stays once the turn is over.
 	weatherArmed bool
 	weatherUntil time.Time
+
+	// askedNight is a page Home Assistant asked for at night (askedAtNight), the forecast, the rain map
+	// or the calendar: shown over the night for as long as it is up, however long a tap keeps it there,
+	// and let go once it has closed (askedUp).
+	askedNight bool
 
 	// The calendar page (render_calendar.go): up until calUntil, on calMonth, as calDay's list when
 	// that is set, or the coming days' agenda when calAgenda is, with calDetail's window open over it
@@ -581,7 +583,7 @@ func (d *Display) relight(jump bool) {
 		target = dayBacklight(d.ceiling, d.autoOn && haveLux, lux, dimmest())
 		if d.nightGlow {
 			target = float64(d.glowBacklight()) // relight holds mu
-		} else if (phone.Get().Busy() || video.Get().State().Active()) && nightNow(time.Now()) {
+		} else if (phone.Get().Busy() || video.Get().State().Active() || d.askedUp(time.Now())) && nightNow(time.Now()) {
 			target = math.Min(target, screen.BacklightMax/2) // a call at night: enough to see who it is
 		}
 	}
@@ -869,8 +871,14 @@ func (d *Display) gesture(g touch.Gesture) {
 	// And only while it is what is drawn: the settings or the drawer opened from it are not shown over
 	// the night clock, so a tap on what looks like the clock must not reach them either.
 	dashAtNight := glowing && d.dash && d.dashNight && d.dashShowing
+	// So is a page Home Assistant asked for at night (askedAtNight): the forecast's Radar button and a
+	// tap to put it away, at the night light's level. Only its taps: a swipe still opens nothing over
+	// the night and a long press still lifts the night light. The calendar takes every finger, as by
+	// day (calendarUp, which this holds mu for).
+	calUp := time.Now().Before(d.calUntil) && d.view.Phase == "idle"
+	askedAtNight := glowing && d.askedUp(time.Now()) && (g.Kind == touch.Tap || calUp)
 	d.mu.Unlock()
-	if glowing && !dashAtNight {
+	if glowing && !dashAtNight && !askedAtNight {
 		if g.Kind == touch.Tap && d.ringing(time.Now()).any() {
 			// An alarm or a timer rings over the night clock; a tap anywhere stops it, as the ringing
 			// page's own button would.
@@ -1530,7 +1538,7 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	in := nightNow(now)
 	d.showNightMode(in)
 	d.mu.Lock()
-	dark, touched, viewAt, wifiUp := d.nightDark, d.touchedAt, d.viewAt, d.wifiOpen
+	dark, touched, viewAt, wifiUp, asked := d.nightDark, d.touchedAt, d.viewAt, d.wifiOpen, d.askedUp(now)
 	d.mu.Unlock()
 	if !in {
 		d.mu.Lock()
@@ -1559,8 +1567,9 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || wifiUp || setup.Get().Waiting()
 		// A video playing keeps the screen as it is: lit at the night light's level if it came on at
 		// night (frame), not put out under it.
+		// A page Home Assistant asked for keeps it while it is up (askedAtNight).
 		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle ||
-			video.Get().State().Active()
+			video.Get().State().Active() || asked
 		// Something playing is not somebody using the screen. At night it is rain or music to sleep
 		// to, and it kept a guest room's screen at full brightness all night.
 		if !lift && active {
@@ -1615,9 +1624,6 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	}
 	return false
 }
-
-// nightIdle is how long the panel stays lit after a finger or a turn during the night.
-const nightIdle = 90 * time.Second
 
 // inNight is whether now falls in the window, which may cross midnight.
 
@@ -2208,7 +2214,8 @@ func (d *Display) frame() time.Duration {
 	d.mu.Unlock()
 	d.mu.Lock()
 	s.demo = now.Before(d.demoUntil)
-	s.redClock = d.nightGlow && config.Get().Screen.NightRed
+	// A page Home Assistant asked for at night is shown on the night light, not under the red clock.
+	s.redClock = d.nightGlow && config.Get().Screen.NightRed && !d.askedUp(now)
 	s.redStyle = config.Get().Screen.NightClockStyle
 	d.mu.Unlock()
 	if s.showDrawer && s.drawerTab == drawerCameras {

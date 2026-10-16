@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -133,7 +135,9 @@ func (st *Store) started(d Device) {
 	st.c.Device = d
 }
 
-// Update applies a change and writes the file.
+// Update applies a change and writes the file. A change the file could not take still holds in
+// memory, and goes to disk with the next change that is saved: what callers count on for a value they
+// make up once and must keep (the DLNA renderer's id), whether or not it could be saved.
 func (st *Store) Update(f func(*Config)) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -141,6 +145,40 @@ func (st *Store) Update(f func(*Config)) error {
 	f(&st.c)
 	return st.write()
 }
+
+// UpdateOrUndo is Update for a setting that must not hold unless it was saved: one the file could not
+// take is taken back whole, so the next change saved cannot write it behind everyone's back. Keep wake
+// clips is one: turned on while the flash was failing, the recorder stays off, and the setting must
+// too. A file that was never readable is the exception, since nothing is written over it all run: the
+// change holds until the next start, as Update's do.
+func (st *Store) UpdateOrUndo(f func(*Config)) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	before := deepCopy(st.c)
+	f(&st.c)
+	err := st.write()
+	var renamed afterRename
+	switch {
+	case err == nil, !st.readable:
+	case errors.As(err, &renamed):
+		// The new file is in place, only not yet flushed with its folder: the disk has the change, and
+		// memory keeps it to match. Saved, as far as the caller goes, so what it does for the setting
+		// (the recorder Keep wake clips turns on) matches both.
+		slog.Warn("config: saved, but the folder could not be flushed after", "path", st.path, "err", err)
+		return nil
+	default:
+		st.c = before
+	}
+	return err
+}
+
+// afterRename is write failing after the new file took the old one's place: what is on disk is the
+// change, though a power cut could still lose it.
+type afterRename struct{ err error }
+
+func (e afterRename) Error() string { return e.err.Error() }
+func (e afterRename) Unwrap() error { return e.err }
 
 // write replaces the file through a temporary one, flushed at every step, because the thing this has
 // to survive is a reboot rather than a crash.
@@ -198,8 +236,11 @@ func (st *Store) write() error {
 	}
 	d, err := os.Open(dir)
 	if err != nil {
-		return err
+		return afterRename{err}
 	}
 	defer func() { _ = d.Close() }()
-	return d.Sync()
+	if err := d.Sync(); err != nil {
+		return afterRename{err}
+	}
+	return nil
 }

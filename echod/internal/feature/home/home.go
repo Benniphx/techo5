@@ -92,8 +92,9 @@ type Feature struct {
 
 	// weatherSel picks the weather entity; weathers is Home Assistant's list of them, fetched at
 	// weathersAt.
-	weatherSel *esphome.Select
-	radarSel   *esphome.Select // where the rain map's radar comes from (radar_setting.go)
+	weatherSel  *esphome.Select
+	weatherOpts *component.Options // weatherSel's options
+	radarSel    *esphome.Select    // where the rain map's radar comes from (radar_setting.go)
 
 	// alerts are the NWS's weather alerts at home and nearby (alerts.go); alertsSw turns them on and off.
 	alerts     alertState
@@ -103,9 +104,10 @@ type Feature struct {
 
 	// followSel picks another media player for Now Playing to follow; players is Home Assistant's list of
 	// them, fetched at playersAt (follow.go).
-	followSel *esphome.Select
-	players   []hass.Entity
-	playersAt time.Time
+	followSel  *esphome.Select
+	followOpts *component.Options // followSel's options
+	players    []hass.Entity
+	playersAt  time.Time
 
 	lyricsSw *esphome.Switch // the words on Now Playing (lyrics.go)
 
@@ -127,6 +129,22 @@ type Feature struct {
 	// stream is put back on with.
 	asked   string
 	askedAt time.Time
+
+	// claiming is a station asked for whose stream has not started yet, and stationURL the url that
+	// started for the last one: what plays from it is live radio (liveURL).
+	// claimName is the station claimed for, claimAt when the claim was made and claimFor how long it
+	// holds, and claimedAt when a stream was last taken for one. ownURL is the last stream this device
+	// played itself for a station (playingOwn).
+	claiming   bool
+	stationURL string
+	claimName  string
+	claimAt    time.Time
+	claimFor   time.Duration
+	claimedAt  time.Time
+	ownURL     string
+	// stationGen counts the stations asked for and forgotten, so a put-back waiting its seconds can
+	// tell a Stop or another station came in between (putBack).
+	stationGen uint64
 
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
@@ -211,6 +229,9 @@ const forecastEvery = 30 * time.Minute
 
 // Run keeps the forecast current. Nothing to do without a token or a weather entity.
 func (f *Feature) Run(ctx context.Context) error {
+	// A station this device asked for is live radio: a drop is fetched again (media resume.go), where
+	// a song would start over.
+	media.SetLive(f.liveURL)
 	go f.metaLoop(ctx)
 	go f.nowPlayingLoop(ctx)
 	if hasScreen {
@@ -276,7 +297,15 @@ func Get() *Feature {
 		shared.buildRadioSensors()
 		shared.buildNowPlayingSensors()
 		hastate.Get().Changed.Listen(shared.stateChanged)
+		hastate.Get().Changed.Listen(shared.stationStarted)
 		media.Get().OnPlay.Listen(shared.played)
+		// Stopped anywhere (the voice assistant, the setup page, the action button, Home Assistant):
+		// the station is over, and a put-back on its way is not made.
+		media.Get().OnStop.Listen(func(struct{}) {
+			shared.mu.Lock()
+			shared.stopped()
+			shared.mu.Unlock()
+		})
 		media.Get().OnEnd.Listen(shared.ended)
 		media.Get().OnNowPlaying.Listen(func(struct{}) { shared.pokeNowPlaying() })
 		media.Get().OnResumeRemote.Listen(func(struct{}) { safe.Go("resume music assistant", resumeMusicAssistant) })
@@ -392,11 +421,9 @@ func (f *Feature) Restore(c config.Config) {
 		// Kept before the album's id was kept with its name: asked for once the network is up.
 		safe.Go("immich album name at start", func() { f.nameImmichAlbumSoon(id) })
 	}
-	f.weatherSel.Options = weatherOptions(c.Home)
+	f.weatherOpts.Restore(weatherOptions(c.Home))
 	f.weatherSel.Set(chosenOption(c.Home))
-	f.mu.Lock()
-	f.followSel.Options = followOptions(c.Home)
-	f.mu.Unlock()
+	f.followOpts.Restore(followOptions(c.Home))
 	f.followSel.Set(followOption(c.Home))
 	f.lyricsSw.Set(c.Home.Lyrics)
 	if hasScreen {
@@ -743,11 +770,20 @@ func favoriteNames(h config.Radio) []string {
 
 // Play plays a station of the list shown on this device: a favorite through Home Assistant's
 // script, a Radio Browser station through the device's own player entity.
-func (f *Feature) Play(station string) {
+func (f *Feature) Play(station string) { f.play(station, nil) }
+
+// play is Play; with gen, only while the station's generation still is *gen (a put-back, which a Stop
+// or another station since cancels: putBack).
+func (f *Feature) play(station string, gen *uint64) {
 	// What was asked for, in the words the lists use, so a stream that drops can be asked for again:
 	// the name worked out from a URL afterwards is often the stream's host, which no list has.
 	f.mu.Lock()
-	f.asked, f.askedAt = station, time.Now()
+	if gen != nil && f.stationGen != *gen {
+		f.mu.Unlock()
+		return
+	}
+	f.askStation(station)
+	g := f.stationGen
 	f.mu.Unlock()
 
 	source := radioSource()
@@ -756,9 +792,12 @@ func (f *Feature) Play(station string) {
 		source = config.RadioLocal
 	}
 	if source == config.RadioOwn {
-		if f.playOwn(station) {
+		if f.playOwn(station, &g) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
+		} else {
+			slog.Info("radio: the station is not one kept on the device; not played", "station", station)
+			f.unask(station)
 		}
 		return
 	}
@@ -766,11 +805,15 @@ func (f *Feature) Play(station string) {
 		if f.playListed(source, station) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
+		} else {
+			slog.Info("radio: the station is not on the list the radio page shows; not played", "station", station, "list", source)
+			f.unask(station)
 		}
 		return
 	}
 	h := config.Get().Home.Radio
 	if !h.Configured() {
+		f.unask(station)
 		return
 	}
 	f.mu.Lock()
@@ -820,6 +863,7 @@ func (f *Feature) Stop() {
 	media.Get().Stop()
 	f.mu.Lock()
 	f.chosen = ""
+	f.forgetStation()
 	f.mu.Unlock()
 	f.Changed.Emit(struct{}{})
 	f.pokeMeta()

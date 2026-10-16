@@ -15,6 +15,10 @@ type Wake struct {
 
 	// OnHA is Home Assistant's own wake word engine, used beside the device's or in its place.
 	OnHA OnHA `json:"on_ha,omitempty"`
+
+	// KeepClips keeps short clips of the wake word on the device, for training a model on (feature/
+	// detect, clips.go). Off unless chosen, and turning it off deletes what was kept.
+	KeepClips bool `json:"keep_clips,omitempty"`
 }
 
 // OnHA is what Home Assistant's wake word engine is asked to do. Both are off unless chosen: either one
