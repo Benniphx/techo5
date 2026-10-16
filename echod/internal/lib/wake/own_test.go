@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,7 +39,7 @@ func TestAWakeWordFromTheSetupPage(t *testing.T) {
 	dir := filepath.Join(root, "models")
 	l := NewLibrary(dir)
 
-	m, err := l.AddOwn([]byte(goodManifest), realModel(t))
+	m, err := l.AddOwn([]byte(goodManifest), realModel(t), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,14 +70,14 @@ func TestAWakeWordFromTheSetupPage(t *testing.T) {
 
 	// The same phrase again replaces it; a purge of the cache leaves it, since nothing can be
 	// downloaded to put it back.
-	if _, err := l.AddOwn([]byte(goodManifest), realModel(t)); err != nil {
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
 		t.Errorf("sending it again: %v", err)
 	}
 	if gone, _ := l.Purge(nil); gone != 0 {
 		t.Errorf("a purge deleted %d models sent from the page", gone)
 	}
 
-	if err := l.RemoveOwn("hey_computer"); err != nil {
+	if err := l.RemoveOwn("hey_computer", nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(l.Ours()) != 0 {
@@ -106,6 +107,8 @@ func TestAWakeWordThatWillNotRunIsRefused(t *testing.T) {
 		"no micro section":      {`{"type":"micro","wake_word":"Hey"}`, model, `"micro"`},
 		"no phrase":             {`{"type":"micro","wake_word":"  ","micro":{}}`, model, "wake_word"},
 		"a control character":   {`{"type":"micro","wake_word":"Hey\u0007there","micro":{}}`, model, "control"},
+		"a direction override":  {`{"type":"micro","wake_word":"Hey \u202eretupmoc","micro":{}}`, model, "text-direction"},
+		"a zero-width space":    {`{"type":"micro","wake_word":"Hey\u200bComputer","micro":{}}`, model, "invisible"},
 		"a long phrase":         {`{"type":"micro","wake_word":"` + strings.Repeat("a", 61) + `","micro":{}}`, model, "at most"},
 		"a bad language":        {`{"type":"micro","wake_word":"Hey","trained_languages":["en; rm -rf"],"micro":{}}`, model, "language tag"},
 		"a step it cannot run":  {withMicro(`{"feature_step_size":15}`), model, "feature_step_size"},
@@ -118,7 +121,7 @@ func TestAWakeWordThatWillNotRunIsRefused(t *testing.T) {
 	} {
 		dir := filepath.Join(t.TempDir(), "models")
 		l := NewLibrary(dir)
-		_, err := l.AddOwn([]byte(c.manifest), c.model)
+		_, err := l.AddOwn([]byte(c.manifest), c.model, nil)
 		if err == nil {
 			t.Errorf("%s was kept", what)
 			continue
@@ -139,12 +142,12 @@ func TestOnlyWhatThePageSentIsThePagesToChange(t *testing.T) {
 	put(t, dir, "okay_nabu", `{"wake_word":"Okay Nabu"}`, 100)
 	l := NewLibrary(dir)
 
-	_, err := l.AddOwn([]byte(`{"type":"micro","wake_word":"Okay, Nabu!","micro":{}}`), realModel(t))
+	_, err := l.AddOwn([]byte(`{"type":"micro","wake_word":"Okay, Nabu!","micro":{}}`), realModel(t), nil)
 	if err == nil || !strings.Contains(err.Error(), "did not come from this page") {
 		t.Errorf("a phrase that would replace the image's model: %v", err)
 	}
 	for _, id := range []string{"okay_nabu", "", "..", "../okay_nabu", "x/../../okay_nabu", `..\okay_nabu`, "nothing_here"} {
-		if err := l.RemoveOwn(id); err == nil {
+		if err := l.RemoveOwn(id, nil); err == nil {
 			t.Errorf("%q was removed", id)
 		}
 	}
@@ -153,7 +156,7 @@ func TestOnlyWhatThePageSentIsThePagesToChange(t *testing.T) {
 	}
 
 	// A phrase that looks like a path is only ever a name.
-	m, err := l.AddOwn([]byte(`{"type":"micro","wake_word":"../../etc/passwd","micro":{}}`), realModel(t))
+	m, err := l.AddOwn([]byte(`{"type":"micro","wake_word":"../../etc/passwd","micro":{}}`), realModel(t), nil)
 	if err != nil || m.ID != "etc_passwd" || filepath.Dir(m.Path) != dir {
 		t.Errorf("kept as %q at %s (%v)", m.ID, m.Path, err)
 	}
@@ -179,7 +182,7 @@ func TestThePageKeepsOnlySoMany(t *testing.T) {
 		put(t, dir, fmt.Sprintf("word_%d", i), `{"wake_word":"Word","techo5_uploaded":true}`, 10)
 	}
 	l := NewLibrary(dir)
-	if _, err := l.AddOwn([]byte(goodManifest), realModel(t)); err == nil || !strings.Contains(err.Error(), "remove one first") {
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err == nil || !strings.Contains(err.Error(), "remove one first") {
 		t.Errorf("one more than the most: %v", err)
 	}
 }
@@ -190,7 +193,11 @@ func TestOwnIDIsAPlainName(t *testing.T) {
 		"  Okay,   Computer!  ":     "okay_computer",
 		"../../etc/passwd":          "etc_passwd",
 		`C:\Windows`:                "c_windows",
-		"Ça va":                     "a_va",
+		"Ça va":                     "ca_va",
+		"Hé, Jarvis":                "he_jarvis",
+		"Straße Øst":                "strasse_ost",
+		"Ｈｅｙ ﬁx":                    "hey_fix",
+		"Łódź":                      "lodz",
 		strings.Repeat("abcd ", 10): "abcd_abcd_abcd_abcd_abcd_abcd_abcd_abcd",
 	} {
 		if got := OwnID(phrase); got != want {
@@ -201,5 +208,119 @@ func TestOwnIDIsAPlainName(t *testing.T) {
 	a, b := OwnID("안녕 컴퓨터"), OwnID("안녕 컴퓨터")
 	if a != b || !strings.HasPrefix(a, "own_") || strings.ContainsAny(a, `/\.:`) {
 		t.Errorf("%q, %q", a, b)
+	}
+}
+
+// What an upload a power cut stopped left in the model directory is deleted as the library is made,
+// which is at the daemon's start, and the models beside it are not touched.
+func TestAnUnfinishedUploadIsSweptAtStart(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{".upload-123", ".upload-456", "okay_nabu.tflite", "okay_nabu.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	NewLibrary(dir)
+	entries, _ := os.ReadDir(dir)
+	var left []string
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	if strings.Join(left, " ") != "okay_nabu.json okay_nabu.tflite" {
+		t.Errorf("left %v", left)
+	}
+}
+
+// A model a slot is listening for is not removed, whether the slot has it as saved or a selection that
+// asks for it is under way: the check and the delete are one step under the library's lock, which a
+// selection takes too, so neither can come between them.
+func TestAModelBeingListenedForIsNotRemoved(t *testing.T) {
+	l := NewLibrary(t.TempDir())
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
+		t.Fatal(err)
+	}
+
+	saved := func(id string) bool { return id == "hey_computer" }
+	if err := l.RemoveOwn("hey_computer", saved); !errors.Is(err, ErrListening) {
+		t.Errorf("removed while a slot listens for it: %v", err)
+	}
+
+	l.Ensure([]string{"okay_nabu", "hey_computer"})
+	if err := l.RemoveOwn("hey_computer", nil); !errors.Is(err, ErrListening) {
+		t.Errorf("removed while a selection asks for it: %v", err)
+	}
+
+	l.Ensure([]string{"okay_nabu"})
+	if err := l.RemoveOwn("hey_computer", nil); err != nil {
+		t.Errorf("once nothing asks for it: %v", err)
+	}
+}
+
+// Sending the same phrase again replaces the model, except while a slot is listening for it: the engine
+// has the old one loaded, and would go on running it under the new one's name.
+func TestAModelBeingListenedForIsNotReplaced(t *testing.T) {
+	l := NewLibrary(t.TempDir())
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), nil); err != nil {
+		t.Fatal(err)
+	}
+	saved := func(id string) bool { return id == "hey_computer" }
+	if _, err := l.AddOwn([]byte(goodManifest), realModel(t), saved); err == nil || !strings.Contains(err.Error(), "listening") {
+		t.Errorf("replaced while a slot listens for it: %v", err)
+	}
+	// A new phrase is not a replacement, so a slot listening for something else does not matter.
+	other := strings.Replace(goodManifest, "Hey Computer", "Hey Device", 1)
+	if _, err := l.AddOwn([]byte(other), realModel(t), saved); err != nil {
+		t.Errorf("a new phrase: %v", err)
+	}
+}
+
+// The model goes in before its manifest, and a replacement whose manifest will not go in puts the
+// model before it back: what was sent before stays as it was, model and manifest.
+func TestAFailedReplacementLeavesTheOneBefore(t *testing.T) {
+	dir := t.TempDir()
+	l := NewLibrary(dir)
+	first := realModel(t)
+	if _, err := l.AddOwn([]byte(goodManifest), first, nil); err != nil {
+		t.Fatal(err)
+	}
+	manifestWas, _ := os.ReadFile(filepath.Join(dir, "hey_computer.json"))
+
+	var order []string
+	was := rename
+	rename = func(from, to string) error {
+		order = append(order, filepath.Ext(to))
+		if filepath.Ext(to) == ".json" {
+			return errors.New("disk full")
+		}
+		return was(from, to)
+	}
+	t.Cleanup(func() { rename = was })
+
+	second := append(bytes.Clone(first), make([]byte, 64)...) // still a model, a different file
+	changed := strings.Replace(goodManifest, `"sliding_window_size":5`, `"sliding_window_size":7`, 1)
+	if _, err := l.AddOwn([]byte(changed), second, nil); err == nil {
+		t.Fatal("a replacement whose manifest did not go in was reported kept")
+	}
+	if strings.Join(order, " ") != ".tflite .json" {
+		t.Errorf("moved into place in the order %v, want the model first", order)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "hey_computer.tflite")); !bytes.Equal(b, first) {
+		t.Error("the model sent before was not put back")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "hey_computer.json")); !bytes.Equal(b, manifestWas) {
+		t.Error("the manifest sent before changed")
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 2 {
+		t.Errorf("the directory holds %d files, want the model and its manifest", len(entries))
+	}
+
+	// A new model whose manifest does not go in leaves nothing behind at all.
+	other := strings.Replace(goodManifest, "Hey Computer", "Hey Device", 1)
+	if _, err := l.AddOwn([]byte(other), first, nil); err == nil {
+		t.Fatal("a model whose manifest did not go in was reported kept")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "hey_device.tflite")); err == nil {
+		t.Error("a model with no manifest was left behind")
 	}
 }

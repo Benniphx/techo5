@@ -1,9 +1,44 @@
 package tflite
 
 import (
+	"bytes"
+	"encoding/binary"
+	"os"
 	"strings"
 	"testing"
 )
+
+// A vector's length word is a number the file states, and the one place a file says how much to
+// allocate. One that claims more than is left of the file is refused before anything is made of it:
+// billions of anything is out of memory, which is fatal rather than a panic Parse can turn into an
+// error.
+func TestParseRefusesAVectorLongerThanTheFile(t *testing.T) {
+	good, err := os.ReadFile("../../feature/detect/assets/stop.tflite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := root(buf(good))
+	for _, field := range []int{modelOperatorCodes, modelSubgraphs, modelBuffers} {
+		b := bytes.Clone(good)
+		p := r.pos + r.slot(field)
+		p += buf(b).u32(p)
+		binary.LittleEndian.PutUint32(b[p:], 0xfffffff0)
+		if m, err := Parse(b); err == nil || !strings.Contains(err.Error(), "past the end") {
+			t.Errorf("field %d: Parse = %v, %v; want a vector past the end", field, m, err)
+		}
+	}
+
+	// A string's length is read the same way, and wide enough not to wrap around to a small one.
+	b := buf{4, 0, 0, 0, 0xfe, 0xff, 0xff, 0xff, 'a', 0, 0, 0}
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("a string longer than the buffer was read")
+			}
+		}()
+		b.fits(4, b.u32(4), 1)
+	}()
+}
 
 // f32in is a float32 input tensor of the given shape, the sort every model starts with.
 func f32in(name string, shape ...int) *TensorDesc {

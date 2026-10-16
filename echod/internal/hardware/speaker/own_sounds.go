@@ -6,6 +6,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Recordings of the owner's own, as the setup page keeps them: the same files, in the same folder, as
@@ -88,7 +90,7 @@ func SaveOwn(name string, r io.Reader) error {
 		return err
 	}
 	// The temporary name does not end in .wav, so nothing takes it for a sound while it is written.
-	tmp, err := os.CreateTemp(SoundsDir, ".upload-*")
+	tmp, err := os.CreateTemp(SoundsDir, uploadPrefix+"*")
 	if err != nil {
 		return err
 	}
@@ -112,6 +114,23 @@ func SaveOwn(name string, r io.Reader) error {
 	}
 	slog.Info("a sound of one's own was kept", "sound", name, "bytes", len(b))
 	return nil
+}
+
+// uploadPrefix starts the name of a recording being written (SaveOwn).
+const uploadPrefix = ".upload-"
+
+// SweepUploads deletes what uploads left in SoundsDir under their temporary names: a power cut in the
+// middle of one leaves up to a recording's worth behind, and nothing else would ever take it away.
+// Called once as the daemon starts, before the setup page can be sending one.
+func SweepUploads() {
+	entries, _ := os.ReadDir(SoundsDir)
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), uploadPrefix) {
+			if err := os.Remove(filepath.Join(SoundsDir, e.Name())); err == nil {
+				slog.Info("an unfinished sound upload was deleted", "file", e.Name())
+			}
+		}
+	}
 }
 
 // RemoveOwn takes the owner's recording away, so the stock sound plays again. One that is not there

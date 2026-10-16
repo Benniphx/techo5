@@ -95,3 +95,23 @@ func TestARecordingThatCannotPlaySaysWhy(t *testing.T) {
 		t.Errorf("sounds %v", OwnSounds())
 	}
 }
+
+// What an upload a power cut stopped left in the folder is deleted at the next start, and nothing else
+// there is touched.
+func TestSweepUploadsDeletesOnlyUnfinishedUploads(t *testing.T) {
+	dir := ownSounds(t)
+	for _, name := range []string{".upload-123", ".upload-x", "failure.wav", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	SweepUploads()
+	entries, _ := os.ReadDir(dir)
+	var left []string
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	if strings.Join(left, " ") != "failure.wav notes.txt" {
+		t.Errorf("left %v", left)
+	}
+}

@@ -33,8 +33,11 @@ type Library struct {
 	muOffers sync.Mutex
 	offers   map[string]esphome.ExternalWakeWord
 
-	// muOwn keeps two models sent from the setup page at once from both counting the same room (own.go).
+	// muOwn keeps two models sent from the setup page at once from both counting the same room, and a
+	// removal from deleting a model a selection is about to load (own.go).
 	muOwn sync.Mutex
+	// selecting is the ids the latest selection asked for (Ensure). Guarded by muOwn.
+	selecting []string
 }
 
 // adoptTimeout bounds a download, since it happens while Home Assistant waits for a selection to be
@@ -59,6 +62,7 @@ func Lib() *Library {
 // a test.
 func NewLibrary(dir string) *Library {
 	l := &Library{dir: dir, offers: map[string]esphome.ExternalWakeWord{}}
+	sweepUploads(dir)
 	l.Reload()
 	return l
 }
@@ -157,6 +161,12 @@ func (l *Library) Purge(inUse []string) (int, int64) {
 // Ensure downloads any of these that are offered and not already here, and reports everything the
 // device has afterwards, which is what a selection is resolved against.
 func (l *Library) Ensure(ids []string) []Model {
+	// Said before anything is resolved: a removal from the setup page after this sees the selection,
+	// and one before it has already gone from what the selection finds.
+	l.muOwn.Lock()
+	l.selecting = slices.Clone(ids)
+	l.muOwn.Unlock()
+
 	var fetched bool
 	for _, id := range ids {
 		if id == "" {

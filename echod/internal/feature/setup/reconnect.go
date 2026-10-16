@@ -34,6 +34,11 @@ const (
 
 	// reconnectPatience is how long a settled moment is waited for before any idle look will do.
 	reconnectPatience = 5 * time.Minute
+
+	// reconnectGap is the least time between two of these reconnects. Each one drops Home Assistant's
+	// connection, and somebody sending wake words one after another would otherwise have it dropped
+	// every few seconds; the later ones wait and go as one.
+	reconnectGap = 30 * time.Second
 )
 
 // deviceBusy is whether reconnecting now would cut something off. Music playing is not counted: it
@@ -45,12 +50,13 @@ func deviceBusy() bool {
 
 // idleReconnect is one reconnect waiting for the device to be idle.
 type idleReconnect struct {
-	busy                  func() bool
-	emit                  func()
-	look, settle, patient time.Duration
+	busy                       func() bool
+	emit                       func()
+	look, settle, patient, gap time.Duration
 
 	mu      sync.Mutex
 	pending bool
+	last    time.Time // when the last reconnect went
 }
 
 // whenIdle is the device's; a test has one of its own.
@@ -60,6 +66,7 @@ var whenIdle = &idleReconnect{
 	look:    reconnectLook,
 	settle:  reconnectSettle,
 	patient: reconnectPatience,
+	gap:     reconnectGap,
 }
 
 // ask has Home Assistant reconnect once the device is idle. Asking while a reconnect is already
@@ -76,10 +83,16 @@ func (r *idleReconnect) ask() {
 
 func (r *idleReconnect) wait() {
 	start := time.Now()
+	r.mu.Lock()
+	earliest := r.last.Add(r.gap)
+	r.mu.Unlock()
 	var quietSince time.Time
 	for {
 		time.Sleep(r.look)
 		now := time.Now()
+		if now.Before(earliest) {
+			continue
+		}
 		if r.busy() {
 			quietSince = time.Time{}
 			continue
@@ -95,6 +108,7 @@ func (r *idleReconnect) wait() {
 	// may already be too late for it.
 	r.mu.Lock()
 	r.pending = false
+	r.last = time.Now()
 	r.mu.Unlock()
 	slog.Info("setup page: Home Assistant reconnects to see the wake words", "waited", time.Since(start).Round(time.Second))
 	r.emit()

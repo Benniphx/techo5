@@ -17,6 +17,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
 )
@@ -36,6 +37,10 @@ const cookieName = "techo5_setup"
 
 // Run closes the page when it has been left alone, and keeps Home Assistant's switch honest.
 func (f *Feature) Run(ctx context.Context) error {
+	// The first thing at a start, before the page can be opened to send one: what an upload a power cut
+	// stopped left behind. The wake word library sweeps its own as it is made.
+	speaker.SweepUploads()
+
 	t := time.NewTicker(15 * time.Second)
 	defer t.Stop()
 	for {

@@ -166,31 +166,53 @@ func (t *Turn) Ends(how Ending) {
 	fields, legacy := t.fields(how), t.legacy(how)
 	t.mu.Unlock()
 
-	fields["device"] = config.Get().Device.Name
-	post(component.Event{Name: TurnEvent, Data: fields})
-	post(component.Event{Name: LegacyTurnEvent, Data: legacy})
+	// A device that was never named has none to give, and an empty field says nothing a missing one
+	// does not.
+	if name := config.Get().Device.Name; name != "" {
+		fields["device"] = name
+	}
+	events.post(component.Event{Name: TurnEvent, Data: fields})
+	events.post(component.Event{Name: LegacyTurnEvent, Data: legacy})
 }
 
-var (
-	outbox     = make(chan component.Event, queued)
-	sendOnce   sync.Once
-	sendEvents = func(e component.Event) { component.Fire.Emit(e) }
-)
+// sender sends finished turns from a goroutine of its own, started with the first.
+type sender struct {
+	outbox chan component.Event
+	once   sync.Once
+	send   func(component.Event)
+}
 
-// post hands a finished turn to the sender and returns at once.
-func post(e component.Event) {
-	sendOnce.Do(func() {
-		safe.Go("turn events", func() {
-			for e := range outbox {
-				sendEvents(e)
-			}
-		})
-	})
+// events is the device's sender; a test has one of its own.
+var events = &sender{
+	outbox: make(chan component.Event, queued),
+	send:   func(e component.Event) { component.Fire.Emit(e) },
+}
+
+// post hands a finished turn to the sender and returns at once. A full queue drops the newest.
+func (s *sender) post(e component.Event) {
+	s.once.Do(func() { safe.Go("turn events", s.run) })
 	select {
-	case outbox <- e:
+	case s.outbox <- e:
 	default:
 		slog.Warn("turn: Home Assistant isn't taking events; dropped one", "id", e.Data["id"])
 	}
+}
+
+// run sends what is posted, for as long as the daemon runs: one event that panics on the way out is
+// that one event lost, not every turn after it.
+func (s *sender) run() {
+	for e := range s.outbox {
+		s.sendOne(e)
+	}
+}
+
+func (s *sender) sendOne(e component.Event) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("turn: sending an event failed", "event", e.Name, "id", e.Data["id"], "err", r)
+		}
+	}()
+	s.send(e)
 }
 
 // Records says how long a recording was kept for this turn, which is what decides whether anything

@@ -83,3 +83,32 @@ func TestTheReconnectStopsWaitingForASettledMoment(t *testing.T) {
 		t.Error("reconnected on a busy look")
 	}
 }
+
+// Two reconnects are never closer together than the gap: wake words sent one after another, each once
+// the one before has reconnected, do not drop Home Assistant's connection every few seconds.
+func TestReconnectsKeepTheirGap(t *testing.T) {
+	var mu sync.Mutex
+	var at []time.Time
+	done := make(chan struct{}, 4)
+	r := &idleReconnect{
+		busy:    func() bool { return false },
+		emit:    func() { mu.Lock(); at = append(at, time.Now()); mu.Unlock(); done <- struct{}{} },
+		look:    time.Millisecond,
+		settle:  time.Millisecond,
+		patient: time.Hour,
+		gap:     200 * time.Millisecond,
+	}
+	for range 2 {
+		r.ask()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("never reconnected")
+		}
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gap := at[1].Sub(at[0]); gap < 200*time.Millisecond {
+		t.Errorf("the second reconnect came %v after the first, inside the gap", gap)
+	}
+}

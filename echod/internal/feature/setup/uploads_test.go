@@ -3,6 +3,8 @@ package setup
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -246,6 +248,15 @@ func TestAWakeWordIsSentFromThePage(t *testing.T) {
 	if w := send(up(c.Value, manifest, model+strings.Repeat("x", wake.MaxOwnModel), c)); w.Code != http.StatusBadRequest {
 		t.Errorf("a model over the limit: %d", w.Code)
 	}
+	// Past what the whole request may be, it stops partway through a file, and that is the files being
+	// too big, not a file that did not arrive.
+	if w := send(up(c.Value, strings.Repeat(" ", 100<<10)+manifest, model+strings.Repeat("x", wake.MaxOwnModel), c)); w.Code != http.StatusRequestEntityTooLarge ||
+		!strings.Contains(w.Body.String(), "too big") || !strings.Contains(w.Body.String(), fmt.Sprintf("%d KB", wake.MaxOwnModel>>10)) {
+		t.Errorf("a request over the limit, stopped in the .tflite: %d %q", w.Code, w.Body.String())
+	}
+	if w := send(up(c.Value, strings.Repeat(" ", 2*wake.MaxOwnModel)+manifest, model, c)); w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("a request over the limit, stopped in the .json: %d %q", w.Code, w.Body.String())
+	}
 	if w := send(up(c.Value, `{"type":"micro","wake_word":"Okay Nabu","micro":{}}`, model, c)); w.Code != http.StatusBadRequest {
 		t.Errorf("a model over the image's own: %d", w.Code)
 	}
@@ -297,5 +308,23 @@ func TestAWakeWordIsSentFromThePage(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 1 || !settled(2) {
 		t.Errorf("%d files left, %d reconnects", len(entries), reconnects.Load())
+	}
+}
+
+// A sound stopped partway by the most a request may be is a file too big, not one that did not
+// arrive whole.
+func TestASoundStoppedAtTheLimitIsTooBig(t *testing.T) {
+	ownSoundsHere(t)
+	var b bytes.Buffer
+	mw := multipart.NewWriter(&b)
+	_ = mw.WriteField("sound", "failure")
+	part, _ := mw.CreateFormFile("file", "x.wav")
+	_, _ = part.Write([]byte(wav(48000, 2, 2000)))
+	_ = mw.Close()
+
+	body := http.MaxBytesReader(httptest.NewRecorder(), io.NopCloser(&b), 64<<10)
+	problem := receiveSound(multipart.NewReader(body, mw.Boundary()))
+	if !strings.Contains(problem, "too big") || !strings.Contains(problem, fmt.Sprintf("%d KB", speaker.MaxOwnUpload>>10)) {
+		t.Errorf("problem is %q", problem)
 	}
 }

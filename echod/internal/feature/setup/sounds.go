@@ -131,13 +131,38 @@ func receiveSound(mr *multipart.Reader) string {
 		return "that is not one of the sounds"
 	}
 	p, err = mr.NextPart()
+	if tooLarge(err) {
+		return tooBigSound
+	}
 	if err != nil || p.FormName() != "file" {
 		return "no file was sent"
 	}
-	if err := speaker.SaveOwn(string(name), p); err != nil {
+	body := &readErr{r: p}
+	if err := speaker.SaveOwn(string(name), body); err != nil {
+		if tooLarge(body.err) {
+			return tooBigSound
+		}
 		return err.Error()
 	}
 	return ""
+}
+
+// tooBigSound is what a sound over the most a request may be is told.
+var tooBigSound = fmt.Sprintf("that file is too big: the most is %d KB, about ten seconds of sound", speaker.MaxOwnUpload>>10)
+
+// readErr is a reader that keeps the error it stopped with, for when what reads it says only that it
+// failed.
+type readErr struct {
+	r   io.Reader
+	err error
+}
+
+func (r *readErr) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return n, err
 }
 
 func playSound(r *http.Request) string {
