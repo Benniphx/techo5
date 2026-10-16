@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const page = 2048
@@ -447,5 +448,121 @@ func TestAStrangeStateIsAnError(t *testing.T) {
 	os.WriteFile(r.p.file("state"), []byte("good "+z+" "+z+"\n"), 0o644)
 	if st, err := r.p.readState(); err != nil || st.kind != "good" {
 		t.Errorf("the old good form: %+v, %v", st, err)
+	}
+}
+
+// failTrial runs a trial out: Tries boots, the first noRoutes of them with everything but a network,
+// then the boot that finds no tries left.
+func (r *rig) failTrial(noRoutes int) (again bool, err error) {
+	r.t.Helper()
+	if _, err := Apply(r.p); err != nil {
+		r.t.Fatal(err)
+	}
+	for i := 0; i < Tries; i++ {
+		if again, err := Boot(r.p); again || err != nil {
+			r.t.Fatalf("boot %d: %v, %v", i, again, err)
+		}
+		if i < noRoutes {
+			if err := NoRoute(r.p); err != nil {
+				r.t.Fatal(err)
+			}
+		}
+	}
+	return Boot(r.p)
+}
+
+func TestATrialWithoutANetworkOnEveryTryIsPutBackButNotMarkedBad(t *testing.T) {
+	clock := time.Date(2026, 10, 16, 6, 0, 0, 0, time.UTC)
+	defer func(old func() time.Time) { now = old }(now)
+	now = func() time.Time { return clock }
+	old := mkImage(t, "old", tableB)
+	shipped := mkImage(t, "new", nil)
+	r := newRig(t, old, shipped)
+	again, err := r.failTrial(Tries)
+	if !again || err != nil {
+		t.Fatalf("the last boot = %v, %v; want the previous kernel back and a reboot", again, err)
+	}
+	if !r.holds(old) {
+		t.Fatal("the previous kernel is not back: one that breaks Wi-Fi would keep the unit off the network")
+	}
+	if strings.Contains(Status(r.p), "bad: ") {
+		t.Fatal("a kernel that only never had a network was marked bad")
+	}
+	// Not straight away: the kernel before it has the network back within minutes, and writing the
+	// same kernel again then would take the unit off the network again and again.
+	clock = clock.Add(RetryAfter - time.Hour)
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply within RetryAfter = %v, %v", w, err)
+	}
+	if !r.holds(old) {
+		t.Fatal("written again within RetryAfter")
+	}
+	clock = clock.Add(time.Hour)
+	if w, err := Apply(r.p); !w || err != nil {
+		t.Fatalf("Apply after RetryAfter = %v, %v; want it written again", w, err)
+	}
+	if !strings.HasPrefix(r.state(), "trial 3 ") {
+		t.Fatalf("state %q: want a new trial", r.state())
+	}
+	if _, err := os.Stat(r.p.file("noroute")); !os.IsNotExist(err) {
+		t.Fatal("the new trial starts with the last one's boots without a network")
+	}
+	// This time it settles, and nothing about the network is left over.
+	if again, err := Boot(r.p); again || err != nil {
+		t.Fatal(again, err)
+	}
+	if err := Settled(r.p); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"noroute", "retry"} {
+		if _, err := os.Stat(r.p.file(f)); !os.IsNotExist(err) {
+			t.Fatalf("%s left after the kernel settled", f)
+		}
+	}
+}
+
+func TestATrialWithAnyOtherFailureIsMarkedBad(t *testing.T) {
+	old := mkImage(t, "old", tableB)
+	shipped := mkImage(t, "new", nil)
+	r := newRig(t, old, shipped)
+	// One boot of the three ended some other way (it never reached the trial timeout with only the
+	// network missing: a crash, a hang, missing hardware).
+	again, err := r.failTrial(Tries - 1)
+	if !again || err != nil {
+		t.Fatalf("the last boot = %v, %v", again, err)
+	}
+	if !r.holds(old) {
+		t.Fatal("the previous kernel is not back")
+	}
+	if !strings.Contains(Status(r.p), "bad: "+sha(shipped)) {
+		t.Fatal("not marked bad")
+	}
+	if _, err := os.Stat(r.p.file("retry")); !os.IsNotExist(err) {
+		t.Fatal("a bad kernel is down to be retried")
+	}
+}
+
+func TestNoRouteOutsideATrialDoesNothing(t *testing.T) {
+	r := newRig(t, mkImage(t, "old", tableB), mkImage(t, "new", nil))
+	if err := NoRoute(r.p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(r.p.file("noroute")); !os.IsNotExist(err) {
+		t.Fatal("counted a boot without a network with no kernel on trial")
+	}
+}
+
+func TestARetryWithTheClockBehindIsNotHeldBack(t *testing.T) {
+	clock := time.Date(2026, 10, 16, 6, 0, 0, 0, time.UTC)
+	defer func(old func() time.Time) { now = old }(now)
+	now = func() time.Time { return clock }
+	old := mkImage(t, "old", tableB)
+	r := newRig(t, old, mkImage(t, "new", nil))
+	if again, err := r.failTrial(Tries); !again || err != nil {
+		t.Fatal(again, err)
+	}
+	clock = time.Date(1970, 1, 1, 0, 1, 0, 0, time.UTC)
+	if w, err := Apply(r.p); !w || err != nil {
+		t.Fatalf("Apply with a clock before the put-back = %v, %v; want it written", w, err)
 	}
 }

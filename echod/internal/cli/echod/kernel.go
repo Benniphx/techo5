@@ -12,7 +12,8 @@ import (
 )
 
 // newKernelCmd is the 2nd gen Show 8's kernel update (update/kernel), which etc/techo5/boot.sh runs:
-// boot early at every boot, settled and then apply once the daemon has settled on a good slot.
+// boot early at every boot, settled and then apply once the daemon has settled on a good slot, and
+// noroute when a trial boot had everything but a network.
 func newKernelCmd() *cobra.Command {
 	c := &cobra.Command{
 		Use:   "kernel",
@@ -75,6 +76,17 @@ func newKernelCmd() *cobra.Command {
 			return kernel.Settled(p)
 		},
 	}
+	noroute := &cobra.Command{
+		Use:   "noroute",
+		Short: "This boot of a kernel on trial had everything but a network: if every try ends so, it is not marked bad",
+		RunE: func(*cobra.Command, []string) error {
+			p, err := paths()
+			if err != nil {
+				return err
+			}
+			return kernel.NoRoute(p)
+		},
+	}
 	apply := &cobra.Command{
 		Use:   "apply",
 		Short: "Write this slot's kernel to the boot partition when it holds another one, and reboot",
@@ -109,6 +121,6 @@ func newKernelCmd() *cobra.Command {
 			return reboot()
 		},
 	}
-	c.AddCommand(status, boot, settled, apply, restore)
+	c.AddCommand(status, boot, settled, noroute, apply, restore)
 	return c
 }

@@ -15,6 +15,12 @@
 // the only way back from one is the way the unit was installed (mtkclient), so kernels are tested on
 // units before they are released.
 //
+// Except when every try failed for want of a network alone: the daemon settled and the hardware was
+// there, but there was never a default route (NoRoute, from boot.sh). That may be the kernel's Wi-Fi,
+// or only the router being down, which says nothing about the kernel. Its tries are used up and the
+// previous kernel is put back all the same, since a kernel that breaks Wi-Fi would otherwise leave
+// the unit unreachable for good; but it is not marked bad, and is written again RetryAfter later.
+//
 // The state is a directory on the data partition, which every slot shares:
 //
 //	state       trial <tries> <written sha256> <written length> <shipped sha256>
@@ -24,6 +30,8 @@
 //	prev.img    the boot partition's image before the last write (its own length)
 //	prev.sha256 its sha256
 //	bad         shipped kernels that failed their trial, one sha256 a line
+//	noroute     <shipped sha256> <n>: boots of the kernel on trial that had everything but a network
+//	retry       <shipped sha256> <unix time>: a kernel put back for want of a network alone, and when
 package kernel
 
 import (
@@ -35,10 +43,19 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Tries is how many boots a new kernel has to settle in, as slotctl gives a new slot.
 const Tries = 3
+
+// RetryAfter is how long a kernel put back for want of a network alone waits before it is written
+// again. Not sooner: one whose Wi-Fi is broken would take the unit off the network for its three
+// tries every time, and the kernel before it brings the network back within minutes.
+const RetryAfter = 24 * time.Hour
+
+// now is the clock; tests set their own.
+var now = time.Now
 
 // Paths are where everything is. Default is the unit's; tests use their own.
 type Paths struct {
@@ -266,6 +283,40 @@ func (p Paths) shipped() (img []byte, sum string, ok bool, err error) {
 	return img, sum, true, nil
 }
 
+// sumCount reads a "<sha256> <number>" file; ok false when it is missing, unreadable or for another
+// kernel.
+func (p Paths) sumCount(name, shipped string) (n int64, ok bool) {
+	b, err := os.ReadFile(p.file(name))
+	if err != nil {
+		return 0, false
+	}
+	f := strings.Fields(string(b))
+	if len(f) != 2 || f[0] != shipped {
+		return 0, false
+	}
+	n, err = strconv.ParseInt(f[1], 10, 64)
+	return n, err == nil
+}
+
+func (p Paths) removeFile(name string) {
+	if err := os.Remove(p.file(name)); err == nil {
+		syncDir(p.Dir)
+	}
+}
+
+// NoRoute says this boot of the kernel on trial had everything it needs to settle but a network: the
+// daemon up, the hardware there, and never a default route. The boot has used its try all the same.
+func NoRoute(p Paths) error {
+	s, err := p.readState()
+	if err != nil || s.kind != "trial" {
+		return err
+	}
+	n, _ := p.sumCount("noroute", s.shipped)
+	n++
+	Log("this boot of the kernel on trial had no network, and nothing else wrong (%d so far)", n)
+	return writeFile(p.file("noroute"), []byte(fmt.Sprintf("%s %d\n", s.shipped, n)))
+}
+
 // Status says what the state is, for people.
 func Status(p Paths) string {
 	s, err := p.readState()
@@ -293,6 +344,11 @@ func Status(p Paths) string {
 	for s := range p.bad() {
 		fmt.Fprintf(&b, "bad: %s\n", s)
 	}
+	for _, name := range []string{"noroute", "retry"} {
+		if f, err := os.ReadFile(p.file(name)); err == nil {
+			fmt.Fprintf(&b, "%s: %s\n", name, strings.TrimSpace(string(f)))
+		}
+	}
 	return b.String()
 }
 
@@ -318,14 +374,27 @@ func Boot(p Paths) (reboot bool, err error) {
 		Log("the kernel is on trial, %d boots left after this one", s.tries)
 		return false, p.writeState(s)
 	}
-	Log("the kernel used all its tries without settling; putting the previous one back")
-	if err := p.markBad(s.shipped); err != nil {
-		return false, err
+	n, _ := p.sumCount("noroute", s.shipped)
+	netOnly := n >= Tries
+	if netOnly {
+		Log("the kernel used all its tries without a network and nothing else wrong; putting the previous one back, "+
+			"and this one is tried again in %v", RetryAfter)
+	} else {
+		Log("the kernel used all its tries without settling; putting the previous one back")
+		if err := p.markBad(s.shipped); err != nil {
+			return false, err
+		}
 	}
 	if err := p.restore(); err != nil {
 		Log("THE PREVIOUS KERNEL COULD NOT BE PUT BACK: %v; leaving the boot partition as it is", err)
 		return false, errors.Join(err, p.writeState(state{kind: "failed", shipped: s.shipped}))
 	}
+	if netOnly {
+		if err := writeFile(p.file("retry"), []byte(fmt.Sprintf("%s %d\n", s.shipped, now().Unix()))); err != nil {
+			return false, err
+		}
+	}
+	p.removeFile("noroute")
 	return true, p.writeState(state{})
 }
 
@@ -336,7 +405,12 @@ func Settled(p Paths) error {
 		return err
 	}
 	Log("the kernel settled; it is good")
-	return p.writeState(state{kind: "good", written: s.written, length: s.length, shipped: s.shipped})
+	if err := p.writeState(state{kind: "good", written: s.written, length: s.length, shipped: s.shipped}); err != nil {
+		return err
+	}
+	p.removeFile("noroute")
+	p.removeFile("retry")
+	return nil
 }
 
 // Apply writes the slot's kernel to the boot partition when it holds another one. reboot says it was
@@ -358,6 +432,14 @@ func Apply(p Paths) (reboot bool, err error) {
 	if p.bad()[sum] {
 		Log("the slot's kernel %s failed its trial before; not written again", sum)
 		return false, nil
+	}
+	if at, ok := p.sumCount("retry", sum); ok {
+		// A clock behind the moment it was put back is not trusted to say how long ago that was.
+		if since := now().Sub(time.Unix(at, 0)); since >= 0 && since < RetryAfter {
+			Log("the slot's kernel %s had no network on any of its tries; it is tried again in %v",
+				sum, (RetryAfter - since).Round(time.Minute))
+			return false, nil
+		}
 	}
 	part, err := p.readBoot()
 	if err != nil {
@@ -407,6 +489,9 @@ func Apply(p Paths) (reboot bool, err error) {
 	if err := p.writeState(trial); err != nil {
 		return false, err
 	}
+	// A new trial counts its own boots without a network.
+	p.removeFile("noroute")
+	p.removeFile("retry")
 	// Everything about the trial is on the disk before the boot partition changes.
 	syncAll()
 	Log("writing the slot's kernel %s with this unit's amp tuning (%s)", sum, name)
