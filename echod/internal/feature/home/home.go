@@ -132,8 +132,11 @@ type Feature struct {
 
 	// claiming is a station asked for whose stream has not started yet, and stationURL the url that
 	// started for the last one: what plays from it is live radio (liveURL).
+	// claimAt is when the claim was made, and claimedAt when a stream was last taken for one.
 	claiming   bool
 	stationURL string
+	claimAt    time.Time
+	claimedAt  time.Time
 
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
@@ -286,6 +289,7 @@ func Get() *Feature {
 		shared.buildRadioSensors()
 		shared.buildNowPlayingSensors()
 		hastate.Get().Changed.Listen(shared.stateChanged)
+		hastate.Get().Changed.Listen(shared.stationStarted)
 		media.Get().OnPlay.Listen(shared.played)
 		media.Get().OnEnd.Listen(shared.ended)
 		media.Get().OnNowPlaying.Listen(func(struct{}) { shared.pokeNowPlaying() })
@@ -767,6 +771,8 @@ func (f *Feature) Play(station string) {
 		if f.playOwn(station) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
+		} else {
+			f.unask(station)
 		}
 		return
 	}
@@ -774,11 +780,14 @@ func (f *Feature) Play(station string) {
 		if f.playListed(source, station) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
+		} else {
+			f.unask(station)
 		}
 		return
 	}
 	h := config.Get().Home.Radio
 	if !h.Configured() {
+		f.unask(station)
 		return
 	}
 	f.mu.Lock()
@@ -828,6 +837,8 @@ func (f *Feature) Stop() {
 	media.Get().Stop()
 	f.mu.Lock()
 	f.chosen = ""
+	// The station is over: nothing that plays after it is put back on or taken for it (resume.go).
+	f.asked, f.claiming, f.stationURL = "", false, ""
 	f.mu.Unlock()
 	f.Changed.Emit(struct{}{})
 	f.pokeMeta()

@@ -3,6 +3,9 @@ package home
 import (
 	"log/slog"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 )
 
 // Radio that puts itself back on when the stream drops.
@@ -41,6 +44,11 @@ func (f *Feature) ended(url string) {
 	if station != "" && time.Since(f.askedAt) > askedFor {
 		station = ""
 	}
+	// Only the station's own stream: a song or a sleep sound that played after it, even with the
+	// station's name still about, is not the station, and its end is nothing to put back.
+	if url != f.stationURL {
+		station = ""
+	}
 	now := time.Now()
 	if now.Sub(f.resumedAt) > resumeWindow {
 		f.resumed = 0
@@ -77,11 +85,42 @@ func (f *Feature) ended(url string) {
 // liveClaim is how long after a station is asked for the next stream to start is taken to be it: the
 // seconds Home Assistant takes to resolve a favorite and send its url, with room to spare. A stream
 // that starts later than that, with nothing asked for since, is something else.
-const liveClaim = time.Minute
+const liveClaim = 20 * time.Second
 
 // askStation is a station being asked for: what the next stream to start is (liveURL). Under f.mu.
 func (f *Feature) askStation(station string) {
-	f.asked, f.askedAt, f.claiming = station, time.Now(), true
+	f.asked, f.askedAt = station, time.Now()
+	f.claiming, f.claimAt = true, f.askedAt
+}
+
+// unask is a station asked for that will not start after all (it is not on the list, or Home
+// Assistant said no): the next stream is not taken for it. Only while it is still the one asked for.
+func (f *Feature) unask(station string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.asked == station {
+		f.claiming = false
+	}
+}
+
+// stationStarted is Home Assistant's "last station" text naming a new station: one started from Home
+// Assistant itself (a dashboard, an automation running the favorites script), not asked for here. The
+// next stream to start is taken for it, as for one asked for here; but not when a stream was just taken
+// for a station, whose name this is arriving after it.
+func (f *Feature) stationStarted(u hastate.Update) {
+	entity := config.Get().Home.Radio.Now
+	if entity == "" || u.Entity != entity || u.Attribute != "" || u.First {
+		return
+	}
+	if u.Value == "" || u.Value == "unknown" || u.Value == "unavailable" {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if time.Since(f.claimedAt) < liveClaim {
+		return
+	}
+	f.claiming, f.claimAt = true, time.Now()
 }
 
 // liveURL says whether url, as its track starts, is a live station (media.SetLive): the first stream
@@ -91,8 +130,8 @@ func (f *Feature) askStation(station string) {
 func (f *Feature) liveURL(url string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.claiming && time.Since(f.askedAt) < liveClaim {
-		f.claiming, f.stationURL = false, url
+	if f.claiming && time.Since(f.claimAt) < liveClaim {
+		f.claiming, f.stationURL, f.claimedAt = false, url, time.Now()
 		return true
 	}
 	f.claiming = false

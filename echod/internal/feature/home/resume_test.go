@@ -1,8 +1,12 @@
 package home
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 )
 
 // What may be put back on and what may not. A device that restarts what somebody just stopped is
@@ -16,15 +20,26 @@ func TestWhatIsWorthPuttingBackOn(t *testing.T) {
 		wantTry bool
 	}{
 		{
-			what:    "the stream that is playing, after a station was asked for",
-			set:     func(f *Feature) { f.url, f.asked, f.askedAt = "http://p/1", "KXYZ", time.Now() },
+			what: "the stream that is playing, after a station was asked for",
+			set: func(f *Feature) {
+				f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now(), "http://p/1"
+			},
 			ended:   "http://p/1",
 			wantTry: true,
 		},
 		{
-			what:  "a stream that is no longer the one playing",
-			set:   func(f *Feature) { f.url, f.asked, f.askedAt = "http://p/2", "KXYZ", time.Now() },
+			what: "a stream that is no longer the one playing",
+			set: func(f *Feature) {
+				f.url, f.asked, f.askedAt, f.stationURL = "http://p/2", "KXYZ", time.Now(), "http://p/1"
+			},
 			ended: "http://p/1",
+		},
+		{
+			what: "a song played after the station, with the station still the last asked for",
+			set: func(f *Feature) {
+				f.url, f.asked, f.askedAt, f.stationURL = "http://p/song", "KXYZ", time.Now(), "http://p/1"
+			},
+			ended: "http://p/song",
 		},
 		{
 			what:  "a stream nobody asked this device for",
@@ -34,14 +49,14 @@ func TestWhatIsWorthPuttingBackOn(t *testing.T) {
 		{
 			what: "a station asked for so long ago that this is something else",
 			set: func(f *Feature) {
-				f.url, f.asked, f.askedAt = "http://p/1", "KXYZ", time.Now().Add(-askedFor-time.Minute)
+				f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now().Add(-askedFor-time.Minute), "http://p/1"
 			},
 			ended: "http://p/1",
 		},
 		{
 			what: "a stream that has already been put back on too many times",
 			set: func(f *Feature) {
-				f.url, f.asked, f.askedAt = "http://p/1", "KXYZ", time.Now()
+				f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now(), "http://p/1"
 				f.resumed, f.resumedAt = resumeTries, time.Now()
 			},
 			ended: "http://p/1",
@@ -68,7 +83,7 @@ func TestWhatIsWorthPuttingBackOn(t *testing.T) {
 // is not ended by five drops spread across it.
 func TestTheRunOfTriesIsForgotten(t *testing.T) {
 	f := &Feature{}
-	f.url, f.asked, f.askedAt = "http://p/1", "KXYZ", time.Now()
+	f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now(), "http://p/1"
 	f.resumed, f.resumedAt = resumeTries, time.Now().Add(-resumeWindow-time.Minute)
 
 	f.ended("http://p/1")
@@ -118,9 +133,61 @@ func TestLiveIsTheStreamStartedForAStation(t *testing.T) {
 	// A station asked for long ago whose stream never came: what starts now is something else.
 	f.mu.Lock()
 	f.askStation("KDEF")
-	f.askedAt = time.Now().Add(-liveClaim - time.Second)
+	f.claimAt = time.Now().Add(-liveClaim - time.Second)
 	f.mu.Unlock()
 	if f.liveURL("http://p/song") {
 		t.Error("a stream starting long after a station was asked for was taken for live radio")
+	}
+}
+
+// A station that will not start after all (not on the list, or Home Assistant said no) leaves no claim
+// behind for whatever starts next.
+func TestAStationThatDidNotStartClaimsNothing(t *testing.T) {
+	f := &Feature{}
+	f.mu.Lock()
+	f.askStation("KXYZ")
+	f.mu.Unlock()
+	f.unask("KXYZ")
+	if f.liveURL("http://p/song") {
+		t.Error("a stream after a station that did not start was taken for live radio")
+	}
+	// Only the station still asked for: a later ask is not undone by an earlier one failing.
+	f.mu.Lock()
+	f.askStation("KABC")
+	f.mu.Unlock()
+	f.unask("KXYZ")
+	if !f.liveURL("http://p/2") {
+		t.Error("an earlier station's failure undid the claim of the one asked for since")
+	}
+}
+
+// A station started from Home Assistant itself, which names it in the "last station" text, has its
+// stream taken for live radio as one asked for here would; but not the name of one just started here,
+// arriving after its stream, and not the value that was there at start.
+func TestAStationStartedFromHomeAssistantIsLive(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Radio(config.Radio{Now: "input_text.last_station"}); err != nil {
+		t.Fatal(err)
+	}
+	now := func(v string, first bool) hastate.Update {
+		return hastate.Update{Key: hastate.Key{Entity: "input_text.last_station"}, Value: v, First: first}
+	}
+	f := &Feature{}
+	f.stationStarted(now("KXYZ", true))
+	if f.liveURL("http://p/song") {
+		t.Error("the value at start armed a claim")
+	}
+	f.stationStarted(now("unavailable", false))
+	if f.liveURL("http://p/song") {
+		t.Error("an unavailable text armed a claim")
+	}
+	f.stationStarted(now("KXYZ", false))
+	if !f.liveURL("http://p/1") {
+		t.Fatal("the stream of a station started from Home Assistant was not taken for live radio")
+	}
+	// The name arriving just after the stream it names: no second claim for the next stream.
+	f.stationStarted(now("KABC", false))
+	if f.liveURL("http://p/clip") {
+		t.Error("a station's name arriving after its stream armed a claim for the next one")
 	}
 }
