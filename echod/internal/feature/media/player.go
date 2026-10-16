@@ -734,6 +734,12 @@ func (p *Player) command(c esphome.MediaCommand) {
 		// kept as a pause, so the screen still shows what was playing and play picks it up again. A
 		// track left stopped that long is really over. A track somebody else is playing is theirs to
 		// stop, so the remote is asked to pause it instead.
+		//
+		// With nothing of its own playing or paused there is nothing to keep, and it is a stop like one
+		// here: what would start something again in a moment (a dropped station's put-back) is told.
+		if playing, paused := p.stream.Playing(); !playing && !paused {
+			p.OnStop.Emit(struct{}{})
+		}
 		p.fromHA(TransportPause)
 		n := p.stoppedAt.Add(1)
 		time.AfterFunc(stoppedFor, func() {
