@@ -250,3 +250,10 @@ func TestARetryThatKeepsFailingIsLoggedLessOften(t *testing.T) {
 		t.Fatal("a failure long after the last one logged was not logged")
 	}
 }
+
+// retryClipsOffOnce is one try of the retry, as its loop makes it, for the tests to call by hand.
+func (d *Detect) retryClipsOffOnce() bool {
+	d.clipsSave.Lock()
+	defer d.clipsSave.Unlock()
+	return d.retryClipsOffLocked()
+}

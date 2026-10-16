@@ -125,17 +125,10 @@ func (d *Detect) retryClipsOffLater() {
 	})
 }
 
-// retryClipsOffOnce tries the save once, and reports whether there is nothing left to do: saved, or
-// no longer wanted because clips are being kept again.
-func (d *Detect) retryClipsOffOnce() bool {
-	d.clipsSave.Lock()
-	defer d.clipsSave.Unlock()
-	return d.retryClipsOffLocked()
-}
-
-// retryClipsOffLocked is retryClipsOffOnce with clipsSave held: the look at whether clips are kept
-// again and the save that follows it are one step, so a Keep wake clips turned on between them cannot
-// be saved over with off.
+// retryClipsOffLocked tries the save once, with clipsSave held, and reports whether there is nothing
+// left to do: saved, or no longer wanted because clips are being kept again. The look at whether clips
+// are kept again and the save that follows it are one step, so a Keep wake clips turned on between them
+// cannot be saved over with off.
 func (d *Detect) retryClipsOffLocked() bool {
 	if d.clips != nil && d.clips.on.Load() {
 		d.clipsFails = 0
