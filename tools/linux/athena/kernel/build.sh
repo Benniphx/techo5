@@ -45,7 +45,10 @@ RAMDISK_FILES="LICENCE.mediatek mediatek/mt7663_n9_rebb.bin mediatek/mt7663_n9_v
 
 export ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-}
 export KBUILD_BUILD_USER=techo5 KBUILD_BUILD_HOST=athena-build
-export KBUILD_BUILD_TIMESTAMP="2026-10-15 00:00:00 UTC" KBUILD_BUILD_VERSION=1
+# Fixed, so a build is reproducible, but it is what `uname -v` says: bump it whenever the kernel
+# changes (a patch, the config, the kernel.org version), or a unit cannot tell the new kernel from
+# the one before. 2026-10-15 was v1.2.16 to v1.2.18's.
+export KBUILD_BUILD_TIMESTAMP="2026-10-16 00:00:00 UTC" KBUILD_BUILD_VERSION=1
 export LC_ALL=C TZ=UTC
 
 mkdir -p "$WORK/cache" "$OUT"
