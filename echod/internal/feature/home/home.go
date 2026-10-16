@@ -124,7 +124,7 @@ type Feature struct {
 	radar   radarState
 	url     string    // the stream playing, from the media player
 	urlAt   time.Time // when it started
-	urlName string // its station name once found
+	urlName string    // its station name once found
 
 	// asked is the last station this device asked to play and askedAt when, which is what a dropped
 	// stream is put back on with.
