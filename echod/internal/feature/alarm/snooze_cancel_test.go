@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 )
 
 // Turning an alarm off drops its snooze, and only its own (#159): a snooze pressed by mistake is undone
@@ -28,9 +29,8 @@ func TestTurningAnAlarmOffDropsItsSnooze(t *testing.T) {
 		for _, k := range keys {
 			a.snoozed = append(a.snoozed, source{key: "snooze:" + k, once: later})
 		}
-		list := snoozeList(a.snoozed)
 		a.mu.Unlock()
-		saveSnoozes(list)
+		a.saveSnoozes()
 	}
 	left := func() []string {
 		a.mu.Lock()
@@ -80,5 +80,63 @@ func TestTurningAnAlarmOffDropsItsSnooze(t *testing.T) {
 	}
 	if got := left(); len(got) != 0 {
 		t.Errorf("a deleted alarm kept its snooze: %v", got)
+	}
+}
+
+// A followed helper's arm switch turned off in Home Assistant drops its snooze, as turning off an
+// alarm on the device does; the switch's first report after a start, and other helpers, do not.
+func TestAHelperTurnedOffDropsItsSnooze(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Alarms().Follow([]string{"input_datetime.wake=input_boolean.wake_on", "input_datetime.gym"}); err != nil {
+		t.Fatal(err)
+	}
+	a := build()
+	later := time.Now().Add(9 * time.Minute).Truncate(time.Second)
+	a.mu.Lock()
+	a.snoozed = []source{{key: "snooze:input_datetime.wake", once: later}, {key: "snooze:input_datetime.gym", once: later}}
+	a.mu.Unlock()
+	off := func(first bool) {
+		a.helperChanged(hastate.Update{Key: hastate.Key{Entity: "input_boolean.wake_on"}, Value: "off", First: first})
+	}
+	count := func() int {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return len(a.snoozed)
+	}
+	off(true)
+	if n := count(); n != 2 {
+		t.Fatalf("the switch's first report dropped a snooze: %d left", n)
+	}
+	off(false)
+	a.mu.Lock()
+	left := a.snoozed
+	a.mu.Unlock()
+	if len(left) != 1 || left[0].key != "snooze:input_datetime.gym" {
+		t.Errorf("after the switch went off: %v, want only the other helper's snooze", left)
+	}
+}
+
+// Snooze on an alarm deleted or turned off while it rang stops it instead: nothing comes back.
+func TestSnoozingAnAlarmThatWentAwayStopsIt(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	endRing(t, a)
+	wake := config.Alarm{ID: "wake", Hour: 6, Minute: 30, Days: 0b0111110, Label: "Wake up", On: true}
+	if err := a.Put(wake); err != nil {
+		t.Fatal(err)
+	}
+	a.fire(source{key: "wake", label: "Wake up", days: wake.Days, local: true}, time.Now())
+	wake.On = false
+	if err := a.Put(wake); err != nil {
+		t.Fatal(err)
+	}
+	if !a.Snooze() {
+		t.Fatal("the snooze was not taken as a stop")
+	}
+	a.mu.Lock()
+	n := len(a.snoozed)
+	a.mu.Unlock()
+	if n != 0 {
+		t.Errorf("a turned-off alarm was snoozed back: %d snoozes", n)
 	}
 }

@@ -580,7 +580,10 @@ stock sound back. A file the device cannot play leaves the stock sound playing, 
 
 Alarms and timers work by voice, on the screen, and from Home Assistant. See
 [docs/actions.md](actions.md) for all of them. Snoozed by mistake? Turn the alarm off, and its snooze
-goes with it; turn it back on and it rings at its next time.
+goes with it; turn it back on and it rings at its next time. A one-time alarm is already off once it
+has rung, so delete it instead, or cancel the snoozes: the Snoozed row on the screen, or Cancel snoozes
+on the setup page. An alarm followed from a Home Assistant helper works the same way when its on/off
+switch is turned off.
 
 ## 8. Settings lock
 

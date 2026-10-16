@@ -62,6 +62,10 @@ type Ring struct {
 	// folded are alarms that went off while this one rang and joined its ring: they end with it, and
 	// Home Assistant is told each one stopped.
 	folded []folded
+
+	// local is an alarm set on the device, or its snooze: one deleted or turned off while it rings is
+	// not snoozed back (SnoozeFor).
+	local bool
 }
 
 // folded is an alarm that joined a ring already sounding.
@@ -120,7 +124,10 @@ type Alarms struct {
 	aliveAt time.Time
 	since   time.Time
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// saveMu keeps one save of the snoozes at a time, each writing the list as it is then, so two
+	// changes saved at once cannot leave the older list on disk (saveSnoozes).
+	saveMu  sync.Mutex
 	ringing *Ring
 	silence func()
 	snoozed []source
@@ -181,11 +188,7 @@ func build() *Alarms {
 		Mode: esphome.NumberSlider,
 	}
 	a.ringVol.OnCommand = func(v float32) { a.SetRingVolume(int(v), false) }
-	hastate.Get().Changed.Listen(func(u hastate.Update) {
-		if a.follows(u.Entity) {
-			a.poke()
-		}
-	})
+	hastate.Get().Changed.Listen(a.helperChanged)
 	return a
 }
 
@@ -230,7 +233,7 @@ func (a *Alarms) Restore(c config.Config) {
 	a.mu.Unlock()
 
 	if len(live) != len(c.Alarms.Snoozed) {
-		saveSnoozes(snoozeList(live))
+		a.saveSnoozes()
 	}
 }
 
@@ -427,13 +430,13 @@ func (a *Alarms) fire(s source, now time.Time) {
 	before := len(a.snoozed)
 	a.snoozed = slices.DeleteFunc(a.snoozed, func(x source) bool { return x.key == s.key })
 	// A snooze that rings is spent, so the saved copy must go with it or a restart would bring it
-	// back. Taken under the lock and written outside it: saving marshals and fsyncs the whole file.
-	spent, saved := len(a.snoozed) != before, snoozeList(a.snoozed)
+	// back. Written outside the lock: saving marshals and fsyncs the whole file.
+	spent := len(a.snoozed) != before
 	if a.ringing != nil {
 		a.ringing.folded = append(a.ringing.folded, folded{key: s.key, label: s.label, at: now})
 		a.mu.Unlock()
 		if spent {
-			saveSnoozes(saved)
+			a.saveSnoozes()
 		}
 		// Folded into the ring already sounding, which may be one somebody silenced: this alarm is a
 		// new reason to ring and is owed a chime of its own, and its words if it has any.
@@ -444,14 +447,15 @@ func (a *Alarms) fire(s source, now time.Time) {
 		}
 		return
 	}
-	a.ringing = &Ring{Key: strings.TrimPrefix(s.key, "snooze:"), Label: s.label, At: now}
+	key := strings.TrimPrefix(s.key, "snooze:")
+	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key))}
 	// Started under the lock, so there is no moment where an alarm is ringing and Stop finds
 	// nothing to stop. The bell calls rang from its own goroutine, never from here.
 	a.silence = ring.Start("alarm", s.label, speaker.AlarmSound(a.Sound()), a.rang)
 	a.mu.Unlock()
 
 	if spent {
-		saveSnoozes(saved)
+		a.saveSnoozes()
 	}
 
 	a.Changed.Emit(struct{}{})
@@ -527,7 +531,6 @@ func (a *Alarms) pruneSnoozes(now time.Time) {
 	a.mu.Lock()
 	live, missed := splitSnoozes(a.snoozed, now)
 	a.snoozed = live
-	saved := snoozeList(live)
 	a.mu.Unlock()
 
 	if len(missed) == 0 {
@@ -536,7 +539,7 @@ func (a *Alarms) pruneSnoozes(now time.Time) {
 	for _, s := range missed {
 		ring.Missed("snooze", s.label, s.once)
 	}
-	saveSnoozes(saved)
+	a.saveSnoozes()
 	a.Changed.Emit(struct{}{})
 }
 
@@ -551,8 +554,14 @@ func snoozeList(snoozed []source) []config.Snooze {
 
 // saveSnoozes writes the snoozes down so a restart between pressing Snooze and the alarm coming back
 // does not lose it. Called when one is made, rings or is dropped, and never on a tick: every set
-// marshals the whole config and fsyncs it.
-func saveSnoozes(list []config.Snooze) {
+// marshals the whole config and fsyncs it. Call it without a.mu held. The list is read under saveMu,
+// not handed in, so of two saves at once the later writes the newer list.
+func (a *Alarms) saveSnoozes() {
+	a.saveMu.Lock()
+	defer a.saveMu.Unlock()
+	a.mu.Lock()
+	list := snoozeList(a.snoozed)
+	a.mu.Unlock()
 	if err := config.Set().Alarms().Snoozed(list); err != nil {
 		slog.Warn("saving the snoozes failed", "err", err)
 	}
@@ -567,26 +576,41 @@ func (a *Alarms) CancelSnoozes() bool {
 	if n == 0 {
 		return false
 	}
-	saveSnoozes(nil)
+	a.saveSnoozes()
 	slog.Info("snoozes canceled", "count", n)
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return true
 }
 
-// dropSnooze drops the snooze of the alarm with this ID, if there is one.
-func (a *Alarms) dropSnooze(id string) {
+// localAlarm is whether an alarm with this ID is set on the device.
+func localAlarm(id string) bool {
+	return slices.ContainsFunc(config.Get().Alarms.List, func(x config.Alarm) bool { return x.ID == id })
+}
+
+// alarmGone is whether the device's alarm with this ID was deleted, or turned off when it repeats. A
+// one-off turns itself off as it rings, so off says nothing about it.
+func alarmGone(id string) bool {
+	list := config.Get().Alarms.List
+	i := slices.IndexFunc(list, func(x config.Alarm) bool { return x.ID == id })
+	return i < 0 || (!list[i].On && list[i].Days != config.DaysOnce)
+}
+
+// dropSnooze drops the snooze of the alarm with this ID, or of the helper with this entity, if there
+// is one, and says whether there was.
+func (a *Alarms) dropSnooze(id string) bool {
 	key := "snooze:" + id
 	a.mu.Lock()
 	before := len(a.snoozed)
 	a.snoozed = slices.DeleteFunc(a.snoozed, func(x source) bool { return x.key == key })
-	dropped, saved := len(a.snoozed) != before, snoozeList(a.snoozed)
+	dropped := len(a.snoozed) != before
 	a.mu.Unlock()
 	if !dropped {
-		return
+		return false
 	}
-	saveSnoozes(saved)
+	a.saveSnoozes()
 	slog.Info("snooze canceled with its alarm", "id", id)
+	return true
 }
 
 // Snooze silences a ringing alarm and rings it again after the snooze length set on the device.
@@ -606,15 +630,21 @@ func (a *Alarms) SnoozeFor(minutes int) bool {
 		a.mu.Unlock()
 		return false
 	}
+	// Deleted or turned off while it rang: a snooze would bring back an alarm nobody wants, so it is
+	// stopped instead (#159).
+	if r.local && alarmGone(r.Key) {
+		a.mu.Unlock()
+		slog.Info("alarm snoozed after it was turned off or deleted; stopped instead", "key", r.Key)
+		return a.Stop()
+	}
 	r.snoozed = true
 	now := time.Now()
 	at := now.Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
 	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at})
 	a.lastSnooze = snoozeMade{made: now, until: at, minutes: minutes}
-	saved := snoozeList(a.snoozed)
 	a.mu.Unlock()
 
-	saveSnoozes(saved)
+	a.saveSnoozes()
 	slog.Info("alarm snoozed", "minutes", minutes)
 	fireEvent("snoozed", r.Key, r.Label, r.At)
 	silence()
@@ -992,6 +1022,22 @@ func (a *Alarms) followHelpers(list []string) {
 		}
 	}
 	hastate.Get().Follow("alarms", keys...)
+	a.poke()
+}
+
+// helperChanged follows a followed helper's state. Its arm switch turned off in Home Assistant drops
+// its snooze, as turning off an alarm on the device does (#159).
+func (a *Alarms) helperChanged(u hastate.Update) {
+	if !a.follows(u.Entity) {
+		return
+	}
+	if !u.First && u.Attribute == "" && u.Value == "off" {
+		for _, h := range parseHelpers(config.Get().Alarms.Follow) {
+			if h.arm == u.Entity && a.dropSnooze(h.entity) {
+				a.Changed.Emit(struct{}{})
+			}
+		}
+	}
 	a.poke()
 }
 
