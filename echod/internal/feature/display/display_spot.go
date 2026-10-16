@@ -834,6 +834,12 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.clearAnswer()
 			return
 		}
+		// The wake light's face, held at full after an alarm with nothing ringing: a tap lets it go, as
+		// stop does (#161). While it is only coming up before an alarm, the tap is the clock's as ever.
+		if tapLetsGoOfLight(time.Now()) {
+			d.wake()
+			return
+		}
 		d.mu.Lock()
 		call := d.callShown && onCallButton(g.X, g.Y)
 		if call {

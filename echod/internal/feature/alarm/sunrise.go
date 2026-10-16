@@ -194,6 +194,31 @@ func (a *Alarms) dropBridge() bool {
 	return had
 }
 
+// LetGoOfLight lets go of the wake light held at full, for a stop on the device with nothing sounding
+// (#161): the stop word, the action button, a tap on the screen. Both holds go, the one for the next
+// alarm (dropBridge) and the one a lit snooze keeps, but the snooze itself stays and rings as it
+// would have, only with the room left as it is until then: a stop with nothing ringing never canceled
+// a snooze on the device. Stop in Home Assistant does that as well. It reports whether anything held
+// the light.
+func (a *Alarms) LetGoOfLight() bool {
+	bridged := a.dropBridge()
+	a.mu.Lock()
+	unlit := false
+	for i := range a.snoozed {
+		if a.snoozed[i].lit {
+			a.snoozed[i].lit, unlit = false, true
+		}
+	}
+	a.mu.Unlock()
+	if unlit {
+		a.saveSnoozes()
+		slog.Info("wake light held for a snooze let go")
+		a.poke()
+		a.Changed.Emit(struct{}{})
+	}
+	return bridged || unlit
+}
+
 // saveBridge writes down the alarm the light is held for, so a restart while it waits keeps the light
 // up as a snooze does. Called when the hold begins or is let go; call it without a.mu held.
 func (a *Alarms) saveBridge() {

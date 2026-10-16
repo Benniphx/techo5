@@ -1167,6 +1167,12 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.clearAnswer()
 			return
 		}
+		// The wake light's page, held at full after an alarm with nothing ringing: a tap lets it go, as
+		// stop does (#161). While it is only coming up before an alarm, the tap is the clock's as ever.
+		if idle && !weatherUp && d.wakeLight(time.Now()) > 0 && tapLetsGoOfLight(time.Now()) {
+			d.wake()
+			return
+		}
 		// The alert badge on the clock opens the alert, and a pill over the rain map opens its alert.
 		// Both sit in the top band too.
 		if idle && !weatherUp && d.r != nil && d.r.badgeTapped(image.Pt(g.X, g.Y)) && d.OpenAlert(0) {

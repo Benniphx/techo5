@@ -9,6 +9,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 )
 
 // Waking to light. For the quarter hour (or whatever is set) before an alarm, the screen comes up
@@ -26,7 +27,23 @@ var sunriseProgress = func(now time.Time) float64 { return alarm.Get().SunrisePr
 // sunriseHold is what holds the light at full after an alarm, if anything (alarm.Alarms.WakeHold).
 var sunriseHold = func(now time.Time) (until time.Time, snooze, ok bool) { return alarm.Get().WakeHold(now) }
 
+// releaseLight lets go of the wake light held after an alarm, as a stop with nothing sounding does
+// (ring.Release).
+var releaseLight = ring.Release
+
 func sunriseLevel(progress float64) float64 { return alarm.SunriseLevel(progress) }
+
+// tapLetsGoOfLight is a tap on the wake light's page with nothing ringing. While the light is held at
+// full after an alarm, the tap lets it go, as the stop word or Stop in Home Assistant does (#161); it
+// was the one thing on the device that could not turn it off. While the light is only coming up before
+// an alarm, it does nothing. It reports whether it let the light go.
+func tapLetsGoOfLight(now time.Time) bool {
+	if _, _, ok := sunriseHold(now); !ok || !releaseLight() {
+		return false
+	}
+	slog.Info("screen: a tap let go of the held wake light")
+	return true
+}
 
 // The Wake with light row's choices.
 var sunriseChoices = []int{0, 5, 10, 15, 20, 30}

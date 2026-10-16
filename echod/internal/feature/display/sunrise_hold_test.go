@@ -48,3 +48,22 @@ func TestTheRowSaysWhatHoldsTheLight(t *testing.T) {
 		}
 	}
 }
+
+// A tap on the wake light's page lets it go while it is held after an alarm, and does nothing while
+// it is only coming up (#161).
+func TestATapLetsTheHeldLightGo(t *testing.T) {
+	was := releaseLight
+	t.Cleanup(func() { releaseLight = was })
+	released := 0
+	releaseLight = func() bool { released++; return true }
+	now := time.Date(2026, 10, 16, 8, 12, 0, 0, time.Local)
+
+	heldLight(t, time.Time{}, false, false)
+	if tapLetsGoOfLight(now) || released != 0 {
+		t.Error("a tap on the light coming up before an alarm let it go")
+	}
+	heldLight(t, now.Add(18*time.Minute), false, true)
+	if !tapLetsGoOfLight(now) || released != 1 {
+		t.Error("a tap on the light held for the next alarm did not let it go")
+	}
+}

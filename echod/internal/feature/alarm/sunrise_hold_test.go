@@ -406,6 +406,68 @@ func TestWhatHoldsTheLight(t *testing.T) {
 	}
 }
 
+// A stop on the device with nothing sounding lets go of the light a lit snooze holds, and leaves the
+// snooze to ring as it would have (#161); and of the light held for the next alarm, saved or not.
+func TestADeviceStopLetsTheHeldLightGo(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", Label: "Wake up", At: time.Now(), lit: true}
+	a.silence = func() {}
+	a.mu.Unlock()
+	if !a.SnoozeFor(9) {
+		t.Fatal("nothing to snooze")
+	}
+	a.rang()
+	if got := a.SunriseProgress(time.Now()); got != 1 {
+		t.Fatalf("while it is snoozed the light is %.2f, want full", got)
+	}
+	if !a.LetGoOfLight() {
+		t.Fatal("a stop found no light held by the snooze")
+	}
+	if got := a.SunriseProgress(time.Now()); got != 0 {
+		t.Errorf("after a stop the snoozed light is %.2f, want off", got)
+	}
+	if v := a.View(time.Now()); len(v.Snoozed) != 1 {
+		t.Errorf("after a stop there are %d snoozes, want the one still coming", len(v.Snoozed))
+	}
+	if s := config.Get().Alarms.Snoozed; len(s) != 1 || s[0].Lit {
+		t.Errorf("the saved snooze is %+v, want it kept without the light", s)
+	}
+	if a.LetGoOfLight() {
+		t.Error("a second stop found the light still held")
+	}
+	a.CancelSnoozes()
+
+	// The light held for an alarm twenty minutes off, with half an hour of light.
+	next := time.Now().Add(20 * time.Minute)
+	al, err := a.Set(next.Hour(), next.Minute(), config.DaysEvery, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	al.Sunrise = 30
+	if err := a.Put(al); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now(), lit: true}
+	a.mu.Unlock()
+	a.rang()
+	if h := config.Get().Alarms.Held; h == nil || h.Key != al.ID {
+		t.Fatalf("the held light was saved as %+v, want the next alarm", h)
+	}
+	if !a.LetGoOfLight() {
+		t.Fatal("a stop found no light held for the next alarm")
+	}
+	if got := a.SunriseProgress(time.Now()); got >= 1 {
+		t.Error("after a stop the light is still held at full")
+	}
+	if h := config.Get().Alarms.Held; h != nil {
+		t.Errorf("after a stop the saved held light is %+v, want none", h)
+	}
+}
+
 // The light held for the next alarm survives a restart while it still holds, and not otherwise.
 func TestTheHeldLightComesBackAfterARestart(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))

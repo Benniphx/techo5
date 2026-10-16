@@ -40,6 +40,7 @@ func init() {
 	// time a button can be pressed this is already in place.
 	ring.Silences(func() bool { return Get().Stop() })
 	ring.Snoozes(func(minutes int) bool { return Get().SnoozeFor(minutes) })
+	ring.Releases(func() bool { return Get().LetGoOfLight() })
 }
 
 const (
