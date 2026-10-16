@@ -67,6 +67,15 @@ Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a 
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- ⚡ **The Show 8 2nd gen at full speed** (v1.2.19). Its kernel now scales the CPUs up to 1.99 GHz
+  instead of leaving them at the bootloader's 1.1 to 1.2 GHz: about 55% faster on one core and 60% on
+  all eight, ahead of a Raspberry Pi 5 on all cores, with temperature control. The kernel comes over
+  the air from Home Assistant like any update. Numbers:
+  [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena#speed)
+- 🌅 **A wake-up light that stays on, and sounds and wake words of your own** (v1.2.19). The light
+  holds at full between close alarms and through a snooze ([#161](https://github.com/HuskerMinion/techo5/issues/161)),
+  and the setup page takes your own sounds and wake word models ([#160](https://github.com/HuskerMinion/techo5/issues/160)).
+  Thanks to [@7rozen7ear](https://github.com/7rozen7ear).
 - 🆕 **The Echo Show 8 2nd gen** (v1.2.16). TECHO5 now runs on the 2021 Show 8 (`athena`), on its own
   64-bit mainline Linux kernel: the first OS other than Fire OS on it. Screen, touch, all four mics,
   the speaker, Bluetooth, Wi-Fi and the light sensor work. The story and the board:
