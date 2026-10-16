@@ -405,3 +405,17 @@ func TestWhatHoldsTheLight(t *testing.T) {
 		}
 	}
 }
+
+// A clock set back hours does not hold the light for all of them: the bridged alarm's window has to
+// be open still.
+func TestTheBridgeLetsGoWhenTheClockGoesBack(t *testing.T) {
+	at := time.Date(2026, 10, 16, 8, 30, 0, 0, time.UTC)
+	s := []source{{key: "b", hour: 8, min: 30, days: config.DaysEvery, sunrise: 30}}
+	b := bridge{key: "b", at: at}
+	if !b.holds(s, at.Add(-30*time.Minute)) {
+		t.Error("the bridge let go with its alarm's window open")
+	}
+	if b.holds(s, at.Add(-3*time.Hour)) {
+		t.Error("with the clock three hours back the bridge still holds")
+	}
+}

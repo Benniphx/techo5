@@ -67,14 +67,15 @@ type bridge struct {
 // after its time, not at it, and the light must not drop for that moment.
 const bridgeGrace = time.Minute
 
-// holds is whether the alarm b waits for is still coming: still armed, still at that time. One turned
-// off, deleted or moved lets the light go.
+// holds is whether the alarm b waits for is still coming: still armed, still at that time, and with
+// its window still open. One turned off, deleted or moved lets the light go, and so does a clock set
+// back hours, which would otherwise hold the light for all of them.
 func (b bridge) holds(sources []source, now time.Time) bool {
 	if b.key == "" || now.After(b.at.Add(bridgeGrace)) {
 		return false
 	}
 	for _, s := range sources {
-		if s.key != b.key || s.sunrise <= 0 {
+		if s.key != b.key || s.sunrise <= 0 || b.at.Sub(now) > time.Duration(s.sunrise)*time.Minute {
 			continue
 		}
 		if at, ok := s.next(b.at); ok && at.Equal(b.at) {
