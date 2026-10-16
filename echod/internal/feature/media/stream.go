@@ -121,6 +121,9 @@ type track struct {
 	cancel context.CancelFunc
 	// received is audio a remote is sending (PlayPCM), not a url or a generator.
 	received bool
+	// live is a url the radio feature said is a live station when it started (SetLive): fetched again
+	// when it drops, and given up on sooner when it goes quiet (resume.go). Set before it runs.
+	live bool
 
 	// heard closes when the track's first samples go to the speaker, and done when it has stopped for
 	// good, with failed saying why if it failed: how a caller that has to answer whether it is playing
@@ -259,8 +262,9 @@ func (m *Stream) play(url string, handOff bool) *track {
 		return nil
 	}
 
-	t, ctx := m.start(&track{item: url, heard: make(chan struct{}), done: make(chan struct{}), handOff: handOff})
-	slog.Info("playing media", "url", url)
+	live := liveURL(url)
+	t, ctx := m.start(&track{item: url, heard: make(chan struct{}), done: make(chan struct{}), handOff: handOff, live: live})
+	slog.Info("playing media", "url", url, "live", live)
 
 	safe.Go("media", func() {
 		itself := false
@@ -281,7 +285,7 @@ func (m *Stream) play(url string, handOff bool) *track {
 		for tries := 0; ; {
 			began := time.Now()
 			err = m.run(ctx, t, url)
-			if !resume(ctx, err, time.Since(began), &tries) {
+			if !resume(ctx, t.live, err, time.Since(began), &tries) {
 				break
 			}
 		}
@@ -639,7 +643,7 @@ func (m *Stream) run(ctx context.Context, t *track, url string) error {
 	// Live radio is fetched again when it drops (resume.go), so a station gone quiet is given up on
 	// sooner than a track would be: the sooner it is fetched again, the shorter the gap.
 	limit := stall
-	if live() {
+	if t.live {
 		limit = liveStall
 	}
 

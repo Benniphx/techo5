@@ -79,3 +79,48 @@ func TestTheRunOfTriesIsForgotten(t *testing.T) {
 		t.Errorf("after the window passed the count is %d, expected a fresh first try", f.resumed)
 	}
 }
+
+// Live radio is the stream that starts for a station this device asked for, decided as it starts: not
+// whatever plays while a station's name lingers on the radio page.
+func TestLiveIsTheStreamStartedForAStation(t *testing.T) {
+	f := &Feature{}
+	if f.liveURL("http://p/song") {
+		t.Error("with no station asked for, a stream was taken for live radio")
+	}
+
+	f.mu.Lock()
+	f.askStation("KXYZ")
+	f.meta.station = "KXYZ"
+	f.mu.Unlock()
+	if !f.liveURL("http://p/1") {
+		t.Fatal("the stream that started for a station was not taken for live radio")
+	}
+	// What follows the station is not it, though the page still names the station.
+	if f.liveURL("http://p/clip") {
+		t.Error("a clip after the station was taken for live radio")
+	}
+	if f.liveURL("/local/sleep/rain.mp3") {
+		t.Error("a file after the station was taken for live radio")
+	}
+	// The station's own stream started again (put back on) still is.
+	if !f.liveURL("http://p/1") {
+		t.Error("the station's stream started again was not taken for live radio")
+	}
+
+	// A new station: its stream is, and the one before it no longer is.
+	f.mu.Lock()
+	f.askStation("KABC")
+	f.mu.Unlock()
+	if !f.liveURL("http://p/2") || f.liveURL("http://p/1") {
+		t.Error("switching stations did not go by the new station's stream")
+	}
+
+	// A station asked for long ago whose stream never came: what starts now is something else.
+	f.mu.Lock()
+	f.askStation("KDEF")
+	f.askedAt = time.Now().Add(-liveClaim - time.Second)
+	f.mu.Unlock()
+	if f.liveURL("http://p/song") {
+		t.Error("a stream starting long after a station was asked for was taken for live radio")
+	}
+}

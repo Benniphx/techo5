@@ -14,8 +14,11 @@ import (
 // live radio and ends without anyone stopping it is fetched again from the same url, after a short
 // wait, as one track: the media player goes on reporting it as playing, and the gap is a second or so.
 //
-// Only radio: a song or a podcast fetched again would start over from its beginning. Whether what plays
-// is radio is the radio feature's to say (feature/home follows the station), through SetLive.
+// Only radio: a song or a podcast fetched again would start over from its beginning, and a clip that ends
+// cleanly would play again. Whether a track is radio is decided once, when it starts, and kept with it
+// (track.live): the radio feature says so through SetLive, for the url of a station it was asked to play.
+// What happens to be named as playing later (a station's name lingering after it) never makes a track
+// that is playing now live.
 //
 // A stream that had played for resumeFresh counts as a new drop, and is always tried again; one that
 // fails sooner than that counts towards resumeTries, so a station that is gone ends after a few quick
@@ -33,23 +36,24 @@ const liveStall = 8 * time.Second
 // resumeWaits is the wait before each try in a row.
 var resumeWaits = [resumeTries]time.Duration{time.Second, 5 * time.Second, 15 * time.Second}
 
-// liveCheck says whether what plays now is live radio. nil until the radio feature sets it.
-var liveCheck atomic.Pointer[func() bool]
+// liveCheck says whether a url about to play is a live station. nil until the radio feature sets it.
+var liveCheck atomic.Pointer[func(url string) bool]
 
-// SetLive is how the radio feature says whether what plays is a live station: one that may be fetched
-// again when it drops.
-func SetLive(f func() bool) { liveCheck.Store(&f) }
+// SetLive is how the radio feature says whether a url about to play is a live station: one that may be
+// fetched again when it drops. It is asked once per track, as the track starts.
+func SetLive(f func(url string) bool) { liveCheck.Store(&f) }
 
-func live() bool {
+// liveURL asks the radio feature about url, as its track starts.
+func liveURL(url string) bool {
 	f := liveCheck.Load()
-	return f != nil && (*f)()
+	return f != nil && (*f)(url)
 }
 
 // resume says whether a track whose fetch just ended after ran (err, if it failed) is fetched again,
-// and waits out the pause first. tries counts the quick failures in a row and is updated. ctx is the
-// track's: stopped or replaced, it is never resumed.
-func resume(ctx context.Context, err error, ran time.Duration, tries *int) bool {
-	if ctx.Err() != nil || IsUnplayable(err) || !live() {
+// and waits out the pause first. Only a live one (track.live) ever is. tries counts the quick failures
+// in a row and is updated. ctx is the track's: stopped or replaced, it is never resumed.
+func resume(ctx context.Context, live bool, err error, ran time.Duration, tries *int) bool {
+	if !live || ctx.Err() != nil || IsUnplayable(err) {
 		return false
 	}
 	if ran >= resumeFresh {

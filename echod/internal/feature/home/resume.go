@@ -73,3 +73,28 @@ func (f *Feature) ended(url string) {
 		}
 	})
 }
+
+// liveClaim is how long after a station is asked for the next stream to start is taken to be it: the
+// seconds Home Assistant takes to resolve a favorite and send its url, with room to spare. A stream
+// that starts later than that, with nothing asked for since, is something else.
+const liveClaim = time.Minute
+
+// askStation is a station being asked for: what the next stream to start is (liveURL). Under f.mu.
+func (f *Feature) askStation(station string) {
+	f.asked, f.askedAt, f.claiming = station, time.Now(), true
+}
+
+// liveURL says whether url, as its track starts, is a live station (media.SetLive): the first stream
+// to start after a station was asked for, or that same stream again. Decided here, once, rather than
+// from what the radio page names as playing, which lingers after the station: a song, a clip or a file
+// of Home Assistant's that follows the radio is not radio, and fetched again it would play again.
+func (f *Feature) liveURL(url string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.claiming && time.Since(f.askedAt) < liveClaim {
+		f.claiming, f.stationURL = false, url
+		return true
+	}
+	f.claiming = false
+	return url != "" && url == f.stationURL
+}

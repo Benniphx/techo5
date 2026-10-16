@@ -130,6 +130,11 @@ type Feature struct {
 	asked   string
 	askedAt time.Time
 
+	// claiming is a station asked for whose stream has not started yet, and stationURL the url that
+	// started for the last one: what plays from it is live radio (liveURL).
+	claiming   bool
+	stationURL string
+
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
 	resumed   int
@@ -213,13 +218,9 @@ const forecastEvery = 30 * time.Minute
 
 // Run keeps the forecast current. Nothing to do without a token or a weather entity.
 func (f *Feature) Run(ctx context.Context) error {
-	// What plays is live radio while a station is being followed: a drop is fetched again (media
-	// resume.go), where a song would start over.
-	media.SetLive(func() bool {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		return f.meta.station != ""
-	})
+	// A station this device asked for is live radio: a drop is fetched again (media resume.go), where
+	// a song would start over.
+	media.SetLive(f.liveURL)
 	go f.metaLoop(ctx)
 	go f.nowPlayingLoop(ctx)
 	if hasScreen {
@@ -754,7 +755,7 @@ func (f *Feature) Play(station string) {
 	// What was asked for, in the words the lists use, so a stream that drops can be asked for again:
 	// the name worked out from a URL afterwards is often the stream's host, which no list has.
 	f.mu.Lock()
-	f.asked, f.askedAt = station, time.Now()
+	f.askStation(station)
 	f.mu.Unlock()
 
 	source := radioSource()
