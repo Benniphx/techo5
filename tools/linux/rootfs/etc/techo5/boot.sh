@@ -297,7 +297,7 @@ TRIAL_TIMEOUT=${TRIAL_TIMEOUT:-900}
 # Both reboots wait while the daemon says the unit is busy (/run/techo5/busy, echod
 # feature/busy): an alarm or timer ringing, a voice request, a call, a sound, music, the wake light,
 # or an alarm due within 30 minutes. Not forever: after BUSY_LIMIT seconds of busy in a row only a
-# ring still holds them, so a unit that is never idle, or a kernel that keeps something from
+# ring, or an alarm or timer due within the minute, still holds them, so a unit that is never idle, or a kernel that keeps something from
 # ending, still gets its update or its verdict.
 BUSY_LIMIT=${BUSY_LIMIT:-7200}
 t5_hw_there() {
@@ -307,21 +307,27 @@ t5_hw_there() {
 t5_kernel_works() {
 	ip route show default 2>/dev/null | grep -q default && t5_hw_there
 }
-# t5_busy: whether a reboot now would cut something off. The marker names the daemon's pid first;
-# one whose daemon is gone says nothing. busy_since is the caller's, kept across calls.
+# t5_busy: whether a reboot now would cut something off. The marker names the daemon's pid and the
+# uptime it was written at, and the daemon writes it again every few seconds: one more than a minute
+# old, or whose pid is not the daemon's (gone, or reused), says nothing. busy_since is the caller's,
+# kept across calls.
 t5_busy() {
 	bp=$(sed -n 's/^pid //p' /run/techo5/busy 2>/dev/null)
-	if [ -z "$bp" ] || [ ! -d "/proc/$bp" ]; then
+	ba=$(sed -n 's/^at //p' /run/techo5/busy 2>/dev/null)
+	bt=$(cut -d. -f1 /proc/uptime)
+	case "$bp" in ""|*[!0-9]*) ba=-999;; esac
+	case "$ba" in ""|*[!0-9]*) ba=-999;; esac
+	if [ $((bt-ba)) -gt 60 ] || [ "$(cat "/proc/$bp/comm" 2>/dev/null)" != techo5 ]; then
 		busy_since=
 		return 1
 	fi
-	bt=$(cut -d. -f1 /proc/uptime)
 	if [ -z "$busy_since" ]; then
 		busy_since=$bt
-		log "kernel: waiting to reboot, the unit is busy: $(sed 1d /run/techo5/busy | xargs)"
+		log "kernel: waiting to reboot, the unit is busy: $(grep -vE '^(pid|at) ' /run/techo5/busy | xargs)"
 	fi
 	[ $((bt-busy_since)) -lt $BUSY_LIMIT ] && return 0
-	grep -qx ring /run/techo5/busy
+	# past the limit, only what rings now or within the minute
+	grep -qxE 'ring|soon' /run/techo5/busy
 }
 if [ -n "${KERNEL_UPDATE:-}" ]; then
 	/usr/local/bin/techo5 tools kernel boot >> /run/boot.log 2>&1
@@ -364,7 +370,11 @@ if [ -n "${KERNEL_UPDATE:-}" ]; then
 				fi
 				cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
 				sync
+				# Read again at the last moment: a ring may have started meanwhile. noroute counts
+				# a boot once, so going round again is safe.
+				t5_busy && continue
 				reboot
+				exit 0
 			fi
 		done
 	) &

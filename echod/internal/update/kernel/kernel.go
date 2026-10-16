@@ -30,8 +30,10 @@
 //	prev.img    the boot partition's image before the last write (its own length)
 //	prev.sha256 its sha256
 //	bad         shipped kernels that failed their trial, one sha256 a line
-//	noroute     <shipped sha256> <n>: boots of the kernel on trial that had everything but a network
+//	noroute     <shipped sha256> <n> <tries>: boots of the kernel on trial that had everything but a
+//	            network, and the tries left at the last one counted (a boot is counted once)
 //	retry       <shipped sha256> <unix time>: a kernel put back for want of a network alone, and when
+//	            (0: before the clock was set; the first Apply with a set clock puts the time in)
 package kernel
 
 import (
@@ -283,20 +285,39 @@ func (p Paths) shipped() (img []byte, sum string, ok bool, err error) {
 	return img, sum, true, nil
 }
 
-// sumCount reads a "<sha256> <number>" file; ok false when it is missing, unreadable or for another
-// kernel.
-func (p Paths) sumCount(name, shipped string) (n int64, ok bool) {
+// sumNumbers reads a "<sha256> <number>..." file holding want numbers; ok false when it is missing,
+// unreadable, of another shape or for another kernel.
+func (p Paths) sumNumbers(name, shipped string, want int) (n []int64, ok bool) {
 	b, err := os.ReadFile(p.file(name))
 	if err != nil {
-		return 0, false
+		return nil, false
 	}
 	f := strings.Fields(string(b))
-	if len(f) != 2 || f[0] != shipped {
-		return 0, false
+	if len(f) != want+1 || f[0] != shipped {
+		return nil, false
 	}
-	n, err = strconv.ParseInt(f[1], 10, 64)
-	return n, err == nil
+	for _, x := range f[1:] {
+		v, err := strconv.ParseInt(x, 10, 64)
+		if err != nil {
+			return nil, false
+		}
+		n = append(n, v)
+	}
+	return n, true
 }
+
+// noRoutes is how many boots of the kernel on trial had everything but a network, and the tries left
+// at the last of them (-1 for none).
+func (p Paths) noRoutes(shipped string) (n int64, tries int64) {
+	if v, ok := p.sumNumbers("noroute", shipped, 2); ok {
+		return v[0], v[1]
+	}
+	return 0, -1
+}
+
+// clockSet is whether t comes from a clock that has been set: athena's RTC has no battery, and early
+// in a boot, before NTP, the clock can say 1970.
+func clockSet(t time.Time) bool { return t.Year() >= 2020 }
 
 func (p Paths) removeFile(name string) {
 	if err := os.Remove(p.file(name)); err == nil {
@@ -311,10 +332,13 @@ func NoRoute(p Paths) error {
 	if err != nil || s.kind != "trial" {
 		return err
 	}
-	n, _ := p.sumCount("noroute", s.shipped)
+	n, tries := p.noRoutes(s.shipped)
+	if tries == int64(s.tries) {
+		return nil // this boot is counted already
+	}
 	n++
 	Log("this boot of the kernel on trial had no network, and nothing else wrong (%d so far)", n)
-	return writeFile(p.file("noroute"), []byte(fmt.Sprintf("%s %d\n", s.shipped, n)))
+	return writeFile(p.file("noroute"), []byte(fmt.Sprintf("%s %d %d\n", s.shipped, n, s.tries)))
 }
 
 // Status says what the state is, for people.
@@ -374,7 +398,7 @@ func Boot(p Paths) (reboot bool, err error) {
 		Log("the kernel is on trial, %d boots left after this one", s.tries)
 		return false, p.writeState(s)
 	}
-	n, _ := p.sumCount("noroute", s.shipped)
+	n, _ := p.noRoutes(s.shipped)
 	netOnly := n >= Tries
 	if netOnly {
 		Log("the kernel used all its tries without a network and nothing else wrong; putting the previous one back, "+
@@ -390,12 +414,22 @@ func Boot(p Paths) (reboot bool, err error) {
 		return false, errors.Join(err, p.writeState(state{kind: "failed", shipped: s.shipped}))
 	}
 	if netOnly {
-		if err := writeFile(p.file("retry"), []byte(fmt.Sprintf("%s %d\n", s.shipped, now().Unix()))); err != nil {
+		// This runs early in the boot, often before the clock is set: then the time is left for
+		// Apply to put in.
+		var at int64
+		if t := now(); clockSet(t) {
+			at = t.Unix()
+		}
+		if err := p.stampRetry(s.shipped, at); err != nil {
 			return false, err
 		}
 	}
 	p.removeFile("noroute")
 	return true, p.writeState(state{})
+}
+
+func (p Paths) stampRetry(shipped string, at int64) error {
+	return writeFile(p.file("retry"), []byte(fmt.Sprintf("%s %d\n", shipped, at)))
 }
 
 // Settled commits a kernel on trial: it has run long enough, with what it drives working.
@@ -433,9 +467,20 @@ func Apply(p Paths) (reboot bool, err error) {
 		Log("the slot's kernel %s failed its trial before; not written again", sum)
 		return false, nil
 	}
-	if at, ok := p.sumCount("retry", sum); ok {
-		// A clock behind the moment it was put back is not trusted to say how long ago that was.
-		if since := now().Sub(time.Unix(at, 0)); since >= 0 && since < RetryAfter {
+	if v, ok := p.sumNumbers("retry", sum, 1); ok {
+		t := now()
+		at := time.Unix(v[0], 0)
+		since := t.Sub(at)
+		switch {
+		case !clockSet(t):
+			Log("the slot's kernel %s had no network on any of its tries; it waits for the clock", sum)
+			return false, nil
+		case v[0] == 0 || !clockSet(at) || since < 0:
+			// Put back before the clock was set, or with one that has since gone back: the day
+			// starts now.
+			Log("the slot's kernel %s had no network on any of its tries; it is tried again in %v", sum, RetryAfter)
+			return false, p.stampRetry(sum, t.Unix())
+		case since < RetryAfter:
 			Log("the slot's kernel %s had no network on any of its tries; it is tried again in %v",
 				sum, (RetryAfter - since).Round(time.Minute))
 			return false, nil
