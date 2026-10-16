@@ -2,7 +2,9 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -156,11 +158,25 @@ func (st *Store) UpdateOrUndo(f func(*Config)) error {
 	before := deepCopy(st.c)
 	f(&st.c)
 	err := st.write()
-	if err != nil && st.readable {
+	var renamed afterRename
+	switch {
+	case err == nil, !st.readable:
+	case errors.As(err, &renamed):
+		// The new file is in place, only not yet flushed with its folder: the disk has the change, and
+		// memory keeps it to match.
+		slog.Warn("config: saved, but the folder could not be flushed after", "path", st.path, "err", err)
+	default:
 		st.c = before
 	}
 	return err
 }
+
+// afterRename is write failing after the new file took the old one's place: what is on disk is the
+// change, though a power cut could still lose it.
+type afterRename struct{ err error }
+
+func (e afterRename) Error() string { return e.err.Error() }
+func (e afterRename) Unwrap() error { return e.err }
 
 // write replaces the file through a temporary one, flushed at every step, because the thing this has
 // to survive is a reboot rather than a crash.
@@ -218,8 +234,11 @@ func (st *Store) write() error {
 	}
 	d, err := os.Open(dir)
 	if err != nil {
-		return err
+		return afterRename{err}
 	}
 	defer func() { _ = d.Close() }()
-	return d.Sync()
+	if err := d.Sync(); err != nil {
+		return afterRename{err}
+	}
+	return nil
 }

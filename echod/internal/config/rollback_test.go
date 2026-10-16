@@ -137,3 +137,34 @@ func TestAKeepClipsOffThatCouldNotBeSavedHolds(t *testing.T) {
 		t.Fatal("the off that could not be saved did not reach the disk with the next save")
 	}
 }
+
+// A save whose new file is in place but whose folder could not be flushed after is on disk: the change
+// is kept in memory to match, not taken back.
+func TestAChangeOnDiskIsNotTakenBack(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.json")
+	st, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Writable and searchable but not readable: the file can be made and renamed, the folder not opened.
+	if err := os.Chmod(dir, 0o300); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(dir, 0o700) }()
+	err = st.Set().KeepClips(true)
+	if err == nil {
+		t.Skip("the folder opened anyway (running as root?)")
+	}
+	if !st.Get().Wake.KeepClips {
+		t.Fatalf("a change already on disk was taken back (%v)", err)
+	}
+	_ = os.Chmod(dir, 0o700)
+	again, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.Get().Wake.KeepClips {
+		t.Fatal("the change was not on disk")
+	}
+}
