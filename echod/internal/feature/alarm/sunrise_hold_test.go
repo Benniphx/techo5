@@ -341,3 +341,37 @@ func TestTheDeviceHoldsTheWakeLight(t *testing.T) {
 		t.Errorf("with that alarm deleted the light is %.2f, want off", got)
 	}
 }
+
+// Stop from Home Assistant with nothing ringing lets go of the light held for the next alarm, as it
+// drops the snoozes: whoever presses it wants the light off.
+func TestStopWithNothingRingingLetsTheLightGo(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+
+	next := time.Now().Add(20 * time.Minute)
+	al, err := a.Set(next.Hour(), next.Minute(), config.DaysEvery, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	al.Sunrise = 30
+	if err := a.Put(al); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now(), lit: true}
+	a.mu.Unlock()
+	a.rang()
+	if got := a.SunriseProgress(time.Now()); got != 1 {
+		t.Fatalf("after the ring the light is %.2f, want it held at full", got)
+	}
+
+	a.stop.OnPress()
+	got := a.SunriseProgress(time.Now())
+	if got >= 1 {
+		t.Errorf("after Stop the light is still held at full")
+	}
+	// The next alarm's own ramp is untouched: twenty minutes out of thirty is a third of the way.
+	if got < 0.3 || got > 0.37 {
+		t.Errorf("after Stop the light is %.2f, want the next alarm's own ramp", got)
+	}
+}

@@ -150,6 +150,21 @@ func (a *Alarms) endLight(sources []source, now time.Time) {
 	}
 }
 
+// dropBridge lets go of the light held for the next alarm, for a stop pressed with nothing ringing:
+// somebody who presses Stop wants the light off. That alarm's own ramp still comes up as it would
+// have. It reports whether there was a bridge.
+func (a *Alarms) dropBridge() bool {
+	a.mu.Lock()
+	had := a.bridge.key != ""
+	a.bridge = bridge{}
+	a.mu.Unlock()
+	if had {
+		slog.Info("wake light held for the next alarm let go")
+		a.poke()
+	}
+	return had
+}
+
 // SunriseLevel is the fraction of full brightness the ramp asks for, eased so most of the change
 // happens near the end rather than the moment it starts.
 func SunriseLevel(progress float64) float64 {

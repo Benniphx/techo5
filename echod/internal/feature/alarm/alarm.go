@@ -180,12 +180,14 @@ func build() *Alarms {
 	// when it only stopped alarms, so automations that press it keep working.
 	a.stop = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_stop", Name: "Stop alarm or timer", Icon: "mdi:alarm-off"}, OnPress: func() {
 		// From Home Assistant, stop also means a snoozed alarm is not wanted back - when nothing is
-		// sounding. Asked of the ring and not of End, which also takes down a reminder on the screen
-		// and would otherwise leave the snooze standing.
+		// sounding - and the wake light held for the next alarm not wanted either. Asked of the ring
+		// and not of End, which also takes down a reminder on the screen and would otherwise leave the
+		// snooze standing.
 		sounding := ring.IsSounding()
 		ring.End()
 		if !sounding {
 			a.CancelSnoozes()
+			a.dropBridge()
 		}
 	}}
 	a.snooze = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_snooze", Name: "Snooze alarm", Icon: "mdi:alarm-snooze"}, OnPress: func() { a.Snooze() }}
