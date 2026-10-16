@@ -422,7 +422,8 @@ func (a *Alarms) sources(now time.Time) []source {
 	for _, al := range c.List {
 		if al.On {
 			src := source{key: al.ID, label: al.Label, hour: al.Hour, min: al.Minute, days: al.Days, local: true,
-				remind: al.Remind, ringOn: al.RingOn, sunrise: c.SunriseFor(al), silent: al.Silent}
+				remind: al.Remind, ringOn: al.RingOn, sunrise: c.SunriseFor(al), silent: al.Silent,
+				lightOnly: al.LightOnly && !al.Remind && !al.Silent}
 			// A dated one-off is a fixed moment, the way a snooze is.
 			if at, ok := al.OnDate(); ok {
 				src.once = at
@@ -467,6 +468,12 @@ func (a *Alarms) fire(s source, now time.Time) {
 	// A silent alarm is Home Assistant's: the event is all there is, with nothing to ring or stop.
 	if s.silent {
 		fireEvent("silent", s.key, s.label, now)
+		return
+	}
+	// A light-only alarm has had its light: what is left is the night ending, with nothing to stop.
+	if s.lightOnly {
+		fireEvent("light_only", s.key, s.label, now)
+		endNight(now)
 		return
 	}
 	a.mu.Lock()
@@ -743,23 +750,27 @@ func (a *Alarms) SetOn(hour, minute int, days uint8, label, date string) (config
 	return a.setOn(hour, minute, days, label, date, nil)
 }
 
-// setOn is SetOn, making the alarm silent or not as well when silent says which, in the one save.
-func (a *Alarms) setOn(hour, minute int, days uint8, label, date string, silent *bool) (config.Alarm, error) {
+// alarmKind is what an alarm set from Home Assistant goes off as: silent, light only, or neither (the zero
+// value, an alarm that rings).
+type alarmKind struct{ silent, lightOnly bool }
+
+// setOn is SetOn, making the alarm the kind k says as well when there is one, in the one save.
+func (a *Alarms) setOn(hour, minute int, days uint8, label, date string, k *alarmKind) (config.Alarm, error) {
 	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
 		return config.Alarm{}, fmt.Errorf("alarms: %d:%02d is not a time of day", hour, minute)
 	}
 	for _, al := range config.Get().Alarms.List {
 		if !al.Remind && al.Hour == hour && al.Minute == minute && al.Days == days && al.Label == label && al.Date == date {
 			al.On = true
-			if silent != nil {
-				al.Silent = *silent
+			if k != nil {
+				al.Silent, al.LightOnly = k.silent, k.lightOnly
 			}
 			return al, a.Put(al)
 		}
 	}
 	al := config.Alarm{ID: strconv.FormatInt(time.Now().UnixNano(), 36), Hour: hour, Minute: minute, Days: days, Label: label, On: true, Date: date}
-	if silent != nil {
-		al.Silent = *silent
+	if k != nil {
+		al.Silent, al.LightOnly = k.silent, k.lightOnly
 	}
 	return al, a.Put(al)
 }
@@ -942,7 +953,7 @@ func (a *Alarms) Actions() []*esphome.Action {
 				if err != nil {
 					return nil, err
 				}
-				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, false)
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{})
 				if err != nil {
 					return nil, err
 				}
@@ -964,11 +975,33 @@ func (a *Alarms) Actions() []*esphome.Action {
 				if err != nil {
 					return nil, err
 				}
-				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, true)
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{silent: true})
 				if err != nil {
 					return nil, err
 				}
 				slog.Info("silent alarm set from home assistant", "time", fmt.Sprintf("%d:%02d", al.Hour, al.Minute), "days", config.DaysLabel(al.Days), "label", al.Label)
+				return nil, nil
+			},
+		},
+		{
+			// alarm_set's twin for a wake light alone (#164): the light comes up before it, and at its
+			// time the night ends, with no sound and nothing to stop.
+			Name: "alarm_set_light_only",
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "days", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				hour, minute, err := parseClock(c.String("time"))
+				if err != nil {
+					return nil, err
+				}
+				days, date, err := daysOrDate(c.String("days"), hour, minute, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{lightOnly: true})
+				if err != nil {
+					return nil, err
+				}
+				slog.Info("light-only alarm set from home assistant", "time", fmt.Sprintf("%d:%02d", al.Hour, al.Minute), "days", config.DaysLabel(al.Days), "label", al.Label)
 				return nil, nil
 			},
 		},

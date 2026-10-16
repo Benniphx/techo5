@@ -87,6 +87,11 @@ type Alarm struct {
 	// Silent makes no sound and shows no ring: it only tells Home Assistant (feature/alarm's Event),
 	// for an alarm that is an automation's wake-up call rather than the device's.
 	Silent bool `json:"silent,omitempty"`
+
+	// LightOnly makes it a wake light and no more (#164): the light comes up before it as for any
+	// alarm, and at its time there is no sound and nothing to stop; the night ends instead, so the
+	// screen is back as by day until the night's next start. It always has a light (SunriseFor).
+	LightOnly bool `json:"light_only,omitempty"`
 }
 
 // DateLayout is how an alarm's date is written.
@@ -125,14 +130,26 @@ const SunriseOff = -1
 // in the afternoon is the bug this replaced.
 func (a Alarms) SunriseFor(al Alarm) int {
 	switch {
-	case al.Remind || al.Silent || al.Sunrise < 0:
+	case al.Remind || al.Silent:
 		// A reminder is said, and a silent alarm is Home Assistant's: neither brings up the light.
 		return 0
 	case al.Sunrise > 0:
 		return al.Sunrise
+	case al.LightOnly:
+		// The light is all a light-only alarm is, so it has one even where the default is none or the
+		// alarm's own light was turned off.
+		if a.SunriseMinutes > 0 {
+			return a.SunriseMinutes
+		}
+		return LightOnlyMinutes
+	case al.Sunrise < 0:
+		return 0
 	}
 	return max(a.SunriseMinutes, 0)
 }
+
+// LightOnlyMinutes is a light-only alarm's light where nothing else says how long.
+const LightOnlyMinutes = 30
 
 // Snooze is one alarm put off until At. Key is the alarm it came from, so a snooze that fires can be
 // told apart from the alarm's own next time.

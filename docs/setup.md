@@ -627,6 +627,11 @@ the light is held keeps it off until that light is over or the next alarm rings.
 brightness** (percent) and **Wake light color** (like `#ff9b1a`, empty while off) show it in Home
 Assistant, for room lights to follow; see [docs/actions.md](actions.md#follow-the-wake-light).
 
+**Light only** in an alarm's editor (and on the setup page) makes it a wake light and nothing more:
+the light comes up as above, and at the alarm's time there is no sound and nothing to dismiss; the
+night ends instead, so the screen is back as by day until the night hours next start. A light-only
+alarm always has a light: its own, the default, or 30 minutes when both are off.
+
 ## 8. Settings lock
 
 A **settings lock** (Show and Spot, off by default) is a PIN the device asks for before its settings

@@ -199,13 +199,32 @@ data:
   label: Bedroom
 ```
 
+## Set a light-only alarm
+
+In YAML, refer to this action as `esphome.<node>_alarm_set_light_only`.
+
+The same as `alarm_set`, with the same `time`, `days` and `label`, for a wake light and nothing
+else: the light comes up before it as for any alarm with **Wake with light** (the device's default,
+or 30 minutes where that is off), and at its time there is no sound and nothing to dismiss. The night
+ends instead, as the **Night mode** switch turned off does, so the screen is back as by day until the
+night hours next start. It fires the `light_only` [alarm event](#alarm-events). Setting the same
+alarm again with `alarm_set` makes it ring again. **Light only** in an alarm's editor on the device,
+and on the setup page, does the same.
+
+```yaml
+action: esphome.office_alarm_set_light_only
+data:
+  time: "6:30 am"
+  days: weekdays
+```
+
 ## Alarm events
 
 Each step of an alarm fires `esphome.techo5_alarm` on Home Assistant's bus, with:
 
 | Field | |
 |---|---|
-| `event` | `ringing`, `silent` (a silent alarm went off), `snoozed`, or `stopped` (by a press, by voice, from Home Assistant, or after ringing its course) |
+| `event` | `ringing`, `silent` (a silent alarm went off), `light_only` (a light-only alarm's time came and the night ended), `snoozed`, or `stopped` (by a press, by voice, from Home Assistant, or after ringing its course) |
 | `id` | The alarm's id, the same for an alarm and its snoozes |
 | `label` | The alarm's label |
 | `due` | When it was due, like `2026-10-01T06:45:00-06:00` |

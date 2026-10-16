@@ -29,6 +29,9 @@ type source struct {
 
 	// silent goes off without a sound, as an event for Home Assistant only.
 	silent bool
+
+	// lightOnly is a wake light and no more: at its time the night ends, without a sound.
+	lightOnly bool
 }
 
 // next is the first time at or after from that s rings, and false if it never will again.
