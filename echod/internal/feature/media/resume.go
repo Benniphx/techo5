@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync/atomic"
 	"time"
 )
@@ -23,10 +24,23 @@ import (
 // A stream that had played for resumeFresh counts as a new drop, and is always tried again; one that
 // fails sooner than that counts towards resumeTries, so a station that is gone ends after a few quick
 // tries rather than being knocked on forever.
+//
+// And whatever it is, a track is fetched again no more than resumeCap times in resumeCapWindow: a
+// station drops a few times an hour at worst (the proxy's every 30 minutes), and a track taken for a
+// station by mistake, a song that plays its 3 minutes and ends, must not go round for ever.
 const (
-	resumeFresh = 20 * time.Second
-	resumeTries = 3
+	resumeFresh     = 20 * time.Second
+	resumeTries     = 3
+	resumeCap       = 6
+	resumeCapWindow = time.Hour
 )
+
+// resumes is what a track's fetches again have been: the quick failures in a row, and when each of
+// the recent ones was.
+type resumes struct {
+	tries  int
+	recent []time.Time
+}
 
 // liveStall is how long a live station may send nothing before it is fetched again: on unit 2 the
 // proxy went quiet for about 20 seconds before it reset the connection, which with the 30 seconds a
@@ -50,22 +64,29 @@ func liveURL(url string) bool {
 }
 
 // resume says whether a track whose fetch just ended after ran (err, if it failed) is fetched again,
-// and waits out the pause first. Only a live one (track.live) ever is. tries counts the quick failures
-// in a row and is updated. ctx is the track's: stopped or replaced, it is never resumed.
-func resume(ctx context.Context, live bool, err error, ran time.Duration, tries *int) bool {
+// and waits out the pause first. Only a live one (track.live) ever is. r is the track's fetches again
+// so far, and is updated. ctx is the track's: stopped or replaced, it is never resumed.
+func resume(ctx context.Context, live bool, err error, ran time.Duration, r *resumes) bool {
 	if !live || ctx.Err() != nil || IsUnplayable(err) {
 		return false
 	}
 	if ran >= resumeFresh {
-		*tries = 0
+		r.tries = 0
 	}
-	if *tries >= resumeTries {
-		slog.Warn("media: the live stream would not come back; giving up", "tries", *tries, "err", err)
+	if r.tries >= resumeTries {
+		slog.Warn("media: the live stream would not come back; giving up", "tries", r.tries, "err", err)
 		return false
 	}
-	wait := resumeWaits[*tries]
-	*tries++
-	slog.Warn("media: the live stream dropped; fetching it again", "after", wait, "try", *tries, "ran", ran.Round(time.Second), "err", err)
+	now := time.Now()
+	r.recent = slices.DeleteFunc(r.recent, func(at time.Time) bool { return now.Sub(at) >= resumeCapWindow })
+	if len(r.recent) >= resumeCap {
+		slog.Warn("media: the live stream keeps ending; giving up", "times", len(r.recent), "within", resumeCapWindow, "err", err)
+		return false
+	}
+	r.recent = append(r.recent, now)
+	wait := resumeWaits[r.tries]
+	r.tries++
+	slog.Warn("media: the live stream dropped; fetching it again", "after", wait, "try", r.tries, "ran", ran.Round(time.Second), "err", err)
 	select {
 	case <-ctx.Done():
 		return false

@@ -21,7 +21,7 @@ var errReset = errors.New("read tcp: connection reset by peer")
 // again, every time it happens.
 func TestALiveStationThatDropsIsFetchedAgain(t *testing.T) {
 	shortWaits(t)
-	tries := 0
+	var tries resumes
 	for drop := range 5 {
 		if !resume(context.Background(), true, errReset, 30*time.Minute, &tries) {
 			t.Fatalf("drop %d after half an hour of playing was not fetched again", drop+1)
@@ -36,7 +36,7 @@ func TestALiveStationThatDropsIsFetchedAgain(t *testing.T) {
 // A song or a podcast is never fetched again: it would start over from its beginning.
 func TestWhatIsNotRadioIsNotFetchedAgain(t *testing.T) {
 	shortWaits(t)
-	tries := 0
+	var tries resumes
 	if resume(context.Background(), false, errReset, time.Hour, &tries) {
 		t.Fatal("a track that is not live radio was fetched again")
 	}
@@ -50,7 +50,7 @@ func TestAStoppedStationStaysStopped(t *testing.T) {
 	shortWaits(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	tries := 0
+	var tries resumes
 	if resume(ctx, true, errReset, time.Hour, &tries) {
 		t.Fatal("a stopped track was fetched again")
 	}
@@ -59,7 +59,7 @@ func TestAStoppedStationStaysStopped(t *testing.T) {
 // A stream the device cannot decode is handed on (library.go), not fetched again.
 func TestAnUndecodableStreamIsNotFetchedAgain(t *testing.T) {
 	shortWaits(t)
-	tries := 0
+	var tries resumes
 	if resume(context.Background(), true, unplayable{format: "not audio"}, time.Hour, &tries) {
 		t.Fatal("an undecodable stream was fetched again")
 	}
@@ -68,7 +68,7 @@ func TestAnUndecodableStreamIsNotFetchedAgain(t *testing.T) {
 // A station that is gone fails at once every time: after a few quick tries the track ends, as before.
 func TestAStationThatIsGoneIsGivenUpAfterAFewTries(t *testing.T) {
 	shortWaits(t)
-	tries := 0
+	var tries resumes
 	n := 0
 	for resume(context.Background(), true, errReset, time.Second, &tries) {
 		n++
@@ -84,11 +84,34 @@ func TestAStationThatIsGoneIsGivenUpAfterAFewTries(t *testing.T) {
 // A try that plays for a while counts as a fresh drop: the quick tries before it are forgotten.
 func TestPlayingAWhileStartsTheCountOver(t *testing.T) {
 	shortWaits(t)
-	tries := 0
+	var tries resumes
 	for range resumeTries - 1 {
 		resume(context.Background(), true, errReset, time.Second, &tries)
 	}
-	if !resume(context.Background(), true, errReset, resumeFresh, &tries) || tries != 1 {
-		t.Fatalf("after a try that played %v, tries is %d, want the count started over at 1", resumeFresh, tries)
+	if !resume(context.Background(), true, errReset, resumeFresh, &tries) || tries.tries != 1 {
+		t.Fatalf("after a try that played %v, tries is %d, want the count started over at 1", resumeFresh, tries.tries)
+	}
+}
+
+// A track that ends cleanly after playing a while each time, as a song taken for a station by mistake
+// would, is fetched again only so often, not for ever; drops spread over hours each count afresh.
+func TestALiveTrackIsFetchedAgainOnlySoOften(t *testing.T) {
+	shortWaits(t)
+	var r resumes
+	n := 0
+	for resume(context.Background(), true, nil, 3*time.Minute, &r) {
+		n++
+		if n > 100 {
+			t.Fatal("a track that keeps ending was fetched again without end")
+		}
+	}
+	if n != resumeCap {
+		t.Fatalf("fetched again %d times, want %d", n, resumeCap)
+	}
+	for i := range r.recent {
+		r.recent[i] = r.recent[i].Add(-resumeCapWindow)
+	}
+	if !resume(context.Background(), true, errReset, 30*time.Minute, &r) {
+		t.Fatal("a drop after the window passed was not fetched again")
 	}
 }

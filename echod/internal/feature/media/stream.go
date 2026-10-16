@@ -282,10 +282,11 @@ func (m *Stream) play(url string, handOff bool) *track {
 		}()
 		// Live radio that drops is fetched again as the same track (resume.go).
 		var err error
-		for tries := 0; ; {
+		var again resumes
+		for {
 			began := time.Now()
 			err = m.run(ctx, t, url)
-			if !resume(ctx, t.live, err, time.Since(began), &tries) {
+			if !resume(ctx, t.live, err, time.Since(began), &again) {
 				break
 			}
 		}
