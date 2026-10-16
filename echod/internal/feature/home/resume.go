@@ -6,6 +6,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 )
 
 // Radio that puts itself back on when the stream drops.
@@ -54,7 +55,7 @@ func (f *Feature) ended(url string) {
 		f.resumed = 0
 	}
 	tries := f.resumed
-	own := url == f.ownURL
+	own, gen := url == f.ownURL, f.stationGen
 	f.mu.Unlock()
 
 	if url != playing || station == "" {
@@ -72,35 +73,48 @@ func (f *Feature) ended(url string) {
 
 	slog.Info("radio: the stream ended by itself, putting it back on",
 		"station", station, "try", tries+1)
-	time.AfterFunc(resumeAfter, func() { f.putBack(station, url, own) })
+	time.AfterFunc(resumeAfter, func() { f.putBack(station, url, own, gen) })
+}
+
+// mediaBusy is whether the player has something playing or paused; a variable for the tests.
+var mediaBusy = func() bool {
+	playing, paused := media.Get().Playing()
+	return playing || paused
 }
 
 // putBack starts station again after its stream (url) ended by itself: one this device played itself
 // (own) from the same url, one Home Assistant played by asking for it again. Anything that started in
-// the meantime is what somebody wanted instead, and a Stop meanwhile is somebody wanting nothing.
-func (f *Feature) putBack(station, url string, own bool) {
-	if !f.stillWanted(station, url) {
+// the meantime is what somebody wanted instead (a phone, a cast, another stream), and a Stop meanwhile
+// is somebody wanting nothing. gen is the station's generation when it ended (stationGen): the play is
+// made only while it still is, checked again as it starts, so a Stop up to that moment wins.
+func (f *Feature) putBack(station, url string, own bool, gen uint64) {
+	if !f.stillWanted(station, url, gen) {
+		return
+	}
+	if mediaBusy() {
+		slog.Info("radio: something else plays now; the station is not put back on", "station", station)
 		return
 	}
 	if own {
-		f.PlayStream(station, url)
+		f.playStream(station, url, &gen)
 		return
 	}
-	f.Play(station)
+	f.play(station, &gen)
 }
 
-// stillWanted is whether station, whose stream url ended, is still to be put back on: nothing else
-// has started, and the station has not been stopped or replaced by another asked for.
-func (f *Feature) stillWanted(station, url string) bool {
+// stillWanted is whether station, whose stream url ended in generation gen, is still to be put back
+// on: nothing else has started, and the station has not been stopped or replaced by another asked for.
+func (f *Feature) stillWanted(station, url string, gen uint64) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.url == url && f.asked == station && f.stationURL == url
+	return f.stationGen == gen && f.url == url && f.asked == station && f.stationURL == url
 }
 
-// forgetStation is the station over (Stop): nothing that plays after it is put back on or taken for it.
-// Under f.mu.
+// forgetStation is the station over (a Stop, here or anywhere the player is stopped): nothing that
+// plays after it is put back on or taken for it. Under f.mu.
 func (f *Feature) forgetStation() {
 	f.asked, f.claiming, f.claimName, f.stationURL = "", false, "", ""
+	f.stationGen++
 }
 
 // playingOwn is a stream this device is about to play itself, for station name, through media's
@@ -123,6 +137,7 @@ const stationClaim = 5 * time.Second
 func (f *Feature) askStation(station string) {
 	f.asked, f.askedAt = station, time.Now()
 	f.claim(station, liveClaim)
+	f.stationGen++
 }
 
 // claim takes the next stream to start within claimFor for station (liveURL). Under f.mu.
@@ -155,6 +170,11 @@ func (f *Feature) stationStarted(u hastate.Update) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if time.Since(f.claimedAt) < liveClaim {
+		return
+	}
+	// A claim still waiting for its stream stays as it is: one asked for here keeps its time and its
+	// name, which the house's text may be giving another room's station.
+	if f.claiming && time.Since(f.claimAt) < f.claimFor {
 		return
 	}
 	f.claim(u.Value, stationClaim)

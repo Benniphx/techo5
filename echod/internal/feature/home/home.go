@@ -142,6 +142,9 @@ type Feature struct {
 	claimFor   time.Duration
 	claimedAt  time.Time
 	ownURL     string
+	// stationGen counts the stations asked for and forgotten, so a put-back waiting its seconds can
+	// tell a Stop or another station came in between (putBack).
+	stationGen uint64
 
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
@@ -296,6 +299,13 @@ func Get() *Feature {
 		hastate.Get().Changed.Listen(shared.stateChanged)
 		hastate.Get().Changed.Listen(shared.stationStarted)
 		media.Get().OnPlay.Listen(shared.played)
+		// Stopped anywhere (the voice assistant, the setup page, the action button, Home Assistant):
+		// the station is over, and a put-back on its way is not made.
+		media.Get().OnStop.Listen(func(struct{}) {
+			shared.mu.Lock()
+			shared.forgetStation()
+			shared.mu.Unlock()
+		})
 		media.Get().OnEnd.Listen(shared.ended)
 		media.Get().OnNowPlaying.Listen(func(struct{}) { shared.pokeNowPlaying() })
 		media.Get().OnResumeRemote.Listen(func(struct{}) { safe.Go("resume music assistant", resumeMusicAssistant) })
@@ -760,10 +770,18 @@ func favoriteNames(h config.Radio) []string {
 
 // Play plays a station of the list shown on this device: a favorite through Home Assistant's
 // script, a Radio Browser station through the device's own player entity.
-func (f *Feature) Play(station string) {
+func (f *Feature) Play(station string) { f.play(station, nil) }
+
+// play is Play; with gen, only while the station's generation still is *gen (a put-back, which a Stop
+// or another station since cancels: putBack).
+func (f *Feature) play(station string, gen *uint64) {
 	// What was asked for, in the words the lists use, so a stream that drops can be asked for again:
 	// the name worked out from a URL afterwards is often the stream's host, which no list has.
 	f.mu.Lock()
+	if gen != nil && f.stationGen != *gen {
+		f.mu.Unlock()
+		return
+	}
 	f.askStation(station)
 	f.mu.Unlock()
 
@@ -777,6 +795,7 @@ func (f *Feature) Play(station string) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
 		} else {
+			slog.Info("radio: the station is not one kept on the device; not played", "station", station)
 			f.unask(station)
 		}
 		return
@@ -786,6 +805,7 @@ func (f *Feature) Play(station string) {
 			f.Changed.Emit(struct{}{})
 			f.pokeMeta()
 		} else {
+			slog.Info("radio: the station is not on the list the radio page shows; not played", "station", station, "list", source)
 			f.unask(station)
 		}
 		return

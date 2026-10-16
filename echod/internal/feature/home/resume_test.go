@@ -1,7 +1,10 @@
 package home
 
 import (
+	"errors"
 	"path/filepath"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -196,19 +199,19 @@ func TestAStationStartedFromHomeAssistantIsLive(t *testing.T) {
 func TestAStopCancelsAPutBack(t *testing.T) {
 	f := &Feature{}
 	f.url, f.asked, f.askedAt, f.stationURL = "http://p/1", "KXYZ", time.Now(), "http://p/1"
-	if !f.stillWanted("KXYZ", "http://p/1") {
+	if !f.stillWanted("KXYZ", "http://p/1", f.stationGen) {
 		t.Fatal("a station that dropped with nothing else going on is not to be put back")
 	}
 	f.mu.Lock()
 	f.forgetStation()
 	f.mu.Unlock()
-	if f.stillWanted("KXYZ", "http://p/1") {
+	if f.stillWanted("KXYZ", "http://p/1", f.stationGen) {
 		t.Error("a station stopped before its put-back is still put back")
 	}
 	f.mu.Lock()
 	f.asked, f.stationURL = "KABC", "http://p/1"
 	f.mu.Unlock()
-	if f.stillWanted("KXYZ", "http://p/1") {
+	if f.stillWanted("KXYZ", "http://p/1", f.stationGen) {
 		t.Error("a station replaced by another asked for is still put back")
 	}
 }
@@ -271,22 +274,141 @@ func TestTheClaimForAStationStartedFromHomeAssistantIsShort(t *testing.T) {
 }
 
 // A station the device plays itself (its own, one from the setup page, one the voice assistant found)
-// is put back on when its stream ends by itself, as one Home Assistant sends is.
+// is put back on when its stream ends by itself, as one Home Assistant sends is: the action button's
+// way in (PlayOwn) included, which does not go through Play.
 func TestAStationTheDevicePlaysItselfIsPutBack(t *testing.T) {
+	played := ownPlayer(t)
 	f := &Feature{}
-	f.mu.Lock()
-	f.askStation("KXYZ")
-	f.playingOwn("KXYZ", "http://p/own")
-	f.mu.Unlock()
-	if !f.liveURL("http://p/own") {
-		t.Fatal("the device's own station was not taken for live radio")
+	if !f.PlayOwn("KXYZ") {
+		t.Fatal("the device's own station did not play")
 	}
+	if got := played(); len(got) != 1 || got[0] != "http://p/own" {
+		t.Fatalf("played %v", got)
+	}
+	if !f.liveURL("http://p/own") {
+		t.Fatal("the device's own station, started by PlayOwn, was not taken for live radio")
+	}
+	f.mu.Lock()
+	gen := f.stationGen
+	f.mu.Unlock()
 	f.ended("http://p/own")
 	f.mu.Lock()
 	tried := f.resumed
-	f.forgetStation() // the put-back itself would play; it is the decision that is tested
+	f.forgetStation() // the put-back on its timer is not this test's
 	f.mu.Unlock()
 	if tried != 1 {
-		t.Errorf("a station the device played itself was put back %d times, want once", tried)
+		t.Fatalf("a station the device played itself was put back %d times, want once", tried)
+	}
+	// The put-back itself, as its timer makes it: from the same address.
+	f.mu.Lock()
+	f.askStation("KXYZ")
+	f.playingOwn("KXYZ", "http://p/own")
+	f.stationURL = "http://p/own"
+	gen = f.stationGen
+	f.mu.Unlock()
+	f.putBack("KXYZ", "http://p/own", true, gen)
+	if got := played(); len(got) != 2 || got[1] != "http://p/own" {
+		t.Fatalf("the put-back played %v", got)
+	}
+}
+
+// ownPlayer keeps one station on the device (KXYZ at http://p/own), records what the device is asked
+// to play itself instead of playing it, and has nothing else playing.
+func ownPlayer(t *testing.T) func() []string {
+	t.Helper()
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := SetOwnStations([]config.Station{{Name: "KXYZ", URL: "http://p/own"}}); err != nil {
+		t.Fatal(err)
+	}
+	oldPlay, oldBusy := playURL, mediaBusy
+	t.Cleanup(func() { playURL, mediaBusy = oldPlay, oldBusy })
+	var mu sync.Mutex
+	var played []string
+	playURL = func(url string) {
+		mu.Lock()
+		played = append(played, url)
+		mu.Unlock()
+	}
+	mediaBusy = func() bool { return false }
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(played)
+	}
+}
+
+// A put-back is not made after a Stop (here or anywhere the player was stopped), after another station
+// was asked for, or while something else plays.
+func TestAPutBackGivesWay(t *testing.T) {
+	played := ownPlayer(t)
+	ready := func() (*Feature, uint64) {
+		f := &Feature{}
+		f.mu.Lock()
+		f.askStation("KXYZ")
+		f.playingOwn("KXYZ", "http://p/own")
+		f.stationURL = "http://p/own"
+		gen := f.stationGen
+		f.mu.Unlock()
+		return f, gen
+	}
+	f, gen := ready()
+	f.mu.Lock()
+	f.forgetStation()
+	f.mu.Unlock()
+	f.putBack("KXYZ", "http://p/own", true, gen)
+
+	f, gen = ready()
+	f.mu.Lock()
+	f.askStation("KXYZ") // the same station asked for again meanwhile: that ask stands, not this
+	f.mu.Unlock()
+	f.putBack("KXYZ", "http://p/own", true, gen)
+
+	f, gen = ready()
+	mediaBusy = func() bool { return true }
+	f.putBack("KXYZ", "http://p/own", true, gen)
+	if got := played(); len(got) != 0 {
+		t.Errorf("put back %v", got)
+	}
+}
+
+// A claim asked for on the device and still waiting for its stream is not replaced by a name in the
+// house's "last station" text: it keeps its time, and its station.
+func TestAPendingClaimKeepsItsTimeAndName(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Home().Radio(config.Radio{Now: "input_text.last_station"}); err != nil {
+		t.Fatal(err)
+	}
+	f := &Feature{}
+	f.mu.Lock()
+	f.askStation("KABC")
+	f.mu.Unlock()
+	f.stationStarted(hastate.Update{Key: hastate.Key{Entity: "input_text.last_station"}, Value: "KXYZ"})
+	f.mu.Lock()
+	f.claimAt = time.Now().Add(-8 * time.Second)
+	f.mu.Unlock()
+	if !f.liveURL("http://p/1") {
+		t.Fatal("a claim asked for here lost its time to a name in the house's text")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.asked != "KABC" {
+		t.Errorf("the station is %q, renamed by the house's text", f.asked)
+	}
+}
+
+// A station the voice assistant asked for that does not play leaves neither its name on what plays
+// nor its address to put back.
+func TestAStationThatDidNotPlayLeavesNoName(t *testing.T) {
+	old := playURLChecked
+	t.Cleanup(func() { playURLChecked = old })
+	playURLChecked = func(string, time.Duration) error { return errors.New("nothing arrived") }
+	f := &Feature{}
+	if err := f.PlayStreamChecked("KXYZ", "http://p/gone", time.Second); err == nil {
+		t.Fatal("a station that did not play said it did")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.urlName != "" || f.ownURL != "" {
+		t.Errorf("a station that did not play left name %q, address %q", f.urlName, f.ownURL)
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 )
 
 // The device's own radio stations: a name and a stream address, kept on the device and played by it.
@@ -80,10 +79,13 @@ func (f *Feature) playOwn(name string) bool {
 		}
 		f.mu.Lock()
 		f.chosen, f.listed, f.listedAt = name, "", time.Time{}
+		// Asked for again here, for the way in that is not Play (the action button, PlayOwn): live
+		// radio either way, put back on when it drops.
+		f.askStation(name)
 		f.playingOwn(name, s.URL)
 		f.mu.Unlock()
 		slog.Info("home: playing a station kept on the device", "station", name)
-		media.Get().PlayURL(s.URL)
+		playURL(s.URL)
 		return true
 	}
 	return false
