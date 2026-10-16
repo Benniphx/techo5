@@ -460,9 +460,10 @@ The quickest way is the device's setup page:
 2. Choose the `.json` and the `.tflite`, then **Add wake word**. The device checks that it can run the
    model before it keeps it, and says why if it can't. The phrase in the `.json` (`wake_word`) is what
    it is called.
-3. Home Assistant reconnects to the device to see the new word, which takes a few seconds. Pick it in
-   **Wake word** on the setup page, on the device, or in the device's **Wake word** list on the Assist
-   satellite in Home Assistant.
+3. Pick it in **Wake word** on the setup page or on the device straight away. Home Assistant picks it
+   up once the device is idle, usually within seconds (it reconnects to the device, so it waits for
+   any request, call or alarm to finish), and then has it in the device's **Wake word** list on the
+   Assist satellite.
 
 Only microWakeWord models are taken (`"type": "micro"` in the `.json`), with a `.tflite` of at most
 1 MB, and up to 20 sent this way. **Remove** takes one sent from the page off the device; the wake
@@ -569,8 +570,8 @@ What to know before turning them on:
 
 The sounds a voice request makes can be recordings of your own. On the setup page, go to **Sound &
 Voice**, **Sounds of your own**. Each sound has **Play**, which plays what the device plays now,
-quietly; a file button to send a recording for it; and, once it has one, **Use the device's own** to
-go back to the stock sound. The device checks a file as it arrives and refuses one it can't play, with
+quietly; a file to choose and **Upload** to send a recording for it; and, once it has one, **Use the
+device's own** to go back to the stock sound. The device checks a file as it arrives and refuses one it can't play, with
 the reason, so the sound before it stays. Nothing is converted on the device: send a WAVE file in the
 format below.
 
