@@ -218,13 +218,23 @@ the rescue environment (USB serial and RNDIS at 172.16.42.1).
 The athena rootfs carries the kernel it was tested with. Once a new slot has committed, it checks
 the kernel on `boot`. If that's a different one, it writes the new kernel the way the installer
 does, with the unit's own speaker tuning taken from `boot`, and reboots into it. So an update can
-take two reboots. The second one comes about five minutes after the first, and it doesn't wait for
-music or a timer to finish.
+take two reboots. The second one comes about five minutes after the first, once the unit isn't
+busy: it waits while an alarm or timer is ringing, while it's hearing or answering a voice request,
+during a call, while music or an announcement is playing, while the wake light is on, and when an
+alarm is due within 30 minutes. After two hours of waiting it only waits for a ring to stop, so a
+unit that is never idle still gets its kernel.
 
 A new kernel is on trial too. It has three boots to settle: the daemon up for five minutes, with a
-network address and a default route, and the sound card and backlight there. If it never gets
-there, the unit writes the previous kernel back (it keeps a copy in `/data/techo5-linux/kernel`)
-and never tries that kernel again. A system update waits while a kernel is on trial.
+network address and a default route, and the sound card and backlight there. A boot that doesn't
+settle within 15 minutes reboots to try again, with the same wait for the unit not to be busy. If
+it never settles, the unit writes the previous kernel back (it keeps a copy in
+`/data/techo5-linux/kernel`) and never tries that kernel again. A system update waits while a
+kernel is on trial.
+
+One case is treated differently: every try had everything but a network (no default route), say
+because the router was down. The previous kernel still goes back, since a kernel that broke Wi-Fi
+would otherwise leave the unit unreachable. But the new kernel isn't marked bad, and the unit tries
+it again a day later.
 
 - `/usr/local/bin/techo5 tools kernel status` shows where it is.
 - `/usr/local/bin/techo5 tools kernel restore` puts the previous kernel back by hand and reboots,
