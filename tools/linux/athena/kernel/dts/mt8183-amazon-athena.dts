@@ -402,40 +402,59 @@
  * cpuidle.off=1.
  */
 
+/*
+ * CPU frequency scaling. Fire OS moves the CPU SRAM rails (vsram_proc11/12)
+ * with the CPU rails in software, so the CPUs and the CCI get an sram-supply
+ * and mediatek-cpufreq / mtk-cci-devfreq keep SRAM above the logic voltage
+ * (measured on unit 2: 900 mV at the lowest speed, 1118.75 mV at 1.99 GHz with
+ * vproc at 1.05 V, the same levels as Fire OS). The CCI shares vproc12 with
+ * the little cores, so it tracks vsram_proc12 too (patch-cci-sram.py gives
+ * its MT8183 data the limits).
+ */
+
 &cci {
 	proc-supply = <&mt6358_vproc12_reg>;
+	sram-supply = <&mt6358_vsram_proc12_reg>;
 };
 
 &cpu0 {
 	proc-supply = <&mt6358_vproc12_reg>;
+	sram-supply = <&mt6358_vsram_proc12_reg>;
 };
 
 &cpu1 {
 	proc-supply = <&mt6358_vproc12_reg>;
+	sram-supply = <&mt6358_vsram_proc12_reg>;
 };
 
 &cpu2 {
 	proc-supply = <&mt6358_vproc12_reg>;
+	sram-supply = <&mt6358_vsram_proc12_reg>;
 };
 
 &cpu3 {
 	proc-supply = <&mt6358_vproc12_reg>;
+	sram-supply = <&mt6358_vsram_proc12_reg>;
 };
 
 &cpu4 {
 	proc-supply = <&mt6358_vproc11_reg>;
+	sram-supply = <&mt6358_vsram_proc11_reg>;
 };
 
 &cpu5 {
 	proc-supply = <&mt6358_vproc11_reg>;
+	sram-supply = <&mt6358_vsram_proc11_reg>;
 };
 
 &cpu6 {
 	proc-supply = <&mt6358_vproc11_reg>;
+	sram-supply = <&mt6358_vsram_proc11_reg>;
 };
 
 &cpu7 {
 	proc-supply = <&mt6358_vproc11_reg>;
+	sram-supply = <&mt6358_vsram_proc11_reg>;
 };
 
 &pmic {
