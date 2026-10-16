@@ -75,7 +75,7 @@ func zoneNumber(path string) int {
 var cpuZones = []string{"mtktscpu", "cpu-thermal", "cpu_thermal", "soc-thermal", "soc_thermal"}
 
 // CPUTemperature picks the CPU out of what Temperatures found. Unknown on a kernel with no thermal
-// driver at all, which is the mainline Show 8 until one is built in.
+// driver at all. The mainline Show 8's kernel has its driver built in, and the zone is cpu-thermal.
 func CPUTemperature(temps map[string]float64) Reading {
 	for _, zone := range cpuZones {
 		if v, ok := temps[zone]; ok {
