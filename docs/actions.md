@@ -229,31 +229,31 @@ actions:
 ## Follow the wake light
 
 Two sensors show the wake light (Wake with light) as it is now, on every device:
-`sensor.office_wake_light_brightness`, from 0 to 100 percent, and `sensor.office_wake_light_color`, the
-light's color at full strength like `#ff9b1a`, empty while it is off. They change at most every 5
-seconds while the light comes up, and at once when it comes on or goes off. To bring a room light up
-with it:
+`sensor.kitchen_echo_wake_light_brightness`, from 0 to 100 percent, and
+`sensor.kitchen_echo_wake_light_color`, the light's color at full strength like `#ff9b1a`, empty while
+it is off. They change at most every 5 seconds while the light comes up, and at once when it comes on
+or goes off. To bring a room light up with it:
 
 ```yaml
 triggers:
   - trigger: state
-    entity_id: sensor.office_wake_light_brightness
+    entity_id: sensor.kitchen_echo_wake_light_brightness
 conditions:
   - condition: numeric_state
-    entity_id: sensor.office_wake_light_brightness
+    entity_id: sensor.kitchen_echo_wake_light_brightness
     above: 0
 actions:
   - action: light.turn_on
     target:
       entity_id: light.bedroom
     data:
-      brightness_pct: "{{ states('sensor.office_wake_light_brightness') | int }}"
+      brightness_pct: "{{ states('sensor.kitchen_echo_wake_light_brightness') | int }}"
       rgb_color: >-
-        {% set c = states('sensor.office_wake_light_color') %}
+        {% set c = states('sensor.kitchen_echo_wake_light_color') %}
         {{ [c[1:3] | int(base=16), c[3:5] | int(base=16), c[5:7] | int(base=16)] }}
 ```
 
-**Replace `office` with your device's own prefix, and `light.bedroom` with your light.**
+**Replace `kitchen_echo` with your device's own prefix, and `light.bedroom` with your light.**
 
 ## Voice request events
 
