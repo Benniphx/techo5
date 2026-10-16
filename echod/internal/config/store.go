@@ -133,13 +133,33 @@ func (st *Store) started(d Device) {
 	st.c.Device = d
 }
 
-// Update applies a change and writes the file.
+// Update applies a change and writes the file. A change the file could not take still holds in
+// memory, and goes to disk with the next change that is saved: what callers count on for a value they
+// make up once and must keep (the DLNA renderer's id), whether or not it could be saved.
 func (st *Store) Update(f func(*Config)) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
 	f(&st.c)
 	return st.write()
+}
+
+// UpdateOrUndo is Update for a setting that must not hold unless it was saved: one the file could not
+// take is taken back whole, so the next change saved cannot write it behind everyone's back. Keep wake
+// clips is one: turned on while the flash was failing, the recorder stays off, and the setting must
+// too. A file that was never readable is the exception, since nothing is written over it all run: the
+// change holds until the next start, as Update's do.
+func (st *Store) UpdateOrUndo(f func(*Config)) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+
+	before := deepCopy(st.c)
+	f(&st.c)
+	err := st.write()
+	if err != nil && st.readable {
+		st.c = before
+	}
+	return err
 }
 
 // write replaces the file through a temporary one, flushed at every step, because the thing this has
