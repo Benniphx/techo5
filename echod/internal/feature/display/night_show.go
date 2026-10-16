@@ -131,6 +131,18 @@ func glowFor(wide bool) int {
 	return 6
 }
 
+// hasGlowRow: the Show's night light brightness is set in Home Assistant only.
+const hasGlowRow = false
+
+// glowLevelSet and stepGlow are the Spot's brightness row, which the Show does not have.
+func glowLevelSet() int { return glowFor(false) }
+
+func (d *Display) stepGlow(int) {}
+
+// nightClockSoon: the Show takes its night light up once nothing has happened for nightIdle, Night
+// light chosen or not.
+func (d *Display) nightClockSoon() {}
+
 // glowBacklight is the backlight the night light shows at on the panel. Wants mu, for wide.
 func (d *Display) glowBacklight() int {
 	return glowSteps[min(max(glowFor(d.wide), 1), len(glowSteps))-1]
