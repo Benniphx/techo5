@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/zserge/microwakeword"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safename"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/tflite"
@@ -351,14 +352,25 @@ func languageTag(s string) bool {
 
 // OwnID is the id a model with this phrase is kept under: the phrase in lower case, with anything that
 // is not a letter or digit as an underscore, as the published models are named ("Hey Jarvis" is
-// hey_jarvis). A phrase with no such letters at all, in another script say, is kept as own_ and a
-// number made from the phrase, so it still has a name and the same phrase always has the same one.
+// hey_jarvis). An accented letter is the plain one ("Ça va" is ca_va), so the id is plain ASCII and
+// still reads as the phrase. A phrase with no such letters at all, in another script say, is kept as
+// own_ and a number made from the phrase, so it still has a name and the same phrase always has the
+// same one.
 func OwnID(phrase string) string {
 	var b strings.Builder
 	under := false
-	for _, r := range strings.ToLower(phrase) {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			b.WriteRune(r)
+	// Decomposed, an accented letter is the plain letter and its accents, which are dropped; NFKD also
+	// makes plain letters of ligatures and full-width forms.
+	for _, r := range norm.NFKD.String(strings.ToLower(phrase)) {
+		if unicode.Is(unicode.Mn, r) {
+			continue
+		}
+		plain := string(r)
+		if f, ok := folds[r]; ok {
+			plain = f
+		}
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || folds[r] != "" {
+			b.WriteString(plain)
 			under = false
 			continue
 		}
@@ -379,6 +391,12 @@ func OwnID(phrase string) string {
 		id = fmt.Sprintf("own_%08x", h)
 	}
 	return id
+}
+
+// folds are the Latin letters that do not decompose into a plain one and accents, as they are usually
+// written in plain letters.
+var folds = map[rune]string{
+	'ß': "ss", 'æ': "ae", 'œ': "oe", 'ø': "o", 'đ': "d", 'ð': "d", 'þ': "th", 'ł': "l", 'ı': "i",
 }
 
 // AddOwn keeps a model sent from the page and its manifest, and reports the model as the device now

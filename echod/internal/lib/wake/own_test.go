@@ -193,7 +193,11 @@ func TestOwnIDIsAPlainName(t *testing.T) {
 		"  Okay,   Computer!  ":     "okay_computer",
 		"../../etc/passwd":          "etc_passwd",
 		`C:\Windows`:                "c_windows",
-		"Ça va":                     "a_va",
+		"Ça va":                     "ca_va",
+		"Hé, Jarvis":                "he_jarvis",
+		"Straße Øst":                "strasse_ost",
+		"Ｈｅｙ ﬁx":                    "hey_fix",
+		"Łódź":                      "lodz",
 		strings.Repeat("abcd ", 10): "abcd_abcd_abcd_abcd_abcd_abcd_abcd_abcd",
 	} {
 		if got := OwnID(phrase); got != want {
