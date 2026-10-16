@@ -36,12 +36,13 @@ const nightNever = "off"
 
 // glowSteps is the night clock's scale, 1 to 10, as backlight out of screen.BacklightMax. All of it is
 // under backlightMin, where the panel is too dim to read in a lit room: in a dark one that is a red
-// clock across the room without a light on the ceiling. Step 1 is the panel's lowest light, 1; the
-// steps widen from there, where one step at the bottom is the difference between a glow and a light
-// in a dark room. An owner found the old bottom, 6, still too bright for a bedroom (techo5-spot#7).
-var glowSteps = [...]int{1, 2, 4, 6, 10, 14, 20, 28, 38, 50}
+// clock across the room without a light on the ceiling. Step 1 is backlight 3, not the panel's lowest
+// light, 1: at 1 the panel may go dark altogether, and 3 looks the same. The steps widen from there,
+// where one step at the bottom is the difference between a glow and a light in a dark room. An owner
+// found the old bottom, 6, still too bright for a bedroom (techo5-spot#7).
+var glowSteps = [...]int{3, 4, 6, 8, 12, 16, 22, 30, 40, 50}
 
-// glowDefault is the night clock's brightness on a Spot with none set: backlight 6.
+// glowDefault is the night clock's brightness on a Spot with none set: backlight 8.
 const glowDefault = 4
 
 // glowSetting is the night clock's brightness on its 1 to 10 scale: the one set, or glowDefault.

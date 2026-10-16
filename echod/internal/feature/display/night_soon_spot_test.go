@@ -87,15 +87,15 @@ func TestChoosingTheNightClockBringsItSoon(t *testing.T) {
 	}
 }
 
-// The scale starts at the panel's lowest light, and the settings row sets it, keeps it in range, and
-// shows it on the backlight at night.
+// The scale starts at backlight 3, above the panel's lowest light, and the settings row sets it,
+// keeps it in range, and shows it on the backlight at night.
 func TestTheSpotNightClockBrightnessRow(t *testing.T) {
 	d := spotNightDisplay(t, true)
-	if glowSteps[0] != 1 {
-		t.Errorf("the night clock's lowest step is backlight %d, want 1", glowSteps[0])
+	if glowSteps[0] != 3 {
+		t.Errorf("the night clock's lowest step is backlight %d, want 3", glowSteps[0])
 	}
-	if got := glowSteps[glowDefault-1]; got != 6 {
-		t.Errorf("the night clock's default is backlight %d, want 6", got)
+	if got := glowSteps[glowDefault-1]; got != 8 {
+		t.Errorf("the night clock's default is backlight %d, want 8", got)
 	}
 	d.stepGlow(-20)
 	if got := config.Get().Screen.NightLightLevel; got != 1 {
@@ -104,8 +104,8 @@ func TestTheSpotNightClockBrightnessRow(t *testing.T) {
 	d.mu.Lock()
 	level := d.level
 	d.mu.Unlock()
-	if level != 1 {
-		t.Errorf("at night a step shows backlight %v, want 1", level)
+	if level != 3 {
+		t.Errorf("at night a step shows backlight %v, want 3", level)
 	}
 	d.stepGlow(+20)
 	if got := config.Get().Screen.NightLightLevel; got != len(glowSteps) {
