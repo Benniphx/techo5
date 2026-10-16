@@ -260,9 +260,14 @@ func (a *Alarms) Restore(c config.Config) {
 	// The light held for the next alarm comes back too, so a restart while it waits does not drop the
 	// room to wherever that alarm's ramp is (#161). Only while it still holds: an alarm turned off,
 	// moved or gone by while the device was down lets it go, as it would have with the device up.
+	//
+	// A helper followed from Home Assistant cannot be asked yet: its state comes in a moment after the
+	// start, and until then it is no alarm at all. Its hold comes back unless its time has gone by, and
+	// holds() decides on every look once Home Assistant has said; it used to be dropped every time.
 	if h := c.Alarms.Held; h != nil {
 		b := bridge{key: h.Key, at: h.At}
-		if b.holds(a.sources(now), now) {
+		local := slices.ContainsFunc(c.Alarms.List, func(al config.Alarm) bool { return al.ID == h.Key })
+		if b.holds(a.sources(now), now) || !local && !now.After(b.at.Add(bridgeGrace)) {
 			a.mu.Lock()
 			a.bridge = b
 			a.mu.Unlock()
