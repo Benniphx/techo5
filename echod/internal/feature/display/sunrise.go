@@ -23,6 +23,9 @@ import (
 
 var sunriseProgress = func(now time.Time) float64 { return alarm.Get().SunriseProgress(now) }
 
+// sunriseHold is what holds the light at full after an alarm, if anything (alarm.Alarms.WakeHold).
+var sunriseHold = func(now time.Time) (until time.Time, snooze, ok bool) { return alarm.Get().WakeHold(now) }
+
 func sunriseLevel(progress float64) float64 { return alarm.SunriseLevel(progress) }
 
 // The Wake with light row's choices.
@@ -61,7 +64,18 @@ func sunriseValue() string {
 }
 
 func sunriseSub() string {
-	if sunriseProgress(time.Now()) > 0 {
+	now := time.Now()
+	// Held at full after an alarm, it says what for (#161), in few enough words for the Spot's card.
+	if until, snooze, ok := sunriseHold(now); ok {
+		switch {
+		case until.IsZero():
+			return "On while the alarm rings"
+		case snooze:
+			return "On until the " + clockText(until) + " snooze"
+		}
+		return "On until the " + clockText(until) + " alarm"
+	}
+	if sunriseProgress(now) > 0 {
 		return "The light is coming up now"
 	}
 	return "Before alarms that don't choose their own"

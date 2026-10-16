@@ -86,17 +86,40 @@ func (b bridge) holds(sources []source, now time.Time) bool {
 
 // wakeLight is SunriseProgress for these sources and that hold.
 func wakeLight(sources []source, hold wakeHold, now time.Time) float64 {
-	if hold.ringing || hold.bridge.holds(sources, now) {
+	if _, _, ok := heldBy(sources, hold, now); ok {
 		return 1
+	}
+	return sunriseAt(sources, now)
+}
+
+// heldBy is what holds the light at full, if anything: until is the alarm or snooze it waits for,
+// zero while a lit alarm rings, and snooze whether it waits for a snooze.
+func heldBy(sources []source, hold wakeHold, now time.Time) (until time.Time, snooze, ok bool) {
+	if hold.ringing {
+		return time.Time{}, false, true
+	}
+	if hold.bridge.holds(sources, now) {
+		return hold.bridge.at, false, true
 	}
 	// A lit snooze holds until it is gone from the list, which is when it rings (or is canceled or
 	// missed), not when its time comes: the moment between the two must not drop the light.
 	for _, s := range sources {
-		if s.lit {
-			return 1
+		if s.lit && (!ok || s.once.Before(until)) {
+			until, snooze, ok = s.once, true, true
 		}
 	}
-	return sunriseAt(sources, now)
+	return until, snooze, ok
+}
+
+// WakeHold is what holds the wake light at full now, for the screen to say: until is the alarm or
+// the snooze it waits for (snooze says which), zero while a lit alarm rings. ok is false when nothing
+// holds it, and the light, if on, is only coming up before an alarm.
+func (a *Alarms) WakeHold(now time.Time) (until time.Time, snooze, ok bool) {
+	sources := a.sources(now)
+	a.mu.Lock()
+	hold := wakeHold{ringing: a.ringing != nil && a.ringing.lit, bridge: a.bridge}
+	a.mu.Unlock()
+	return heldBy(sources, hold, now)
 }
 
 // bridgeFrom is the alarm the light is held for when a lit ring ends at now: the soonest one with a

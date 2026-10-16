@@ -375,3 +375,33 @@ func TestStopWithNothingRingingLetsTheLightGo(t *testing.T) {
 		t.Errorf("after Stop the light is %.2f, want the next alarm's own ramp", got)
 	}
 }
+
+// What holds the light is said on the screen, so it has to name the right thing.
+func TestWhatHoldsTheLight(t *testing.T) {
+	now := time.Date(2026, 10, 16, 8, 5, 0, 0, time.UTC)
+	next := source{key: "b", hour: 8, min: 30, days: config.DaysEvery, sunrise: 30}
+	snoozes := []source{
+		{key: "snooze:a", once: now.Add(9 * time.Minute), lit: true},
+		{key: "snooze:c", once: now.Add(4 * time.Minute), lit: true},
+		{key: "snooze:d", once: now.Add(2 * time.Minute)}, // no light of its own
+	}
+	for _, tc := range []struct {
+		name    string
+		sources []source
+		hold    wakeHold
+		until   time.Time
+		snooze  bool
+		ok      bool
+	}{
+		{"nothing", []source{next}, wakeHold{}, time.Time{}, false, false},
+		{"a ring", []source{next}, wakeHold{ringing: true}, time.Time{}, false, true},
+		{"a bridge", []source{next}, wakeHold{bridge: bridge{key: "b", at: now.Add(25 * time.Minute)}}, now.Add(25 * time.Minute), false, true},
+		{"the sooner lit snooze", append([]source{next}, snoozes...), wakeHold{}, now.Add(4 * time.Minute), true, true},
+	} {
+		until, snooze, ok := heldBy(tc.sources, tc.hold, now)
+		if !until.Equal(tc.until) || snooze != tc.snooze || ok != tc.ok {
+			t.Errorf("%s: held until %v (snooze %v, %v), want %v (snooze %v, %v)",
+				tc.name, until, snooze, ok, tc.until, tc.snooze, tc.ok)
+		}
+	}
+}
