@@ -246,3 +246,13 @@ func TestDashboardHiddenEventsChangeNothing(t *testing.T) {
 		}
 	}
 }
+
+// A 12-hour time loses only its AM/PM, and a 24-hour one stays as it is: the Dashboard drops the
+// suffix when a long "when" in another language would squeeze the event names.
+func TestDashBareTime(t *testing.T) {
+	for in, want := range map[string]string{"11:30 PM": "11:30", "9:05 AM": "9:05", "23:30": "23:30", "": ""} {
+		if got := dashBareTime(in); got != want {
+			t.Errorf("dashBareTime(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

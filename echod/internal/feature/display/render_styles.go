@@ -487,12 +487,30 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 		}
 		return w
 	}
-	tx := col
-	for _, e := range shown {
-		tx = max(tx, col+whenWidth(dashWhen(e, s.now))+r.s(18))
+	// A long "when" in another language on a 12-hour clock ("Aujourd'hui 11:30 PM") left the names a
+	// few letters; past dashWhenShare of the column the times lose their AM/PM instead.
+	short := false
+	widest := func() int {
+		tx := col
+		for _, e := range shown {
+			day, hhm := dashWhen(e, s.now)
+			if short {
+				hhm = dashBareTime(hhm)
+			}
+			tx = max(tx, col+whenWidth(day, hhm)+r.s(18))
+		}
+		return tx
+	}
+	tx := widest()
+	if tx-col > (r.w-r.margin-col)*dashWhenShare/100 {
+		short = true
+		tx = widest()
 	}
 	for _, e := range shown {
 		day, hhm := dashWhen(e, s.now)
+		if short {
+			hhm = dashBareTime(hhm)
+		}
 		r.text(r.tiny, day, col, y, amber)
 		if hhm != "" {
 			r.text(r.tiny, hhm, col+r.width(r.tiny, day)+r.s(8), y, dim)
@@ -572,6 +590,19 @@ func (r *renderer) dashRowSpan(days []hass.Day, box image.Rectangle, row int, ca
 // dashWhen is when an event starts, as the dashboard writes it, in the screen's language: the day
 // ("Today", or the short weekday from tomorrow on) and apart its time, empty for an all-day event; an
 // event under way is "Now" with no time.
+// dashWhenShare is the most of the Dashboard's event column, in percent, the "when" may take before
+// its times drop their AM/PM.
+const dashWhenShare = 45
+
+// dashBareTime is a 12-hour time without its AM/PM ("11:30 PM" is "11:30"); a 24-hour one is
+// unchanged.
+func dashBareTime(hhm string) string {
+	if f := strings.Fields(hhm); len(f) > 1 {
+		return f[0]
+	}
+	return hhm
+}
+
 func dashWhen(e hass.Event, now time.Time) (day, hhm string) {
 	lang := screenLang()
 	start := e.Start
