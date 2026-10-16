@@ -288,9 +288,6 @@ func TestAStationTheDevicePlaysItselfIsPutBack(t *testing.T) {
 	if !f.liveURL("http://p/own") {
 		t.Fatal("the device's own station, started by PlayOwn, was not taken for live radio")
 	}
-	f.mu.Lock()
-	gen := f.stationGen
-	f.mu.Unlock()
 	f.ended("http://p/own")
 	f.mu.Lock()
 	tried := f.resumed
@@ -304,7 +301,7 @@ func TestAStationTheDevicePlaysItselfIsPutBack(t *testing.T) {
 	f.askStation("KXYZ")
 	f.playingOwn("KXYZ", "http://p/own")
 	f.stationURL = "http://p/own"
-	gen = f.stationGen
+	gen := f.stationGen
 	f.mu.Unlock()
 	f.putBack("KXYZ", "http://p/own", true, gen)
 	if got := played(); len(got) != 2 || got[1] != "http://p/own" {
