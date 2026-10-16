@@ -259,3 +259,32 @@ func TestOWWLoadSurvivesDamagedModels(t *testing.T) {
 		}()
 	}
 }
+
+// Every model is held to the static check before the engine reads it, wherever it came from: a file
+// that claims more than the device has is refused at load, not allocated.
+func TestMicroLoadRefusesAModelTheCheckRefuses(t *testing.T) {
+	good, err := os.ReadFile("assets/stop.tflite")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A shape of 4096 x 4096 x 40 in place of the input's [1, 3, 40]: no published model is anywhere
+	// near that, and the engine would allocate it.
+	bad := bytes.Clone(good)
+	i := bytes.Index(bad, []byte{1, 0, 0, 0, 3, 0, 0, 0, 40, 0, 0, 0})
+	if i < 0 {
+		t.Fatal("the input shape is not where this looks for it")
+	}
+	copy(bad[i:], []byte{0, 16, 0, 0, 0, 16, 0, 0})
+	path := filepath.Join(t.TempDir(), "big.tflite")
+	if err := os.WriteFile(path, bad, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b := newMicroBackend()
+	err = b.load(wake.Model{ID: "big", Path: path, Config: microwakeword.Config{ModelPath: path, SlidingWindowSize: 5, FeaturesStepMs: 10}})
+	if err == nil {
+		t.Fatal("loaded a model the check refuses")
+	}
+	if len(b.dets) != 0 {
+		t.Error("something was loaded")
+	}
+}

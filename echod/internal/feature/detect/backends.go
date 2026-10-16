@@ -116,6 +116,12 @@ func (b *microBackend) load(m wake.Model) (err error) {
 			err = fmt.Errorf("wake: loading %s: damaged model: %v", m.Path, r)
 		}
 	}()
+	// The engine sizes and indexes everything by what the file says, and an allocation a file talked
+	// it into is fatal, not a panic the guard above can catch. So every model, the image's, Home
+	// Assistant's or the setup page's, is held to the setup page's checks before the engine reads it.
+	if err := wake.CheckMicro(m.Path); err != nil {
+		return fmt.Errorf("wake: loading %s: %w", m.Path, err)
+	}
 	det, err := microwakeword.NewDetector(cfg)
 	if err != nil {
 		return fmt.Errorf("wake: loading %s: %w", m.Path, err)

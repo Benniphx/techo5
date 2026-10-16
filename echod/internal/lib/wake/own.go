@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -140,9 +141,38 @@ func CheckOwn(manifestJSON, model []byte) (Model, error) {
 	}, nil
 }
 
-// microInput checks that a model reads as a microWakeWord model, and reports how many feature frames
-// it takes at a time. The engine's own loader takes the input's shape on trust and indexes it, so the
-// shape is checked here before the engine ever sees the file.
+// The limits of a microWakeWord model, past which a file is refused before the engine reads it. The
+// engine (github.com/zserge/microwakeword) allocates every tensor, in both subgraphs, at the size the
+// file states, and runs whatever operators the file lists: it was written for the published models,
+// not for a file made to make it fall over. The published models have two subgraphs, under 100
+// operators, no dimension over a few hundred and well under a megabyte of tensors all told; these
+// leave room for a bigger one trained at home and none for a file that would run the daemon out of
+// memory, which is fatal rather than a panic anything can recover.
+const (
+	microMaxSubgraphs = 2
+	microMaxRank      = 8
+	microMaxDim       = 4096
+	microMaxElements  = 1 << 20
+	microMaxBytes     = 4 << 20
+	microMaxOperators = 256
+
+	// MaxMicroFile is the most a microWakeWord model on disk may be, from wherever it came.
+	MaxMicroFile = 4 << 20
+)
+
+// microOps is every operator the engine runs, which is every one the published models use. Anything
+// else the engine would refuse at the first inference; refusing it here says so at once.
+var microOps = map[tflite.Op]bool{
+	tflite.OpCallOnce: true, tflite.OpVarHandle: true, tflite.OpReadVariable: true,
+	tflite.OpAssignVariable: true, tflite.OpReshape: true, tflite.OpConcatenation: true,
+	tflite.OpStridedSlice: true, tflite.OpConv2D: true, tflite.OpDepthwiseConv: true,
+	tflite.OpFullyConnected: true, tflite.OpLogistic: true, tflite.OpQuantize: true,
+	tflite.OpSplitV: true,
+}
+
+// microInput checks that a model reads as a microWakeWord model the engine can be trusted with, and
+// reports how many feature frames it takes at a time. The engine's own loader takes the file on
+// trust, so everything it would size or index from is checked here before it ever sees the file.
 func microInput(model []byte) (frames int, err error) {
 	if len(model) < 8 || string(model[4:8]) != "TFL3" {
 		return 0, errors.New("the .tflite is not a TensorFlow Lite model")
@@ -165,7 +195,118 @@ func microInput(model []byte) (frames int, err error) {
 	if len(shape) != 3 || shape[0] != 1 || shape[1] < 1 || shape[1] > 100 || shape[2] != featureDims {
 		return 0, fmt.Errorf("the .tflite is not a microWakeWord model: its input is %v, not [1, frames, %d]", shape, featureDims)
 	}
+	if err := microGraph(m, len(model)); err != nil {
+		return 0, fmt.Errorf("the .tflite is not a microWakeWord model the engine can run: %v", err)
+	}
 	return shape[1], nil
+}
+
+// microGraph walks every subgraph, tensor, operator and buffer of a parsed model and holds them to
+// the limits above. size is the file's length.
+func microGraph(m *tflite.Model, size int) error {
+	if len(m.Subgraphs) > microMaxSubgraphs {
+		return fmt.Errorf("it has %d subgraphs; the most is %d", len(m.Subgraphs), microMaxSubgraphs)
+	}
+
+	var data int
+	for i, n := range m.BufferSizes() {
+		if n < 0 || n > size-data {
+			return fmt.Errorf("buffer %d holds more than the file does", i)
+		}
+		data += n
+	}
+
+	var bytes, ops int
+	for gi, g := range m.Subgraphs {
+		for i, t := range g.Tensors {
+			if len(t.Shape) > microMaxRank {
+				return fmt.Errorf("tensor %d has %d dimensions", i, len(t.Shape))
+			}
+			n := 1
+			for _, d := range t.Shape {
+				if d < 0 || d > microMaxDim {
+					return fmt.Errorf("tensor %d has a dimension of %d; the most is %d", i, d, microMaxDim)
+				}
+				n *= d // at most 4096 per step, so it cannot overflow before the check below
+				if n > microMaxElements {
+					return fmt.Errorf("tensor %d has more than %d elements", i, microMaxElements)
+				}
+			}
+			bytes += max(n, 1) * elemSize(t.Type)
+			if bytes > microMaxBytes {
+				return fmt.Errorf("its tensors take more than %d MB", microMaxBytes>>20)
+			}
+		}
+
+		for _, io := range [][]int{g.Inputs, g.Outputs} {
+			if err := tensorRefs(io, len(g.Tensors)); err != nil {
+				return err
+			}
+		}
+		for i, o := range g.Ops {
+			ops++
+			if ops > microMaxOperators {
+				return fmt.Errorf("it has more than %d operators", microMaxOperators)
+			}
+			if !microOps[o.Op] {
+				return fmt.Errorf("operator %d is %s, which microWakeWord models do not use", i, o.Op)
+			}
+			// CALL_ONCE runs another subgraph to set up the first. Anywhere else, or pointed back at
+			// the first, it would call itself without end.
+			if o.Op == tflite.OpCallOnce && (gi != 0 || o.InitSubgraph() <= 0 || o.InitSubgraph() >= len(m.Subgraphs)) {
+				return fmt.Errorf("operator %d calls subgraph %d from subgraph %d", i, o.InitSubgraph(), gi)
+			}
+			for _, io := range [][]int{o.Inputs, o.Outputs} {
+				if err := tensorRefs(io, len(g.Tensors)); err != nil {
+					return fmt.Errorf("operator %d: %v", i, err)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// tensorRefs checks a list of tensor indices against the table they index; -1 is an input left out.
+func tensorRefs(refs []int, n int) error {
+	for _, r := range refs {
+		if r < -1 || r >= n {
+			return fmt.Errorf("tensor %d is not in a table of %d", r, n)
+		}
+	}
+	return nil
+}
+
+// elemSize is what the engine allocates per element of a tensor of type t.
+func elemSize(t tflite.TensorType) int {
+	switch t {
+	case tflite.Int64:
+		return 8
+	case tflite.Float32, tflite.Int32:
+		return 4
+	case 1, 7: // float16, int16
+		return 2
+	}
+	return 1
+}
+
+// CheckMicro holds a microWakeWord model on disk to the same checks a model sent from the setup page
+// is held to, wherever it came from: the image, Home Assistant or the page. It runs before the engine
+// loads anything, so a model that would take the daemon down is refused rather than loaded.
+func CheckMicro(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	model, err := io.ReadAll(io.LimitReader(f, MaxMicroFile+1))
+	if err != nil {
+		return err
+	}
+	if len(model) > MaxMicroFile {
+		return fmt.Errorf("the .tflite is bigger than %d MB", MaxMicroFile>>20)
+	}
+	_, err = microInput(model)
+	return err
 }
 
 // runs loads the model at path in the engine and feeds it one window of silence, which is what the
