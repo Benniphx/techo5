@@ -107,6 +107,7 @@ python3 "$P/patch-mt7663s-firmware-hold.py" "$KTREE"
 python3 "$P/patch-display.py" "$KTREE"
 python3 "$P/patch-tas5805m-dsp-slot.py" "$KTREE"
 python3 "$P/patch-cci-sram.py" "$KTREE"
+python3 "$P/patch-thermal-devinfo.py" "$KTREE"
 
 # 4. Configuration
 cd "$KTREE"
