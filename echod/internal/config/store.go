@@ -163,8 +163,10 @@ func (st *Store) UpdateOrUndo(f func(*Config)) error {
 	case err == nil, !st.readable:
 	case errors.As(err, &renamed):
 		// The new file is in place, only not yet flushed with its folder: the disk has the change, and
-		// memory keeps it to match.
+		// memory keeps it to match. Saved, as far as the caller goes, so what it does for the setting
+		// (the recorder Keep wake clips turns on) matches both.
 		slog.Warn("config: saved, but the folder could not be flushed after", "path", st.path, "err", err)
+		return nil
 	default:
 		st.c = before
 	}
