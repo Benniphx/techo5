@@ -51,8 +51,10 @@ var patterns = []struct {
 	// A telephone number, and not the tail of a number that merely holds ten digits: a rate of
 	// 49.98765432109876 has a run of digits after the point that this used to take for a phone, which
 	// left a log reading "per_second=49.<phone-130>" line after line and nothing in it worth reading.
-	// The match takes in what is either side of the number so it can tell; only the number goes.
-	{"phone", regexp.MustCompile(`(?:^|[^\d.+-])(\+?\d{10,15})(?:$|[^\d.])`), true},
+	// The match takes in what is either side of the number so it can tell; only the number goes. A
+	// letter either side means a run of hex instead: a kernel stack trace's [<0000000012e3d9f7>] came
+	// out as [<<phone-1>e3d9f7>].
+	{"phone", regexp.MustCompile(`(?:^|[^\dA-Za-z.+-])(\+?\d{10,15})(?:$|[^\dA-Za-z.])`), true},
 	{"url", regexp.MustCompile(`\b(?:https?)://[^\s"'<>]+`), false},
 }
 

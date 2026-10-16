@@ -440,6 +440,15 @@ func timezoneSection(w http.ResponseWriter, token string) {
 	hidden(w, token, "timezone", "general")
 	fmt.Fprint(w, `<label for="zone">Zone</label><select id="zone" name="zone">`)
 	fmt.Fprintf(w, `<option value=""%s>Follow Home Assistant</option>`, selected(!timezone.Get().SetHere()))
+	if !timezone.HasDatabase() {
+		// An image without the zone database still puts the common zones in force (timezone.Common).
+		fmt.Fprint(w, `<optgroup label="Common">`)
+		for _, full := range timezone.Common {
+			fmt.Fprintf(w, `<option value="%s"%s>%s</option>`,
+				html.EscapeString(full), selected(full == cur && timezone.Get().SetHere()), html.EscapeString(full))
+		}
+		fmt.Fprint(w, `</optgroup>`)
+	}
 	for _, region := range timezone.Regions() {
 		fmt.Fprintf(w, `<optgroup label="%s">`, html.EscapeString(region))
 		for _, z := range timezone.Zones(region) {

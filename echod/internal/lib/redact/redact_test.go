@@ -136,3 +136,21 @@ func TestAMACIsStillAMAC(t *testing.T) {
 		t.Errorf("a mac was taken for something else: %s", out)
 	}
 }
+
+// A kernel stack trace prints its addresses as runs of hex that can start with ten or more digits;
+// they are no telephone number, and taking them for one left traces reading [<<phone-1>e3d9f7>].
+func TestKernelAddressesAreNotPhones(t *testing.T) {
+	for _, line := range []string{
+		"[  242.667317] [<0000000012e3d9f7>] tz_service_call+0x94/0xe8",
+		"[  242.668013] [<00000000c9eeac12>] KREE_TeeServiceCall+0xc0/0x258",
+		"[  242.669537] [<ffffff800812345a>] kthread+0xf8/0x100",
+		"[  242.670139] [<0000000001234567>] ret_from_fork+0x10/0x40",
+	} {
+		if got := New().Text(line); got != line {
+			t.Errorf("a kernel address was changed:\n old: %s\n new: %s", line, got)
+		}
+	}
+	if got := New().Text("call to +15551234567 failed"); got == "call to +15551234567 failed" {
+		t.Error("a telephone number was left in")
+	}
+}
