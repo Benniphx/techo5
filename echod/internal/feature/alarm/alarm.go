@@ -66,6 +66,10 @@ type Ring struct {
 	// local is an alarm set on the device, or its snooze: one deleted or turned off while it rings is
 	// not snoozed back (SnoozeFor).
 	local bool
+
+	// lit is a ring with a wake light, its own or a folded alarm's: the light stays at full while it
+	// rings and through its snooze (sunrise.go).
+	lit bool
 }
 
 // folded is an alarm that joined a ring already sounding.
@@ -111,6 +115,9 @@ type Alarms struct {
 	// everything quieter; lighting is whether it is showing anything.
 	sun      *led.Claim
 	lighting bool
+	// bridge is the next alarm the light is held at full for, after a lit ring ended inside that
+	// alarm's window; under mu.
+	bridge bridge
 
 	// sound and snoozeFor are the ring's settings in Home Assistant; the screen sets them too.
 	sound     *esphome.Select
@@ -227,7 +234,7 @@ func (a *Alarms) Restore(c config.Config) {
 			ring.Missed("snooze", s.Label, s.At)
 			continue
 		}
-		live = append(live, source{key: s.Key, label: s.Label, once: s.At})
+		live = append(live, source{key: s.Key, label: s.Label, once: s.At, lit: s.Lit})
 	}
 
 	a.mu.Lock()
@@ -436,6 +443,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 	spent := len(a.snoozed) != before
 	if a.ringing != nil {
 		a.ringing.folded = append(a.ringing.folded, folded{key: s.key, label: s.label, at: now})
+		a.ringing.lit = a.ringing.lit || lights(s)
 		a.mu.Unlock()
 		if spent {
 			a.saveSnoozes()
@@ -450,7 +458,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 		return
 	}
 	key := strings.TrimPrefix(s.key, "snooze:")
-	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key))}
+	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key)), lit: lights(s)}
 	// Started under the lock, so there is no moment where an alarm is ringing and Stop finds
 	// nothing to stop. The bell calls rang from its own goroutine, never from here.
 	a.silence = ring.Start("alarm", s.label, speaker.AlarmSound(a.Sound()), a.rang)
@@ -466,6 +474,10 @@ func (a *Alarms) fire(s source, now time.Time) {
 		safe.Go("alarm label", func() { sayOverRing(s.label) })
 	}
 }
+
+// lights is whether s ringing holds the wake light at full: it has a wake light, or is the snooze of
+// an alarm that had one.
+func lights(s source) bool { return s.sunrise > 0 || s.lit }
 
 // sayFor is how long the ring holds its chime back for an alarm's label: long enough for Home
 // Assistant to make the words and for them to be said, short enough that an alarm whose words never
@@ -494,6 +506,12 @@ func (a *Alarms) rang() {
 	r := a.ringing
 	a.ringing, a.silence = nil, nil
 	a.mu.Unlock()
+	// A lit ring that ended for good hands the light to the next alarm whose window is already open,
+	// or lets it go. A snoozed one holds it through its snooze instead.
+	if r != nil && r.lit && !r.snoozed {
+		now := time.Now()
+		a.endLight(a.sources(now), now)
+	}
 	// A snoozed ring has said so already, and rings again later; any other end is a stop.
 	if r != nil && !r.snoozed {
 		fireEvent("stopped", r.Key, r.Label, r.At)
@@ -549,7 +567,7 @@ func (a *Alarms) pruneSnoozes(now time.Time) {
 func snoozeList(snoozed []source) []config.Snooze {
 	out := make([]config.Snooze, 0, len(snoozed))
 	for _, s := range snoozed {
-		out = append(out, config.Snooze{Key: s.key, Label: s.label, At: s.once})
+		out = append(out, config.Snooze{Key: s.key, Label: s.label, At: s.once, Lit: s.lit})
 	}
 	return out
 }
@@ -645,7 +663,7 @@ func (a *Alarms) SnoozeFor(minutes int) bool {
 	r.snoozed = true
 	now := time.Now()
 	at := now.Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
-	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at})
+	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at, lit: r.lit})
 	a.lastSnooze = snoozeMade{made: now, until: at, minutes: minutes}
 	a.mu.Unlock()
 

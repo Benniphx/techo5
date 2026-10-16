@@ -130,6 +130,8 @@ type Snooze struct {
 	Key   string    `json:"key"`
 	Label string    `json:"label,omitempty"`
 	At    time.Time `json:"at"`
+	// Lit is a snooze of an alarm that had a wake light, which stays on at full until it rings again.
+	Lit bool `json:"lit,omitempty"`
 }
 
 const (
