@@ -1567,14 +1567,21 @@ func (d *Display) lightOffOver(now time.Time, alarmRinging bool) {
 		return
 	}
 	lit := sunriseProgress(now) > 0
+	gone := false
 	if w := d.lightOffWaits.Load(); w != 0 {
-		if lit || now.After(time.Unix(0, w).Add(time.Minute)) {
+		// Only the hold it was turned off under brings it back for good. Anything else lit first, like
+		// another alarm's own ramp, is a new light and is shown; so is nothing once the moment is past.
+		until, _, held := sunriseHold(now)
+		switch {
+		case held && until.Equal(time.Unix(0, w)):
 			d.lightOffWaits.Store(0)
-		} else if !alarmRinging {
+		case lit || now.After(time.Unix(0, w).Add(time.Minute)):
+			gone = true
+		case !alarmRinging:
 			return
 		}
 	}
-	if alarmRinging || !lit {
+	if gone || alarmRinging || !lit {
 		d.lightOff.Store(false)
 		d.lightOffWaits.Store(0)
 		saveHeldDark(time.Time{})

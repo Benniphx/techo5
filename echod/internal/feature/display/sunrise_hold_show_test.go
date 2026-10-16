@@ -140,3 +140,37 @@ func TestTheScreenTurnedOffUnderTheHeldLightStaysOffAfterARestart(t *testing.T) 
 		t.Error("restored, the screen stays off past the moment its light waited for")
 	}
 }
+
+// Restored after a restart, the screen stays off only for the hold it was turned off under. Another
+// alarm's own ramp lit first is a new light, and the screen shows it.
+func TestARestoredDarkScreenShowsAnotherAlarmsLight(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	now := time.Date(2026, 10, 16, 8, 12, 0, 0, time.Local)
+	until := now.Add(18 * time.Minute)
+	if err := config.Set().Alarms().HeldDark(until); err != nil {
+		t.Fatal(err)
+	}
+
+	d := &Display{}
+	d.restoreLightOff(config.Get().Alarms.HeldDark, now)
+	heldLight(t, time.Time{}, false, false) // another alarm's ramp, at 0.4, and nothing held
+	d.lightOffOver(now, false)
+	if got := d.wakeLight(now); got != 0.4 {
+		t.Errorf("another alarm's light is %.2f on the screen, want 0.40", got)
+	}
+	if !config.Get().Alarms.HeldDark.IsZero() {
+		t.Error("the screen shows another light and the dark one is still saved")
+	}
+
+	// Held for some other moment than the one saved, the same.
+	if err := config.Set().Alarms().HeldDark(until); err != nil {
+		t.Fatal(err)
+	}
+	other := &Display{}
+	other.restoreLightOff(until, now)
+	heldLight(t, until.Add(30*time.Minute), false, true)
+	other.lightOffOver(now, false)
+	if other.wakeLight(now) != 1 {
+		t.Error("a light held for another alarm stays off the screen")
+	}
+}
