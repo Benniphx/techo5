@@ -226,6 +226,48 @@ actions:
   - action: script.good_morning
 ```
 
+## Voice request events
+
+Each finished voice request (a turn: wake, listen, answer) fires `esphome.techo5_voice` on Home
+Assistant's bus, with:
+
+| Field | |
+|---|---|
+| `ended` | `answered`, `no_speech` (nothing said, or only what speech-to-text writes for noise), `canceled` (stopped, interrupted, cut off by another sound, or answered by another device), or `error` |
+| `error` | Only when `ended` is `error`: Home Assistant's error code, like `stt-stream-failed`, or `timeout` when the pipeline took longer than the slot allows |
+| `trigger` | What opened it: `wake_word`, `button`, `follow_up` (listening again after a reply), or `home_assistant` (an announcement that asked for an answer) |
+| `wake_word` | The slot's wake word. It picked the pipeline, so it is there for a button or follow-up too |
+| `slot` | The wake word slot, `1` or `2` |
+| `heard` | What speech-to-text heard, up to 1000 characters |
+| `reply` | The reply's text, up to 1000 characters |
+| `listen_ms`, `think_ms`, `reply_ms` | How long each phase took, in milliseconds. A phase the turn never reached is left out |
+| `audio_seconds` | Seconds of recording kept for this turn, when one was |
+| `id` | The turn's id |
+| `version` | `1`; bumped if a field changes meaning |
+| `device` | The device's name |
+
+All values are text, as with every ESPHome event. No audio is sent. The device needs **Allow the
+device to perform Home Assistant actions** turned on, as for alarm events.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: esphome.techo5_voice
+    event_data:
+      ended: error
+actions:
+  - action: persistent_notification.create
+    data:
+      title: "Voice request failed on {{ trigger.event.data.device }}"
+      message: >-
+        Heard "{{ trigger.event.data.heard | default('') }}",
+        error {{ trigger.event.data.error }}.
+```
+
+Events do not show in the logbook by themselves. To keep a line there for each request, add an
+automation that triggers on `esphome.techo5_voice` with no `event_data` and runs `logbook.log` with
+`name: "{{ trigger.event.data.device }}"` and `message: "heard {{ trigger.event.data.heard | default('nothing') }}, {{ trigger.event.data.ended }}"`.
+
 ## Set a reminder
 
 In YAML, refer to this action as `esphome.<node>_reminder_set`.
