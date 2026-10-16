@@ -146,8 +146,13 @@ type Display struct {
 	sunriseLit bool
 	// lightOff is the screen turned off by somebody while the wake light was held at full after an
 	// alarm (#161): the panel stays off for that light, and its page and level stay away if the panel
-	// is lit again some other way (wakeLight). The light ring, if any, is the alarm's and stays.
+	// is lit again some other way (wakeLight). The light ring, if any, is the alarm's and stays. It is
+	// saved with the moment that light waits for (config.Alarms.HeldDark), so a restart keeps it.
 	lightOff atomic.Bool
+	// lightOffWaits is a lightOff brought back by a restart, as the moment its light waits for in Unix
+	// nanoseconds, until that light is seen again: a helper's hold is not held until Home Assistant
+	// has said what the helper is set to, and that moment is not the light being over.
+	lightOffWaits atomic.Int64
 
 	view   voice.State
 	viewAt time.Time
@@ -512,6 +517,7 @@ func (d *Display) Restore(c config.Config) {
 	d.popupSettingsChanged()
 	d.glowLevel.Set(float32(d.glowSetting()))
 	d.dimmestNum.Set(float32(dimmestSetting()))
+	d.restoreLightOff(c.Alarms.HeldDark, time.Now())
 	d.setAuto(c.Screen.Auto, false)
 	d.apply(c.Screen.On, c.Screen.Brightness, false)
 }
@@ -1544,16 +1550,60 @@ func (d *Display) wakeLight(now time.Time) float64 {
 // turnedOff is the screen turned off by somebody (apply, saved). While the wake light is held at full
 // after an alarm it stays off for that light (#161).
 func (d *Display) turnedOff(now time.Time) {
-	if _, _, ok := sunriseHold(now); ok && !d.lightOff.Swap(true) {
+	if until, _, ok := sunriseHold(now); ok && !d.lightOff.Swap(true) {
 		slog.Info("screen: turned off under the held wake light; it stays off for this light")
+		// While a lit alarm rings there is no moment to keep; the ring ends this one anyway.
+		if !until.IsZero() {
+			saveHeldDark(until)
+		}
 	}
 }
 
 // lightOffOver lets the screen show the wake light again once the light it was turned off under is
-// over: gone altogether, or an alarm ringing, after which any light held is a new one.
+// over: gone altogether, or an alarm ringing, after which any light held is a new one. One brought
+// back by a restart waits to see its light again first, or for the moment it waited for to go by.
 func (d *Display) lightOffOver(now time.Time, alarmRinging bool) {
-	if d.lightOff.Load() && (alarmRinging || sunriseProgress(now) == 0) {
+	if !d.lightOff.Load() {
+		return
+	}
+	lit := sunriseProgress(now) > 0
+	if w := d.lightOffWaits.Load(); w != 0 {
+		if lit || now.After(time.Unix(0, w).Add(time.Minute)) {
+			d.lightOffWaits.Store(0)
+		} else if !alarmRinging {
+			return
+		}
+	}
+	if alarmRinging || !lit {
 		d.lightOff.Store(false)
+		d.lightOffWaits.Store(0)
+		saveHeldDark(time.Time{})
+	}
+}
+
+// restoreLightOff brings back a screen turned off under the held wake light before a restart, unless
+// the moment that light waited for has gone by, in which case the saved one goes.
+func (d *Display) restoreLightOff(until, now time.Time) {
+	if until.IsZero() {
+		return
+	}
+	if now.After(until.Add(time.Minute)) {
+		saveHeldDark(time.Time{})
+		return
+	}
+	d.lightOff.Store(true)
+	d.lightOffWaits.Store(until.UnixNano())
+	slog.Info("screen: stays off for the held wake light, as it was", "until", until.Format("15:04"))
+}
+
+// saveHeldDark writes down the screen turned off under the held wake light (lightOff), zero for none.
+// Only a change is written: the whole config is fsynced on every set.
+func saveHeldDark(until time.Time) {
+	if config.Get().Alarms.HeldDark.Equal(until) {
+		return
+	}
+	if err := config.Set().Alarms().HeldDark(until); err != nil {
+		slog.Warn("saving the screen turned off under the wake light failed", "err", err)
 	}
 }
 

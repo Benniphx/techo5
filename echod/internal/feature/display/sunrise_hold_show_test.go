@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
 // The Alarms card with the wake light held after an alarm, for looking at with SHOW_PREVIEW set.
@@ -45,6 +47,7 @@ func TestHeldLightRowDraws(t *testing.T) {
 // The screen turned off under the held wake light stays off for that light, and shows it again once
 // it is over or an alarm rings (#161). It used to be turned straight back on.
 func TestTheScreenTurnedOffUnderTheHeldLightStaysOff(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	now := time.Date(2026, 10, 16, 8, 12, 0, 0, time.Local)
 	d := &Display{}
 
@@ -74,5 +77,66 @@ func TestTheScreenTurnedOffUnderTheHeldLightStaysOff(t *testing.T) {
 	sunriseProgress = func(time.Time) float64 { return 1 }
 	if d.wakeLight(now) != 1 {
 		t.Error("the light ended and the next one stays off the screen")
+	}
+}
+
+// The screen turned off under the held wake light stays off after a restart, including the moment
+// before Home Assistant says what a helper is set to, when nothing holds the light yet; and lights
+// for it again once that light is over. It used to come back on with the restart.
+func TestTheScreenTurnedOffUnderTheHeldLightStaysOffAfterARestart(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	now := time.Date(2026, 10, 16, 8, 12, 0, 0, time.Local)
+	until := now.Add(18 * time.Minute)
+
+	heldLight(t, until, false, true)
+	(&Display{}).turnedOff(now)
+	if got := config.Get().Alarms.HeldDark; !got.Equal(until) {
+		t.Fatalf("saved %v for the screen turned off, want %v", got, until)
+	}
+
+	d := &Display{}
+	d.restoreLightOff(config.Get().Alarms.HeldDark, now)
+	heldLight(t, time.Time{}, false, false)
+	sunriseProgress = func(time.Time) float64 { return 0 } // Home Assistant has not said yet
+	d.lightOffOver(now, false)
+	heldLight(t, until, false, true)
+	if got := d.wakeLight(now); got != 0 {
+		t.Errorf("after a restart the screen shows %.2f of the light it was turned off under", got)
+	}
+	d.lightOffOver(now, false)
+	if d.wakeLight(now) != 0 {
+		t.Error("after a restart the screen took the light back while it was still held")
+	}
+
+	sunriseProgress = func(time.Time) float64 { return 0 }
+	d.lightOffOver(now, false)
+	if !config.Get().Alarms.HeldDark.IsZero() {
+		t.Error("the light is over and the screen turned off under it is still saved")
+	}
+	sunriseProgress = func(time.Time) float64 { return 1 }
+	if d.wakeLight(now) != 1 {
+		t.Error("the light ended and the next one stays off the screen")
+	}
+
+	// Saved for a moment that went by while the device was down, it does not come back.
+	if err := config.Set().Alarms().HeldDark(now.Add(-5 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	late := &Display{}
+	late.restoreLightOff(config.Get().Alarms.HeldDark, now)
+	if late.wakeLight(now) != 1 {
+		t.Error("restored for a light whose moment went by, the screen stays off")
+	}
+	if !config.Get().Alarms.HeldDark.IsZero() {
+		t.Error("a screen turned off under a light whose moment went by is still saved")
+	}
+
+	// Never seen again, the light it waited for gone by unseen, it lets go too.
+	sunriseProgress = func(time.Time) float64 { return 0 }
+	gone := &Display{}
+	gone.restoreLightOff(until, now)
+	gone.lightOffOver(until.Add(2*time.Minute), false)
+	if gone.lightOff.Load() {
+		t.Error("restored, the screen stays off past the moment its light waited for")
 	}
 }

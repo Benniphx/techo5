@@ -31,6 +31,11 @@ type Alarms struct {
 	// it. Nothing for none.
 	Held *Held `json:"held,omitempty"`
 
+	// HeldDark is the screen turned off by somebody while the wake light was held at full, kept so a
+	// restart does not light the panel again under the same light: the moment that light waits for.
+	// Zero for none; it goes when the light it was turned off under is over.
+	HeldDark time.Time `json:"held_dark,omitzero"`
+
 	// Sound is what an alarm rings with, by name; empty is the first of the speaker's alarm sounds.
 	Sound string `json:"sound,omitempty"`
 
@@ -278,6 +283,12 @@ func (w AlarmsWriter) Held(h *Held) error {
 		h = &c
 	}
 	return w.st.Update(func(c *Config) { c.Alarms.Held = h })
+}
+
+// HeldDark sets the moment the screen stays off for the held wake light until, zero for none. Written
+// when the screen is turned off under the light and when that light is over, never on a tick.
+func (w AlarmsWriter) HeldDark(until time.Time) error {
+	return w.st.Update(func(c *Config) { c.Alarms.HeldDark = until })
 }
 
 // SunriseMinutes sets how long before an alarm the screen starts to light; nothing for not at all.
