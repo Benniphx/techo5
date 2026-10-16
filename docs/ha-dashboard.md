@@ -14,6 +14,10 @@ The examples use a device named **Kitchen Echo**, so its entities start with `ki
 check an id, open **Settings → Devices & services → Devices →** your device, click the entity, then
 the gear: the id is under **Entity ID**. If you renamed an entity, its id may differ.
 
+The microphone mute switch is on its own sub-device, **Kitchen Echo microphone**, so Home Assistant
+names it from that: `switch.kitchen_echo_microphone_microphone_mute`. Ids can differ between Home
+Assistant versions; find yours on that sub-device's page, linked from your device's page.
+
 Leave out the `light.kitchen_echo_screen` row on an Echo Dot, which has no screen.
 
 ## The dashboard
@@ -34,7 +38,7 @@ views:
           - type: entities
             title: Kitchen Echo
             entities:
-              - switch.kitchen_echo_microphone_mute
+              - switch.kitchen_echo_microphone_microphone_mute
               - button.kitchen_echo_cancel_request
               - button.kitchen_echo_stop_alarm_or_timer
               - light.kitchen_echo_screen  # not on an Echo Dot
@@ -67,9 +71,8 @@ change it). **CPU temperature** shows *Unknown* on a device whose kernel reports
 
 ## Stop every device at once
 
-This script stops whatever every TECHO5 device is doing: a voice request, an alarm or timer, and
-anything playing. It finds the devices by their manufacturer, so it needs no editing and picks up a
-new device by itself.
+This script stops whatever every TECHO5 device is doing: a voice request and anything playing. It
+finds the devices by their manufacturer, so it needs no editing and picks up a new device by itself.
 
 **Settings → Automations & scenes → Scripts → Add script → ⋮ → Edit in YAML**, and paste:
 
@@ -84,12 +87,20 @@ sequence:
   - action: button.press
     target:
       entity_id: >-
-        {{ techo5 | select('search', '_(cancel_request|stop_alarm_or_timer)$') | list }}
+        {{ techo5 | select('search', '_cancel_request$') | list }}
     continue_on_error: true
   - action: media_player.media_stop
     target:
       entity_id: "{{ techo5 | select('match', 'media_player[.]') | list }}"
     continue_on_error: true
+```
+
+It leaves alarms alone because **Stop alarm or timer** pressed on a device with nothing ringing
+cancels its snoozed alarms and turns off a wake light held for the next alarm. To stop ringing
+alarms and timers as well, make the button step's `entity_id`:
+
+```yaml
+        {{ techo5 | select('search', '_(cancel_request|stop_alarm_or_timer)$') | list }}
 ```
 
 To mute instead of stopping, replace the last step with:
