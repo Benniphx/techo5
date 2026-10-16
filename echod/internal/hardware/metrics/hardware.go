@@ -6,8 +6,11 @@
 package metrics
 
 import (
+	"cmp"
+	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -32,15 +35,20 @@ func known(v float64) Reading { return Reading{Value: v, Known: true} }
 //
 // Every zone is looked at, not a fixed count: the 2nd gen Show 5 has sixteen and puts the CPU at
 // twelve, and nothing says another board stops there. A zone that names itself and reports no
-// temperature, as the virtual ones on the Show 5 do, is left out.
+// temperature, as the virtual ones on the Show 5 do, is left out. Zones are taken in the kernel's
+// order, thermal_zone2 before thermal_zone12, and where two share a name the first is the one kept.
 //
 // The kernel reports millidegrees.
 func (r Reader) Temperatures() map[string]float64 {
 	out := map[string]float64{}
 	zones, _ := filepath.Glob(r.path("sys/class/thermal/thermal_zone*"))
+	slices.SortFunc(zones, func(a, b string) int { return cmp.Compare(zoneNumber(a), zoneNumber(b)) })
 	for _, zone := range zones {
 		name, err := text(zone + "/type")
 		if err != nil {
+			continue
+		}
+		if _, seen := out[name]; seen {
 			continue
 		}
 		milli, err := number(zone + "/temp")
@@ -50,6 +58,15 @@ func (r Reader) Temperatures() map[string]float64 {
 		out[name] = milli / 1000
 	}
 	return out
+}
+
+// zoneNumber is the n of a thermal_zoneN path, or one past any zone for a name that has none.
+func zoneNumber(path string) int {
+	n, err := strconv.Atoi(strings.TrimPrefix(filepath.Base(path), "thermal_zone"))
+	if err != nil {
+		return math.MaxInt
+	}
+	return n
 }
 
 // cpuZones are the names the CPU's zone goes by, best first. Amazon's MediaTek kernels call it

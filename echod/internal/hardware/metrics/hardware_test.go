@@ -79,6 +79,13 @@ func TestCPUTemperatureIsFoundByName(t *testing.T) {
 		t.Errorf("Show 5 CPU = %+v, want 48.3", got)
 	}
 
+	// Two zones by the same name: the lower numbered one is taken, not whichever the listing ends on.
+	write("sys/class/thermal/thermal_zone1/type", "mtktscpu\n")
+	write("sys/class/thermal/thermal_zone1/temp", "44100\n")
+	if got := CPUTemperature(Reader{Root: root}.Temperatures()); !got.Known || got.Value != 44.1 {
+		t.Errorf("CPU with two zones of its name = %+v, want 44.1, thermal_zone1's", got)
+	}
+
 	mainline := map[string]float64{"tzts1": 39, "cpu-thermal": 41.2}
 	if got := CPUTemperature(mainline); !got.Known || got.Value != 41.2 {
 		t.Errorf("mainline CPU = %+v, want 41.2", got)
