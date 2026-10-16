@@ -213,8 +213,24 @@ the rescue environment (USB serial and RNDIS at 172.16.42.1).
 - `slotctl status`, `slotctl rollback` (mark the running slot bad, boot the other next) and
   `slotctl switch a|b` work as on the other Shows.
 
-A new kernel comes with a new boot image: run the installer again from TWRP. It keeps the name, the
-Home Assistant key and the first backup.
+### Kernel updates
+
+The athena rootfs carries the kernel it was tested with. Once a new slot has committed, it checks
+the kernel on `boot`. If that's a different one, it writes the new kernel the way the installer
+does, with the unit's own speaker tuning taken from the kernel it's running, and reboots into it.
+So an update can take two reboots.
+
+A new kernel is on trial too. It has three boots to reach a daemon that runs for five minutes. If it
+never gets there, the unit writes the previous kernel back (it keeps a copy in
+`/data/techo5-linux/kernel`) and never tries that kernel again. `techo5 tools kernel status` shows
+where it is.
+
+One thing this can't catch: a kernel that hangs before Linux is up. The way back from that is the
+way the unit was unlocked (mtkclient). Kernels are tested on units before they are released for this
+reason.
+
+Running the installer again from TWRP still works too. It keeps the name, the Home Assistant key
+and the first backup.
 
 ## The USB cable is a root shell
 

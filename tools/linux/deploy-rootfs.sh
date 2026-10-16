@@ -36,6 +36,10 @@ WSL_DISTRO=${WSL_DISTRO:-Ubuntu}
 BUILD_TAGS=${BUILD_TAGS:-}
 VENDOR_TGZ=${VENDOR_TGZ:-}
 DEVICE_OVERLAY=${DEVICE_OVERLAY:-}
+# KERNEL_IMAGE (athena): the released boot image (tools/linux/athena/kernel/build.sh's boot-athena.img, its
+# amp tuning slot empty) to carry in the rootfs; once the slot is good it goes to the boot partition with the
+# unit's own tuning (echod/internal/update/kernel). Without it the rootfs leaves the unit's kernel as it is.
+KERNEL_IMAGE=${KERNEL_IMAGE:-}
 INSTALL=; REBOOT=; ONDEVICE=; KEEP=
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -119,6 +123,20 @@ if [ -d "$INPUTS/models" ]; then
 	for m in "$INPUTS"/models/*.tflite; do
 		cmp -s "$m" "$STAGE/overlay/usr/share/techo5/models/$(basename "$m")" || { echo "model copy differs: $m" >&2; exit 1; }
 	done
+fi
+
+# The kernel goes in after the line endings are fixed too, and is checked as a whole released image.
+if [ -n "$KERNEL_IMAGE" ]; then
+	grep -q '^T5_BOARD=athena' "$STAGE/overlay/etc/techo5/device.conf" 2>/dev/null \
+		|| { echo "KERNEL_IMAGE is for athena: DEVICE_OVERLAY=tools/linux/athena/overlay" >&2; exit 1; }
+	PY=$(command -v python3 || command -v python) || { echo "KERNEL_IMAGE needs python to check the image" >&2; exit 1; }
+	"$PY" "$ROOT/tools/linux/athena/kernel/check-boot.py" "$KERNEL_IMAGE" || { echo "KERNEL_IMAGE is not a released athena boot image" >&2; exit 1; }
+	mkdir -p "$STAGE/overlay/usr/share/techo5/kernel"
+	cp "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img"
+	cmp -s "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img" || { echo "kernel copy differs" >&2; exit 1; }
+	sum=$(sha256sum "$KERNEL_IMAGE" | cut -d' ' -f1)
+	echo "$sum  boot-athena.img" > "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img.sha256"
+	echo "== kernel: sha256 $sum"
 fi
 
 OUT=/data/techo5-linux/techo5-rootfs-$VERSION.tar.gz
