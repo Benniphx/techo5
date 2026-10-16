@@ -20,7 +20,8 @@ const TurnEvent = "esphome.techo5_voice"
 
 // LegacyTurnEvent is the same turn as EchoLocal reported it, which its Home Assistant integration
 // reads for its logbook lines and its activity view. It goes out unchanged beside TurnEvent, with
-// EchoLocal's fields and values, and is left out of the docs: TurnEvent is the one to build on.
+// EchoLocal's fields and values. The docs name it only so it can be left out of the recorder:
+// TurnEvent is the one to build on.
 const LegacyTurnEvent = "esphome.echolocal_turn"
 
 // Version is bumped when a field changes meaning, so a reader that does not know a version can ignore

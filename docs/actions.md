@@ -297,6 +297,17 @@ Events do not show in the logbook by themselves. To keep a line there for each r
 automation that triggers on `esphome.techo5_voice` with no `event_data` and runs `logbook.log` with
 `name: "{{ trigger.event.data.device }}"` and `message: "heard {{ trigger.event.data.heard | default('nothing') }}, {{ trigger.event.data.ended }}"`.
 
+Beside it, each request also fires `esphome.echolocal_turn`, the same request as EchoLocal reported
+it, for EchoLocal's Home Assistant integration. Home Assistant's recorder keeps both events in its
+database. If you don't use EchoLocal's integration, leave that one out in `configuration.yaml`:
+
+```yaml
+recorder:
+  exclude:
+    event_types:
+      - esphome.echolocal_turn
+```
+
 ## Set a reminder
 
 In YAML, refer to this action as `esphome.<node>_reminder_set`.
