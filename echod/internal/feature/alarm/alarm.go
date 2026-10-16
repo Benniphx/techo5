@@ -140,6 +140,8 @@ type Alarms struct {
 type snoozeMade struct {
 	made, until time.Time
 	minutes     int
+	// stopped is a snooze taken as a stop: the alarm was deleted or turned off while it rang.
+	stopped bool
 }
 
 var (
@@ -632,7 +634,10 @@ func (a *Alarms) SnoozeFor(minutes int) bool {
 	}
 	// Deleted or turned off while it rang: a snooze would bring back an alarm nobody wants, so it is
 	// stopped instead (#159).
-	if r.local && alarmGone(r.Key) {
+	if (r.local && alarmGone(r.Key)) || helperOff(r.Key) {
+		// Remembered, so alarm_snooze_for arriving a moment after a spoken snooze answers that it
+		// stopped rather than that nothing is ringing.
+		a.lastSnooze = snoozeMade{made: time.Now(), stopped: true}
 		a.mu.Unlock()
 		slog.Info("alarm snoozed after it was turned off or deleted; stopped instead", "key", r.Key)
 		return a.Stop()
@@ -833,6 +838,9 @@ func (a *Alarms) snoozeAnswer(sentence string) map[string]any {
 	if last.made.IsZero() || time.Since(last.made) > snoozeRecent {
 		return map[string]any{"snoozed": false, "stopped": stopped}
 	}
+	if last.stopped {
+		return map[string]any{"snoozed": false, "stopped": true}
+	}
 	slog.Info("alarm snooze from home assistant", "minutes", last.minutes)
 	return map[string]any{"snoozed": true, "minutes": last.minutes, "until": last.until.Format("3:04 PM")}
 }
@@ -1025,20 +1033,38 @@ func (a *Alarms) followHelpers(list []string) {
 	a.poke()
 }
 
-// helperChanged follows a followed helper's state. Its arm switch turned off in Home Assistant drops
-// its snooze, as turning off an alarm on the device does (#159).
+// helperChanged follows a followed helper's state. Its arm switch off in Home Assistant drops its
+// snooze, as turning off an alarm on the device does (#159). Its first report after a start counts
+// too: a helper's snooze is only made while its switch is on, so off then means it was turned off
+// while the device was down. The drop saves the config, so it runs on its own goroutine, not on the
+// state handler's, which must not block.
 func (a *Alarms) helperChanged(u hastate.Update) {
 	if !a.follows(u.Entity) {
 		return
 	}
-	if !u.First && u.Attribute == "" && u.Value == "off" {
+	if u.Attribute == "" && u.Value == "off" {
 		for _, h := range parseHelpers(config.Get().Alarms.Follow) {
-			if h.arm == u.Entity && a.dropSnooze(h.entity) {
-				a.Changed.Emit(struct{}{})
+			if h.arm == u.Entity {
+				entity := h.entity
+				safe.Go("alarm helper snooze", func() {
+					if a.dropSnooze(entity) {
+						a.Changed.Emit(struct{}{})
+					}
+				})
 			}
 		}
 	}
 	a.poke()
+}
+
+// helperOff is whether key is a followed helper whose on/off switch is off now.
+func helperOff(key string) bool {
+	for _, h := range parseHelpers(config.Get().Alarms.Follow) {
+		if h.entity == key && h.arm != "" {
+			return hastate.Get().State(h.arm) == "off"
+		}
+	}
+	return false
 }
 
 func (a *Alarms) follows(entity string) bool {

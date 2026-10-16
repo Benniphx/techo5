@@ -84,7 +84,8 @@ func TestTurningAnAlarmOffDropsItsSnooze(t *testing.T) {
 }
 
 // A followed helper's arm switch turned off in Home Assistant drops its snooze, as turning off an
-// alarm on the device does; the switch's first report after a start, and other helpers, do not.
+// alarm on the device does, and only that helper's. Its first report after a start counts: the
+// switch was turned off while the device was down.
 func TestAHelperTurnedOffDropsItsSnooze(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	if err := config.Set().Alarms().Follow([]string{"input_datetime.wake=input_boolean.wake_on", "input_datetime.gym"}); err != nil {
@@ -95,24 +96,25 @@ func TestAHelperTurnedOffDropsItsSnooze(t *testing.T) {
 	a.mu.Lock()
 	a.snoozed = []source{{key: "snooze:input_datetime.wake", once: later}, {key: "snooze:input_datetime.gym", once: later}}
 	a.mu.Unlock()
-	off := func(first bool) {
-		a.helperChanged(hastate.Update{Key: hastate.Key{Entity: "input_boolean.wake_on"}, Value: "off", First: first})
-	}
-	count := func() int {
+	a.saveSnoozes()
+	left := func() []source {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		return len(a.snoozed)
+		return append([]source(nil), a.snoozed...)
 	}
-	off(true)
-	if n := count(); n != 2 {
-		t.Fatalf("the switch's first report dropped a snooze: %d left", n)
+	a.helperChanged(hastate.Update{Key: hastate.Key{Entity: "input_boolean.wake_on"}, Value: "on", First: true})
+	a.helperChanged(hastate.Update{Key: hastate.Key{Entity: "input_boolean.wake_on"}, Value: "unavailable"})
+	time.Sleep(50 * time.Millisecond)
+	if n := len(left()); n != 2 {
+		t.Fatalf("a switch that did not go off dropped a snooze: %d left", n)
 	}
-	off(false)
-	a.mu.Lock()
-	left := a.snoozed
-	a.mu.Unlock()
-	if len(left) != 1 || left[0].key != "snooze:input_datetime.gym" {
-		t.Errorf("after the switch went off: %v, want only the other helper's snooze", left)
+	a.helperChanged(hastate.Update{Key: hastate.Key{Entity: "input_boolean.wake_on"}, Value: "off", First: true})
+	// The drop runs on its own goroutine; done once the saved list has it too.
+	for end := time.Now().Add(2 * time.Second); len(config.Get().Alarms.Snoozed) != 1 && time.Now().Before(end); {
+		time.Sleep(time.Millisecond)
+	}
+	if got := left(); len(got) != 1 || got[0].key != "snooze:input_datetime.gym" {
+		t.Errorf("after the switch went off: %v, want only the other helper's snooze", got)
 	}
 }
 
@@ -121,11 +123,12 @@ func TestSnoozingAnAlarmThatWentAwayStopsIt(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	a := build()
 	endRing(t, a)
-	wake := config.Alarm{ID: "wake", Hour: 6, Minute: 30, Days: 0b0111110, Label: "Wake up", On: true}
+	// No label: a label is said over the ring on a goroutine of its own, which would outlive the test.
+	wake := config.Alarm{ID: "wake", Hour: 6, Minute: 30, Days: 0b0111110, On: true}
 	if err := a.Put(wake); err != nil {
 		t.Fatal(err)
 	}
-	a.fire(source{key: "wake", label: "Wake up", days: wake.Days, local: true}, time.Now())
+	a.fire(source{key: "wake", days: wake.Days, local: true}, time.Now())
 	wake.On = false
 	if err := a.Put(wake); err != nil {
 		t.Fatal(err)
@@ -138,5 +141,9 @@ func TestSnoozingAnAlarmThatWentAwayStopsIt(t *testing.T) {
 	a.mu.Unlock()
 	if n != 0 {
 		t.Errorf("a turned-off alarm was snoozed back: %d snoozes", n)
+	}
+	// Home Assistant's alarm_snooze_for, arriving a moment after the spoken snooze, says it stopped.
+	if got := a.snoozeAnswer("snooze"); got["stopped"] != true || got["snoozed"] != false {
+		t.Errorf("alarm_snooze_for answered %v, want stopped", got)
 	}
 }
