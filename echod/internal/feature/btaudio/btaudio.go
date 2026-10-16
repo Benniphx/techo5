@@ -194,6 +194,10 @@ type Feature struct {
 
 	// refusals counts stream opens bluetoothd refused for the current connection; see attach.
 	refusals int
+	// ran is whether the open stream has been seen running since it was opened, and reopened when
+	// one that stopped was last closed to be opened again (moveStream).
+	ran      bool
+	reopened time.Time
 }
 
 var (
@@ -480,17 +484,26 @@ func (f *Feature) refresh() {
 	}
 
 	f.mu.Lock()
-	cur := f.stream
+	var cur dbus.ObjectPath
+	if f.stream != nil {
+		cur = f.stream.Path
+	}
+	move, ran := moveStream(want, cur, f.ran, time.Since(f.reopened) >= reopenEvery)
+	f.ran = ran
 	f.mu.Unlock()
-	switch {
-	case want == nil && cur != nil:
+	switch move {
+	case streamClose:
 		f.detach()
-	case want == nil:
+	case streamOpen:
+		f.attach(al, *want, wantDev)
+	case streamReopen:
+		f.reopen(wantDev)
+	}
+	if want == nil {
 		f.mu.Lock()
 		f.refusals = 0 // whatever comes next is a new connection
+		f.reopened = time.Time{}
 		f.mu.Unlock()
-	case want != nil && (cur == nil || cur.Path != want.Path):
-		f.attach(al, *want, wantDev)
 	}
 
 	// A remote playing to the device (a phone using it as a speaker): the moment its stream starts, it
@@ -1056,6 +1069,67 @@ func (f *Feature) attach(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) {
 	speaker.Get().SetSink(s, displayName(d), p.Rate, p.Channels)
 	slog.Info("playing through bluetooth", "device", displayName(d), "codec", p.Codec, "rate", p.Rate, "channels", p.Channels)
 	f.note(displayName(d) + " connected")
+}
+
+// streamMove is what refresh does with the stream the speaker plays into.
+type streamMove int
+
+const (
+	streamKeep   streamMove = iota
+	streamOpen              // open the stream wanted: none is open, or another one is
+	streamClose             // nothing to play to: back to the codec
+	streamReopen            // the stream wanted is the one open, but it stopped under it
+)
+
+// reopenEvery is how often a stream that keeps stopping is opened again, so a speaker that suspends
+// the stream whenever it likes is not asked to start it again on every look.
+const reopenEvery = 30 * time.Second
+
+// moveStream is what to do with the stream open (cur, empty for none) when want is the one to play
+// into (nil for none), and whether the open one has been seen running since it was opened (ran,
+// returned for the next look). mayReopen is whether one may be opened again now (reopenEvery).
+//
+// bluez-alsa takes the Bluetooth transport for a stream played into only when the stream is opened.
+// When the transport stops while it stays open - the speaker suspends it, which a speaker that
+// reconnected on its own can do just after connecting - bluez-alsa stops the stream (Running goes
+// false) and never takes the transport again: what is written goes nowhere, while the device still
+// looks connected. Closing it and opening it again takes the transport again, as disconnecting and
+// connecting by hand did (#157). Running is not true at once after an open on every look (the
+// signal can come after it), so only a stream seen running and then stopped is opened again.
+func moveStream(want *bluealsa.PCM, cur dbus.ObjectPath, ran, mayReopen bool) (streamMove, bool) {
+	switch {
+	case want == nil && cur != "":
+		return streamClose, false
+	case want == nil:
+		return streamKeep, false
+	case cur != want.Path:
+		return streamOpen, false
+	case want.Running:
+		return streamKeep, true
+	case ran && mayReopen:
+		return streamReopen, false
+	}
+	return streamKeep, ran
+}
+
+// reopenAfter is how long after closing a stopped stream it is opened again: bluez-alsa refuses a
+// second open of a stream until it has seen the first one closed.
+const reopenAfter = 500 * time.Millisecond
+
+// reopen closes the stream, which stopped while it was open, so the next look opens it again and
+// bluez-alsa takes the transport again (moveStream).
+func (f *Feature) reopen(d bluez.Device) {
+	f.mu.Lock()
+	s := f.stream
+	f.stream = nil
+	f.reopened = time.Now()
+	f.mu.Unlock()
+	if s == nil {
+		return
+	}
+	slog.Info("bluetooth: the stream stopped while open; opening it again", "device", displayName(d))
+	speaker.Get().SetSink(nil, "", 0, 0) // the speaker closes the stream
+	time.AfterFunc(reopenAfter, f.wake)
 }
 
 // detach puts the speaker back on the codec.
