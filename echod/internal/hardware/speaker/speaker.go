@@ -90,6 +90,9 @@ type Player struct {
 
 	// sink, when set, is where the audio goes instead of the codec: see sink.go.
 	sink atomic.Pointer[sinkState]
+	// OnSinkSound is sound beginning to go to the sink after it was quiet (SinkSounding). It is emitted
+	// from the write loop, so a listener must not block.
+	OnSinkSound hook.Hook[struct{}]
 
 	volume atomic.Uint32 // linear gain, derived from step and the current output's curve
 	step   atomic.Int32

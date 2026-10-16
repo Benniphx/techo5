@@ -198,6 +198,8 @@ type Feature struct {
 	// one that stopped was last closed to be opened again (moveStream).
 	ran      bool
 	reopened time.Time
+	// soundHeard is the speaker told to say when sound starts going to the stream (moveStream).
+	soundHeard sync.Once
 }
 
 var (
@@ -346,6 +348,11 @@ func (f *Feature) open(ctx context.Context) error {
 	a.Changed.Listen(func(struct{}) { f.wake() })
 	a.PlayerChanged.Listen(f.followPlayer)
 	al.Changed.Listen(func(struct{}) { f.wake() })
+	// Sound starting is when a stream that stopped under it is opened again: looked at once it has
+	// had reopenSounding to start the stream itself.
+	f.soundHeard.Do(func() {
+		speaker.Get().OnSinkSound.Listen(func(struct{}) { time.AfterFunc(reopenSounding, f.wake) })
+	})
 	slog.Info("bluetooth up", "address", a.Address(), "devices", len(a.Devices()))
 	return nil
 }
@@ -488,7 +495,8 @@ func (f *Feature) refresh() {
 	if f.stream != nil {
 		cur = f.stream.Path
 	}
-	move, ran := moveStream(want, cur, f.ran, time.Since(f.reopened) >= reopenEvery)
+	sounding, ok := speaker.Get().SinkSounding()
+	move, ran := moveStream(want, cur, f.ran, ok && sounding >= reopenSounding, time.Since(f.reopened) >= reopenEvery)
 	f.ran = ran
 	f.mu.Unlock()
 	switch move {
@@ -1085,9 +1093,15 @@ const (
 // the stream whenever it likes is not asked to start it again on every look.
 const reopenEvery = 30 * time.Second
 
+// reopenSounding is how long sound has to have been going to a stopped stream before it is opened
+// again: resuming after a pause for silence (speaker sink.go) can start it again by itself, and the
+// Running signal for that comes a moment after the sound.
+const reopenSounding = 2 * time.Second
+
 // moveStream is what to do with the stream open (cur, empty for none) when want is the one to play
 // into (nil for none), and whether the open one has been seen running since it was opened (ran,
-// returned for the next look). mayReopen is whether one may be opened again now (reopenEvery).
+// returned for the next look). sounding is whether sound has been going to it for reopenSounding, and
+// mayReopen whether one may be opened again now (reopenEvery).
 //
 // bluez-alsa takes the Bluetooth transport for a stream played into only when the stream is opened.
 // When the transport stops while it stays open - the speaker suspends it, which a speaker that
@@ -1096,7 +1110,12 @@ const reopenEvery = 30 * time.Second
 // looks connected. Closing it and opening it again takes the transport again, as disconnecting and
 // connecting by hand did (#157). Running is not true at once after an open on every look (the
 // signal can come after it), so only a stream seen running and then stopped is opened again.
-func moveStream(want *bluealsa.PCM, cur dbus.ObjectPath, ran, mayReopen bool) (streamMove, bool) {
+//
+// And only when there is sound for it. A stream also stops while nothing plays: the speaker pauses
+// it after a couple of seconds of silence (speaker sink.go), and a speaker can suspend an idle one
+// itself. Opening an idle speaker's stream again every half minute would only wake it to say nothing,
+// so a stopped stream waits for sound to go to it; reopenEvery stays as the limit on how often.
+func moveStream(want *bluealsa.PCM, cur dbus.ObjectPath, ran, sounding, mayReopen bool) (streamMove, bool) {
 	switch {
 	case want == nil && cur != "":
 		return streamClose, false
@@ -1106,7 +1125,7 @@ func moveStream(want *bluealsa.PCM, cur dbus.ObjectPath, ran, mayReopen bool) (s
 		return streamOpen, false
 	case want.Running:
 		return streamKeep, true
-	case ran && mayReopen:
+	case ran && sounding && mayReopen:
 		return streamReopen, false
 	}
 	return streamKeep, ran
