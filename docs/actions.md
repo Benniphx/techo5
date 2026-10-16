@@ -253,6 +253,8 @@ actions:
         {{ [c[1:3] | int(base=16), c[3:5] | int(base=16), c[5:7] | int(base=16)] }}
 ```
 
+**Replace `office` with your device's own prefix, and `light.bedroom` with your light.**
+
 ## Voice request events
 
 Each finished voice request (a turn: wake, listen, answer) fires `esphome.techo5_voice` on Home
