@@ -59,6 +59,7 @@ func Lib() *Library {
 // a test.
 func NewLibrary(dir string) *Library {
 	l := &Library{dir: dir, offers: map[string]esphome.ExternalWakeWord{}}
+	sweepUploads(dir)
 	l.Reload()
 	return l
 }

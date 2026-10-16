@@ -203,3 +203,23 @@ func TestOwnIDIsAPlainName(t *testing.T) {
 		t.Errorf("%q, %q", a, b)
 	}
 }
+
+// What an upload a power cut stopped left in the model directory is deleted as the library is made,
+// which is at the daemon's start, and the models beside it are not touched.
+func TestAnUnfinishedUploadIsSweptAtStart(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{".upload-123", ".upload-456", "okay_nabu.tflite", "okay_nabu.json"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	NewLibrary(dir)
+	entries, _ := os.ReadDir(dir)
+	var left []string
+	for _, e := range entries {
+		left = append(left, e.Name())
+	}
+	if strings.Join(left, " ") != "okay_nabu.json okay_nabu.tflite" {
+		t.Errorf("left %v", left)
+	}
+}

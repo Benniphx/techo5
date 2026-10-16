@@ -476,10 +476,27 @@ func (l *Library) RemoveOwn(id string) error {
 	return nil
 }
 
+// uploadPrefix starts the name of a model or manifest being written (writeTemp).
+const uploadPrefix = ".upload-"
+
+// sweepUploads deletes what uploads left in dir under their temporary names: a power cut in the middle
+// of one leaves up to a model's worth behind, and nothing else would ever take it away. Called as the
+// library is made, before anything can be sending one.
+func sweepUploads(dir string) {
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), uploadPrefix) {
+			if err := os.Remove(filepath.Join(dir, e.Name())); err == nil {
+				slog.Info("an unfinished wake word upload was deleted", "file", e.Name())
+			}
+		}
+	}
+}
+
 // writeTemp writes b to a new file in dir under a name that does not end in .tflite or .json, so
 // nothing lists it while it is written, and hands back its path.
 func writeTemp(dir string, b []byte) (string, error) {
-	f, err := os.CreateTemp(dir, ".upload-*")
+	f, err := os.CreateTemp(dir, uploadPrefix+"*")
 	if err != nil {
 		return "", err
 	}
