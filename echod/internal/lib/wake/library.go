@@ -32,6 +32,9 @@ type Library struct {
 
 	muOffers sync.Mutex
 	offers   map[string]esphome.ExternalWakeWord
+
+	// muOwn keeps two models sent from the setup page at once from both counting the same room (own.go).
+	muOwn sync.Mutex
 }
 
 // adoptTimeout bounds a download, since it happens while Home Assistant waits for a selection to be
@@ -160,7 +163,7 @@ func (l *Library) Ensure(ids []string) []Model {
 			continue
 		}
 		o := l.offer(id)
-		if o.URL == "" || Have(l.dir, o) {
+		if o.URL == "" || Have(l.dir, o) || l.uploaded(id) {
 			continue
 		}
 		l.fetch(o)
@@ -171,6 +174,13 @@ func (l *Library) Ensure(ids []string) []Model {
 		l.Reload()
 	}
 	return l.Ours()
+}
+
+// uploaded is whether the model with this id was sent from the setup page. Home Assistant offering one
+// under the same id does not get to replace it: the owner sent it, and there is no getting it back.
+func (l *Library) uploaded(id string) bool {
+	m, ok := Find(l.Ours(), id)
+	return ok && m.Uploaded
 }
 
 func (l *Library) offer(id string) esphome.ExternalWakeWord {

@@ -75,6 +75,10 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 		f.photo(w, r)
 	case "/setup/font":
 		f.font(w, r)
+	case "/setup/sound":
+		f.sound(w, r)
+	case "/setup/wakeword":
+		f.wakeWordUpload(w, r)
 	case "/setup/diagnostics.txt":
 		f.diagnostics(w, r)
 	default:
@@ -255,6 +259,12 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = forgetImmich()
 	case "font-remove":
 		problem = removeFont(r)
+	case "sound-play":
+		problem = playSound(r)
+	case "sound-remove":
+		problem = removeSound(r)
+	case "wakeword-remove":
+		problem = removeWakeWord(r)
 	case "reolink":
 		problem = saveReolink(r)
 	case "doorbell":
@@ -372,6 +382,8 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		brainSection(w, token)
 		listeningSection(w, token)
 		houseSection(w, token)
+		wakeWordsSection(w, token)
+		soundsSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)
 	case "connections":
