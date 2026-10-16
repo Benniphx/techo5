@@ -18,6 +18,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safename"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/tflite"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/unseen"
 )
 
 // Wake words of the owner's own, sent from the setup page: a microWakeWord model and the .json that
@@ -95,6 +96,10 @@ func CheckOwn(manifestJSON, model []byte) (Model, error) {
 		return Model{}, fmt.Errorf("the wake word's phrase has to be at most %d characters", maxPhrase)
 	case strings.IndexFunc(phrase, unicode.IsControl) >= 0:
 		return Model{}, errors.New("the wake word's phrase has a control character in it")
+	case strings.IndexFunc(phrase, unseen.Rune) >= 0:
+		// Home Assistant shows the phrase in its picker, where a character that turns the text's
+		// direction or takes no room makes it read as something other than what it is.
+		return Model{}, errors.New("the wake word's phrase has a text-direction or invisible character in it")
 	}
 
 	langs := man.TrainedLanguages

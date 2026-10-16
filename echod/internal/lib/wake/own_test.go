@@ -107,6 +107,8 @@ func TestAWakeWordThatWillNotRunIsRefused(t *testing.T) {
 		"no micro section":      {`{"type":"micro","wake_word":"Hey"}`, model, `"micro"`},
 		"no phrase":             {`{"type":"micro","wake_word":"  ","micro":{}}`, model, "wake_word"},
 		"a control character":   {`{"type":"micro","wake_word":"Hey\u0007there","micro":{}}`, model, "control"},
+		"a direction override":  {`{"type":"micro","wake_word":"Hey \u202eretupmoc","micro":{}}`, model, "text-direction"},
+		"a zero-width space":    {`{"type":"micro","wake_word":"Hey\u200bComputer","micro":{}}`, model, "invisible"},
 		"a long phrase":         {`{"type":"micro","wake_word":"` + strings.Repeat("a", 61) + `","micro":{}}`, model, "at most"},
 		"a bad language":        {`{"type":"micro","wake_word":"Hey","trained_languages":["en; rm -rf"],"micro":{}}`, model, "language tag"},
 		"a step it cannot run":  {withMicro(`{"feature_step_size":15}`), model, "feature_step_size"},
