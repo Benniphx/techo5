@@ -136,6 +136,16 @@ if ($AthenaKernelSource) {
     if (-not $kver) { throw "check-source.py named no kernel version" }
     $athenaSourceName = "linux-$kver-techo5-athena-$Version-source.tar.xz"
 }
+# The store image a new unit gets must hold this release: the slot in it carries this -AthenaBoot
+# (its kernel's sum file, as deploy-rootfs.sh writes it) and says this version (etc/techo5-release,
+# "techo5 rootfs <version> built ..."). The image is an ext4 filesystem, gzipped, and both are small
+# files whose bytes sit whole in its blocks, so the image is read as a stream and searched.
+if ($AthenaImage) {
+    $bootSum = (Get-FileHash -Algorithm SHA256 $AthenaBoot).Hash.ToLower()
+    $holds = "import gzip,sys`nwant={w.encode():False for w in sys.argv[2:]}`nf=gzip.open(sys.argv[1],'rb'); tail=b''`nwhile not all(want.values()):`n    b=f.read(1<<20)`n    if not b: break`n    for w in want:`n        if w in tail+b: want[w]=True`n    tail=(tail+b)[-256:]`nmissing=[w.decode() for w,ok in want.items() if not ok]`nfor m in missing: print('missing: '+m)`nsys.exit(1 if missing else 0)"
+    python -c $holds $AthenaImage "$bootSum  boot-athena.img`n" "techo5 rootfs $Version built "
+    if ($LASTEXITCODE -ne 0) { throw "$AthenaImage does not hold this release: build it (mkstore.sh) from the athena rootfs made for $Version with KERNEL_IMAGE=$AthenaBoot" }
+}
 if (-not $SignKey -or -not (Test-Path $SignKey)) { throw "no release signing key: set TECHO5_SIGN_KEY or pass -SignKey" }
 $repo = 'HuskerMinion/techo5'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..')
