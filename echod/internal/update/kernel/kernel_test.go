@@ -552,8 +552,9 @@ func TestNoRouteOutsideATrialDoesNothing(t *testing.T) {
 	}
 }
 
-func TestARetryWithTheClockBehindIsNotHeldBack(t *testing.T) {
-	clock := time.Date(2026, 10, 16, 6, 0, 0, 0, time.UTC)
+func TestARetryPutBackBeforeTheClockWasSetWaitsADayFromWhenItIs(t *testing.T) {
+	// athena's RTC has no battery: early in a boot, before NTP, the clock says 1970.
+	clock := time.Date(1970, 1, 1, 0, 0, 30, 0, time.UTC)
 	defer func(old func() time.Time) { now = old }(now)
 	now = func() time.Time { return clock }
 	old := mkImage(t, "old", tableB)
@@ -561,8 +562,79 @@ func TestARetryWithTheClockBehindIsNotHeldBack(t *testing.T) {
 	if again, err := r.failTrial(Tries); !again || err != nil {
 		t.Fatal(again, err)
 	}
-	clock = time.Date(1970, 1, 1, 0, 1, 0, 0, time.UTC)
+	if b, _ := os.ReadFile(r.p.file("retry")); !strings.HasSuffix(strings.TrimSpace(string(b)), " 0") {
+		t.Fatalf("retry %q: want the time left at 0 with the clock unset", b)
+	}
+	// Still unset when the old kernel settles: held, whatever the clock says.
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply with the clock unset = %v, %v", w, err)
+	}
+	// Set: the day starts now.
+	clock = time.Date(2026, 10, 16, 6, 0, 0, 0, time.UTC)
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply once the clock is set = %v, %v; want it held", w, err)
+	}
+	clock = clock.Add(RetryAfter - time.Minute)
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply a minute before the day is up = %v, %v", w, err)
+	}
+	if !r.holds(old) {
+		t.Fatal("written again too soon")
+	}
+	clock = clock.Add(time.Minute)
 	if w, err := Apply(r.p); !w || err != nil {
-		t.Fatalf("Apply with a clock before the put-back = %v, %v; want it written", w, err)
+		t.Fatalf("Apply a day after the clock was set = %v, %v; want it written", w, err)
+	}
+}
+
+func TestARetryWithTheClockGoneBackIsHeldADayFromNow(t *testing.T) {
+	clock := time.Date(2026, 10, 16, 6, 0, 0, 0, time.UTC)
+	defer func(old func() time.Time) { now = old }(now)
+	now = func() time.Time { return clock }
+	r := newRig(t, mkImage(t, "old", tableB), mkImage(t, "new", nil))
+	if again, err := r.failTrial(Tries); !again || err != nil {
+		t.Fatal(again, err)
+	}
+	clock = clock.Add(-48 * time.Hour)
+	if w, err := Apply(r.p); w || err != nil {
+		t.Fatalf("Apply with the clock behind the put-back = %v, %v; want it held", w, err)
+	}
+	clock = clock.Add(RetryAfter)
+	if w, err := Apply(r.p); !w || err != nil {
+		t.Fatalf("Apply a day later = %v, %v; want it written", w, err)
+	}
+}
+
+func TestNoRouteCountsABootOnce(t *testing.T) {
+	old := mkImage(t, "old", tableB)
+	r := newRig(t, old, mkImage(t, "new", nil))
+	if _, err := Apply(r.p); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < Tries; i++ {
+		if again, err := Boot(r.p); again || err != nil {
+			t.Fatal(again, err)
+		}
+		// The first boot reports twice; the third not at all (it ended some other way).
+		if i == 0 {
+			for range 2 {
+				if err := NoRoute(r.p); err != nil {
+					t.Fatal(err)
+				}
+			}
+		} else if i == 1 {
+			if err := NoRoute(r.p); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if n, _ := r.p.noRoutes(sha(mkImage(t, "new", nil))); n != 2 {
+		t.Fatalf("%d boots counted without a network, want 2", n)
+	}
+	if again, err := Boot(r.p); !again || err != nil {
+		t.Fatal(again, err)
+	}
+	if !strings.Contains(Status(r.p), "bad: ") {
+		t.Fatal("a double report made a boot that failed otherwise count as one without a network")
 	}
 }
