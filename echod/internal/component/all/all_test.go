@@ -163,6 +163,7 @@ var registered = []string{
 	"screen_night_light_level",
 	"screen_night_mode",
 	"screen_night_start",
+	"screen_night_tap_lifts",
 	"screen_now_playing",
 	"screen_theme",
 	"screen_turn_style",

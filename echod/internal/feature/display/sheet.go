@@ -100,6 +100,10 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 				rows = append(rows, settingRow{id: "nightstyle", label: "Night clock", sub: "How the night clock looks",
 					kind: ctlChoice, value: nightStyleLabel()})
 			}
+			if hasNightTap && config.Get().Screen.NightLight {
+				rows = append(rows, settingRow{id: "nighttap", label: "Tap lifts the night light",
+					sub: "A tap brings the screen back until the room is quiet", kind: ctlToggle, on: config.Get().Screen.NightTapLifts})
+			}
 		}
 		// The light first, then each group under its name: what is changed most near the top.
 		rows = append(rows, settingRow{label: "Look", kind: ctlHeading})
@@ -932,6 +936,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetCameraSound(!home.CameraSound())
 	case "lyrics":
 		safe.Go("lyrics from the screen", func() { home.Get().SetLyricsOn(!home.LyricsOn()) })
+	case "nighttap":
+		d.setNightTapLifts(!config.Get().Screen.NightTapLifts)
 	case "weatherfx":
 		setWeatherAnimationSaved(d.weatherFx, !weatherAnimation.Load())
 	case "dnd":

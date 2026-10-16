@@ -131,6 +131,8 @@ type Display struct {
 	callBtn *esphome.Switch
 	// styleSwipeSw is Swipe between clock styles (style_swipe.go).
 	styleSwipeSw *esphome.Switch
+	// nightTapSw is Tap lifts the night light (night_tap_show.go).
+	nightTapSw *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
 	weatherFx *esphome.Switch
 	lang      *esphome.Select
@@ -423,6 +425,7 @@ func build() *Display {
 	d.clockTap = clockTapSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.styleSwipeSw = styleSwipeSwitch()
+	d.nightTapSw = nightTapSwitch(d)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
 	d.themeSel = themeSelect(d.wake)
@@ -507,7 +510,7 @@ func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
 	return []esphome.Entity{d.light, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
-		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.fontSel}
+		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.nightTapSw, d.fontSel}
 }
 
 // Restore lights the panel the way it was left. Before the framebuffer is opened: the backlight is
@@ -524,6 +527,7 @@ func (d *Display) Restore(c config.Config) {
 	d.clockTap.Set(clockTaps[clockTapIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
+	d.nightTapSw.Set(c.Screen.NightTapLifts)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
 	d.nightHoursChanged()
@@ -841,6 +845,17 @@ func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
 	}
 }
 
+// liftNightLight brings the screen back from the night light as by day, until the room has been quiet
+// for nightIdle and the night takes it down again (night).
+func (d *Display) liftNightLight(by string) {
+	d.mu.Lock()
+	d.nightGlow = false
+	d.mu.Unlock()
+	slog.Info("screen: night light lifted by " + by)
+	d.relight(true)
+	d.wake()
+}
+
 // gesture is a finger on the panel. A dark screen only lights up; otherwise a tap is the action
 // button and a vertical swipe the volume.
 func (d *Display) gesture(g touch.Gesture) {
@@ -943,6 +958,12 @@ func (d *Display) gesture(g touch.Gesture) {
 				d.wake()
 				return
 			}
+			if nightTapLifts() {
+				// Set to: the tap lifts the night light as a long press does, and is not a tap on
+				// anything, since nobody could see what was under the finger.
+				d.liftNightLight("a tap")
+				return
+			}
 			if nightTapOpensDashboard() && !d.overNight() && d.openNightDashboard() {
 				// A tap on the clock opens the dashboard by day, and so it does on the night light: to
 				// turn a light on in the night, say. It stays at the night light's level, and the night
@@ -952,12 +973,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			}
 		}
 		if g.Kind == touch.Hold {
-			d.mu.Lock()
-			d.nightGlow = false
-			d.mu.Unlock()
-			slog.Info("screen: night light lifted by a long press")
-			d.relight(true)
-			d.wake()
+			d.liftNightLight("a long press")
 		}
 		return
 	}
