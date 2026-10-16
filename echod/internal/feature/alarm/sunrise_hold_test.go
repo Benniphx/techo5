@@ -406,6 +406,55 @@ func TestWhatHoldsTheLight(t *testing.T) {
 	}
 }
 
+// The light held for the next alarm survives a restart while it still holds, and not otherwise.
+func TestTheHeldLightComesBackAfterARestart(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	next := time.Now().Add(20 * time.Minute)
+	al, err := a.Set(next.Hour(), next.Minute(), config.DaysEvery, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	al.Sunrise = 30
+	if err := a.Put(al); err != nil {
+		t.Fatal(err)
+	}
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now(), lit: true}
+	a.mu.Unlock()
+	a.rang()
+
+	again := build()
+	again.Restore(config.Get())
+	if got := again.SunriseProgress(time.Now()); got != 1 {
+		t.Errorf("after a restart the held light is %.2f, want full", got)
+	}
+
+	// Saved for an alarm since turned off, it does not come back, and the saved copy goes.
+	al.On = false
+	if err := config.Set().Alarms().Put(al); err != nil {
+		t.Fatal(err)
+	}
+	third := build()
+	third.Restore(config.Get())
+	if got := third.SunriseProgress(time.Now()); got != 0 {
+		t.Errorf("after a restart with that alarm off the light is %.2f, want off", got)
+	}
+	if h := config.Get().Alarms.Held; h != nil {
+		t.Errorf("a held light that no longer holds is still saved: %+v", h)
+	}
+
+	// A saved config from before there was a held light restores with nothing held.
+	if err := config.Set().Alarms().Held(nil); err != nil {
+		t.Fatal(err)
+	}
+	fourth := build()
+	fourth.Restore(config.Get())
+	if fourth.bridge.key != "" {
+		t.Errorf("with nothing saved the light is held for %q", fourth.bridge.key)
+	}
+}
+
 // A clock set back hours does not hold the light for all of them: the bridged alarm's window has to
 // be open still.
 func TestTheBridgeLetsGoWhenTheClockGoesBack(t *testing.T) {

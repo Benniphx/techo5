@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/led"
 )
 
@@ -163,19 +164,22 @@ func sunriseAt(sources []source, now time.Time) float64 {
 }
 
 // endLight is a lit ring ending for good at now, stopped rather than snoozed: the light is held for
-// the next alarm whose window is already open, or let go.
-func (a *Alarms) endLight(sources []source, now time.Time) {
+// the next alarm whose window is already open, or let go. It reports whether that changed the hold,
+// for the caller to save it (saveBridge).
+func (a *Alarms) endLight(sources []source, now time.Time) bool {
 	b := bridgeFrom(sources, now)
 	a.mu.Lock()
+	changed := a.bridge.key != b.key || !a.bridge.at.Equal(b.at)
 	a.bridge = b
 	a.mu.Unlock()
 	if b.key != "" {
 		slog.Info("wake light held for the next alarm", "key", b.key, "at", b.at.Format("15:04"))
 	}
+	return changed
 }
 
-// dropBridge lets go of the light held for the next alarm, for a stop pressed with nothing ringing:
-// somebody who presses Stop wants the light off. That alarm's own ramp still comes up as it would
+// dropBridge lets go of the light held for the next alarm, for a stop with nothing ringing: somebody
+// who says or presses stop wants the light off. That alarm's own ramp still comes up as it would
 // have. It reports whether there was a bridge.
 func (a *Alarms) dropBridge() bool {
 	a.mu.Lock()
@@ -183,10 +187,28 @@ func (a *Alarms) dropBridge() bool {
 	a.bridge = bridge{}
 	a.mu.Unlock()
 	if had {
+		a.saveBridge()
 		slog.Info("wake light held for the next alarm let go")
 		a.poke()
 	}
 	return had
+}
+
+// saveBridge writes down the alarm the light is held for, so a restart while it waits keeps the light
+// up as a snooze does. Called when the hold begins or is let go; call it without a.mu held.
+func (a *Alarms) saveBridge() {
+	a.saveMu.Lock()
+	defer a.saveMu.Unlock()
+	a.mu.Lock()
+	b := a.bridge
+	a.mu.Unlock()
+	var held *config.Held
+	if b.key != "" {
+		held = &config.Held{Key: b.key, At: b.at}
+	}
+	if err := config.Set().Alarms().Held(held); err != nil {
+		slog.Warn("saving the held wake light failed", "err", err)
+	}
 }
 
 // SunriseLevel is the fraction of full brightness the ramp asks for, eased so most of the change

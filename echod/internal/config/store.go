@@ -119,6 +119,10 @@ func (st *Store) Get() Config {
 	}
 	c.Alarms.Follow = slices.Clone(st.c.Alarms.Follow)
 	c.Alarms.Snoozed = slices.Clone(st.c.Alarms.Snoozed)
+	if h := st.c.Alarms.Held; h != nil {
+		held := *h
+		c.Alarms.Held = &held
+	}
 	c.Timers.Local = slices.Clone(st.c.Timers.Local)
 	c.Screen.WorldClocks = slices.Clone(st.c.Screen.WorldClocks)
 	c.Deck = st.c.Deck.clone()
