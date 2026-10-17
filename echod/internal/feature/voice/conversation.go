@@ -123,6 +123,10 @@ type event struct {
 	// asked is an evStart Home Assistant asked for, by an announcement that wants an answer.
 	asked bool
 
+	// waited is how long after the wake word an evStart comes, deciding which device answers
+	// (WokeAt): what was said meanwhile is in the history, and the turn sends that much more of it.
+	waited time.Duration
+
 	// peak is an evCandidate's score.
 	peak float64
 }
@@ -296,6 +300,9 @@ type nextTurn struct {
 	// at is when it was asked for, which a turn held back in pending opens later than.
 	at time.Time
 
+	// waited is the event's waited: how much more history the turn sends.
+	waited time.Duration
+
 	// afterWatch is a turn that waited for a run at the wake word stage to close. Home Assistant's engine
 	// may have heard the same word in it just before, and refuses that phrase again for a moment as a
 	// second device hearing it: so the first slot's turn reports no phrase, which reaches the same
@@ -457,7 +464,7 @@ func (c *conversation) handle(e event) {
 func (c *conversation) turnEvent(e event) {
 	switch e.kind {
 	case evStart:
-		c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at})
+		c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited})
 
 	case evSpeaking:
 		if c.followUp && c.phase == phaseListening {
@@ -872,7 +879,7 @@ func (c *conversation) start(n nextTurn) bool {
 	}
 
 	c.arm(c.listenFor(n))
-	c.startAudio(slot, n.followUp, n.continued)
+	c.startAudio(slot, n.followUp, n.continued, n.waited)
 	// The phrase is logged for a follow-up too, because it is what chose the pipeline — not because
 	// anyone said it.
 	slog.Info("turn started", "slot", slot+1, "phrase", phrase, "follow_up", n.followUp, "on_ha", n.continued)
@@ -1221,6 +1228,11 @@ func (c *conversation) Woke(slot int) {
 	c.post(event{kind: evStart, slot: slot, woke: true, at: time.Now()})
 }
 
+// WokeAt is Woke for a wake word heard at at and acted on now.
+func (c *conversation) WokeAt(slot int, at time.Time) {
+	c.post(event{kind: evStart, slot: slot, woke: true, at: at, waited: max(time.Since(at), 0)})
+}
+
 // Cancel gives up on whatever is happening.
 func (c *conversation) Cancel() { c.post(event{kind: evCancel}) }
 
@@ -1244,7 +1256,7 @@ func audioSettings() *api.VoiceAssistantAudioSettings {
 
 // startAudio begins sending microphone frames. The streamer only reads, so it needs no coordination
 // beyond being told to stop. continued is a run that has had the audio up to now already.
-func (c *conversation) startAudio(slot int, followUp, continued bool) {
+func (c *conversation) startAudio(slot int, followUp, continued bool, waited time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.stopAudio = cancel
 
@@ -1256,7 +1268,7 @@ func (c *conversation) startAudio(slot int, followUp, continued bool) {
 	streams.Add(1)
 	safe.Go("turn audio", func() {
 		defer streams.Done()
-		c.stream(ctx, be, slot, followUp, continued, id)
+		c.stream(ctx, be, slot, followUp, continued, id, waited)
 	})
 }
 
@@ -1275,7 +1287,7 @@ func (c *conversation) stopStreaming() {
 }
 
 // stream sends microphone frames until it is told to stop.
-func (c *conversation) stream(ctx context.Context, be backend, slot int, followUp, continued bool, id string) {
+func (c *conversation) stream(ctx context.Context, be backend, slot int, followUp, continued bool, id string, waited time.Duration) {
 	frames, unlisten := c.source.Listen("turn")
 	defer unlisten()
 
@@ -1288,7 +1300,7 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 	// A slot that chimes does not send it: whoever is talking waits for the tone, so the history holds
 	// the wake word rather than the request, and the tone itself is louder at the array than they are.
 	// That is as true of a wake Home Assistant's engine heard.
-	pre := c.source.Recent(mic.History)
+	pre := c.source.Recent(mic.History + waited)
 	if wakeword.Tones(slot, followUp) {
 		pre = nil
 	}

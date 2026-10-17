@@ -586,6 +586,35 @@ What to know before turning them on:
 - Confirm does nothing while Wake word on Home Assistant is on, since Home Assistant is already
   listening.
 
+### The nearest device answers
+
+**Nearest device answers** (a switch of the device's in Home Assistant, under its configuration; off
+on a new device). With two devices in earshot, Home Assistant answers whichever reaches it first,
+which is the faster one and not always the one you spoke to. With this on, a device that hears its
+wake word tells the others how clearly it heard it and waits a moment to hear from them, and only
+the one that heard it best answers. The others go back to listening without a sound. Turn it on on
+every device that should take part; they need the same house word, set on each device's setup page,
+which signs what they tell each other so nothing else on the network can silence them.
+
+How clearly is how far the wake word stood out from that device's own room, so a device with hotter
+microphones or in a louder room does not win for that alone. Nothing you say during the wait is
+lost: it is sent with the rest. A device that has already answered keeps the turn, even if a device
+that heard you better speaks up a moment later; and a device that could not answer just then (Home
+Assistant out of reach, say) does not take part, so it never silences one that could. If no other
+device answers in time, for whatever reason, the device answers as it would without this, so the
+worst a fault can do is what happened before: two devices hear you and Home Assistant picks the
+faster. A wake word heard by Home Assistant's own engine (above) is settled by Home Assistant as
+before.
+
+**Nearest device window** (100 to 500 ms, 300 to start with) is how long a device waits to hear from
+the others. Every wake word waits this long. Raise it if two devices sometimes both answer, or a
+nearer one loses; lower it if the wait is noticeable. **Nearest device offset** (-30 to 30 dB, 0 to
+start with) is added to how clearly this device heard you: raise it on a device that loses when you
+speak right beside it, lower it on one that answers from across the room. The log shows each
+device's score on every wake word. If the device that heard you best loses Home Assistant during the
+wait, the others have already stood down: you hear that one's error, as you would with only one
+device, and say it again.
+
 ### Sounds of your own
 
 The sounds a voice request makes can be recordings of your own. On the setup page, go to **Sound &

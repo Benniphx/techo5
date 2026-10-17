@@ -87,6 +87,8 @@ type Source struct {
 
 	// noise measures the room for the ambient noise sensor, while that is on.
 	noise noiseMeter
+	// standout measures how far speech stands out from the room, while something has asked for it.
+	standout standout
 
 	// Which way the loudest sound is, as a beam, or -1 until something asks. finder belongs to the
 	// reader; wantFacing is how anything else asks it to look.
@@ -430,6 +432,8 @@ func (s *Source) broadcast(raw []byte) {
 
 	// Before the noise reduction and the leveling, which would take the room out and put gain back on.
 	s.noise.add(raw, frame)
+	// Before the noise reduction, which would lower the floor it is measured against.
+	s.standout.add(frame, s.leveler.leastNow())
 
 	s.findFacing(mics)
 
