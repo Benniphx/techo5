@@ -14,6 +14,8 @@ import (
 	"time"
 
 	xdraw "golang.org/x/image/draw"
+
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
 // The TECHO5 mark, drawn while the device comes up: the same picture the bootloader paints, so
@@ -66,11 +68,23 @@ var (
 	teal = color.RGBA{20, 147, 180, 255}
 )
 
+// splashScale is how large the mark is drawn on a panel w wide. The Shows keep logoScale: their
+// bootloaders paint the mark at that size, and the splash has to take over without a jump. The
+// Skylight's panel is twice the Show 5's width, and its kernel paints the mark scaled the same way
+// (logoScale × 2, centered on navy), so there it is drawn in proportion.
+func splashScale(w int) float64 {
+	if layout.Skylight() {
+		return logoScale * float64(w) / drawnFor
+	}
+	return logoScale
+}
+
 // splash is the mark, scaled once, and where its arcs are centered on the canvas.
 type splash struct {
 	img    *image.RGBA
 	at     image.Point // top-left on the canvas
 	cx, cy float64     // arc center on the canvas
+	k      float64     // how much larger than on a Show the mark is drawn: the arcs grow with it
 }
 
 func newSplash(w, h int) *splash {
@@ -79,15 +93,17 @@ func newSplash(w, h int) *splash {
 		slog.Error("decoding the logo failed", "err", err)
 		return nil
 	}
-	sw := int(float64(src.Bounds().Dx()) * logoScale)
-	sh := int(float64(src.Bounds().Dy()) * logoScale)
+	scale := splashScale(w)
+	sw := int(float64(src.Bounds().Dx()) * scale)
+	sh := int(float64(src.Bounds().Dy()) * scale)
 	img := image.NewRGBA(image.Rect(0, 0, sw, sh))
 	xdraw.CatmullRom.Scale(img, img.Bounds(), src, src.Bounds(), draw.Src, nil)
 	at := image.Pt((w-sw)/2, (h-sh)/2)
 	return &splash{
 		img: img, at: at,
-		cx: float64(at.X) + arcCenterX*logoScale,
-		cy: float64(at.Y) + arcCenterY*logoScale,
+		cx: float64(at.X) + arcCenterX*scale,
+		cy: float64(at.Y) + arcCenterY*scale,
+		k:  scale / logoScale,
 	}
 }
 
@@ -142,13 +158,14 @@ func (r *renderer) arcs(s *splash, elapsed time.Duration) {
 	var fades [arcCount]float64
 	for i := range arcCount {
 		p := math.Mod(phase+float64(i)/arcCount, 1)
-		radii[i] = arcFrom + p*(arcTo-arcFrom)
+		radii[i] = (arcFrom + p*(arcTo-arcFrom)) * s.k
 		fades[i] = (1 - p) * (1 - p) // brighter near the mark, gone at the edge
 	}
-	x0 := max(int(s.cx-arcTo-arcWidth), 0)
-	x1 := min(int(s.cx+arcTo+arcWidth), r.w-1)
-	y0 := max(int(s.cy-arcTo*math.Sin(arcSpread)-arcWidth), 0)
-	y1 := min(int(s.cy+arcTo*math.Sin(arcSpread)+arcWidth), r.h-1)
+	to, width := arcTo*s.k, arcWidth*s.k
+	x0 := max(int(s.cx-to-width), 0)
+	x1 := min(int(s.cx+to+width), r.w-1)
+	y0 := max(int(s.cy-to*math.Sin(arcSpread)-width), 0)
+	y1 := min(int(s.cy+to*math.Sin(arcSpread)+width), r.h-1)
 	pix := r.dst.Pix
 	for y := y0; y <= y1; y++ {
 		dy := float64(y) - s.cy
@@ -160,10 +177,10 @@ func (r *renderer) arcs(s *splash, elapsed time.Duration) {
 			d := math.Hypot(dx, dy)
 			for i := range arcCount {
 				w := math.Abs(d - radii[i])
-				if w > arcWidth {
+				if w > width {
 					continue
 				}
-				a := (1 - w/arcWidth) * fades[i]
+				a := (1 - w/width) * fades[i]
 				// soften the cone edges
 				edge := 1 - math.Abs(dy)/(math.Abs(dx)*math.Tan(arcSpread)+1e-9)
 				a *= math.Min(edge*4, 1)
