@@ -3,6 +3,7 @@
 package display
 
 import (
+	"image"
 	"path/filepath"
 	"testing"
 
@@ -39,5 +40,28 @@ func TestAHoldOnTheClockIsTold(t *testing.T) {
 	d.clockHeld()
 	if len(told) != 1 || told[0] != "hold" {
 		t.Errorf("told %v, want one hold", told)
+	}
+}
+
+// Over the screensaver, a card or a popup, the clock is not the plain clock, and a hold there is not
+// told.
+func TestOnlyThePlainClockTakesHolds(t *testing.T) {
+	if !plainClock(&scene{}, true) {
+		t.Fatal("the plain clock does not take holds")
+	}
+	for name, s := range map[string]scene{
+		"the screensaver":  {slideshowScreensaver: image.NewRGBA(image.Rect(0, 0, 1, 1))},
+		"a notification":   {showNotification: true},
+		"a reminder":       {showReminder: true},
+		"an announcement":  {showAnnouncement: true},
+		"the night clock":  {redClock: true},
+		"the light before": {sunrise: 0.5},
+	} {
+		if plainClock(&s, true) {
+			t.Errorf("%s takes holds", name)
+		}
+	}
+	if plainClock(&scene{}, false) {
+		t.Error("a page of its own takes holds")
 	}
 }

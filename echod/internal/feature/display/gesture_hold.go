@@ -58,6 +58,15 @@ func (h *clockHold) Entities() []esphome.Entity { return []esphome.Entity{h.on} 
 
 func (h *clockHold) Restore(c config.Config) { h.on.Set(c.Screen.ClockHold) }
 
+// plainClock is whether a frame is the plain clock and nothing over it: not the screensaver, the light
+// before an alarm, the night clock, the drawer, a card, an announcement, the setup page asking or the
+// PIN. boring is the frame having no page of its own.
+func plainClock(s *scene, boring bool) bool {
+	return boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock && !s.showDrawer &&
+		!s.setupAsking && !s.pin.open && !s.showNotification && !s.showReminder && s.popup == nil &&
+		!s.showAnnouncement
+}
+
 // clockHoldScene says whether the plain clock is what is up, and so whether holds are wanted for it.
 func (d *Display) clockHoldScene(plainClock bool) {
 	want := plainClock && config.Get().Screen.ClockHold

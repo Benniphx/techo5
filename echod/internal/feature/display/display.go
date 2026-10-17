@@ -2526,9 +2526,6 @@ func (d *Display) frame() time.Duration {
 	if s.showVideo {
 		boring = false
 	}
-	d.clockHoldScene(boring && !s.showDrawer && !s.setupAsking && !s.pin.open && !d.overDashboard(&s) &&
-		!d.answerUp(now) && d.wakeLight(now) == 0)
-
 	// The announcement state is read every frame like the setup page's, for the same reason: the
 	// drawer's button, the page an arriving one puts up and the line that says this microphone is
 	// open all have to be right wherever the screen happens to be.
@@ -2581,6 +2578,9 @@ func (d *Display) frame() time.Duration {
 			s.slideshowCaptions = home.Get().SlideshowCaptions()
 		}
 	}
+	// Holds go to Home Assistant only on the plain clock: not over the screensaver, the light before an
+	// alarm, the night clock, a card, an answer, an announcement or any page of its own.
+	d.clockHoldScene(plainClock(&s, boring) && !d.overDashboard(&s) && !d.answerUp(now) && d.wakeLight(now) == 0)
 
 	// The Call button is on the clock itself and only there: on any other page a tap where it would be
 	// still does what that page does.
