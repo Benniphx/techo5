@@ -192,6 +192,7 @@ var registered = []string{
 	"sendspin",
 	"sendspin_state",
 	"settings_lock",
+	"settings_sharing",
 	"setup_page",
 	"sleep_timer",
 	"slideshow_folder",

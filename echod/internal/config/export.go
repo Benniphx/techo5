@@ -134,6 +134,10 @@ func serverChanges(a, b Config) []ServerChange {
 	return out
 }
 
+// ServerChanges is the server addresses that differ between a and b, for anything else that changes
+// settings and must not move where the device's voice, words or photos go (feature/share).
+func ServerChanges(a, b Config) []ServerChange { return serverChanges(a, b) }
+
 // Restored is what a settings file makes of cur, on a device of model: the file's settings, with cur's
 // secrets (for the same servers) and what is cur's own kept.
 func Restored(cur Config, file []byte, model string) (Restoration, error) {
@@ -348,6 +352,9 @@ func KeepOwn(c *Config, from Config) {
 	// network; a finger held on the clock goes to Home Assistant. Both this device's to turn on.
 	c.Nearest = from.Nearest
 	c.Screen.ClockHold = from.Screen.ClockHold
+	// Sharing settings with the other devices, and which of them, is this device's to set up: a file
+	// from another device names that device's links, not this one's.
+	c.Share = from.Share.clone()
 
 	// "No wake word" chosen on purpose is a device that is not to listen: a file with words in it does
 	// not start it listening.

@@ -445,6 +445,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		timezoneSection(w, token)
 		homeAssistantSection(w, token)
 		settingsFileSection(w, token)
+		shareSection(w, token)
 		diagnosticsSection(w)
 	}
 	fmt.Fprint(w, `</section></div></div>`)

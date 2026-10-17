@@ -889,6 +889,32 @@ The file is still personal: it holds where the device is (for the weather), addr
 network, user names and the assistant's instructions. Keep it somewhere private, and don't post it
 or attach it to an issue; the diagnostics download is the one made for that.
 
+### Sharing settings with the other devices
+
+Settings can be kept in step between devices, setting by setting, each with the devices you choose,
+or copied to other devices once. It is off on every device until you turn it on, on each one that is
+to take part: **Settings sharing** in Home Assistant, or **Shared settings** under **General** on the
+setup page. Every device needs the same house word (Connections), since what one device sends another
+is signed with it.
+
+- **Linked settings.** On the setup page, open a group (Speaker, Screen, Night and so on) and tick,
+  for a setting, the devices it is to be kept in step with. Save, and those devices are linked with
+  it and with each other, and take this device's value. From then on, a change to that setting on any
+  of them, from the screen, Home Assistant or the setup page, reaches the rest within a few seconds.
+  There is no main device: the latest change wins. **Last from** shows which device a value came from.
+  Untick a device to take it out of the link.
+- **Keep mine.** Ticked for a setting, nothing another device sends changes it here, linked or copied;
+  the device that sent it is told it was kept.
+- **Copy once.** Under **Copy once**, tick the settings and the devices, and press **Copy**: this
+  device's values go to them once, with no link, and the page shows what each device took. Home
+  Assistant can do the same with [`copy_settings`](actions.md#copy-settings-to-other-devices).
+
+Only everyday settings can be shared: the speaker's sound, the microphones' tuning, how the device
+answers, alarms' sound, the screen, night, photos, weather, calendar pop-ups and the dashboard's
+behavior. Never what opens the device to the network or has it listen or watch (the same list a
+restore leaves alone, above), and never a password, a key, a server's address or the device's name.
+A device that has no such setting (a Dot has no screen) says so and is left alone.
+
 ## 11. The remote API
 
 For scripts and tools that are not Home Assistant. It reads what the device is and what its settings

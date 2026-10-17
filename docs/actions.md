@@ -2364,3 +2364,33 @@ action: esphome.office_announce_house
 data:
   text: ""
 ```
+
+## Copy settings to other devices
+
+In YAML, refer to this action as `esphome.<node>_copy_settings`.
+
+Copies this device's settings to other devices, once, with no link: the way to make a change on one
+device and send it to the others. Settings sharing has to be on, on this device and on each device
+that is to take them ([Sharing settings](setup.md#sharing-settings-with-the-other-devices)). A device
+that keeps a setting its own, has sharing off or has no such setting is left alone, and the log says
+which.
+
+### settings (Required)
+
+*string*
+
+The settings, by their entities' object IDs (`screen_theme` for `select.office_screen_theme`),
+separated by commas, or `all` for every setting that can be shared.
+
+### devices (Required)
+
+*string*
+
+The devices, by name, separated by commas, or `all` for every other device on the network now.
+
+```yaml
+action: esphome.office_copy_settings
+data:
+  settings: screen_theme, screen_clock_style, night_volume
+  devices: Kitchen, Bedroom
+```

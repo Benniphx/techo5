@@ -129,6 +129,7 @@ func (st *Store) Get() Config {
 	c.Screen.WorldClocks = slices.Clone(st.c.Screen.WorldClocks)
 	c.Deck = st.c.Deck.clone()
 	c.Video = st.c.Video.clone()
+	c.Share = st.c.Share.clone()
 	return c
 }
 
