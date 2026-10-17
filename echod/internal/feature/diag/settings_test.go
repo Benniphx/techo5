@@ -1,6 +1,7 @@
 package diag
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,6 +22,20 @@ func TestTheBundleSaysWhichSwitchesAreOn(t *testing.T) {
 	for _, secret := range []string{c.Remote.Secret, c.CamStream.Pass} {
 		if strings.Contains(got, secret) {
 			t.Errorf("the summary carries %q", secret)
+		}
+	}
+}
+
+// The secrets a line could carry are named for the redactor, the go2rtc login with them.
+func TestTheSecretsAreTakenOut(t *testing.T) {
+	var c config.Config
+	c.CamStream.Pass, c.Remote.Secret, c.Home.HouseWord = "camera-password-value", "remote-secret-value", "our long house word"
+	c.Home.Immich.Key = "immich-key-value"
+	c.Home.Go2RTC.Base = "http://go2user:go2pass@go2rtc.example:1984"
+	got := secrets(c)
+	for _, want := range []string{"camera-password-value", "remote-secret-value", "our long house word", "immich-key-value", "go2user", "go2pass"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("%q is not among the secrets", want)
 		}
 	}
 }

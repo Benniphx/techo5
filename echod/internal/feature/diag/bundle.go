@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,7 +67,23 @@ func Redactor() *redact.Redactor {
 	if from, ok := phonePlaying(media.Get().Receiving()); ok {
 		r.Known("bluetooth", from)
 	}
+	// The secrets themselves, in case a line ever carries one: the patterns only catch a secret that
+	// says what it is.
+	for _, s := range secrets(c) {
+		r.Known("secret", s)
+	}
 	return r
+}
+
+// secrets is the settings that are secrets in themselves, and the login in the go2rtc server's address.
+func secrets(c config.Config) []string {
+	s := []string{c.CamStream.Pass, c.Remote.Secret, c.Home.HouseWord, c.Home.Immich.Key, c.Home.Reolink.Pass,
+		c.Brain.Key, c.Dashboard.Key, c.MusicAssistant.Token, c.Deck.OBS.Password}
+	if u, err := url.Parse(c.Home.Go2RTC.Base); err == nil && u.User != nil {
+		pass, _ := u.User.Password()
+		s = append(s, u.User.Username(), pass)
+	}
+	return s
 }
 
 // Bundle is the whole thing as text, ready to be sent to somebody.
