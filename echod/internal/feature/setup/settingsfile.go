@@ -110,7 +110,7 @@ func (f *Feature) restore(w http.ResponseWriter, r *http.Request) {
 	}
 	// The form carries the session it came from, as every save does, so another site's page cannot
 	// restore settings here with a browser's cookie.
-	if r.FormValue("token") != token {
+	if !sameToken(r.FormValue("token"), token) {
 		http.Error(w, "that did not come from this page", http.StatusForbidden)
 		return
 	}
@@ -191,7 +191,7 @@ func restorePage(w http.ResponseWriter, token string, rs config.Restoration) {
 // applyRestore applies the file this browser looked at, and restarts.
 func (f *Feature) applyRestore(w http.ResponseWriter, r *http.Request, token string) {
 	waiting.Lock()
-	ok := waiting.token == token && time.Since(waiting.at) < restoreFor
+	ok := sameToken(waiting.token, token) && time.Since(waiting.at) < restoreFor
 	file := waiting.file
 	waiting.Unlock()
 	forgetWaiting()

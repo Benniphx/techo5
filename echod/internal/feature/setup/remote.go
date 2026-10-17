@@ -50,7 +50,7 @@ func (f *Feature) remoteKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
-	if err := r.ParseForm(); err != nil || r.PostFormValue("token") != token {
+	if err := r.ParseForm(); err != nil || !sameToken(r.PostFormValue("token"), token) {
 		http.Error(w, "that did not come from this page", http.StatusForbidden)
 		return
 	}

@@ -108,6 +108,9 @@ type rtBackend struct {
 	gen     int     // which turn's events are wanted
 	preroll []int16
 	ended   bool // the speaker finished before the session was open
+
+	// counting is the turns' minutes being counted (closeLocked), off the conversation's goroutine.
+	counting sync.WaitGroup
 }
 
 // rtTurn is one turn's session and what goes with it, for as long as it is open.
@@ -168,14 +171,30 @@ func (r *rtBackend) Ready() bool {
 
 // Start opens a turn: a session of its own, opened meanwhile, with what is said until it is open kept to
 // send then.
-func (r *rtBackend) Start(string) error {
+func (r *rtBackend) Start(string) error { return r.startFrom(-1) }
+
+// generation is the turn now, for startFrom.
+func (r *rtBackend) generation() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	return r.gen
+}
+
+// startFrom is Start for a turn opened at generation gen (any, for less than none): the conversation
+// queues the start while it stops a turn at once (Stop), and a turn stopped before its start ran opens
+// nothing, where it would hold a session open, its minutes counted, until the turn's time ran out.
+func (r *rtBackend) startFrom(gen int) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if gen >= 0 && gen != r.gen {
+		slog.Debug("realtime: a start for a turn already over, not opened")
+		return nil
+	}
 	r.closeLocked()
 	r.gen++
 	r.preroll, r.ended = r.preroll[:0], false
-	gen := r.gen
-	safe.Go("realtime open", func() { r.open(gen) })
+	opening := r.gen
+	safe.Go("realtime open", func() { r.open(opening) })
 	return nil
 }
 
@@ -325,10 +344,17 @@ func (r *rtBackend) closeLocked() {
 		t.cap.Stop()
 	}
 	_ = t.sess.Close()
-	secs := int(r.now().Sub(t.at).Round(time.Second) / time.Second)
-	if err := config.Set().Realtime().Used(max(secs, 1), r.now()); err != nil {
-		slog.Warn("realtime: the day's minutes could not be counted", "err", err)
-	}
+	now := r.now()
+	secs := int(now.Sub(t.at).Round(time.Second) / time.Second)
+	// Written on a goroutine of its own: the file is written and synced, and this runs on the
+	// conversation's goroutine. Each count adds to the day's as it stands, whichever is written first.
+	r.counting.Add(1)
+	safe.Go("realtime minutes", func() {
+		defer r.counting.Done()
+		if err := config.Set().Realtime().Used(max(secs, 1), now); err != nil {
+			slog.Warn("realtime: the day's minutes could not be counted", "err", err)
+		}
+	})
 	slog.Info("realtime: session closed", "seconds", secs)
 }
 
@@ -470,6 +496,13 @@ func (r *rtBackend) refreshHA(token string, ask bool) <-chan struct{} {
 	safe.Go("realtime home assistant tools", func() {
 		defer close(done)
 		c := r.mcpFor(token)
+		if c == nil {
+			// Home Assistant's address went meanwhile: no tools, and asked again next time.
+			r.haMu.Lock()
+			r.haBusy = false
+			r.haMu.Unlock()
+			return
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), mcpWithin)
 		defer cancel()
 		var ts []mcp.Tool

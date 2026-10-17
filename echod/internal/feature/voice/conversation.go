@@ -546,10 +546,11 @@ func (c *conversation) turnEvent(e event) {
 		//
 		// Home Assistant goes on with the run it was told to stop, and its last events are still to
 		// come: a wake in the meantime waits for them (draining), or they would land in its turn.
-		// Realtime voice's transcript can come after its answer has begun: by then the answer is the
-		// turn, whatever the words were taken for.
+		// Realtime voice is answered by the model that heard the audio, whatever its transcript was
+		// taken for, and the transcript can come after the answer has begun: only nothing heard at all
+		// is a mistake there.
 		_, rt := c.be.(*rtBackend)
-		if c.woke && c.phase != phaseIdle && onlyNoise(e.text) && !(rt && c.phase == phaseReplying) {
+		if c.woke && c.phase != phaseIdle && onlyNoise(e.text) && (!rt || e.text == "") {
 			slog.Info("heard only what noise is written as; the wake was a mistake", "slot", c.slot+1)
 			slot, opened := c.slot, c.opened
 			c.clearPending()
@@ -562,7 +563,9 @@ func (c *conversation) turnEvent(e event) {
 			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text, Opened: opened})
 			return
 		}
-		if c.phase == phaseListening {
+		// Realtime voice's listening is ended by this device hearing the speaker finish (evSpokeEnd),
+		// never by a transcript, which can be of part of the question.
+		if c.phase == phaseListening && !rt {
 			c.think()
 		}
 
@@ -886,9 +889,15 @@ func (c *conversation) start(n nextTurn) bool {
 		if n.afterWatch && slot == 0 {
 			asked = ""
 		}
-		c.send("start", func() error { return be.Start(asked) })
+		if rt, ok := be.(*rtBackend); ok {
+			// Stopped at once, not through the queue: a start still queued when the turn ends is refused.
+			gen := rt.generation()
+			c.send("start", func() error { return rt.startFrom(gen) })
+		} else {
+			c.send("start", func() error { return be.Start(asked) })
+		}
 	}
-	if _, here := be.(*direct); !here {
+	if !c.stopsAtOnce() {
 		c.runOpen = true
 	}
 

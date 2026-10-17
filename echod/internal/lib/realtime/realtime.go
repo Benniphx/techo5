@@ -184,11 +184,11 @@ func Dial(ctx context.Context, c Config) (*Session, error) {
 func codecFor(provider string) (codec, error) {
 	switch provider {
 	case OpenAI:
-		return openAI{base: "wss://api.openai.com/v1/realtime", defaultModel: "gpt-realtime", defaultVoice: "marin"}, nil
+		return openAI{base: "wss://api.openai.com/v1/realtime", defaultModel: "gpt-realtime", defaultVoice: "marin", transcribe: "gpt-4o-mini-transcribe"}, nil
 	case XAI:
 		return openAI{base: "wss://api.x.ai/v1/realtime", defaultModel: "grok-voice", defaultVoice: "Ara"}, nil
 	case Gemini:
-		return gemini{}, nil
+		return gemini{heard: new(strings.Builder)}, nil
 	}
 	return nil, fmt.Errorf("realtime: not a provider: %q", provider)
 }

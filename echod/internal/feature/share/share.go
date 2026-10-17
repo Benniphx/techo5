@@ -57,6 +57,10 @@ const (
 	// sendWithin is how long one message to one device may take.
 	sendWithin = 10 * time.Second
 
+	// peersEvery is how often the devices on the network are looked at for one that has come back, to
+	// bring it up to date (catchUp).
+	peersEvery = 15 * time.Second
+
 	// maxJump is the furthest a change's number may run ahead of the one this device has: changes made
 	// elsewhere while it was away number a handful, and a number far past that would end every change
 	// made here after it.
@@ -126,9 +130,17 @@ type Feature struct {
 	last map[string]string // the linked settings' values as last seen or taken, so a change is seen once
 
 	// asks is how asking each device for a link went (askAgain), and asking whether askAgain is running.
+	// behind is, the same way, each linked setting a change of which did not reach a device: it is sent
+	// again (catchUp), soon at first and then less often, until it gets there.
 	askMu  sync.Mutex
 	asks   map[string]*askLater
+	behind map[string]*askLater
 	asking atomic.Bool
+
+	// peers is the names of the devices on the network now; replaced in tests. seen is those there at the
+	// last look, only Run's.
+	peers func() []string
+	seen  map[string]bool
 }
 
 var (
@@ -144,6 +156,13 @@ func Get() *Feature {
 			now:  time.Now,
 			wake: make(chan struct{}, 1),
 			last: map[string]string{},
+			peers: func() []string {
+				var names []string
+				for _, p := range announce.Peers() {
+					names = append(names, p.Name)
+				}
+				return names
+			},
 		}
 		f.sw = &esphome.Switch{
 			Base: esphome.Base{ObjectID: "settings_sharing", Name: "Settings sharing", Icon: "mdi:sync",
@@ -206,6 +225,8 @@ func (f *Feature) Run(ctx context.Context) error {
 	defer tick.Stop()
 	askAgain := time.NewTicker(askAgainEvery)
 	defer askAgain.Stop()
+	peers := time.NewTicker(peersEvery)
+	defer peers.Stop()
 	for {
 		f.watch(ctx)
 		select {
@@ -213,9 +234,86 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-f.wake:
 		case <-tick.C:
+		case <-peers.C:
+			f.lookForPeers(ctx)
 		case <-askAgain.C:
 			f.askAgain(ctx)
 		}
+	}
+}
+
+// lookForPeers brings each device that has come on the network since the last look up to date: it may
+// have been unplugged while a linked setting changed here, or changed one itself meanwhile. The first
+// look finds every device there, which brings each up to date after this one starts.
+func (f *Feature) lookForPeers(ctx context.Context) {
+	now := map[string]bool{}
+	var back []string
+	for _, n := range f.peers() {
+		k := strings.ToLower(n)
+		now[k] = true
+		if !f.seen[k] {
+			back = append(back, n)
+		}
+	}
+	f.seen = now
+	if len(back) > 0 && config.Get().Share.On {
+		safe.Go("share catch up", func() { f.catchUp(ctx, back, true) })
+	}
+}
+
+// catchUp sends each linked setting's value here to each device in devices (every linked device, for
+// none) it is linked with, all of them (every) or only those a change did not reach whose time has come
+// again. Each takes it if it is later than what it has, and answers with its own if not, which is taken
+// here the same way: the two end with the later.
+func (f *Feature) catchUp(ctx context.Context, devices []string, every bool) {
+	c := config.Get().Share
+	if !c.On {
+		return
+	}
+	now := f.now()
+	for id, linked := range c.Links {
+		if !Shareable(id) {
+			continue
+		}
+		for _, d := range linked {
+			if c.WaitingFor(id, d) || (devices != nil && !containsFold(devices, d)) {
+				continue
+			}
+			if !every {
+				f.askMu.Lock()
+				b := f.behind[config.AskKey(id, d)]
+				due := b != nil && !now.Before(b.next)
+				f.askMu.Unlock()
+				if !due {
+					continue
+				}
+			}
+			f.sendValue(ctx, id, d)
+		}
+	}
+}
+
+// reached notes, for catchUp, how sending settings to a device went: each that could not reach it is
+// sent again later.
+func (f *Feature) reached(to string, results map[string]string) {
+	f.askMu.Lock()
+	defer f.askMu.Unlock()
+	if f.behind == nil {
+		f.behind = map[string]*askLater{}
+	}
+	for id, outcome := range results {
+		k := config.AskKey(id, to)
+		if outcome != Unreachable {
+			delete(f.behind, k)
+			continue
+		}
+		b := f.behind[k]
+		if b == nil {
+			b = &askLater{}
+			f.behind[k] = b
+		}
+		b.delay = min(max(2*b.delay, askFirst), askMost)
+		b.next = f.now().Add(b.delay)
 	}
 }
 
@@ -264,7 +362,7 @@ func (f *Feature) watch(ctx context.Context) {
 		})
 	}
 	for d, items := range out {
-		safe.Go("share", func() { f.deliver(ctx, d, message{Kind: "set", Items: items}) })
+		safe.Go("share", func() { f.reached(d, f.deliver(ctx, d, message{Kind: "set", Items: items})) })
 	}
 }
 
@@ -590,7 +688,7 @@ func (f *Feature) sendValue(ctx context.Context, id, to string) {
 	}
 	f.last[id] = v
 	f.mu.Unlock()
-	f.deliver(ctx, to, message{Kind: "set", Items: []item{{ID: id, Value: v, N: have.N, Origin: origin}}})
+	f.reached(to, f.deliver(ctx, to, message{Kind: "set", Items: []item{{ID: id, Value: v, N: have.N, Origin: origin}}}))
 }
 
 // Link sets the devices a setting is linked with, from here. Devices added are linked here and asked; each
@@ -794,6 +892,7 @@ func (f *Feature) askDue(ctx context.Context) {
 			}
 		}
 	}
+	f.catchUp(ctx, nil, false)
 }
 
 // Accept accepts another device's request to link a setting: linked here, and the device is told. Once

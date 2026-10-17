@@ -733,3 +733,62 @@ func TestAskingStartsOverWithTheLink(t *testing.T) {
 		t.Fatalf("%d asks kept after it was accepted", n)
 	}
 }
+
+// A device unplugged while a linked setting changed here is brought up to date: the change is sent
+// again later, and at once when the device comes back on the network.
+func TestADeviceThatWasAwayIsBroughtUpToDate(t *testing.T) {
+	r := newRig(t)
+	link(t, "screen_theme", "Office")
+	var away sync.Mutex
+	gone := true
+	send := r.f.send
+	r.f.send = func(ctx context.Context, to string, body []byte) ([]byte, error) {
+		away.Lock()
+		g := gone
+		away.Unlock()
+		if g {
+			return nil, fmt.Errorf("%s is not on the network now", to)
+		}
+		return send(ctx, to, body)
+	}
+	var peers []string
+	r.f.peers = func() []string { away.Lock(); defer away.Unlock(); return append([]string(nil), peers...) }
+	r.f.lookForPeers(context.Background()) // nobody there
+
+	r.f.watch(context.Background()) // learns the value
+	r.theme.Set("Light")
+	r.f.watch(context.Background())
+	behind := func() bool {
+		r.f.askMu.Lock()
+		defer r.f.askMu.Unlock()
+		return r.f.behind[config.AskKey("screen_theme", "Office")] != nil
+	}
+	waitFor(t, behind)
+
+	// Not again before its time; then again, and still not there.
+	r.f.catchUp(context.Background(), nil, false)
+	r.tick(askFirst)
+	r.f.catchUp(context.Background(), nil, false)
+	if !behind() {
+		t.Fatal("given up on after one more try")
+	}
+
+	// Back on the network: sent at once, numbered as the change was.
+	away.Lock()
+	gone, peers = false, []string{"Office"}
+	away.Unlock()
+	r.f.lookForPeers(context.Background())
+	waitFor(t, func() bool { return len(r.sentTo("Office")) > 0 })
+	m := r.sentTo("Office")[0]
+	if m.Kind != "set" || len(m.Items) != 1 || m.Items[0].Value != "Light" || m.Items[0].N != 1 || m.Items[0].Origin != "Kitchen" {
+		t.Fatalf("%+v", m)
+	}
+	waitFor(t, func() bool { return !behind() })
+
+	// Still there at the next look: not sent again.
+	r.f.lookForPeers(context.Background())
+	time.Sleep(50 * time.Millisecond)
+	if n := len(r.sentTo("Office")); n != 1 {
+		t.Fatalf("sent %d times", n)
+	}
+}

@@ -66,7 +66,7 @@ func realtimeSection(w http.ResponseWriter, token string) {
 		keyHint(rt.Key != ""), html.EscapeString(rt.Endpoint), html.EscapeString(rt.Model), html.EscapeString(rt.Voice),
 		config.MaxDailyMinutes, rt.Daily(), usedMinutes(rt), rt.Daily(), keyHint(rt.MCPToken != ""))
 	fmt.Fprint(w, `<p>Answer with realtime voice:</p>`)
-	for i := range realtimeSlots {
+	for i := range realtimeChoices(c) {
 		on, name := false, fmt.Sprintf("wake word %d", i+1)
 		if i < len(c.Wake.Words) {
 			on = c.Wake.Words[i].Realtime
@@ -78,6 +78,12 @@ func realtimeSection(w http.ResponseWriter, token string) {
 			i, checkedIf(on), html.EscapeString(name))
 	}
 	fmt.Fprint(w, `<p><button type="submit">Save</button></p></form></fieldset>`)
+}
+
+// realtimeChoices is how many of the slots there are to choose: those with a wake word, the first
+// always. Ticking one with no word would make an empty slot.
+func realtimeChoices(c config.Config) int {
+	return max(1, min(realtimeSlots, len(c.Wake.Words)))
 }
 
 func usedMinutes(rt config.Realtime) int {
@@ -120,7 +126,7 @@ func saveRealtime(r *http.Request) string {
 		_ = config.Set().Realtime().SetMCPToken(tok)
 	}
 	var chosen []int
-	for i := range realtimeSlots {
+	for i := range realtimeChoices(config.Get()) {
 		on := r.PostFormValue(fmt.Sprintf("slot%d", i)) == "yes"
 		was := i < len(config.Get().Wake.Words) && config.Get().Wake.Words[i].Realtime
 		if on != was {

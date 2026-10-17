@@ -70,6 +70,12 @@ func (c *conversation) backendFor(slot int) backend {
 	return c.ha
 }
 
+// onHA is whether the turn is Home Assistant's pipeline's.
+func (c *conversation) onHA() bool {
+	_, on := c.be.(ha)
+	return on
+}
+
 // stopsAtOnce is whether the turn's backend stops the moment it is told, with nothing more to come from
 // it: the device's own, not Home Assistant's run.
 func (c *conversation) stopsAtOnce() bool {

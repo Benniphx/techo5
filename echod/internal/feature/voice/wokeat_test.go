@@ -33,3 +33,20 @@ func TestCanAnswerNeedsAnAssistant(t *testing.T) {
 		t.Error("with Home Assistant not listening, the device says it can answer")
 	}
 }
+
+// A slot chosen for realtime voice can be answered when realtime voice is ready, Home Assistant or not,
+// and not when it is not.
+func TestCanAnswerARealtimeSlot(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	vs := &esphome.VoiceSatellite{ActiveWakeWords: []string{"okay_nabu"}}
+	v := &Voice{vs: vs, turn: newConversation(vs)}
+	_ = config.Set().Wake(0).Realtime(true)
+	if v.CanAnswer(0) {
+		t.Error("realtime voice not set up, and the device says it can answer")
+	}
+	_ = config.Set().Realtime().Set("openai", "", "", "", 0)
+	_ = config.Set().Realtime().SetKey("sk-test")
+	if !v.CanAnswer(0) {
+		t.Error("realtime voice ready, and the device says it cannot answer without Home Assistant")
+	}
+}

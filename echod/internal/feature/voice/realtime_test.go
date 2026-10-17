@@ -132,7 +132,7 @@ func newRTRig(t *testing.T) *rtRig {
 		g.dialed <- struct{}{}
 		return s, nil
 	}
-	t.Cleanup(func() { _ = g.r.Stop() })
+	t.Cleanup(func() { _ = g.r.Stop(); g.r.counting.Wait() })
 	return g
 }
 
@@ -209,6 +209,7 @@ func TestARealtimeTurn(t *testing.T) {
 
 	// Stopped: closed at once, and its time counted.
 	_ = g.r.Stop()
+	g.r.counting.Wait()
 	s.mu.Lock()
 	closed := s.closed
 	s.mu.Unlock()
@@ -499,4 +500,20 @@ func TestHomeAssistantToolsAreKept(t *testing.T) {
 		t.Fatalf("%v after %v", ts, time.Since(start))
 	}
 	waitUntilT(t, func() bool { return len(g.r.haTools("c")) == 1 })
+}
+
+// A start queued for a turn that was stopped before it ran opens nothing.
+func TestAStartForAStoppedTurnOpensNothing(t *testing.T) {
+	g := newRTRig(t)
+	gen := g.r.generation()
+	_ = g.r.Stop() // the turn ended, its start still queued
+	_ = g.r.startFrom(gen)
+	select {
+	case <-g.dialed:
+		t.Fatal("a session was opened for a turn already over")
+	case <-time.After(100 * time.Millisecond):
+	}
+	// The next turn's start opens one.
+	_ = g.r.startFrom(g.r.generation())
+	g.waitDial(t)
 }

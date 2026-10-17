@@ -46,6 +46,8 @@ const (
 
 	// every is how often a frame is looked at while somebody is near.
 	every = 500 * time.Millisecond
+	// everySlack is how much sooner than every a frame may come and still be looked at.
+	everySlack = 50 * time.Millisecond
 
 	// hold is how long a sighting stands: the model misses a person often enough that one look without
 	// them is no news.
@@ -191,7 +193,9 @@ func (f *Feature) look(ctx context.Context) {
 			f.update(now)
 		case fr := <-frames:
 			now := time.Now()
-			if now.Sub(last) < every || !presence.Present() {
+			// A frame a little early is taken: frames come about every so often, and one just short
+			// of every skipped would make it a look every other frame.
+			if now.Sub(last) < every-everySlack || !presence.Present() {
 				continue
 			}
 			last = now

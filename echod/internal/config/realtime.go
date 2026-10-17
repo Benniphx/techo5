@@ -98,5 +98,25 @@ func (w RealtimeWriter) Used(seconds int, now time.Time) error {
 
 // Realtime chooses realtime voice for this slot, or its usual assistant.
 func (w WakeWriter) Realtime(on bool) error {
-	return w.word(func(word *WakeWord) { word.Realtime = on })
+	// A slot with no wake word is not made for it: it would be one with no word to wake it. The first
+	// is there whether or not it has been written.
+	if w.slot < 0 {
+		return errSlot(w.slot)
+	}
+	none := false
+	err := w.st.Update(func(c *Config) {
+		switch {
+		case w.slot < len(c.Wake.Words):
+			c.Wake.Words[w.slot].Realtime = on
+		case w.slot == 0:
+			c.Wake.Words = append(c.Wake.Words, DefaultWakeWord())
+			c.Wake.Words[0].Realtime = on
+		default:
+			none = true
+		}
+	})
+	if err == nil && none {
+		err = errSlot(w.slot)
+	}
+	return err
 }

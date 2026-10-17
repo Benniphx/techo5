@@ -493,8 +493,9 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   Home Assistant, which works only with Presence detection on): tells a person from anything else
   that moves, such as a curtain, a pet or the light changing. While Presence has seen movement, a small
   model looks at the camera's picture twice a second, as 96 by 96 shades of gray, on the device, and
-  Home Assistant gets a **Person** sensor (occupancy). It turns on after three looks in a row that are
-  more person than not, and stays on for a minute after the last such look. The model is TensorFlow's
+  Home Assistant gets a **Person** sensor (occupancy). It turns on when the last three looks score 0.6
+  or more on average, where 1 is surely a person, and stays on for a minute after the last time they
+  did. The model is TensorFlow's
   person detection example: small enough for these processors, and a modest judge. It often misses a
   person far from the camera or half out of the picture, and it has not yet been tried on a device.
   Nothing it sees is kept or sent.
@@ -581,12 +582,14 @@ The key is never shown again; leave the field empty to keep it. Choosing another
 clears it, so a key is never sent where it was not given for. **Relay** is optional: a server on your
 network in place of the provider's address, which can hold the key itself; it has to be a `wss://`
 address, since your voice goes through it. A settings file never chooses a wake word for realtime
-voice, and one that moves it to another provider or relay leaves every wake word off it.
+voice, and one that moves it to another provider or relay leaves every wake word off it. A file saved
+before realtime voice existed leaves the device's realtime voice as it is.
 
 Each turn has a session of its own, so the model does not remember the last turn, and the device
 does not listen again after a realtime answer, even with listening after an answer set for the wake
-word: say the wake word again for the next question. The device still decides when you have finished speaking, and the stop word,
-the action button and another wake word stop an answer as they stop any other. Its speech plays as any
+word: say the wake word again for the next question. The device still decides when you have finished
+speaking, and the stop word, the action button and another wake word stop an answer as they stop any
+other. Its speech plays as any
 answer does, so an alarm, a ring or a call cuts it off. A turn ends after five minutes whatever
 happens. The minutes a day count all the time a session is open, not only speech, and once they are
 used up the wake word chimes and sounds its failure tone until the next day. The setup page shows the
@@ -597,7 +600,8 @@ model and Puck) are untried.
 To do things in the house, add Home Assistant's **Model Context Protocol Server** integration, make a
 Home Assistant user of its own for it with no administrator rights, and give a long-lived token of that
 user in **Home Assistant token for its MCP server**: the model then has the tools Assist has, for the
-entities exposed to Assist. Without it, it has the device's own abilities (timers, alarms, the radio,
+entities exposed to Assist. The token is for that Home Assistant only: when the device is given
+another Home Assistant's address, or one after having none, the token is cleared. Without it, it has the device's own abilities (timers, alarms, the radio,
 the volume). Either way the same rule as for the device's own assistant holds: once a turn has read
 the web, a calendar or anything else from outside, nothing that changes anything runs in it, and none
 of the provider's own tools (its web search, code, files) are ever turned on.
@@ -967,9 +971,11 @@ here.
   for good. Only the device that declined can undo it, by ticking the other device for that setting
   itself. A device linked with several passes a change on to the rest, so a
   group stays in step. There is no main device: every change is numbered one past the last, and the
-  latest number wins, whatever any device's clock says; a device behind is brought up to date. **Last
-  from** shows which device a value came from. Untick a device to take it out of the link; it is told, and unlinks too. A setting is linked
-  with 16 devices at most.
+  latest number wins, whatever any device's clock says. A device that was off or unreachable when a
+  change was made is sent it again, soon at first and then less often, and as soon as it is back on
+  the network, every linked setting is sent to it, so the two end with the later of each. **Last
+  from** shows which device a value came from. Untick a device to take it out of the link; it is told,
+  and unlinks too. A setting is linked with 16 devices at most.
 - **Keep mine.** Ticked for a setting, nothing another device sends changes it here, linked or copied;
   the device that sent it is told it was kept.
 - **Copy once.** Under **Copy once**, tick the settings and the devices, and press **Copy**: this

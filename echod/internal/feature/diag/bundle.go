@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
@@ -50,6 +51,11 @@ func Redactor() *redact.Redactor {
 	r := redact.New()
 	c := config.Get()
 	r.Known("device", c.Device.Name)
+	// The other devices in the house, as the log names them (sharing settings, announcing): a device is
+	// often named for a room or for whoever has it.
+	for _, name := range otherDevices(c) {
+		r.Known("device", name)
+	}
 	r.Known("serial", serial())
 	for _, ssid := range wifi.Saved() {
 		r.Known("wifi", ssid)
@@ -73,6 +79,29 @@ func Redactor() *redact.Redactor {
 		r.Known("secret", s)
 	}
 	return r
+}
+
+// otherDevices is the names of the other devices this one knows: those on the network now, and those
+// shared settings are linked with, asked about or came from.
+func otherDevices(c config.Config) []string {
+	var names []string
+	for _, p := range announce.Peers() {
+		names = append(names, p.Name)
+	}
+	s := c.Share
+	for _, list := range s.Links {
+		names = append(names, list...)
+	}
+	for _, list := range s.Waiting {
+		names = append(names, list...)
+	}
+	for _, fr := range s.From {
+		names = append(names, fr.Device)
+	}
+	for _, r := range append(append([]config.ShareRequest(nil), s.Requests...), s.Declined...) {
+		names = append(names, r.Device)
+	}
+	return names
 }
 
 // secrets is the settings that are secrets in themselves, and the login in the go2rtc server's address,

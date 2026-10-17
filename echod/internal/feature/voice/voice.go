@@ -244,10 +244,17 @@ func (v *Voice) WokeAt(slot int, at time.Time) { v.open(slot, true, at) }
 
 // CanAnswer is whether a wake word in slot would open a turn here now: an assistant is there to take it
 // (Home Assistant, or the device's own direct pipeline), the microphones are not talking through a
-// camera, and the slot has a wake word Home Assistant knows it by. A device that could not answer must not
-// claim a wake word over the others (feature/nearest).
+// camera, and the slot has a wake word Home Assistant knows it by. A slot chosen for realtime voice is
+// answered by it alone (backendFor): set up and with minutes left today, whatever Home Assistant is
+// doing. A device that could not answer must not claim a wake word over the others (feature/nearest).
 func (v *Voice) CanAnswer(slot int) bool {
-	if micTaken() || !v.Ready() {
+	if micTaken() {
+		return false
+	}
+	if w := config.Get().Wake.Words; slot >= 0 && slot < len(w) && w[slot].Realtime {
+		return v.turn != nil && v.turn.realtime.Ready()
+	}
+	if !v.Ready() {
 		return false
 	}
 	if config.Get().Brain.Direct() {

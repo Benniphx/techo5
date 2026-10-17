@@ -14,6 +14,9 @@ type openAI struct {
 	base         string
 	defaultModel string
 	defaultVoice string
+	// transcribe is the model that writes down what was heard: OpenAI's own. xAI is sent none, and
+	// writes it down by itself.
+	transcribe string
 }
 
 const openAIRate = 24000
@@ -57,17 +60,20 @@ func (o openAI) setup(c Config) []any {
 		}
 		tools = append(tools, map[string]any{"type": "function", "name": f.Name, "description": f.Description, "parameters": params})
 	}
+	input := map[string]any{
+		"format":         map[string]any{"type": "audio/pcm", "rate": openAIRate},
+		"turn_detection": nil, // the device says when somebody has finished
+	}
+	if o.transcribe != "" {
+		input["transcription"] = map[string]any{"model": o.transcribe}
+	}
 	return []any{map[string]any{
 		"type": "session.update",
 		"session": map[string]any{
 			"type":         "realtime",
 			"instructions": c.Instructions,
 			"audio": map[string]any{
-				"input": map[string]any{
-					"format":         map[string]any{"type": "audio/pcm", "rate": openAIRate},
-					"turn_detection": nil, // the device says when somebody has finished
-					"transcription":  map[string]any{"model": "gpt-4o-mini-transcribe"},
-				},
+				"input": input,
 				"output": map[string]any{
 					"format": map[string]any{"type": "audio/pcm", "rate": openAIRate},
 					"voice":  voice,

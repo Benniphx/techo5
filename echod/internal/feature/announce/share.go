@@ -234,7 +234,6 @@ func shareFailed(addr string, now time.Time) {
 
 // receiveShare takes a message from another device and hands it to feature/share.
 func receiveShare(w http.ResponseWriter, r *http.Request) {
-	// The family build also refuses a device that is Away here, before anything else.
 	now := receiveNow()
 	src := shareSource(r)
 	if r.Method != http.MethodPost {
@@ -286,6 +285,7 @@ func receiveShare(w http.ResponseWriter, r *http.Request) {
 
 // SendShare sends a message to the device of that name, answering its reply.
 func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
+	signed := false // the other device answered signed: a clock it gave is kept
 	word := config.Get().Home.HouseWord
 	if word == "" {
 		return nil, errors.New("this house has no word set")
@@ -324,8 +324,14 @@ func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
 		_ = resp.Body.Close()
 		if resp.StatusCode == http.StatusConflict && try == 0 {
 			if theirs, err := strconv.ParseInt(resp.Header.Get(timeHeader), 10, 64); err == nil {
-				off := time.Until(time.Unix(theirs, 0))
-				setOffset(addr, off)
+				// The time came unsigned: it is kept only once the other device answers signed, by it.
+				was := offsetFor(addr)
+				off := setOffset(addr, time.Until(time.Unix(theirs, 0)), time.Now())
+				defer func() {
+					if !signed {
+						setOffset(addr, was, time.Now())
+					}
+				}()
 				slog.Info("share: signing by another device's clock", "device", p.Name, "off_by", off.Round(time.Second))
 				continue
 			}
@@ -340,6 +346,7 @@ func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
 		if !hmac.Equal([]byte(want), []byte(resp.Header.Get(shareReplyHeader))) {
 			return nil, fmt.Errorf("%s answered without the house's signature", p.Name)
 		}
+		signed = true
 		return reply, nil
 	}
 }

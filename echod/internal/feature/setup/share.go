@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -166,7 +167,7 @@ func (f *Feature) shareForm(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, shareBody)
-	if err := r.ParseForm(); err != nil || r.PostFormValue("token") != token {
+	if err := r.ParseForm(); err != nil || !sameToken(r.PostFormValue("token"), token) {
 		http.Error(w, "that did not come from this page", http.StatusForbidden)
 		return false
 	}
@@ -213,7 +214,11 @@ func (f *Feature) saveShare(w http.ResponseWriter, r *http.Request) {
 				problems = append(problems, err.Error())
 			}
 		}
-		for _, id := range r.PostForm["id"] {
+		// Every setting at once: a device that has gone and is still listed takes sendWithin to give up on,
+		// and one after another the page would wait that long for each setting linked with it.
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		for _, id := range slices.Compact(slices.Sorted(slices.Values(r.PostForm["id"]))) {
 			if !share.Shareable(id) {
 				continue
 			}
@@ -222,19 +227,27 @@ func (f *Feature) saveShare(w http.ResponseWriter, r *http.Request) {
 			if sameDevices(want, cur.Linked(id)) && len(cur.Waiting[id]) == 0 {
 				continue
 			}
-			results, err := share.Get().Link(ctx, id, want)
-			if err != nil {
-				problems = append(problems, err.Error())
-				continue
-			}
-			for d, outcome := range results {
-				switch outcome {
-				case share.Applied, share.Linked, share.Asked:
-				default:
-					problems = append(problems, fmt.Sprintf("%s: %s (%s)", d, shareName(id), orUnreachable(outcome)))
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				results, err := share.Get().Link(ctx, id, want)
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					problems = append(problems, err.Error())
+					return
 				}
-			}
+				for d, outcome := range results {
+					switch outcome {
+					case share.Applied, share.Linked, share.Asked:
+					default:
+						problems = append(problems, fmt.Sprintf("%s: %s (%s)", d, shareName(id), orUnreachable(outcome)))
+					}
+				}
+			}()
 		}
+		wg.Wait()
+		sort.Strings(problems)
 	}
 	slog.Info("setup page: shared settings saved", "on", on)
 	to := back("general", "saved", "1")

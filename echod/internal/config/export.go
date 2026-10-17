@@ -173,6 +173,18 @@ func Restored(cur Config, file []byte, model string) (Restoration, error) {
 	c.moveSounds()
 	c.rescaleNightLight()
 
+	// A file from before realtime voice says nothing about it: the device's own is kept, the slots chosen
+	// for it with it, rather than taken for one that turns it off.
+	var sections map[string]json.RawMessage
+	if json.Unmarshal(f.Settings, &sections) == nil {
+		if _, ok := sections["realtime"]; !ok {
+			c.Realtime = cur.Realtime
+			for i := range c.Wake.Words {
+				c.Wake.Words[i].Realtime = i < len(cur.Wake.Words) && cur.Wake.Words[i].Realtime
+			}
+		}
+	}
+
 	// What the file names that only the device that made it can fill in: its calendar links and paired
 	// computers have their addresses and keys taken out, and the device's own are kept in their place.
 	var missing []string

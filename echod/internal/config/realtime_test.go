@@ -1,7 +1,9 @@
 package config
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -75,6 +77,14 @@ func TestRealtimeWriter(t *testing.T) {
 		t.Fatalf("a new day did not start over: %+v", r)
 	}
 
+	// A slot with no wake word is not made by choosing it.
+	n := len(st.Get().Wake.Words)
+	if err := st.Set().Wake(n + 1).Realtime(true); err == nil || len(st.Get().Wake.Words) != n {
+		t.Fatalf("an empty slot was made: %v, %d words", err, len(st.Get().Wake.Words))
+	}
+	if err := st.Set().Wake(1).ID("hey_jarvis"); err != nil {
+		t.Fatal(err)
+	}
 	if err := st.Set().Wake(1).Realtime(true); err != nil {
 		t.Fatal(err)
 	}
@@ -104,5 +114,35 @@ func TestARestoreThatMovesRealtimeChoosesNoSlot(t *testing.T) {
 	r, _ = Restored(here, file, "")
 	if r.Config.Wake.Words[0].Realtime {
 		t.Fatal("a file sent the slot's voice to its own relay")
+	}
+}
+
+// A file from before realtime voice leaves the device's realtime voice as it was: provider, key and slots.
+func TestARestoreFromBeforeRealtimeKeepsIt(t *testing.T) {
+	here := Defaults()
+	here.Realtime = Realtime{Provider: "gemini", Key: "g-mine", Endpoint: "wss://relay.example/rt"}
+	here.Wake.Words = []WakeWord{DefaultWakeWord()}
+	here.Wake.Words[0].Realtime = true
+
+	from := Defaults()
+	from.Wake.Words = []WakeWord{DefaultWakeWord()}
+	file, _ := Export(from, "", "v0")
+	var f map[string]json.RawMessage
+	_ = json.Unmarshal(file, &f)
+	var settings map[string]json.RawMessage
+	_ = json.Unmarshal(f["settings"], &settings)
+	delete(settings, "realtime")
+	f["settings"], _ = json.Marshal(settings)
+	old, _ := json.Marshal(f)
+
+	r, err := Restored(here, old, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rt := r.Config.Realtime; rt.Provider != "gemini" || rt.Key != "g-mine" || rt.Endpoint != here.Realtime.Endpoint {
+		t.Fatalf("%+v", rt)
+	}
+	if !r.Config.Wake.Words[0].Realtime || slices.Contains(r.Reenter, "realtime voice's key") {
+		t.Fatalf("slot %v, re-enter %v", r.Config.Wake.Words[0].Realtime, r.Reenter)
 	}
 }

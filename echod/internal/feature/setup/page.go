@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"crypto/subtle"
 	"fmt"
 	"html"
 	"log/slog"
@@ -210,7 +211,7 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 	}
 	// The form carries the session it came from, so a page on another site cannot post here with a
 	// browser's cookie.
-	if r.PostFormValue("token") != token {
+	if !sameToken(r.PostFormValue("token"), token) {
 		slog.Warn("setup page: a save arrived without the page's own token")
 		http.Error(w, "that form did not come from this page", http.StatusForbidden)
 		return
@@ -822,4 +823,9 @@ func deviceName() string {
 		return n
 	}
 	return layout.DefaultName
+}
+
+// sameToken is whether a form's token is the page's, compared in the same time whatever it holds.
+func sameToken(got, token string) bool {
+	return subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1
 }

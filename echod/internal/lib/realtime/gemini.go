@@ -10,7 +10,10 @@ import (
 )
 
 // gemini is Google's Gemini Live API.
-type gemini struct{}
+type gemini struct {
+	// heard is what was heard of the question so far (hear); it is read on one goroutine at a time.
+	heard *strings.Builder
+}
 
 const (
 	geminiBase  = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
@@ -113,6 +116,27 @@ func (g gemini) toolResult(callID, name, output string) []any {
 	}}}}
 }
 
+// hear keeps a piece of what was heard. Gemini sends the words as they are made out, a few letters at a
+// time ("Ho", "w", " are"): they are said as one Heard when the answer starts (flush), so nothing takes
+// the first piece for the whole question.
+func (g gemini) hear(s string) {
+	if g.heard != nil {
+		g.heard.WriteString(s)
+	}
+}
+
+// flush says what was heard so far, if anything, as one Heard.
+func (g gemini) flush(emit func(Event)) {
+	if g.heard == nil || g.heard.Len() == 0 {
+		return
+	}
+	text := strings.TrimSpace(g.heard.String())
+	g.heard.Reset()
+	if text != "" {
+		emit(Event{Kind: Heard, Text: text})
+	}
+}
+
 func (g gemini) read(msg []byte, emit func(Event)) {
 	var m struct {
 		ServerContent *struct {
@@ -148,10 +172,11 @@ func (g gemini) read(msg []byte, emit func(Event)) {
 		return
 	}
 	if sc := m.ServerContent; sc != nil {
-		if sc.InputTranscription != nil && sc.InputTranscription.Text != "" {
-			emit(Event{Kind: Heard, Text: sc.InputTranscription.Text})
+		if sc.InputTranscription != nil {
+			g.hear(sc.InputTranscription.Text)
 		}
 		if sc.OutputTranscription != nil && sc.OutputTranscription.Text != "" {
+			g.flush(emit)
 			emit(Event{Kind: Saying, Text: sc.OutputTranscription.Text})
 		}
 		if sc.ModelTurn != nil {
@@ -160,18 +185,22 @@ func (g gemini) read(msg []byte, emit func(Event)) {
 					continue
 				}
 				if pcm := pcmFrom(p.InlineData.Data); len(pcm) > 0 {
+					g.flush(emit)
 					emit(Event{Kind: Audio, PCM: pcm, Rate: rateOf(p.InlineData.MimeType)})
 				}
 			}
 		}
 		if sc.Interrupted {
+			g.flush(emit)
 			emit(Event{Kind: Interrupt})
 		}
 		if sc.TurnComplete {
+			g.flush(emit)
 			emit(Event{Kind: Done})
 		}
 	}
 	if tc := m.ToolCall; tc != nil {
+		g.flush(emit)
 		for _, f := range tc.FunctionCalls {
 			args := string(f.Args)
 			if args == "" || args == "null" {

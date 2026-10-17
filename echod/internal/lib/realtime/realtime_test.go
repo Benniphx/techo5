@@ -358,3 +358,42 @@ func TestOpenAINothingHeard(t *testing.T) {
 		t.Fatalf("%+v", evs)
 	}
 }
+
+// Gemini's words come a few letters at a time: they are said as one Heard when the answer starts.
+func TestGeminiHeardInPieces(t *testing.T) {
+	cd, _ := codecFor(Gemini)
+	var evs []Event
+	emit := func(e Event) { evs = append(evs, e) }
+	for _, p := range []string{"Ho", "w", " are", " you?"} {
+		cd.read([]byte(`{"serverContent":{"inputTranscription":{"text":"`+p+`"}}}`), emit)
+	}
+	if len(evs) != 0 {
+		t.Fatalf("said before the answer: %+v", evs)
+	}
+	cd.read([]byte(`{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AAAAAA=="}}]}}}`), emit)
+	cd.read([]byte(`{"serverContent":{"turnComplete":true}}`), emit)
+	if kinds(evs) != "heard,audio,done" || evs[0].Text != "How are you?" {
+		t.Fatalf("%s %+v", kinds(evs), evs)
+	}
+	// Words heard and no answer: said at the end of the turn.
+	evs = nil
+	cd.read([]byte(`{"serverContent":{"inputTranscription":{"text":"Hi"}}}`), emit)
+	cd.read([]byte(`{"serverContent":{"turnComplete":true}}`), emit)
+	if kinds(evs) != "heard,done" || evs[0].Text != "Hi" {
+		t.Fatalf("%s %+v", kinds(evs), evs)
+	}
+}
+
+// OpenAI is asked to write down what was heard with its transcription model; xAI is not sent OpenAI's.
+func TestTranscriptionModelIsOpenAIsOnly(t *testing.T) {
+	for _, c := range []struct {
+		provider string
+		want     bool
+	}{{OpenAI, true}, {XAI, false}} {
+		cd, _ := codecFor(c.provider)
+		raw, _ := json.Marshal(cd.setup(Config{}))
+		if got := strings.Contains(string(raw), "gpt-4o-mini-transcribe"); got != c.want {
+			t.Errorf("%s: %s", c.provider, raw)
+		}
+	}
+}
