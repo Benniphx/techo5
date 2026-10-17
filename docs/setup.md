@@ -601,7 +601,7 @@ To do things in the house, add Home Assistant's **Model Context Protocol Server*
 Home Assistant user of its own for it with no administrator rights, and give a long-lived token of that
 user in **Home Assistant token for its MCP server**: the model then has the tools Assist has, for the
 entities exposed to Assist. The token is for that Home Assistant only: when the device is given
-another Home Assistant's address, or one after having none, the token is cleared. Without it, it has the device's own abilities (timers, alarms, the radio,
+another Home Assistant's address, the token is cleared. Leaving Home Assistant clears it too. Without it, it has the device's own abilities (timers, alarms, the radio,
 the volume). Either way the same rule as for the device's own assistant holds: once a turn has read
 the web, a calendar or anything else from outside, nothing that changes anything runs in it, and none
 of the provider's own tools (its web search, code, files) are ever turned on.

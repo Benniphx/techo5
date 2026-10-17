@@ -624,8 +624,9 @@ func (f *Feature) accessAction() *esphome.Action {
 				return nil, err
 			}
 			// Realtime voice's token is for the Home Assistant it was given for: another address does
-			// not get it, nor does the first one given after none (a device that left its last one).
-			if now := hass.Get().Address(); now != was && config.Get().Realtime.MCPToken != "" {
+			// not get it. The first address, at setup, does: a token typed in before it is for it, and
+			// a device that left its last Home Assistant cleared the token then (api's leave).
+			if now := hass.Get().Address(); was != "" && now != was && config.Get().Realtime.MCPToken != "" {
 				_ = config.Set().Realtime().SetMCPToken("")
 				slog.Warn("home: Home Assistant's address changed; realtime voice's token for it was cleared")
 			}
