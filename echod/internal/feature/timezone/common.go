@@ -10,7 +10,7 @@ import (
 // Each has its POSIX rule here too, so it can be put in force on a unit whose image has no zone
 // database: an early install that never had one, which updates only by swapping the daemon and so
 // never got one later. Those rules are the footers of the zones' own zoneinfo files, which is what
-// the database applies after its last listed change, so the two agree from now on (zones_test.go).
+// the database applies after its last listed change, so the two agree from now on (common_test.go).
 var Common = []string{
 	"America/New_York", "America/Chicago", "America/Denver", "America/Phoenix", "America/Los_Angeles",
 	"America/Anchorage", "Pacific/Honolulu", "America/Toronto", "America/Vancouver", "America/Mexico_City",
