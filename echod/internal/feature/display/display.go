@@ -2640,7 +2640,7 @@ func (d *Display) frame() time.Duration {
 
 	// The Call button is on the clock itself and only there: on any other page a tap where it would be
 	// still does what that page does.
-	s.callButton = callButton.Load() && s.phase == "idle" && !s.nowPlaying && !s.strip && !s.showWeather && !s.showCalendar && !s.showDeck &&
+	s.callButton = callButton.Load() && hasMicrophone() && s.phase == "idle" && !s.nowPlaying && !s.strip && !s.showWeather && !s.showCalendar && !s.showDeck &&
 		s.sunrise == 0 && s.slideshowScreensaver == nil && !s.showDrawer && !s.showSheet
 	d.mu.Lock()
 	d.callShown = s.callButton

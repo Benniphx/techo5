@@ -65,9 +65,32 @@ func TestListedListeningEntitiesExist(t *testing.T) {
 			t.Errorf("no feature makes an entity %q", id)
 		}
 	}
+	for name := range listeningActions {
+		if !strings.Contains(all, `Name: "`+name+`"`) {
+			t.Errorf("no feature makes an action %q", name)
+		}
+	}
 	for _, p := range listeningPrefixes {
 		if !strings.Contains(all, `"`+p+`%d"`) {
 			t.Errorf("no feature makes entities %q%%d", p)
 		}
+	}
+}
+
+// On a device that cannot hear, the phone's actions go (signing in, calling) and the rest stay.
+func TestCallActionsAreDropped(t *testing.T) {
+	var in []*esphome.Action
+	for _, n := range []string{"phone_account", "announce", "phone_call", "intercom_call", "alarm_set", "phone_hangup"} {
+		in = append(in, &esphome.Action{Name: n})
+	}
+	var got []string
+	for _, a := range dropCallActions(in) {
+		got = append(got, a.Name)
+	}
+	if strings.Join(got, ",") != "announce,alarm_set" {
+		t.Fatalf("kept %v, want [announce alarm_set]", got)
+	}
+	if len(in) != 6 {
+		t.Error("dropCallActions changed the list it was given")
 	}
 }

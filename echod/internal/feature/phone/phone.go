@@ -318,6 +318,15 @@ func fire(event string, st State, extra ...string) {
 func (p *Phone) Run(ctx context.Context) error {
 	// The bell is a lot of sums. Built here, off the call's path, a first call or intercom ring takes
 	// the speaker at once rather than after them.
+	if !layout.HasMicrophone() {
+		// A device without microphones could ring but never talk back, so it never signs in, and a
+		// login saved before this build is removed rather than kept unused.
+		if err := saveAccount(Account{}); err != nil {
+			slog.Error("phone: removing the account", "err", err)
+		}
+		<-ctx.Done()
+		return nil
+	}
 	safe.Go("phone: build the bell", func() { bellRing() })
 	for {
 		acct, err := loadAccount()

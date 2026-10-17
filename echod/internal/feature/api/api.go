@@ -197,7 +197,7 @@ func (a *API) Start(ctx context.Context) error {
 	if err := ents.Add(heard(component.Default().Entities())...); err != nil {
 		return err
 	}
-	if err := ents.AddActions(component.Default().Actions()...); err != nil {
+	if err := ents.AddActions(heardActions(component.Default().Actions())...); err != nil {
 		return err
 	}
 

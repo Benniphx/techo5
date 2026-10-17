@@ -22,6 +22,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/sealed"
 )
@@ -67,7 +68,9 @@ const (
 	msgBye     = 'X' // hung up
 )
 
-func intercomOpen() bool { return config.Get().Home.HouseWord != "" }
+// A device without microphones (the Skylight Calendar) neither takes nor makes intercom calls: it could
+// not talk back.
+func intercomOpen() bool { return layout.HasMicrophone() && config.Get().Home.HouseWord != "" }
 
 func intercomKey() []byte { return sealed.Key(intercomLabel, config.Get().Home.HouseWord) }
 

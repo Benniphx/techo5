@@ -38,7 +38,13 @@ var listeningObjects = map[string]bool{
 	"cancel_request": true,
 	// feature/phone: calls and the intercom
 	"phone": true, "phone_answer": true, "phone_hangup": true, "phone_peer": true, "phone_ring_sound": true,
-	"intercom_drop_in": true, "intercom_do_not_disturb": true,
+	"intercom_drop_in": true, "intercom_do_not_disturb": true, "screen_call_button": true,
+}
+
+// listeningActions are the actions that need a microphone: signing the phone in, and calling.
+var listeningActions = map[string]bool{
+	"phone_account": true, "phone_call": true, "phone_contacts": true, "intercom_call": true,
+	"phone_answer": true, "phone_hangup": true,
 }
 
 var listeningPrefixes = []string{
@@ -73,6 +79,25 @@ func dropListening(ents []esphome.Entity) []esphome.Entity {
 	for _, e := range ents {
 		if !listening(e.Object()) {
 			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// heardActions is the actions to offer: all of them on a device that can hear, those not about
+// calls on one that cannot.
+func heardActions(acts []*esphome.Action) []*esphome.Action {
+	if layout.HasMicrophone() {
+		return acts
+	}
+	return dropCallActions(acts)
+}
+
+func dropCallActions(acts []*esphome.Action) []*esphome.Action {
+	out := acts[:0:0]
+	for _, a := range acts {
+		if !listeningActions[a.Name] {
+			out = append(out, a)
 		}
 	}
 	return out
