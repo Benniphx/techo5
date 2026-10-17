@@ -6,7 +6,9 @@
 The unlock check before the flash (#168) and what the wait for the rescue console says about where
 the unit is (#166), with adb and fastboot stood in for.
 """
+import contextlib
 import importlib.util
+import io
 import os
 import sys
 import tempfile
@@ -32,6 +34,31 @@ class Getvar(unittest.TestCase):
         out = "getvar:kaeru-version FAILED (remote: 'GetVar Variable Not found')\nFinished. Total time: 0.001s"
         self.assertEqual(inst.getvar(out, 'kaeru-version'), '')
         self.assertEqual(inst.getvar('kaeru-version:\nFinished.', 'kaeru-version'), '')
+
+
+class ScriptFastboot:
+    """A fastboot stood in for by a short Python script, run as the real one would be."""
+    serial = 'SERIAL1'
+
+    def __init__(self, script):
+        self.base = [sys.executable, '-c', script]
+
+
+class FastbootGetvar(unittest.TestCase):
+    def test_answer(self):
+        fb = ScriptFastboot('import sys; print("kaeru-version: 2.0.0"); print("Finished.")')
+        self.assertEqual(inst.fastboot_getvar(fb, 'kaeru-version'), '2.0.0')
+
+    def test_asked_of_the_unit(self):
+        fb = ScriptFastboot('import sys; print("unlock_status: " + " ".join(sys.argv[1:]))')
+        self.assertEqual(inst.fastboot_getvar(fb, 'unlock_status'), '-s SERIAL1 getvar unlock_status')
+
+    def test_no_answer_in_time_is_not_reported(self):
+        # A bootloader that sits on the question must not hold up the install for good.
+        fb = ScriptFastboot('import time; time.sleep(30)')
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(inst.fastboot_getvar(fb, 'kaeru-version', seconds=1), '')
+        self.assertIn('no answer', out.getvalue())
 
 
 class UnlockProblem(unittest.TestCase):

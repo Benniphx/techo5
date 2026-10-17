@@ -48,6 +48,7 @@ import glob
 import hashlib
 import os
 import re
+import subprocess
 import sys
 import zipfile
 
@@ -357,6 +358,23 @@ def getvar(out, name):
     return m.group(1) if m else ''
 
 
+# How long a getvar is given. A bootloader that does not know a variable can sit on the question
+# rather than refuse it, and Fastboot.run waits for good; the answer is only a check, so a wait this
+# long is taken as no answer and the install goes on.
+GETVAR_SECONDS = 10
+
+
+def fastboot_getvar(fastboot, name, seconds=GETVAR_SECONDS):
+    """fastboot getvar <name> on the unit, or '' when it gives no value or no answer within seconds."""
+    try:
+        r = subprocess.run(fastboot.base + ['-s', fastboot.serial, 'getvar', name],
+                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=seconds)
+    except subprocess.TimeoutExpired:
+        note('fastboot getvar %s gave no answer in %d s; taken as not reported' % (name, seconds))
+        return ''
+    return getvar(r.stdout.decode('utf-8', 'replace'), name)
+
+
 def unlock_problem(dev, kaeru, unlocked):
     """Why this unit's unlock is not the one the install is tested on, or '' when nothing says so. kaeru
     and unlocked are fastboot's kaeru-version and unlock_status, '' when it did not answer: a unit on the
@@ -637,8 +655,8 @@ def main():
     adb.reboot('bootloader')
     wait_for('fastboot', 90, fastboot.present, 3)
     if dev == 'cronos':
-        kaeru = getvar(fastboot.run('getvar', 'kaeru-version')[1], 'kaeru-version')
-        unlocked = getvar(fastboot.run('getvar', 'unlock_status')[1], 'unlock_status')
+        kaeru = fastboot_getvar(fastboot, 'kaeru-version')
+        unlocked = fastboot_getvar(fastboot, 'unlock_status')
         why = unlock_problem(dev, kaeru, unlocked)
         if why and not a.any_unlock:
             fail("this unit's unlock is not the one TECHO5 is tested on: %s.\n%s\n"
