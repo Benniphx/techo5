@@ -489,6 +489,15 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   camera stills come back, or restart.
   The v1.0.1 boot image fixes it ([updating the boot image](install.md#updating-the-boot-image)); with
   it, holding the button mutes like a tap. The 2nd gen Show 5 is not affected.
+- **Person detection** (Show and Spot, experimental, off by default; the **Person detection** switch in
+  Home Assistant, which works only with Presence detection on): tells a person from anything else
+  that moves, such as a curtain, a pet or the light changing. While Presence has seen movement, a small
+  model looks at the camera's picture twice a second, as 96 by 96 shades of gray, on the device, and
+  Home Assistant gets a **Person** sensor (occupancy). It turns on after three looks in a row that are
+  more person than not, and stays on for a minute after the last such look. The model is TensorFlow's
+  person detection example: small enough for these processors, and a modest judge. It often misses a
+  person far from the camera or half out of the picture, and it has not yet been tried on a device.
+  Nothing it sees is kept or sent.
 - **Gestures** (Show and Spot, experimental, off by default; the **Gestures** switch in Home
   Assistant): cover the camera with your palm, hand on or almost on the lens, for half a second to
   three seconds. It stops a ringing alarm or timer, and Home Assistant gets an `esphome.techo5_gesture`
