@@ -73,7 +73,9 @@ echo "== building for armv7 ($VERSION)"
 export GOOS=linux GOARCH=arm GOARM=7 CGO_ENABLED=0
 pkg=github.com/HuskerMinion/techo5/echod/internal/layout
 commit=$(git -C "$ROOT" rev-parse --short HEAD)
-date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# BUILD_DATE fixes the date stamped in the daemon, so two images built from one commit (the Show's and
+# the Skylight's, made in one run) carry the same daemon, byte for byte.
+date=${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}
 if [ -n "${PREBUILT_DAEMON:-}" ]; then
 	# Only what CI built from this release's own tag (spot-vX.Y.Z for BUILD_TAGS=spot): anything else
 	# carries another version, and Home Assistant would offer the update forever after it installed.
