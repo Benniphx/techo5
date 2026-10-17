@@ -85,6 +85,9 @@ type Source struct {
 	wasDenoising bool
 	denoising    atomic.Bool
 
+	// noise measures the room for the ambient noise sensor, while that is on.
+	noise noiseMeter
+
 	// Which way the loudest sound is, as a beam, or -1 until something asks. finder belongs to the
 	// reader; wantFacing is how anything else asks it to look.
 	finder     *Beamformer
@@ -424,6 +427,9 @@ func (s *Source) broadcast(raw []byte) {
 	// a pool or a ring would save nothing worth measuring — and a ring would have to be sized against
 	// how far behind a listener may fall, which is the thing this is fixing.
 	frame = append([]int16(nil), frame...)
+
+	// Before the noise reduction and the leveling, which would take the room out and put gain back on.
+	s.noise.add(raw, frame)
 
 	s.findFacing(mics)
 

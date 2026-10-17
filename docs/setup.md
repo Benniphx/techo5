@@ -656,6 +656,28 @@ light-only alarm always has a light: its own, the default, or 30 minutes when bo
 editor's **Wake with light** row shows the minutes it gets. On a Dot, which has no screen, it is the
 light ring's sunrise and nothing else: no sound, and no night to end.
 
+### How loud the room is
+
+**Ambient noise sensor** (a switch of the device's in Home Assistant, under its configuration; off
+on a new device) gives Home Assistant an **Ambient noise** sensor: how loud the room has been over
+the last five seconds, in dBFS, rounded to a whole decibel and sent when it moves by 2 or more. Use
+it to turn the voice down when the house is quiet at night, or to notice the TV is on in another
+room. Only the number leaves the microphones, never sound, and with the switch off the sensor reads
+unknown.
+
+It holds its last reading while the device makes a sound of its own (an answer, music, an
+announcement, a ring) and for a second after, and through a voice request, a call or a talk through
+a camera, so the device's own voice and yours talking to it never show in it. It reads unknown while
+the microphones are muted.
+
+dBFS is measured against the loudest sound the microphones can take, which is 0, so a room reads
+below it, and a quieter room reads lower. It is not a calibrated sound level. **Microphone gain**
+moves it by the same number of decibels, and **Microphone mixing** moves it too: **All microphones**
+and **Delay and sum** read a steady room lower than **Center mic** does, and **Beamformer** (offered
+on some devices) leans toward the loudest thing in the room. Set both first, then watch the sensor
+for a day to learn your room's quiet and loud readings. Sound from another speaker in the room
+counts, like any other noise.
+
 ## 8. Settings lock
 
 A **settings lock** (Show and Spot, off by default) is a PIN the device asks for before its settings
