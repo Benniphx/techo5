@@ -435,6 +435,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		calendarLinksSection(w, token)
 	case "privacy":
 		lockSection(w, token)
+		camStreamSection(w, token)
 		privacySection(w)
 		remoteSection(w, token)
 	case "general":

@@ -20,6 +20,7 @@ import (
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/busy"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/buttons"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/camera"
+	_ "github.com/HuskerMinion/techo5/echod/internal/feature/camstream"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/clap"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	_ "github.com/HuskerMinion/techo5/echod/internal/feature/deck"

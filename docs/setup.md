@@ -211,6 +211,55 @@ automation that wants to know too.
 > way. Whether a view-only user may follow the Hub's events has not been tried: if the Doorbell
 > section says the login was refused, use an administrator's.
 
+### Recording this device's camera
+
+The camera of a Show or a Spot can be recorded like any other camera, by Frigate, go2rtc or an NVR, from
+`rtsp://<device address>:8554/camera`. It is off on a new device.
+
+1. On the setup page, under **Privacy & Security** → **Camera streaming**, set a password (8
+   characters or more) and, if you like, a user name (`camera` unless changed). Save. The password is
+   never shown again; leave the field empty to keep it.
+2. Turn on **Camera streaming**, a switch of the device's in Home Assistant, under its configuration.
+
+It never runs without a password. Turning it off, saving a new login and closing the lens cover each
+cut off whoever is watching; the mute button stops the picture, as it stops the camera everywhere else.
+While somebody is being sent the camera, a Show draws a small green dot in the top right corner of the
+screen, over everything; a Spot shows its camera dot, as it does whenever its camera runs.
+
+Two viewers at most watch at once, at up to 10 pictures a second. The login is checked with Digest, so
+the password does not cross the network in the clear, but the picture itself is not encrypted, and
+Digest is MD5: somebody on your network who records a login can try passwords against it offline. Use a
+long password of its own, not one you use anywhere else. An address that gets the login wrong 10 times
+is refused for 15 minutes. That is by address: a guesser who can change addresses (IPv6 lets a device
+pick many) is slowed rather than stopped, and a recorder that shares an address with one (behind the
+same router, say) is refused with it.
+
+The device has no video encoder, so the stream is a series of JPEGs (RTP/JPEG, over TCP only), not
+H.264. ffmpeg, and Frigate and go2rtc with it, read it; a recorder that wants H.264 has to re-encode it,
+which in Frigate is an ffmpeg output argument:
+
+```yaml
+cameras:
+  kitchen_show:
+    ffmpeg:
+      inputs:
+        - path: rtsp://camera:<password>@<device address>:8554/camera
+          input_args: -rtsp_transport tcp
+          roles: [detect, record]
+      output_args:
+        record: -c:v libx264 -preset veryfast -an -f segment -segment_time 10 -segment_format mp4 -reset_timestamps 1 -strftime 1
+```
+
+A recorder that adds cameras by ONVIF can take it from `http://<device address>:8181/onvif/device_service`
+with the same login: one profile, its stream, and its snapshot while **Camera web access** is on. The
+snapshot is the camera page's `/camera.jpg`, which asks for no login and does not light the green dot:
+it is there for anybody on the network whenever Camera web access is on, ONVIF or not. The
+device is not found by ONVIF discovery: give the recorder its address. ONVIF here is a login digest over
+plain HTTP, as on most cameras, and the password itself is never sent.
+
+So far it has been tried off the device only, with
+ffmpeg and an ONVIF client library, not against a recorder on a device.
+
 ## 5. Music
 
 - **Music Assistant.** Each device is a Sendspin player, on from the first boot. Music Assistant
