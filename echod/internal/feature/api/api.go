@@ -25,7 +25,6 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/bluetooth"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/led"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
@@ -195,7 +194,7 @@ func (a *API) Start(ctx context.Context) error {
 
 	device := config.Get().Device
 	ents := esphome.NewEntities()
-	if err := ents.Add(component.Default().Entities()...); err != nil {
+	if err := ents.Add(heard(component.Default().Entities())...); err != nil {
 		return err
 	}
 	if err := ents.AddActions(component.Default().Actions()...); err != nil {
@@ -215,7 +214,7 @@ func (a *API) Start(ctx context.Context) error {
 		Model:             layout.Model + " · TECHO5 " + layout.Version,
 		Version:           ESPHomeCompat,
 		ESPHomeVersion:    ESPHomeCompat,
-		VoiceFeatures:     voice.Features,
+		VoiceFeatures:     voiceFeatures(),
 		BluetoothFeatures: bluetooth.Get().Features(),
 
 		Devices: subDevices(device.Name),

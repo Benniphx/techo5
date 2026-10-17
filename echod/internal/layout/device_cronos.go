@@ -102,6 +102,10 @@ func Athena() bool { return Board == boardAthena }
 // no microphone, a speaker on the RK809's headphone outputs.
 func Skylight() bool { return Board == boardSkylight }
 
+// HasMicrophone is whether the device can hear: every Show but the Skylight, which was built
+// without microphones.
+func HasMicrophone() bool { return !Skylight() }
+
 // Show8 is whether the screen is the Show 8's: an 800 by 1280 portrait panel in a 1280 by 800
 // landscape device, with a FocalTech touch controller behind it. Both generations have it.
 func Show8() bool { return Crown() || Athena() }
