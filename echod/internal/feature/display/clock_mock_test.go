@@ -37,7 +37,7 @@ func TestMockClockCorners(t *testing.T) {
 	for _, panel := range []struct {
 		name       string
 		wide, high int
-	}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}} {
+	}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}, {"skylight", skylightWide, skylightHigh}} {
 		var tiles []mockTile
 		for _, st := range clockStyles {
 			if err := config.Set().Screen().ClockStyle(st.value); err != nil {

@@ -31,7 +31,7 @@ func TestTheVideoPage(t *testing.T) {
 	for _, panel := range []struct {
 		name       string
 		wide, high int
-	}{{"", showWide, showHigh}, {"-show8", show8Wide, show8High}} {
+	}{{"", showWide, showHigh}, {"-show8", show8Wide, show8High}, {"-skylight", skylightWide, skylightHigh}} {
 		scenes := map[string]scene{
 			"video-picture":  {video: playing, showVideo: true, videoLive: true},
 			"video-controls": {video: playing, showVideo: true, videoLive: true, videoControls: true},

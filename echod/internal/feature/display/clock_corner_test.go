@@ -43,7 +43,7 @@ func TestACornerDateStaysInItsCorner(t *testing.T) {
 			for _, panel := range []struct {
 				name       string
 				wide, high int
-			}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}} {
+			}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}, {"skylight", skylightWide, skylightHigh}} {
 				r := newRenderer(image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high)))
 				r.draw(s)
 				if r.dateAt.Empty() {

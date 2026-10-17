@@ -33,9 +33,6 @@ const (
 
 	Manufacturer = "TECHO5"
 
-	// DefaultName is the fallback display name when a device has none recorded.
-	DefaultName = "Echo Show"
-
 	// LogPath is where techo5-run sends the daemon's output, and BootLog what the boot script kept
 	// of its own run. Both are what a diagnostics bundle reads.
 	LogPath = "/data/techo5-linux/techo5.log"
@@ -65,6 +62,9 @@ var (
 		boardAthena:   "Echo Show 8 2nd gen (athena)",
 		boardSkylight: "Skylight Calendar 15 (150-CAL)",
 	}[Board]
+
+	// DefaultName is the fallback display name when a device has none recorded.
+	DefaultName = map[bool]string{false: "Echo Show", true: "Skylight Calendar"}[Board == boardSkylight]
 )
 
 const (
