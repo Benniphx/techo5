@@ -179,7 +179,7 @@ func (v *Voice) ShowEffect(name string) error {
 	if !v.turn.Busy() {
 		return nil
 	}
-	v.turn.post(event{kind: evEffect, text: name})
+	v.turn.askEffect(name)
 	return nil
 }
 

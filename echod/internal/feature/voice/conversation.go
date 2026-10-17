@@ -93,7 +93,7 @@ const (
 	evSpokeEnd                     // the device heard the speaker finish; text is the turn's id
 	evLookHere                     // the answer put something on the screen: no listening again after it
 	evCutOff                       // another sound took the speaker from the reply (event.reply)
-	evEffect                       // an effect asked for the step the turn is in (event.text, ShowEffect)
+	evEffect                       // an effect asked for the step the turn is in (c.effect, askEffect)
 	evWakeStart                    // Home Assistant's wake word engine is listening (hawake.go)
 	evWakeEnd                      // and has heard the word
 	evUnconfirmed                  // a wake asked about was not heard in time
@@ -164,6 +164,12 @@ type conversation struct {
 
 	// hears is Home Assistant listening for the first slot's wake word, so a candidate is not asked about.
 	hears atomic.Bool
+
+	// effect is the latest effect asked for (askEffect), and effectPosted whether an evEffect is on
+	// its way to draw it: an automation asking over and over has one event in the queue at a time,
+	// so it cannot crowd out the pipeline's own.
+	effect       atomic.Pointer[string]
+	effectPosted atomic.Bool
 
 	// now is the clock, for tests.
 	now func() time.Time
@@ -474,7 +480,10 @@ func (c *conversation) turnEvent(e event) {
 		}
 
 	case evEffect:
-		c.showEffect(e.text)
+		c.effectPosted.Store(false)
+		if name := c.effect.Load(); name != nil {
+			c.showEffect(*name)
+		}
 
 	case evContinue:
 		// The pipeline asked a question. Its answer is owed after the reply has been spoken, so this
@@ -993,6 +1002,21 @@ func (c *conversation) idle(why string, how activity.Ending) {
 	}
 }
 
+// askEffect has the loop show name for the step the turn is in (Voice.ShowEffect). Only the latest
+// name asked for is kept, and only one event is posted until the loop has taken it.
+func (c *conversation) askEffect(name string) {
+	c.effect.Store(&name)
+	if c.effectPosted.Swap(true) {
+		return
+	}
+	select {
+	case c.events <- event{kind: evEffect}:
+	default:
+		c.effectPosted.Store(false)
+		slog.Warn("conversation event dropped", "kind", evEffect, "phase", c.Phase())
+	}
+}
+
 // showEffect puts name on the ring for the step the turn is in (Voice.ShowEffect): Default, or no
 // name, draws the step as entering it did, and None clears it. A turn that has ended shows nothing.
 func (c *conversation) showEffect(name string) {
@@ -1024,12 +1048,16 @@ func (c *conversation) restyle() {
 }
 
 // showPhase runs a phase's override, or the wake word's own animation reversed when there is none.
-// None is an answer of its own: the ring stays out of that phase.
+// None is an answer of its own: the ring stays out of that phase. A wake word with no animation
+// leaves the ring clear, which also takes off an effect an automation put up for the step before
+// (showEffect).
 func (c *conversation) showPhase(override string) {
 	switch override {
 	case "":
 		if effect := wakeword.Effect(c.slot); effect != "" {
 			c.claim.PlayReversed(effect, c.ring.Base())
+		} else {
+			c.claim.Clear()
 		}
 	case component.EffectNone:
 		c.claim.Clear()
