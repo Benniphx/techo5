@@ -20,7 +20,12 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/triggers"
 )
 
-func init() { voice.SetThink(Get().Think) }
+func init() {
+	voice.SetThink(Get().Think)
+	// Realtime voice runs its model's calls under the same lockout, with the same instructions.
+	voice.SetRealtime(func() voice.ToolGate { return NewTurnGate() },
+		func() string { return instructions(config.Get().Brain, time.Now()) })
+}
 
 // rounds bounds how many times one turn may go back to the model with tool results: a model that
 // keeps asking for tools is not going to stop by being asked once more.

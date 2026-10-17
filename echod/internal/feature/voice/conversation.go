@@ -144,7 +144,9 @@ type conversation struct {
 	// running against (backend.go). be is chosen as a turn opens and is only the loop's to change.
 	ha     ha
 	direct *direct
-	be     backend
+	// realtime answers a slot chosen for realtime voice (realtime.go).
+	realtime *rtBackend
+	be       backend
 
 	source  *mic.Source
 	speaker *speaker.Player
@@ -340,6 +342,7 @@ func newConversation(vs *esphome.VoiceSatellite) *conversation {
 	}
 	c.ha = ha{vs: vs, watch: c.startWatch}
 	c.direct = newDirect(c.post)
+	c.realtime = newRealtime(c.post)
 	c.be = c.ha
 
 	vs.OnPipelineEvent = c.pipeline
@@ -534,8 +537,8 @@ func (c *conversation) turnEvent(e event) {
 			slot, opened := c.slot, c.opened
 			c.clearPending()
 			c.idle("woken by mistake", activity.NoSpeech)
-			// The built-in brain stops at once and sends nothing more.
-			if _, here := c.be.(*direct); !here {
+			// The built-in brain and realtime voice stop at once and send nothing more.
+			if !c.stopsAtOnce() {
 				c.draining = true
 				c.grace = time.NewTimer(drainFor)
 			}
@@ -803,7 +806,7 @@ func (c *conversation) start(n nextTurn) bool {
 	}
 
 	// A run Home Assistant's engine heard the word in is its own, whatever the brain.
-	c.be = c.backendFor()
+	c.be = c.backendFor(slot)
 	if n.continued {
 		c.be = c.ha
 	}
