@@ -75,16 +75,27 @@ func Redactor() *redact.Redactor {
 	return r
 }
 
-// secrets is the settings that are secrets in themselves, and the login in the go2rtc server's address.
+// secrets is the settings that are secrets in themselves, and the login in the go2rtc server's address,
+// those of them long enough to take out. A short one is left: replacing "admin" or a short house word
+// wherever it appears would take words out all over the bundle, and show where the word is.
 func secrets(c config.Config) []string {
-	s := []string{c.CamStream.Pass, c.Remote.Secret, c.Home.HouseWord, c.Home.Immich.Key, c.Home.Reolink.Pass,
+	all := []string{c.CamStream.Pass, c.Remote.Secret, c.Home.HouseWord, c.Home.Immich.Key, c.Home.Reolink.Pass,
 		c.Brain.Key, c.Dashboard.Key, c.MusicAssistant.Token, c.Deck.OBS.Password}
 	if u, err := url.Parse(c.Home.Go2RTC.Base); err == nil && u.User != nil {
 		pass, _ := u.User.Password()
-		s = append(s, u.User.Username(), pass)
+		all = append(all, u.User.Username(), pass)
+	}
+	var s []string
+	for _, v := range all {
+		if len([]rune(strings.TrimSpace(v))) >= shortestSecret {
+			s = append(s, v)
+		}
 	}
 	return s
 }
+
+// shortestSecret is how long a secret has to be to be taken out of the bundle wherever it appears.
+const shortestSecret = 8
 
 // Bundle is the whole thing as text, ready to be sent to somebody.
 func Bundle() string {
