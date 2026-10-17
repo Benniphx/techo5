@@ -208,3 +208,22 @@ func TestAthenasPlaybackRingFits(t *testing.T) {
 		t.Errorf("playback ring %d bytes, the driver's block is %d", bytes, athenaRingMax)
 	}
 }
+
+// The Skylight's speaker is the RK809 codec's headphone outputs feeding an external amplifier: the
+// SPKO path was silent on the unit. The mux has to name HP, and the codec runs at its 0 dB top (255)
+// with the volume in software.
+func TestTheSkylightPlaysThroughTheHeadphoneOutputs(t *testing.T) {
+	want := map[string]kctl{
+		"Playback Mux":           {name: "Playback Mux", value: "HP"},
+		"Master Playback Volume": {name: "Master Playback Volume", level: 255},
+	}
+	if len(skylightInit) != len(want) {
+		t.Fatalf("%d writes, want %d: %+v", len(skylightInit), len(want), skylightInit)
+	}
+	for _, c := range skylightInit {
+		w, ok := want[c.name]
+		if !ok || c.value != w.value || c.level != w.level || c.ifPresent {
+			t.Errorf("write %+v, want %+v", c, w)
+		}
+	}
+}

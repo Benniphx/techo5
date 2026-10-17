@@ -150,7 +150,8 @@ func Open() (*Device, error) {
 	// On TECHO5's mainline kernel /dev/fb0 can be DRM's fbdev emulation (mediatek-drm), which sets no
 	// mode of its own while there is no console on it: unblanking does, so the panel shows this buffer
 	// even before the first pan. simple-framebuffer has no blank operation and says EINVAL; that is fine.
-	if layout.AthenaMainline() {
+	// The Skylight's rockchip-drm fbdev emulation is the same kind.
+	if layout.AthenaMainline() || layout.Skylight() {
 		_ = ioctl(f.Fd(), fbioBlank, nil)
 	}
 
@@ -387,11 +388,34 @@ const (
 	mainlineBacklightMax  = 1023
 )
 
+// The Skylight's pwm-backlight has as many steps as its device tree's interpolated level table
+// gives (235 for brightness-levels 20..255): the top is read from the driver, not assumed.
+const (
+	skylightBacklightDir = "/sys/class/backlight/backlight"
+	skylightBacklightMax = 235
+)
+
 func backlightNode() (path string, top int) {
 	if layout.AthenaMainline() {
 		return mainlineBacklightPath, mainlineBacklightMax
 	}
+	if layout.Skylight() {
+		return skylightBacklightDir + "/brightness", readTop(skylightBacklightDir+"/max_brightness", skylightBacklightMax)
+	}
 	return backlightPath, BacklightMax
+}
+
+// readTop is a backlight's max_brightness, or fallback where it cannot be read or is not positive.
+func readTop(path string, fallback int) int {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return fallback
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 // SetBacklight sets the panel's backlight, 0 (off) to BacklightMax.

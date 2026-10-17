@@ -76,6 +76,10 @@ func (s *Sensor) Current() (lux float64, at time.Time, ok bool) {
 
 // Start switches the sensor on and opens its input node.
 func (s *Sensor) Start(context.Context) error {
+	if layout.Skylight() {
+		// Its EM3071X light sensor has no driver in TECHO5's mainline kernel.
+		return fmt.Errorf("ambient: no light sensor driver on this device")
+	}
 	if layout.AthenaMainline() {
 		return s.startIIO()
 	}

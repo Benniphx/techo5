@@ -63,6 +63,7 @@ var (
 		boardCheckers: "Echo Show 5 1st gen (checkers)",
 		boardCrown:    "Echo Show 8 1st gen (crown)",
 		boardAthena:   "Echo Show 8 2nd gen (athena)",
+		boardSkylight: "Skylight Calendar 15 (150-CAL)",
 	}[Board]
 )
 
@@ -71,6 +72,7 @@ const (
 	boardCheckers = "checkers"
 	boardCrown    = "crown"
 	boardAthena   = "athena"
+	boardSkylight = "skylight"
 
 	// gatingDir is Amazon's own mute driver, amazon-gating, which the 1st gen Show 5 and the Show 8
 	// both carry; the 2nd gen Show 5 has gpio-privacy instead.
@@ -80,6 +82,11 @@ const (
 	// kernel shows in /proc/device-tree: "amzn,athena-pvt", "amzn,athena-dvt", "amzn,athena" on the
 	// unit read 2026-10-14. Its command line names no panel (there is no lcm=), so this is the answer.
 	athenaCompatible = "amzn,athena"
+
+	// skylightCompatible is the root compatible of TECHO5's own device tree for the Skylight
+	// Calendar 15 (150-CAL): a Rockchip RK3566 board (Skyworth D156) on TECHO5's mainline kernel.
+	// It is not an Echo, but it is a screen device with the Show's kind of userland.
+	skylightCompatible = "skylight,cal150"
 )
 
 // Checkers is whether this is the 1st gen Echo Show 5.
@@ -90,6 +97,10 @@ func Crown() bool { return Board == boardCrown }
 
 // Athena is whether this is the 2nd gen Echo Show 8.
 func Athena() bool { return Board == boardAthena }
+
+// Skylight is whether this is the Skylight Calendar 15 (150-CAL): a 1920 by 1080 landscape screen,
+// no microphone, a speaker on the RK809's headphone outputs.
+func Skylight() bool { return Board == boardSkylight }
 
 // Show8 is whether the screen is the Show 8's: an 800 by 1280 portrait panel in a 1280 by 800
 // landscape device, with a FocalTech touch controller behind it. Both generations have it.
@@ -106,11 +117,15 @@ func Show8() bool { return Crown() || Athena() }
 // 1st gen Show 5. That is the safer way to be wrong about a Show 8, which shares its mute driver
 // and its speaker codec and differs mainly in the panel and the microphone count.
 //
-// The 2nd gen Show 8 comes first, from its device tree: its kernel is Amazon's and names no panel.
+// The 2nd gen Show 8 and the Skylight come first, from their device trees: neither kernel names a
+// panel on its command line.
 func showBoard(cmdline, gating string, compatible []string) string {
 	for _, c := range compatible {
 		if c == athenaCompatible || strings.HasPrefix(c, athenaCompatible+"-") {
 			return boardAthena
+		}
+		if c == skylightCompatible {
+			return boardSkylight
 		}
 	}
 	for _, f := range strings.Fields(cmdline) {
