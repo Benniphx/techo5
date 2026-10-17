@@ -133,6 +133,7 @@ var registered = []string{
 	"radio_station",
 	"radio_temperature",
 	"radio_title",
+	"remote_api",
 	"reply_buffer_1",
 	"reply_buffer_2",
 	"reply_delivery_1",

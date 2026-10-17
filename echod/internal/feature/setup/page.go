@@ -97,6 +97,10 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 	case "/setup/restore":
 		f.restore(w, r)
 	default:
+		if route, ok := routes[strings.TrimSuffix(r.URL.Path, "/")]; ok {
+			route(f, w, r)
+			return
+		}
 		http.NotFound(w, r)
 	}
 }
@@ -429,6 +433,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	case "privacy":
 		lockSection(w, token)
 		privacySection(w)
+		remoteSection(w, token)
 	case "general":
 		nameSection(w, token)
 		updatesSection(w, token)

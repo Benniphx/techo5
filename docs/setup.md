@@ -790,6 +790,64 @@ The file is still personal: it holds where the device is (for the weather), addr
 network, user names and the assistant's instructions. Keep it somewhere private, and don't post it
 or attach it to an issue; the diagnostics download is the one made for that.
 
+## 11. The remote API
+
+For scripts and tools that are not Home Assistant. It reads what the device is and what its settings
+say, changes its everyday settings, and follows its log as it is written. It never changes a privacy or
+security setting (SSH, the camera and screen pages, the setup page, Drop In, talking through cameras,
+presence and gestures, sending the room to Home Assistant, keeping clips, calls, Bluetooth pairing and
+the proxy, AirPlay, Spotify Connect, DLNA, video, Sendspin, the settings lock, updates, restarts, or the
+API itself): those it can read, not change. It never runs Home Assistant actions.
+
+1. On the setup page, **Privacy & Security**, **Remote API**, press **Make a key**. The key is shown
+   once, on that page (the one time it crosses your network): copy it. The device does not keep the
+   key, only a secret made from it, in its own settings file, which never goes out in the diagnostics
+   download or a saved settings file. A lost key cannot be shown again; make a new one, which stops
+   the old one working and ends any log being followed with it.
+2. Turn on **Remote API** on the device's screen (**Privacy & Security**) or in Home Assistant (a switch
+   of the device's, under its configuration). Off on a new device.
+
+It is on the device's web port, `http://<device>:8181/api/v1/`, on your own network and without
+encryption, so every request is signed with the key rather than carrying it: a request seen on the
+network cannot be sent again or changed, and the key is not in it. A request is signed over its
+method, its path and query, the time, a fresh nonce and its body, and the device refuses one more than
+30 seconds from its own clock. In Python:
+
+```python
+import hashlib, hmac, json, secrets, time, urllib.request
+
+KEY = "the key from the setup page"
+DEVICE = "http://192.168.x.y:8181"
+
+def call(method, path, body=b""):
+    secret = hmac.new(b"techo5-remote v1", KEY.encode(), hashlib.sha256).digest()
+    ts, nonce = str(int(time.time())), secrets.token_hex(12)
+    msg = "\n".join(["v1", method, path, ts, nonce, hashlib.sha256(body).hexdigest()]) + "\n"
+    sig = hmac.new(secret, msg.encode(), hashlib.sha256).hexdigest()
+    req = urllib.request.Request(DEVICE + path, data=body or None, method=method,
+                                 headers={"X-Techo5-Remote": f"v1 {ts} {nonce} {sig}"})
+    with urllib.request.urlopen(req) as r:
+        return r.read()
+
+print(call("GET", "/api/v1/device"))
+call("POST", "/api/v1/entities/night_volume", json.dumps({"state": 3}).encode())
+```
+
+What it answers:
+
+| Request | What it does |
+| --- | --- |
+| `GET /api/v1/device` | The device's name, model, software and how long it has been running. |
+| `GET /api/v1/entities` | Every setting and reading the device has, as Home Assistant sees them: `id`, `name`, `kind` (switch, number, select, text, button, sensor, binary_sensor, text_sensor), `state`, whether it is `writable` here, and a number's `min`, `max` and `unit` or a select's `options`. |
+| `POST /api/v1/entities/<id>` | Changes one: `{"state": true}` for a switch, a number for a number, one of the options for a select, a string for a text, and nothing for a button, which presses it. A setting that is not writable here answers 403. |
+| `GET /api/v1/logs` | The log as server-sent events: the last 200 lines, then each line as it is written, for up to 30 minutes; two at a time at most. |
+
+The log has the device's name, serial number, Wi-Fi networks and Bluetooth devices taken out, as the
+diagnostics download does, along with addresses, but still names rooms and other devices, so treat
+it as private. Turning the API off or making a new key ends a log being followed. An address that
+sends requests that do not check out is turned away for a minute after ten of them; nobody else is,
+except that a public IPv6 address is counted with the rest of its /64.
+
 ## More
 
 - [Dashboards](dashboards.md): Home Assistant dashboards on the screen.

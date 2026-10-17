@@ -42,8 +42,10 @@ const logTail = 400
 // starts), so the times in it can go back to zero partway through.
 const wakeTail = 100
 
-// Bundle is the whole thing as text, ready to be sent to somebody.
-func Bundle() string {
+// Redactor is what takes the private parts out of the device's text before it goes to anybody: the
+// device's name, its serial, its Wi-Fi networks and the Bluetooth devices it knows, and the patterns
+// every redactor has. The diagnostics download and anything else that hands out the log use the same one.
+func Redactor() *redact.Redactor {
 	r := redact.New()
 	c := config.Get()
 	r.Known("device", c.Device.Name)
@@ -64,6 +66,15 @@ func Bundle() string {
 	if from, ok := phonePlaying(media.Get().Receiving()); ok {
 		r.Known("bluetooth", from)
 	}
+	return r
+}
+
+// Bundle is the whole thing as text, ready to be sent to somebody.
+func Bundle() string {
+	r := Redactor()
+	c := config.Get()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
 	var b strings.Builder
 	section := func(title string, body string) {
