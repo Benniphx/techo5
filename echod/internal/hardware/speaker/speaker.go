@@ -43,6 +43,15 @@ const (
 	// measured from the vendor HAL doing the same thing on a route change.
 	codecSettle = 1100 * time.Millisecond
 
+	// muteSettle is how long an amplifier with a mute of its own (MuteSwitch) sits switched on before
+	// the mute is let go, so the switch's own step is behind the mute and not heard.
+	muteSettle = 75 * time.Millisecond
+
+	// unmuteAfter is how many periods the stream writes before an amplifier mute is let go: one more
+	// than the ring holds, so the write that returns has had to wait for the card to take a period,
+	// and the card is playing, not only filled.
+	unmuteAfter = periods + 1
+
 	// upsampleTaps is the length of each phase of the filter that takes a period up to hwRate, where
 	// the card runs faster than Rate: 96 taps at 96 kHz, flat to 21 kHz and about 74 dB down on the
 	// images from 27 kHz. 1 ms of delay.
@@ -139,8 +148,8 @@ type Player struct {
 	// fed is whether the last block had anything in it, and belongs to the write loop alone.
 	fed bool
 
-	// playing is whether the card has taken the stream's first period, which is when an amplifier
-	// mute (MuteSwitch) may be let go.
+	// playing is whether the card is taking the stream's periods (unmuteAfter), which is when an
+	// amplifier mute (MuteSwitch) may be let go.
 	playing atomic.Bool
 
 	// underruns is the card running out while we were away. Write blocks against the whole ring, so
@@ -394,7 +403,12 @@ func (p *Player) amp(on bool) {
 		p.apply(ampOff())
 		return
 	}
-	p.apply(ampOn(p.playing.Load()))
+	on1, release := ampOn(p.playing.Load())
+	p.apply(on1)
+	if len(release) > 0 {
+		time.Sleep(muteSettle)
+		p.apply(release)
+	}
 }
 
 // unmute lets go of the amplifier's mute once the stream has started, where the speaker is the output
@@ -434,17 +448,17 @@ func ampOff() []kctl {
 	return seq
 }
 
-// ampOn is ampOff the other way round: the switch first, and the mute let go last, and only when
-// release says the stream is running.
-func ampOn(release bool) []kctl {
-	var seq []kctl
+// ampOn is ampOff the other way round: the switch first (on), and the mute let go last (unmute),
+// muteSettle later, and only when release says the stream is running. Without a mute, unmute is
+// empty and on is all of it.
+func ampOn(release bool) (on, unmute []kctl) {
 	if AmpSwitch != "" {
-		seq = append(seq, kctl{name: AmpSwitch, value: "On"})
+		on = append(on, kctl{name: AmpSwitch, value: "On"})
 	}
 	if MuteSwitch != "" && release {
-		seq = append(seq, kctl{name: MuteSwitch, value: "Off"})
+		unmute = append(unmute, kctl{name: MuteSwitch, value: "Off"})
 	}
-	return seq
+	return on, unmute
 }
 
 // Output reports which output the player is driving. It never waits on a switch in progress.
@@ -621,7 +635,8 @@ func (p *Player) Run(ctx context.Context) error {
 
 	// The order the vendor HAL uses on a route change: route with the amplifier off, let the
 	// codec sit idle, enable the amplifier, then feed. An amplifier mute (MuteSwitch) is held through
-	// all of it and let go once the card is playing, on silence or whatever is queued.
+	// all of it and let go once the card is playing, on silence or whatever is queued: after
+	// unmuteAfter periods, when the ring has filled and the card has taken from it.
 	defer p.stopped()
 	out := p.Output()
 	p.apply(initSequence)
@@ -647,6 +662,7 @@ func (p *Player) Run(ctx context.Context) error {
 	safe.Go("jack watcher", func() { p.watchJack(ctx) })
 
 	silence := make([]byte, len(buf))
+	muted := 0 // periods written while an amplifier mute is still held
 
 	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go).
 	var up *audio.Upsampler
@@ -682,8 +698,10 @@ func (p *Player) Run(ctx context.Context) error {
 			return err
 		}
 		if !p.playing.Load() {
-			p.playing.Store(true)
-			p.unmute()
+			if muted++; muted >= unmuteAfter {
+				p.playing.Store(true)
+				p.unmute()
+			}
 		}
 		// What the card holds now is what the period rendered next waits behind, so it is read here,
 		// between the write and the render, and published with the count it belongs to: in frames at

@@ -163,12 +163,18 @@ func TestRadarSequenceOrder(t *testing.T) {
 		t.Error("the speaker path does not take both channels")
 	}
 
-	on := ampOn(true)
-	if len(on) != 2 || !is(on[0], AmpSwitch, "On") || on[1].name != radarMute || on[1].value != "Off" {
-		t.Errorf("turning the amplifier on is %v, want the switch on and then the mute let go", on)
+	on, unmute := ampOn(true)
+	if len(on) != 1 || !is(on[0], AmpSwitch, "On") || len(unmute) != 1 || !is(unmute[0], radarMute, "Off") {
+		t.Errorf("turning the amplifier on is %v then %v, want the switch on and then the mute let go", on, unmute)
 	}
-	if on := ampOn(false); indexOf(on, radarMute) >= 0 {
-		t.Errorf("the mute was let go before the stream was playing: %v", on)
+	if muteSettle <= 0 {
+		t.Error("the mute is let go the moment the amplifier is switched on")
+	}
+	if on, unmute := ampOn(false); indexOf(on, radarMute) >= 0 || len(unmute) != 0 {
+		t.Errorf("the mute was let go before the stream was playing: %v %v", on, unmute)
+	}
+	if unmuteAfter <= periods {
+		t.Errorf("the mute is let go after %d periods, before the %d-period ring has been taken from", unmuteAfter, periods)
 	}
 	offSeq := ampOff()
 	if len(offSeq) != 2 || offSeq[0].name != radarMute || offSeq[0].value != "On" || !is(offSeq[1], AmpSwitch, "Off") {
@@ -195,8 +201,8 @@ func TestDotSequencesUnchanged(t *testing.T) {
 	if MuteSwitch != "" {
 		t.Errorf("MuteSwitch is %q off a radar", MuteSwitch)
 	}
-	if on := ampOn(true); len(on) != 1 || !is(on[0], AmpSwitch, "On") {
-		t.Errorf("the Dot's amplifier turns on with %v", on)
+	if on, unmute := ampOn(true); len(on) != 1 || !is(on[0], AmpSwitch, "On") || len(unmute) != 0 {
+		t.Errorf("the Dot's amplifier turns on with %v then %v", on, unmute)
 	}
 }
 

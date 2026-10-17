@@ -19,9 +19,12 @@ import (
 // writes them, with the filter coefficients read from that file rather than kept here.
 //
 // The order is the one that does not pop: the mute is held On while the path is set up and the
-// filters written, the stream starts on silence, and only then is the mute let go (Player.Run). It goes
-// On again before every path switch, at close, and when playback fails. Enabling the amplifier with no
-// path defined was reported to reboot the unit, which is why the release always comes last.
+// filters written, the stream starts on silence, and only once the card is taking it (unmuteAfter)
+// is the mute let go (Player.Run); after a path switch, a moment after the amplifier is switched on
+// (muteSettle). It goes On again before every path switch, at close, and when playback fails.
+// Enabling the amplifier with no path defined was reported to reboot the unit, which is why the
+// release always comes last. Tested on a unit on 2026-10-16: the speaker plays through the gate, and
+// no pop was heard at startup.
 const radarMute = "MFP Gpio Mute"
 
 // vendorMixerFiles are where the unit's mixer file is read from: the copy the boot script keeps in the
@@ -53,7 +56,8 @@ var radarInit = []kctl{
 //
 // The jack is mono (the codec's Board Channel Config reads MonoRight) and needs Audio_DacMux_Setting
 // On with a plug in, as the Dot's does. The speaker's mute stays On while it plays: it gates the
-// speaker's amplifier, not the jack. Not tried on a unit yet.
+// speaker's amplifier, not the jack. Tested on a unit on 2026-10-16: the jack plays, and the output
+// switches on every plug and unplug.
 func radarPaths(speaker, jack []byte) map[Output][]kctl {
 	return map[Output][]kctl{
 		OutputSpeaker: {
