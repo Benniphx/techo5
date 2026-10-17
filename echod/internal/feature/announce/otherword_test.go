@@ -36,3 +36,26 @@ func TestADeviceWithAnotherWordIsNamed(t *testing.T) {
 		t.Error("a device that only disagreed about the time was named")
 	}
 }
+
+// However many names answer, only so many are kept, and the newest of them.
+func TestOtherWordsAreKeptToAFew(t *testing.T) {
+	t.Cleanup(func() {
+		otherWord.Lock()
+		clear(otherWord.seen)
+		clear(otherWord.warned)
+		otherWord.Unlock()
+	})
+	for i := range otherWordsKept + 10 {
+		refusedBy("device "+strconv.Itoa(i), http.StatusForbidden)
+	}
+	got := OtherWords()
+	if len(got) != otherWordsKept || !slices.Contains(got, "device "+strconv.Itoa(otherWordsKept+9)) {
+		t.Errorf("kept %d, the newest among them: %t", len(got), slices.Contains(got, "device "+strconv.Itoa(otherWordsKept+9)))
+	}
+	otherWord.Lock()
+	n := len(otherWord.warned)
+	otherWord.Unlock()
+	if n > otherWordsKept {
+		t.Errorf("%d warnings remembered", n)
+	}
+}
