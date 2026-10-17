@@ -28,9 +28,9 @@ const (
 	emOn = 0x06
 )
 
-// emLuxPerCount turns a reading into lux. An estimate, not a measurement: no datasheet says, and the
-// unit read about 3 in a dark garage and about 160 under its lights, which is a likely level for them.
-var emLuxPerCount = 1.0
+// emLuxPerCount turns a reading into lux, measured on the unit against a phone's light meter held
+// beside it: 162 at 116 lux (0.72) and 15 at 8.7 lux (0.58).
+var emLuxPerCount = 0.7
 
 type em3071x struct {
 	bus *i2c.Bus
