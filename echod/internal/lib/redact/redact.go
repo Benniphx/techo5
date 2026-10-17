@@ -51,10 +51,12 @@ var patterns = []struct {
 	// A telephone number, and not the tail of a number that merely holds ten digits: a rate of
 	// 49.98765432109876 has a run of digits after the point that this used to take for a phone, which
 	// left a log reading "per_second=49.<phone-130>" line after line and nothing in it worth reading.
-	// The match takes in what is either side of the number so it can tell; only the number goes. A
-	// letter either side means a run of hex instead: a kernel stack trace's [<0000000012e3d9f7>] came
-	// out as [<<phone-1>e3d9f7>].
-	{"phone", regexp.MustCompile(`(?:^|[^\dA-Za-z.+-])(\+?\d{10,15})(?:$|[^\dA-Za-z.])`), true},
+	// The match takes in what is either side of the number so it can tell; only the number goes. The
+	// letters and digits run on to the number either side are taken in too (the first and last
+	// groups), because a word that is hex all through is no phone: a kernel stack trace's
+	// [<0000000012e3d9f7>] came out as [<<phone-1>e3d9f7>]. Any other letter next to it still leaves a
+	// phone, as in caller=Bob5551234567, tel%3A5551234567 or 5551234567ext.
+	{"phone", regexp.MustCompile(`(?:^|[^\d.+-])([A-Za-z]*)(\+?\d{10,15})([0-9A-Za-z]*)(?:$|[^\d.])`), true},
 	{"url", regexp.MustCompile(`\b(?:https?)://[^\s"'<>]+`), false},
 }
 
@@ -91,6 +93,10 @@ func (r *Redactor) Text(s string) string {
 		s = strings.ReplaceAll(s, k.value, k.with)
 	}
 	for _, p := range patterns {
+		if p.name == "phone" {
+			s = r.phones(p.re, s)
+			continue
+		}
 		s = p.re.ReplaceAllStringFunc(s, func(match string) string {
 			// A key is "psk=abc": the name stays so the line still reads, the value goes.
 			if p.name == "key" {
@@ -122,6 +128,36 @@ func (r *Redactor) Text(s string) string {
 		})
 	}
 	return s
+}
+
+// phones puts the placeholders in for the numbers the phone pattern finds in s, unless a number and
+// what runs on to it either side make one word of hex: an address, not a phone. It works from the
+// positions in s, because matched again on its own a match reads differently: the character before
+// the number becomes part of the word.
+func (r *Redactor) phones(re *regexp.Regexp, s string) string {
+	var out strings.Builder
+	last := 0
+	for _, at := range re.FindAllStringSubmatchIndex(s, -1) {
+		lead, number, trail := s[at[2]:at[3]], s[at[4]:at[5]], s[at[6]:at[7]]
+		if lead+trail != "" && isHex(lead+number+trail) {
+			continue
+		}
+		out.WriteString(s[last:at[4]])
+		out.WriteString(r.placeholder("phone", number))
+		last = at[5]
+	}
+	out.WriteString(s[last:])
+	return out.String()
+}
+
+// isHex is whether s is hex digits all through.
+func isHex(s string) bool {
+	for _, c := range s {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", c) {
+			return false
+		}
+	}
+	return true
 }
 
 // isIP says whether the text really is an address of the given family, or a prefix in it: the parser

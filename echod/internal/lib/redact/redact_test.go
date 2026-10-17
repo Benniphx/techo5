@@ -154,3 +154,35 @@ func TestKernelAddressesAreNotPhones(t *testing.T) {
 		t.Error("a telephone number was left in")
 	}
 }
+
+// A telephone number next to a letter is still a telephone number: escaped in a message, in a URL,
+// with an extension, or run on to a name. Only words that are hex all through are left.
+func TestPhonesNextToLetters(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{`Call me\n5551234567`, `Call me\n<phone-1>`},
+		{"to=%2B15551234567", "to=%2B<phone-1>"},
+		{"tel%3A5551234567", "tel%3A<phone-1>"},
+		{"5551234567x12", "<phone-1>x12"},
+		{"5551234567ext", "<phone-1>ext"},
+		{"caller=Bob5551234567", "caller=Bob<phone-1>"},
+		{"call to +15551234567 failed", "call to <phone-1> failed"},
+		{"phone 5551234567", "phone <phone-1>"},
+	} {
+		if got := New().Text(tc.in); got != tc.want {
+			t.Errorf("%q came out as %q, want %q", tc.in, got, tc.want)
+		}
+	}
+	for _, line := range []string{
+		"[  242.667317] [<00000000ab12cd34>] tz_service_call+0x94/0xe8",
+		"[  242.667317] [<0000000012e3d9f7>] tz_service_call+0x94/0xe8",
+		"[  242.667317] [<ffffff8012345678>] kthread+0xf8/0x100",
+		"pc : 0000000012e3d9f7 lr : ffffff8012345678",
+		"commit 1234567890abcdef1234567890abcdef12345678",
+		"per_second=49.98765432109876",
+		"uptime 12345678901234567890",
+	} {
+		if got := New().Text(line); got != line {
+			t.Errorf("changed:\n old: %s\n new: %s", line, got)
+		}
+	}
+}
