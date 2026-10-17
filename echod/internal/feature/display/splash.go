@@ -15,6 +15,8 @@ import (
 
 	xdraw "golang.org/x/image/draw"
 
+	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
@@ -141,9 +143,9 @@ func (r *renderer) splashWaiting(s *splash) {
 	// Below the mark, which reaches within about seventy pixels of the bottom on this panel: the two
 	// lines go in what is left rather than over the wordmark. If a panel ever leaves less room than
 	// they need, they sit on the bottom edge instead of climbing onto the mark.
-	const gap, lead = 26, 32
+	gap, lead := r.s(26), r.s(32)
 	y := s.at.Y + s.img.Bounds().Dy() + gap
-	if bottom := r.h - 6; y+lead > bottom {
+	if bottom := r.h - r.s(6); y+lead > bottom {
 		y = bottom - lead
 	}
 	r.text(r.tiny, what, (r.w-r.width(r.tiny, what))/2, y, teal)
@@ -195,4 +197,14 @@ func (r *renderer) arcs(s *splash, elapsed time.Duration) {
 
 func blend(under, over uint8, a float64) uint8 {
 	return uint8(float64(under)*(1-a) + float64(over)*a + 0.5)
+}
+
+// homeAssistantHere is what ends the splash: Home Assistant's voice pipeline listening, or, on a
+// screen without microphones that has no voice assistant for it to listen to, Home Assistant
+// connected and following its entities. Waiting for the pipeline there kept the logo up for good.
+func homeAssistantHere() bool {
+	if !hasMicrophone() {
+		return hastate.Get().Subscribed()
+	}
+	return voice.Get().Ready()
 }

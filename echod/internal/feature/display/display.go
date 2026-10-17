@@ -2380,7 +2380,7 @@ func (d *Display) frame() time.Duration {
 
 	d.mu.Lock()
 	booting, started := d.booting, d.started
-	if booting && now.Sub(started) >= splashMin && voice.Get().Ready() {
+	if booting && now.Sub(started) >= splashMin && homeAssistantHere() {
 		d.booting, booting = false, false
 		slog.Info("splash done", "after", now.Sub(started).Round(time.Millisecond))
 	}
