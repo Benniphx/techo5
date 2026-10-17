@@ -321,6 +321,15 @@ func KeepOwn(c *Config, from Config) {
 	c.Streaming = from.Streaming
 	c.Video.On, c.Video.DLNA = from.Video.On, from.Video.DLNA
 	c.Video.Allowed = slices.Clone(from.Video.Allowed)
+	c.Home.CameraLive = from.Home.CameraLive
+	// Keeping the audio of a slot's turns on disk is this device's: the file's words come in, kept
+	// to as many turns as the device kept for that slot before, none for a slot it did not have.
+	for i := range c.Wake.Words {
+		c.Wake.Words[i].Recordings = 0
+		if i < len(from.Wake.Words) {
+			c.Wake.Words[i].Recordings = from.Wake.Words[i].Recordings
+		}
+	}
 
 	// Sendspin keeps a port open and says so on the network; the Bluetooth proxy hears nearby phones for
 	// Home Assistant. Neither is a restore's to turn on: Sendspin is on by default, so a file from before
@@ -335,6 +344,10 @@ func KeepOwn(c *Config, from Config) {
 	c.Microphone.Claps = from.Microphone.Claps
 	c.CamStream = from.CamStream
 	c.Remote.On = from.Remote.On
+	// Answering for the others when this one heard best keeps measuring the room and talks to them on the
+	// network; a finger held on the clock goes to Home Assistant. Both this device's to turn on.
+	c.Nearest = from.Nearest
+	c.Screen.ClockHold = from.Screen.ClockHold
 
 	// "No wake word" chosen on purpose is a device that is not to listen: a file with words in it does
 	// not start it listening.
@@ -355,6 +368,10 @@ func KeepOwn(c *Config, from Config) {
 	c.Timers.Local = slices.Clone(from.Timers.Local)
 	c.Calendar.PopupShown = slices.Clone(from.Calendar.PopupShown)
 	c.Update.LastVersion = from.Update.LastVersion
+	// Which builds it takes, and whether it installs them by itself, are this device's: a file is not
+	// to move it to another channel or have it install on its own.
+	c.Update.Channel = from.Update.Channel
+	c.Update.AutoInstall = from.Update.AutoInstall
 }
 
 // scheme finds an address in a setting.

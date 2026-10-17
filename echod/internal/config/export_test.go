@@ -435,6 +435,8 @@ func TestManyAddressesAreQuick(t *testing.T) {
 func TestARestoreKeepsTheNewSwitchesAndLogins(t *testing.T) {
 	from := Defaults()
 	from.Microphone.Noise, from.Microphone.Claps = true, true
+	from.Nearest.On, from.Screen.ClockHold = true, true
+	from.Update.Channel, from.Update.AutoInstall = "dev", true
 	from.CamStream = CamStream{On: true, User: "them", Pass: "their-password"}
 	from.Remote = Remote{On: true, Secret: "theirs"}
 	from.Home.Go2RTC.Base = "http://192.0.2.9:1984"
@@ -458,8 +460,11 @@ func TestARestoreKeepsTheNewSwitchesAndLogins(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := got.Config
-	if c.Microphone.Noise || c.Microphone.Claps || c.CamStream.On || c.Remote.On {
-		t.Errorf("a restore turned on what the device had off: %+v %+v %+v", c.Microphone, c.CamStream, c.Remote)
+	if c.Microphone.Noise || c.Microphone.Claps || c.CamStream.On || c.Remote.On || c.Nearest.On || c.Screen.ClockHold {
+		t.Errorf("a restore turned on what the device had off: %+v %+v %+v %+v", c.Microphone, c.CamStream, c.Remote, c.Nearest)
+	}
+	if c.Update.Channel != here.Update.Channel || c.Update.AutoInstall {
+		t.Errorf("a restore changed how the device updates: %+v", c.Update)
 	}
 	if c.CamStream.Pass != "my-password" || c.Remote.Secret != "mine" {
 		t.Errorf("the device's own logins were not kept: %+v %+v", c.CamStream, c.Remote)
