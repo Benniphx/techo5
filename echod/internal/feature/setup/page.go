@@ -729,8 +729,24 @@ func houseSection(w http.ResponseWriter, token string) {
 	 <p class="note">Leave it empty to turn announcements and intercom calls off here: the device takes
 	  neither. The other devices can still see it on the network, but what they send it is refused.
 	  Reminders set to go off on other devices use it too.</p>
+	 <p class="note">Make it a long phrase, %d characters or more. What the devices send each other is
+	  signed with it, and anything on the network that hears them can try words until one fits.</p>%s
 	 <p><button type="submit">Save</button></p></form></fieldset>`,
-		html.EscapeString(word))
+		html.EscapeString(word), longHouseWord, shortWordNote(word))
+}
+
+// longHouseWord is how long a house word has to be before the page stops saying it is short. A short
+// one still works: it is a warning, not a refusal.
+const longHouseWord = 16
+
+// shortWordNote is the warning for a house word that is set and short.
+func shortWordNote(word string) string {
+	if word == "" || len([]rune(word)) >= longHouseWord {
+		return ""
+	}
+	return `
+	 <p class="note"><strong>This word is short.</strong> It works, but it is easy to guess: a longer one
+	  keeps the announcements, the intercom and the other devices' messages yours.</p>`
 }
 
 // saveHouse keeps the word, and then tells the web feature to look again: the port announcements

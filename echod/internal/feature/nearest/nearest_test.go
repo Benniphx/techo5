@@ -438,3 +438,60 @@ func TestPostBelievesOnlyAProvenRefusal(t *testing.T) {
 		}
 	}
 }
+
+// A claim in the old form, or signed before this program started, is refused: the first keyed the word
+// in one hash, the second could be one replayed across a restart.
+func TestOldFormAndBeforeTheStartAreRefused(t *testing.T) {
+	now := time.Now()
+	body := []byte(`{"from":"Kitchen","turn":"a","score":20}`)
+	old := "v1" + sign(word, "Office", body, now)[len(version):]
+	if err := verify(word, "Office", old, body, now); err != errUnsigned {
+		t.Errorf("a v1 claim: %v", err)
+	}
+	was := started
+	started = now.Add(3 * time.Second)
+	t.Cleanup(func() { started = was })
+	if err := verify(word, "Office", sign(word, "Office", body, now), body, now.Add(3*time.Second)); err != errStale {
+		t.Errorf("a claim from before the start: %v", err)
+	}
+}
+
+// A claim whose body never arrives whole is answered once its time is up, and its connection closed:
+// nothing that has not signed holds the web port.
+func TestASlowClaimIsAnsweredAndLetGo(t *testing.T) {
+	h := newHouse(t)
+	closed := make(chan struct{}, 4)
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(h.n.receive))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateClosed {
+			closed <- struct{}{}
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	for _, header := range []string{"", sign(word, config.Get().Device.Name, []byte("x"), time.Now())} {
+		c, err := net.Dial("tcp", srv.Listener.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := "POST " + path + " HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n"
+		if header != "" {
+			req += authHeader + ": " + header + "\r\n"
+		}
+		if _, err := c.Write([]byte(req + "\r\nab")); err != nil {
+			t.Fatal(err)
+		}
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		buf := make([]byte, 64)
+		n, _ := c.Read(buf)
+		if !bytes.HasPrefix(buf[:n], []byte("HTTP/1.1 4")) {
+			t.Errorf("signed %v: answered %q, want a refusal", header != "", buf[:n])
+		}
+		select {
+		case <-closed:
+		case <-time.After(5 * time.Second):
+			t.Errorf("signed %v: the connection was kept", header != "")
+		}
+		c.Close()
+	}
+}

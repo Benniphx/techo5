@@ -59,6 +59,12 @@ const (
 	// warnEvery is how often a claim that does not check out is written to the log, so a device on the
 	// network sending them cannot fill it.
 	warnEvery = time.Minute
+
+	// bodyWithin is how long a signed-looking claim has to arrive whole: one is a few hundred bytes.
+	bodyWithin = 2 * time.Second
+
+	// maxPeers bounds the devices one wake word is told to, which mDNS alone decides.
+	maxPeers = 16
 )
 
 // claim is what a device says when it hears its wake word. Word is which wake word, so two people
@@ -158,6 +164,9 @@ func build() *Nearest {
 		},
 	}
 	n.fanout = func(peers []announce.Peer, mine *pending) {
+		if len(peers) > maxPeers {
+			peers = peers[:maxPeers]
+		}
 		for _, p := range peers {
 			safe.Go("nearest claim", func() {
 				if post(p, mine.claim) {
@@ -203,6 +212,9 @@ func (n *Nearest) Restore(c config.Config) {
 // the time a wake word comes. A wake word already waiting on the others is still answered as it would
 // have been: turning this off must not lose it.
 func (n *Nearest) set(on bool) {
+	if on {
+		warm(config.Get().Home.HouseWord)
+	}
 	n.on.Set(on)
 	mic.Get().SetStandout(on)
 	n.mu.Lock()
@@ -364,23 +376,30 @@ func newTurn() string {
 // receive takes a claim from another device of this house.
 func (n *Nearest) receive(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "post a claim", http.StatusMethodNotAllowed)
+		web.Refuse(w, "post a claim", http.StatusMethodNotAllowed)
 		return
 	}
+	// The header first, and the body only with a deadline: nothing that has not signed is waited on.
+	if err := looksSigned(r.Header.Get(authHeader), time.Now()); err != nil {
+		warn(n.now(), "nearest device: a claim that does not check out", "from", r.RemoteAddr, "err", err)
+		web.Refuse(w, "not this house", http.StatusForbidden)
+		return
+	}
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(bodyWithin))
 	body, err := readBody(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		web.Refuse(w, "not a claim", http.StatusBadRequest)
 		return
 	}
 	c := config.Get()
 	if err := verify(c.Home.HouseWord, c.Device.Name, r.Header.Get(authHeader), body, time.Now()); err != nil {
 		warn(n.now(), "nearest device: a claim that does not check out", "from", r.RemoteAddr, "err", err)
-		http.Error(w, "not this house", http.StatusForbidden)
+		web.Refuse(w, "not this house", http.StatusForbidden)
 		return
 	}
 	var cl claim
 	if err := json.Unmarshal(body, &cl); err != nil || cl.From == "" {
-		http.Error(w, "not a claim", http.StatusBadRequest)
+		web.Refuse(w, "not a claim", http.StatusBadRequest)
 		return
 	}
 	if cl.From == c.Device.Name {

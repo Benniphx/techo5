@@ -2,6 +2,7 @@ package nearest
 
 import (
 	"crypto/hmac"
+	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,7 +24,16 @@ import (
 
 const (
 	authHeader = "X-Techo5-Nearest"
-	authLabel  = "techo5-nearest hmac"
+
+	// version is the claim's form. v2 keys it from the house word slowly (key), so a claim heard on the
+	// network is no quick way to guess the word: v1 claims, keyed in one hash, are not taken any more,
+	// and a device still sending them is answered as though nothing claimed (it answers too).
+	version = "v2"
+
+	// keySalt and keyRounds are the slow keying. The salt is this protocol's own, so the key is no use to
+	// announcements or the intercom, which sign with the same word.
+	keySalt   = "techo5-nearest v2"
+	keyRounds = 100_000
 
 	// skew is how far a sender's clock may be from this one's. The devices keep time from the network;
 	// a claim is only of use for a fraction of a second, so a replay is what this is about.
@@ -36,9 +46,34 @@ const (
 	maxBody = 1 << 12
 )
 
+// keys is the key of the house word in use, worked out once: it takes a moment by design.
+var keys struct {
+	sync.Mutex
+	word string
+	key  []byte
+}
+
+// key is the HMAC key for a house word: PBKDF2 over it, so guessing the word from a claim costs as much
+// per guess as working the key out does here.
 func key(word string) []byte {
-	sum := sha256.Sum256([]byte(authLabel + ":" + word))
-	return sum[:]
+	keys.Lock()
+	defer keys.Unlock()
+	if keys.key != nil && keys.word == word {
+		return keys.key
+	}
+	k, err := pbkdf2.Key(sha256.New, word, []byte(keySalt), keyRounds, sha256.Size)
+	if err != nil {
+		k = nil // cannot happen for these sizes; a nil key signs nothing another device checks
+	}
+	keys.word, keys.key = word, k
+	return k
+}
+
+// warm works the key out ahead of the first wake word, so that one is not held up by it.
+func warm(word string) {
+	if word != "" {
+		go key(word)
+	}
 }
 
 // mac is the signature over a claim to the device called to. The name is compared without regard to
@@ -46,7 +81,7 @@ func key(word string) []byte {
 func mac(word, to, ts, nonce string, body []byte) []byte {
 	sum := sha256.Sum256(body)
 	m := hmac.New(sha256.New, key(word))
-	m.Write([]byte("v1\n" + ts + "\n" + nonce + "\n" + strings.ToLower(to) + "\n" + hex.EncodeToString(sum[:]) + "\n"))
+	m.Write([]byte(version + "\n" + ts + "\n" + nonce + "\n" + strings.ToLower(to) + "\n" + hex.EncodeToString(sum[:]) + "\n"))
 	return m.Sum(nil)
 }
 
@@ -55,7 +90,29 @@ func sign(word, to string, body []byte, now time.Time) string {
 	var n [12]byte
 	_, _ = rand.Read(n[:])
 	ts, nonce := strconv.FormatInt(now.Unix(), 10), hex.EncodeToString(n[:])
-	return "v1 " + ts + " " + nonce + " " + hex.EncodeToString(mac(word, to, ts, nonce, body))
+	return version + " " + ts + " " + nonce + " " + hex.EncodeToString(mac(word, to, ts, nonce, body))
+}
+
+// started is when this program started. A claim signed before it is refused, so one taken after a
+// restart, while the nonces it remembers are gone, cannot be sent again.
+var started = time.Now()
+
+// looksSigned checks a claim's header before its body is read: its form, and a time this device would
+// take. A request that fails it is turned away without waiting on anything it sends.
+func looksSigned(header string, now time.Time) error {
+	parts := strings.Fields(header)
+	if len(parts) != 4 || parts[0] != version || len(parts[3]) != 2*sha256.Size {
+		return errUnsigned
+	}
+	sec, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return errUnsigned
+	}
+	at := time.Unix(sec, 0)
+	if d := now.Sub(at); d > skew || d < -skew || at.Before(started.Truncate(time.Second)) {
+		return errStale
+	}
+	return nil
 }
 
 var (
@@ -69,20 +126,13 @@ func verify(word, me, header string, body []byte, now time.Time) error {
 	if word == "" {
 		return errUnsigned
 	}
-	parts := strings.Fields(header)
-	if len(parts) != 4 || parts[0] != "v1" {
-		return errUnsigned
+	if err := looksSigned(header, now); err != nil {
+		return err
 	}
+	parts := strings.Fields(header)
 	got, err := hex.DecodeString(parts[3])
 	if err != nil || !hmac.Equal(got, mac(word, me, parts[1], parts[2], body)) {
 		return errUnsigned
-	}
-	sec, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil {
-		return errUnsigned
-	}
-	if d := now.Sub(time.Unix(sec, 0)); d > skew || d < -skew {
-		return errStale
 	}
 	if !fresh(parts[2], now) {
 		return errReplayed
