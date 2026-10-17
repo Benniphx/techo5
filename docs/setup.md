@@ -163,6 +163,23 @@ a camera on the recorder that has no speaker shows Talk too, and says it has no 
 Cameras read straight from a Reolink recorder have no sound on the device, so for those Talk is
 one-way: you are heard at the door, but the visitor is not heard on the device.
 
+### Cameras from go2rtc
+
+A [go2rtc](https://github.com/AlexxIT/go2rtc) server, which many homes run beside Home Assistant (or
+inside Frigate), turns cameras of every kind into streams anything can read. Give the device its
+address on the setup page (**Connections**, **go2rtc cameras**, like `192.168.x.y:1984`) or with
+the [`home_go2rtc`](actions.md#cameras-from-go2rtc) action, and every stream it has is a camera on
+the device, by its name in go2rtc: on the Cameras drawer, and by voice ("show the porch"). Its
+picture comes from go2rtc, and with **Live camera video** on, live video from go2rtc's RTSP port
+(8554), with no camera's own login. Home Assistant is not asked, so they work with it down. Their
+sound is not played yet.
+
+A go2rtc with a login takes it in the address, as `http://user:password@host:1984`; the setup page
+does not show the password again, and saving the address as shown keeps it. Saving the address again
+reads go2rtc's list again; clearing it takes the cameras away. Live video uses the same login on
+go2rtc's RTSP port, and only with Digest: a go2rtc whose RTSP login differs from its API's, or whose
+RTSP offers only Basic, shows snapshots instead (untested).
+
 ### A doorbell
 
 The device can be a Reolink doorbell's chime, with no Home Assistant needed: a press of the button

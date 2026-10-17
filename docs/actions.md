@@ -982,6 +982,30 @@ data:
   entities: input_datetime.wake=input_boolean.wake_armed,input_datetime.weekend_wake
 ```
 
+## Cameras from go2rtc
+
+In YAML, refer to this action as `esphome.<node>_home_go2rtc`.
+
+Reads the streams of a go2rtc server into the device's camera list, as cameras of their own named as
+go2rtc names them (`go2rtc:porch`), and answers how many there are. Called again, it reads the list
+again; with an empty address, it takes them away. See [Setting it up](setup.md#cameras-from-go2rtc).
+
+### address (Required)
+
+*string*
+
+The go2rtc server, as a host, host:port (go2rtc's own port, 1984, when none is given) or URL, with a
+user and password in it if go2rtc has them; empty to take the cameras away. Home Assistant's logbook
+and traces can keep an action's arguments, so give go2rtc a user of its own that can only view, or
+pass the address from a secret.
+
+```yaml
+action: esphome.kitchen_home_go2rtc
+data:
+  address: 192.168.x.y:1984
+response_variable: go2rtc
+```
+
 ## Choose which cameras the device shows
 
 In YAML, refer to this action as `esphome.<node>_home_cameras`.

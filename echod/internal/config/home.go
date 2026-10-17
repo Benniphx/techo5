@@ -50,6 +50,9 @@ type Home struct {
 	// to proxy its cameras (feature/home/reolink.go). Its cameras join the list.
 	Reolink Reolink `json:"reolink"`
 
+	// Go2RTC is a go2rtc server whose streams are cameras on the list (feature/home/go2rtc.go).
+	Go2RTC Go2RTC `json:"go2rtc,omitempty"`
+
 	// Glance are Home Assistant entities shown as chips along the foot of the clock page, each only
 	// while it has something to say (feature/home/glance.go), in the order given.
 	Glance []string `json:"glance,omitempty"`
@@ -404,6 +407,17 @@ type Reolink struct {
 	Pass        string   `json:"pass,omitempty"`
 	Fingerprint string   `json:"fingerprint,omitempty"`
 	Cameras     []Camera `json:"cameras,omitempty"`
+}
+
+// Go2RTC is a go2rtc server: its address (with its login, if it has one) and its streams as cameras, as
+// it listed them when it was set up.
+type Go2RTC struct {
+	Base    string   `json:"base,omitempty"`
+	Cameras []Camera `json:"cameras,omitempty"`
+}
+
+func (w HomeWriter) Go2RTC(g Go2RTC) error {
+	return w.st.Update(func(c *Config) { c.Home.Go2RTC = g })
 }
 
 func (w HomeWriter) Reolink(r Reolink) error {

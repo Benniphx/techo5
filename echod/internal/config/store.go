@@ -211,7 +211,7 @@ func (st *Store) write() error {
 
 	tmp := st.path + ".tmp"
 	// Owner-only: the file holds passwords and tokens (the Reolink recorder's, Music Assistant's, the
-	// cameras' for talking through them). Set on the file itself too, since one left from an older
+	// cameras' for talking through them, a go2rtc server's). Set on the file itself too, since one left from an older
 	// build keeps the mode it was made with.
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
