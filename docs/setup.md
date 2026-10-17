@@ -10,6 +10,11 @@ and the Spot. On a Dot, steps 1, 5 and 7 apply.
 In the examples the device is named `office`. Use your own device's name: the actions are
 `esphome.<name>_...` and the entities `switch.<name>_...` and so on.
 
+The setup page, the camera stream and its ONVIF login, and a go2rtc server's login all cross your
+network over plain HTTP or RTSP, as most home devices' do: they are made for a home network you
+trust. Somebody on it who records a login can try passwords against it, so give each a long password
+you use nowhere else.
+
 ## 1. Give the device access to Home Assistant
 
 Do this first. Photos, cameras, weather and the radio lists all need it. The device fetches them from
@@ -178,7 +183,8 @@ A go2rtc with a login takes it in the address, as `http://user:password@host:198
 does not show the password again, and saving the address as shown keeps it. Saving the address again
 reads go2rtc's list again; clearing it takes the cameras away. Live video uses the same login on
 go2rtc's RTSP port, and only with Digest: a go2rtc whose RTSP login differs from its API's, or whose
-RTSP offers only Basic, shows snapshots instead (untested).
+RTSP offers only Basic, shows snapshots instead (untested). The login goes to go2rtc's API over plain
+HTTP, so give go2rtc a password of its own.
 
 ### A doorbell
 
@@ -216,7 +222,7 @@ automation that wants to know too.
 The camera of a Show or a Spot can be recorded like any other camera, by Frigate, go2rtc or an NVR, from
 `rtsp://<device address>:8554/camera`. It is off on a new device.
 
-1. On the setup page, under **Privacy & Security** → **Camera streaming**, set a password (8
+1. On the setup page, under **Privacy & Security** → **Camera streaming**, set a password (12
    characters or more) and, if you like, a user name (`camera` unless changed). Save. The password is
    never shown again; leave the field empty to keep it.
 2. Turn on **Camera streaming**, a switch of the device's in Home Assistant, under its configuration.
@@ -224,15 +230,18 @@ The camera of a Show or a Spot can be recorded like any other camera, by Frigate
 It never runs without a password. Turning it off, saving a new login and closing the lens cover each
 cut off whoever is watching; the mute button stops the picture, as it stops the camera everywhere else.
 While somebody is being sent the camera, a Show draws a small green dot in the top right corner of the
-screen, over everything; a Spot shows its camera dot, as it does whenever its camera runs.
+screen, over everything; a Spot shows its camera dot, as it does whenever its camera runs. With the
+screen off, it lights at its dimmest to show the dot alone on black, so the room can still tell.
 
 Two viewers at most watch at once, at up to 10 pictures a second. The login is checked with Digest, so
 the password does not cross the network in the clear, but the picture itself is not encrypted, and
 Digest is MD5: somebody on your network who records a login can try passwords against it offline. Use a
 long password of its own, not one you use anywhere else. An address that gets the login wrong 10 times
-is refused for 15 minutes. That is by address: a guesser who can change addresses (IPv6 lets a device
-pick many) is slowed rather than stopped, and a recorder that shares an address with one (behind the
-same router, say) is refused with it.
+is refused for 15 minutes; a public IPv6 address is counted with the rest of its /64, since a device
+can pick many there. After 50 wrong logins from anywhere within 10 minutes, every new login is refused
+for 15 minutes, so a guesser who keeps changing addresses is stopped too. A recorder that shares an
+address with a guesser (behind the same router, say) is refused with it, and during such a lockout a
+recorder that has to log in again waits it out as well.
 
 The device has no video encoder, so the stream is a series of JPEGs (RTP/JPEG, over TCP only), not
 H.264. ffmpeg, and Frigate and go2rtc with it, read it; a recorder that wants H.264 has to re-encode it,
@@ -497,8 +506,9 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   how near and how loud a clap has to be may change.
 - **Hold on the clock** (Show, off by default; the **Hold on the clock** switch in Home Assistant):
   a finger held on the clock for half a second sends the same event with `gesture: hold`. Only on
-  the clock itself, with nothing else on the screen: every other page keeps its taps as they are.
-  With it on, a slow tap on the clock is a hold, so tap quickly to open what a tap opens.
+  the clock itself, with nothing else on the screen (not over the screensaver, a card or the night
+  clock): every other page keeps its taps as they are. With it on, a slow tap on the clock is a
+  hold, so tap quickly to open what a tap opens. So far it has been tried off the device only, not on a device.
 
 ## 7. Voice
 
@@ -673,8 +683,9 @@ which is the faster one and not always the one you spoke to. With this on, a dev
 wake word tells the others how clearly it heard it and waits a moment to hear from them, and only
 the one that heard it best answers. The others go back to listening without a sound. Turn it on on
 every device that should take part; they need the same house word, set on each device's setup page,
-which signs what they tell each other so nothing else on the network can silence them. The house word
-is case-sensitive: it has to match exactly, capitals included. When another device refuses this one's
+which signs what they tell each other so nothing else on the network can silence them. Make it a long
+phrase, 16 characters or more: anything on the network that hears the devices can try words until one
+fits. The house word is case-sensitive: it has to match exactly, capitals included. When another device refuses this one's
 announcements for having a different word, the setup page names it next to the house word for an
 hour, and the log says so.
 
@@ -696,6 +707,8 @@ speak right beside it, lower it on one that answers from across the room. The lo
 device's score on every wake word. If the device that heard you best loses Home Assistant during the
 wait, the others have already stood down: you hear that one's error, as you would with only one
 device, and say it again.
+
+So far it has been tried off the device only, not on a device.
 
 ### Sounds of your own
 
@@ -799,6 +812,8 @@ on some devices) leans toward the loudest thing in the room. Set both first, the
 for a day to learn your room's quiet and loud readings. Sound from another speaker in the room
 counts, like any other noise.
 
+So far it has been tried off the device only, not on a device.
+
 ## 8. Settings lock
 
 A **settings lock** (Show and Spot, off by default) is a PIN the device asks for before its settings
@@ -863,7 +878,9 @@ A restore never opens a door on the device or has it listen or watch. Its privac
 camera and screen pages, talking through cameras), AirPlay, Spotify Connect, DLNA, Sendspin, the
 Bluetooth proxy, video and the addresses allowed to send it video, the diagnostics settings, Drop
 In, sending the room to Home Assistant's wake word engine (streaming or confirming), keeping wake
-word clips, presence and gestures, and a choice of no wake word all stay as they are, and so do its
+word clips and recordings, presence and gestures, the remote API, camera streaming and its login, the
+ambient noise sensor, the clap gesture, nearest device answers, hold on the clock, the update channel
+and automatic updates, live camera video, and a choice of no wake word all stay as they are, and so do its
 paired Bluetooth speaker, its amplifier's gain and anything it is in the middle of (a snooze, a
 timer). Wi-Fi networks, SSH keys and a fixed address are not part of the settings and are never in
 the file.
@@ -878,16 +895,18 @@ For scripts and tools that are not Home Assistant. It reads what the device is a
 say, changes its everyday settings, and follows its log as it is written. It never changes a privacy or
 security setting (SSH, the camera and screen pages, the setup page, Drop In, talking through cameras,
 presence and gestures, sending the room to Home Assistant, keeping clips, calls, Bluetooth pairing and
-the proxy, AirPlay, Spotify Connect, DLNA, video, Sendspin, the settings lock, updates, restarts, or the
-API itself): those it can read, not change. It never runs Home Assistant actions.
+the proxy, AirPlay, Spotify Connect, DLNA, video, Sendspin, the settings lock, updates, restarts, camera
+streaming, the ambient noise sensor, the clap gesture, hold on the clock, nearest device answers, or the
+API itself): those it can read, not change. It never runs Home Assistant actions, and it carries none
+of what was said to the device or what it answered.
 
 1. On the setup page, **Privacy & Security**, **Remote API**, press **Make a key**. The key is shown
    once, on that page (the one time it crosses your network): copy it. The device does not keep the
    key, only a secret made from it, in its own settings file, which never goes out in the diagnostics
    download or a saved settings file. A lost key cannot be shown again; make a new one, which stops
    the old one working and ends any log being followed with it.
-2. Turn on **Remote API** on the device's screen (**Privacy & Security**) or in Home Assistant (a switch
-   of the device's, under its configuration). Off on a new device.
+2. Turn on **Remote API** in Home Assistant (a switch of the device's, under its configuration), or on
+   the screen (Show and Spot, **Privacy & Security**). Off on a new device.
 
 It is on the device's web port, `http://<device>:8181/api/v1/`, on your own network and without
 encryption, so every request is signed with the key rather than carrying it: a request seen on the
@@ -924,11 +943,13 @@ What it answers:
 | `POST /api/v1/entities/<id>` | Changes one: `{"state": true}` for a switch, a number for a number, one of the options for a select, a string for a text, and nothing for a button, which presses it. A setting that is not writable here answers 403. |
 | `GET /api/v1/logs` | The log as server-sent events: the last 200 lines, then each line as it is written, for up to 30 minutes; two at a time at most. |
 
-The log has the device's name, serial number, Wi-Fi networks and Bluetooth devices taken out, as the
-diagnostics download does, along with addresses, but still names rooms and other devices, so treat
-it as private. Turning the API off or making a new key ends a log being followed. An address that
+The log has the device's name, serial number, Wi-Fi networks, Bluetooth devices, passwords and keys
+taken out, as the diagnostics download does, along with addresses and logins, and what was said and
+answered replaced by how long it was; it still names rooms and other devices, so treat it as private. Turning the API off or making a new key ends a log being followed. An address that
 sends requests that do not check out is turned away for a minute after ten of them; nobody else is,
 except that a public IPv6 address is counted with the rest of its /64.
+
+So far it has been tried off the device only, not on a device.
 
 ## More
 

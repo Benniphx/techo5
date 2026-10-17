@@ -32,7 +32,7 @@ func remoteSection(w http.ResponseWriter, token string) {
 	 <p style="margin:0">Remote API: %s. %s</p>
 	 <p class="note">For scripts and tools that are not Home Assistant: they read the device and change its
 	  everyday settings, never its privacy switches, updates or restarts. Every request is signed with the
-	  key, which is shown once. Turn it on on the device's screen (Privacy & Security) or in Home Assistant.</p>
+	  key, which is shown once. Turn it on in Home Assistant, or on the screen (Show and Spot, Privacy & Security).</p>
 	 <form method="post" action="/setup/remote-key"><input type="hidden" name="token" value="%s">
 	  <div class="btns"><button type="submit">%s</button></div></form></fieldset>`,
 		state, key, html.EscapeString(token), button)

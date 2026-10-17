@@ -79,6 +79,13 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
   players play or pause, scenes and scripts run, a card's own tap action does what it is set to.
 - **Slide** a finger along a light, cover, thermostat or media player to set its brightness,
   position, temperature or volume. The tile fills as you slide, and it is set when you let go.
+- **Tap a thermostat** whose card sets no tap of its own:
+  - on the Show (a long press too), for a sheet over the page: the temperature where it is, the one
+    it is set to with a step down and up (the low and the high of a range in heat/cool), its modes,
+    and **Done**.
+  - on the Spot, which has no room for a sheet, a tap on the left third of its tile sets it a step
+    cooler, and on the right third a step warmer; the middle does nothing. A thermostat that is off
+    or keeps a range has no one temperature to step.
 - **Long press** (Show only; on the Spot a long press is the ring menu):
   - on a light that has whites or colors, for a sheet of them. The light follows your finger.
   - on a media player, for a sheet with its controls, its volume, the speakers it can be grouped
