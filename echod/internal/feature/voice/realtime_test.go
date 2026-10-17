@@ -190,7 +190,8 @@ func TestARealtimeTurn(t *testing.T) {
 	for _, e := range evs {
 		kinds = append(kinds, e.kind)
 	}
-	want := []eventKind{evHeard, evStreamAudio, evReplyText, evContinue, evStreamEnd, evRunEnd}
+	// A question at the end opens no listening: the next turn would not know what it was.
+	want := []eventKind{evHeard, evStreamAudio, evReplyText, evStreamEnd, evRunEnd}
 	if len(kinds) != len(want) {
 		t.Fatalf("posted %v, want %v", kinds, want)
 	}
@@ -381,4 +382,121 @@ func waitUntilT(t *testing.T, ok func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("not in time")
+}
+
+// stuckSession is a session whose writes wait on a network that has stopped, until it is closed.
+type stuckSession struct {
+	*fakeSession
+	stuck chan struct{}
+	once  sync.Once
+}
+
+func (s *stuckSession) Audio([]int16) error {
+	<-s.stuck
+	return errors.New("closed")
+}
+
+func (s *stuckSession) Close() error {
+	s.once.Do(func() { close(s.stuck) })
+	return s.fakeSession.Close()
+}
+
+// A write waiting on the network does not hold Stop up: the conversation calls it, and the stop word and
+// a ring wait on it.
+func TestStopDoesNotWaitOnAWrite(t *testing.T) {
+	g := newRTRig(t)
+	stuck := &stuckSession{fakeSession: newFakeSession(), stuck: make(chan struct{})}
+	g.r.dial = func(context.Context, realtime.Config) (rtSession, error) {
+		g.dialed <- struct{}{}
+		return stuck, nil
+	}
+	_ = g.r.Start("")
+	<-g.dialed
+	waitUntilT(t, func() bool { g.r.mu.Lock(); defer g.r.mu.Unlock(); return g.r.turn != nil })
+	writing := make(chan struct{})
+	go func() { close(writing); _ = g.r.Audio(frame(160)) }()
+	<-writing
+	time.Sleep(20 * time.Millisecond) // the write is waiting now
+	start := time.Now()
+	_ = g.r.Stop()
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("Stop waited %v on a stuck write", d)
+	}
+}
+
+// Nothing heard: the turn ends as one that heard nothing.
+func TestRealtimeHeardNothing(t *testing.T) {
+	g := newRTRig(t)
+	_ = g.r.Start("")
+	s := g.waitDial(t)
+	s.events <- realtime.Event{Kind: realtime.Empty}
+	evs := g.waitPosted(t, evRunEnd)
+	if len(evs) != 2 || evs[0].kind != evHeard || evs[0].text != "" {
+		t.Fatalf("%+v", evs)
+	}
+}
+
+// countingMCP lists its tools as it is told to, counting the listings, and can be slow.
+type countingMCP struct {
+	fakeMCP
+	mu    sync.Mutex
+	lists int
+	delay time.Duration
+	tools []mcp.Tool
+}
+
+func (m *countingMCP) Tools(context.Context) ([]mcp.Tool, error) {
+	time.Sleep(m.delay)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lists++
+	return append([]mcp.Tool(nil), m.tools...), nil
+}
+
+func (m *countingMCP) count() int { m.mu.Lock(); defer m.mu.Unlock(); return m.lists }
+
+// Home Assistant's tools are kept: listed once, asked again in the background when stale, and listed anew
+// for another token; a slow first listing is waited for haFirst at most.
+func TestHomeAssistantToolsAreKept(t *testing.T) {
+	g := newRTRig(t)
+	m := &countingMCP{tools: []mcp.Tool{{Name: "HassTurnOn"}}}
+	g.r.mcpFor = func(string) mcpClient { return m }
+	now := time.Unix(1_000_000, 0)
+	var clock sync.Mutex
+	g.r.now = func() time.Time { clock.Lock(); defer clock.Unlock(); return now }
+	advance := func(d time.Duration) { clock.Lock(); now = now.Add(d); clock.Unlock() }
+
+	if ts := g.r.haTools("a"); len(ts) != 1 || m.count() != 1 {
+		t.Fatalf("%v, %d listings", ts, m.count())
+	}
+	if g.r.haTools("a"); m.count() != 1 {
+		t.Fatal("listed again while fresh")
+	}
+	// Stale: the kept list now, a new one in the background.
+	m.mu.Lock()
+	m.tools = append(m.tools, mcp.Tool{Name: "HassTurnOff"})
+	m.mu.Unlock()
+	advance(haStale + time.Second)
+	if ts := g.r.haTools("a"); len(ts) != 1 {
+		t.Fatalf("a stale list was not used while the new one came: %v", ts)
+	}
+	waitUntilT(t, func() bool { return m.count() == 2 })
+	waitUntilT(t, func() bool { return len(g.r.haTools("a")) == 2 })
+
+	// Another token: listed for it, not the other's list.
+	if ts := g.r.haTools("b"); len(ts) != 2 || m.count() != 3 {
+		t.Fatalf("%v, %d listings", ts, m.count())
+	}
+
+	// A slow first listing: the turn goes on without it after haFirst.
+	slow := &countingMCP{delay: 300 * time.Millisecond, tools: []mcp.Tool{{Name: "HassTurnOn"}}}
+	g.r.mcpFor = func(string) mcpClient { return slow }
+	was := haFirst
+	haFirst = 50 * time.Millisecond
+	defer func() { haFirst = was }()
+	start := time.Now()
+	if ts := g.r.haTools("c"); len(ts) != 0 || time.Since(start) > 250*time.Millisecond {
+		t.Fatalf("%v after %v", ts, time.Since(start))
+	}
+	waitUntilT(t, func() bool { return len(g.r.haTools("c")) == 1 })
 }

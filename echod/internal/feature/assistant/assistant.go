@@ -315,4 +315,6 @@ func run(ts []tool, call llm.ToolCall) string {
 // which can carry words a stranger wrote (a song's title, a notification).
 const realtimeInstructions = " To control the house, call Home Assistant's Hass tools (HassTurnOn, " +
 	"HassTurnOff, HassLightSet and the like) with the name of the device or area you were told, " +
-	"directly. Read the house's state (GetLiveContext) only when you are asked about it."
+	"directly. Read the house's state (GetLiveContext) only when you are asked about it. " +
+	"Each request is answered on its own, with no memory of the one before: never end by asking a " +
+	"question, and if something is unclear, say what you need and that the person can ask again."

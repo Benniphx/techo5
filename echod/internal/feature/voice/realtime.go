@@ -75,8 +75,10 @@ const (
 	// Home Assistant's tool list is kept, so a turn does not wait on it: asked again in the background
 	// once it is haStale, and waited for only on the first turn, haFirst at most.
 	haStale = 2 * time.Minute
-	haFirst = 3 * time.Second
 )
+
+// haFirst is how long the first turn waits for Home Assistant's tools; a variable for the tests.
+var haFirst = 3 * time.Second
 
 // readOnlyTools are Home Assistant's tools known to only look things up.
 var readOnlyTools = map[string]bool{"GetLiveContext": true, "GetDateTime": true}
@@ -109,8 +111,13 @@ type rtBackend struct {
 }
 
 // rtTurn is one turn's session and what goes with it, for as long as it is open.
+//
+// What goes to the session is sent under send, never under the backend's mu: a write can wait on the
+// network, and Stop, which the conversation calls on its own goroutine, needs only mu, and closes the
+// session, which ends any write waiting.
 type rtTurn struct {
 	gen    int
+	send   sync.Mutex
 	sess   rtSession
 	at     time.Time // when the session opened, for the day's count
 	gate   ToolGate  // this turn's lockout, never swapped
@@ -239,18 +246,33 @@ func (r *rtBackend) open(gen int) {
 		r.post(event{kind: evError, code: "realtime-limit", msg: "realtime voice reached its time limit"})
 	})
 	// What was said while it opened goes first, and the end of speech after it, before anything sent from
-	// now on: under the lock, so a frame arriving meanwhile waits behind them.
-	if len(r.preroll) > 0 {
-		_ = sess.Audio(r.preroll)
-	}
-	if r.ended {
-		_ = sess.EndOfSpeech()
-	}
+	// now on: the turn is published with its send lock held, so a frame arriving meanwhile waits behind
+	// them, and the lock that Stop needs is let go before anything is written.
+	pre, ended := r.preroll, r.ended
 	r.preroll, r.ended = nil, false
+	t.send.Lock()
 	r.turn = t
 	r.mu.Unlock()
+	if len(pre) > 0 {
+		_ = sess.Audio(pre)
+	}
+	if ended {
+		_ = sess.EndOfSpeech()
+	}
+	t.send.Unlock()
 	slog.Info("realtime: session open", "provider", rc.Provider, "functions", len(fns))
 	safe.Go("realtime events", func() { r.pump(t) })
+}
+
+// sending is the open turn, to send to under its send lock, or nil, the frame kept, while none is open.
+func (r *rtBackend) sending(keep func()) *rtTurn {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.turn == nil {
+		keep()
+		return nil
+	}
+	return r.turn
 }
 
 // Audio sends a frame of the microphone, or keeps it while the session opens.
@@ -259,26 +281,28 @@ func (r *rtBackend) Audio(frame []byte) error {
 	for i := range pcm {
 		pcm[i] = int16(binary.LittleEndian.Uint16(frame[2*i:]))
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.turn == nil {
+	t := r.sending(func() {
 		if len(r.preroll)+len(pcm) <= realtimePreroll {
 			r.preroll = append(r.preroll, pcm...)
 		}
+	})
+	if t == nil {
 		return nil
 	}
-	return r.turn.sess.Audio(pcm)
+	t.send.Lock()
+	defer t.send.Unlock()
+	return t.sess.Audio(pcm)
 }
 
 // End says the speaker has finished: the answer is asked for.
 func (r *rtBackend) End() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.turn == nil {
-		r.ended = true
+	t := r.sending(func() { r.ended = true })
+	if t == nil {
 		return nil
 	}
-	return r.turn.sess.EndOfSpeech()
+	t.send.Lock()
+	defer t.send.Unlock()
+	return t.sess.EndOfSpeech()
 }
 
 // Stop ends the turn's session at once, and what it was saying with it. Safe from any goroutine.
@@ -346,10 +370,18 @@ func (r *rtBackend) pump(t *rtTurn) {
 			r.postFor(t, event{kind: evStreamAudio, audio: out})
 		case realtime.Call:
 			out := r.call(t, e.Name, e.Args)
+			t.send.Lock()
 			_ = t.sess.ToolResult(e.CallID, e.Name, out)
+			t.send.Unlock()
 		case realtime.Calls:
 			// Every call of the response is answered (each was, as it came): one request to go on.
+			t.send.Lock()
 			_ = t.sess.Continue()
+			t.send.Unlock()
+		case realtime.Empty:
+			// Nothing was heard: the turn ends as any turn that heard nothing does.
+			r.postFor(t, event{kind: evHeard, text: ""})
+			r.postFor(t, event{kind: evRunEnd})
 		case realtime.Done, realtime.Interrupt:
 			r.finish(t)
 		case realtime.Failed:
@@ -374,12 +406,11 @@ func (r *rtBackend) finish(t *rtTurn) {
 	t.spoke = false
 	r.mu.Unlock()
 
+	// No listening after it, even for a question: the next turn is a session of its own, which would not
+	// know what the question was.
 	if said != "" {
 		slog.Info("realtime: replying", "text", said)
 		r.postFor(t, event{kind: evReplyText, text: said})
-		if strings.HasSuffix(said, "?") {
-			r.postFor(t, event{kind: evContinue})
-		}
 	}
 	if spoke {
 		r.postFor(t, event{kind: evStreamEnd})

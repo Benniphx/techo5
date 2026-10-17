@@ -338,3 +338,23 @@ func TestGeminiNeverSetUp(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// An empty commit is said as nothing heard, not as a failure, and not answered.
+func TestOpenAINothingHeard(t *testing.T) {
+	f := &fakeServer{script: func(m map[string]any) []string {
+		if m["type"] != "input_audio_buffer.commit" {
+			return nil
+		}
+		return []string{`{"type":"error","error":{"code":"input_audio_buffer_commit_empty","message":"buffer too small"}}`}
+	}}
+	addr := f.start(t)
+	s, err := Dial(context.Background(), Config{Provider: OpenAI, Endpoint: addr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.EndOfSpeech()
+	if evs := collect(t, s, Empty); len(evs) != 1 {
+		t.Fatalf("%+v", evs)
+	}
+}

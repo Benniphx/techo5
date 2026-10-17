@@ -574,8 +574,9 @@ network in place of the provider's address, which can hold the key itself; it ha
 address, since your voice goes through it. A settings file never chooses a wake word for realtime
 voice, and one that moves it to another provider or relay leaves every wake word off it.
 
-Each turn has a session of its own, so the model does not remember the last turn: a follow-up
-question starts afresh. The device still decides when you have finished speaking, and the stop word,
+Each turn has a session of its own, so the model does not remember the last turn, and the device
+does not listen again after a realtime answer, even with listening after an answer set for the wake
+word: say the wake word again for the next question. The device still decides when you have finished speaking, and the stop word,
 the action button and another wake word stop an answer as they stop any other. Its speech plays as any
 answer does, so an alarm, a ring or a call cuts it off. A turn ends after five minutes whatever
 happens. The minutes a day count all the time a session is open, not only speech, and once they are

@@ -113,10 +113,6 @@ func (g gemini) toolResult(callID, name, output string) []any {
 	}}}}
 }
 
-// cancel has nothing to send: Gemini stops an answer when it hears speech, and the session is closed to
-// stop it otherwise.
-func (g gemini) cancel() any { return nil }
-
 func (g gemini) read(msg []byte, emit func(Event)) {
 	var m struct {
 		ServerContent *struct {

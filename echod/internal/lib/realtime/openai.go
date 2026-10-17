@@ -107,10 +107,7 @@ func (o openAI) readyFirst() bool  { return true }
 var nonFatal = map[string]bool{
 	"conversation_already_has_active_response": true,
 	"response_cancel_not_active":               true,
-	"input_audio_buffer_commit_empty":          true,
 }
-
-func (o openAI) cancel() any { return map[string]any{"type": "response.cancel"} }
 
 func (o openAI) read(msg []byte, emit func(Event)) {
 	var m struct {
@@ -184,6 +181,11 @@ func (o openAI) read(msg []byte, emit func(Event)) {
 			}
 		}
 	case "error":
+		if m.Error.Code == "input_audio_buffer_commit_empty" {
+			// Nothing was heard: said so, and the session is ended rather than left to answer silence.
+			emit(Event{Kind: Empty})
+			return
+		}
 		if nonFatal[m.Error.Code] {
 			return
 		}

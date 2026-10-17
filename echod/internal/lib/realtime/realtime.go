@@ -62,8 +62,9 @@ const (
 	Call      = "call"      // the model calls a function (CallID, Name, Args)
 	Calls     = "calls"     // the model's calls so far are all made: their results go back, then Continue
 	Done      = "done"      // the answer is finished
+	Empty     = "empty"     // nothing was heard: there is nothing to answer
 	Failed    = "failed"    // the session failed (Err)
-	Interrupt = "interrupt" // the provider cut its answer short
+	Interrupt = "interrupt" // the provider ended its answer early (the device never asks it to)
 )
 
 // Event is something from the session.
@@ -87,7 +88,6 @@ type codec interface {
 	toolResult(callID, name, output string) []any
 	// goOn is what has the model go on once every call's result is in; nothing where it goes on by itself.
 	goOn() []any
-	cancel() any
 	// ready is whether a message says the session is set up, for a provider that says so (Gemini); a
 	// provider that does not answers true to its first message, or to none (readyFirst).
 	ready(msg []byte) bool
@@ -243,14 +243,6 @@ func (s *Session) Continue() error {
 		if err := s.write(m); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-// Cancel stops the answer being made.
-func (s *Session) Cancel() error {
-	if m := s.codec.cancel(); m != nil {
-		return s.write(m)
 	}
 	return nil
 }
