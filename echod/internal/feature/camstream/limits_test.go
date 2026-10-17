@@ -134,10 +134,12 @@ func TestAnAddressIsLockedOut(t *testing.T) {
 			"nonce=\"stale\", uri=\"%s\", response=\"0\"\r\n\r\n", c.url, realm, c.url)
 		_, _ = c.read() // a 401, or the connection closed on the one that locks the address out
 		c.conn.Close()
+		// The server lets the connection go before the next is made: one address may have only so many
+		// waiting, and one more would be closed unread, its wrong login not counted.
+		waitUntil(t, func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.waiting["127.0.0.1"] == 0 })
 	}
-	if !f.guard.refused("127.0.0.1") {
-		t.Fatal("not locked out")
-	}
+	// The last wrong login is counted as its connection ends, a moment after its answer has gone.
+	waitUntil(t, func() bool { return f.guard.refused("127.0.0.1") })
 	c := dial(t, addr, "viewer", "secret")
 	if !c.closed(5 * time.Second) {
 		t.Fatal("a locked-out address was let in")
@@ -210,5 +212,17 @@ func TestGuardCountsWithoutChanging(t *testing.T) {
 	r := g.by["x"]
 	if len(r.fails) != 3 || countRecent(r.fails, time.Now()) != 2 {
 		t.Fatalf("failures now %v", r.fails)
+	}
+}
+
+// waitUntil waits for ok, five seconds at most.
+func waitUntil(t *testing.T, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !ok() {
+		if time.Now().After(deadline) {
+			t.Fatal("not in time")
+		}
+		time.Sleep(2 * time.Millisecond)
 	}
 }
