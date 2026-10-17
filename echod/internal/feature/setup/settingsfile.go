@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/update"
@@ -90,11 +91,11 @@ func (f *Feature) settingsFile(w http.ResponseWriter, r *http.Request) {
 func (f *Feature) restore(w http.ResponseWriter, r *http.Request) {
 	token, in := f.session(r)
 	if !in {
-		http.Error(w, "not let in", http.StatusForbidden)
+		web.Refuse(w, "not let in", http.StatusForbidden)
 		return
 	}
 	if r.Method != http.MethodPost {
-		http.Error(w, "post a settings file", http.StatusMethodNotAllowed)
+		web.Refuse(w, "post a settings file", http.StatusMethodNotAllowed)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxSettings+64<<10)
