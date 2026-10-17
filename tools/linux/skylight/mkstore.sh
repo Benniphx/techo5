@@ -4,7 +4,7 @@
 # initramfs). Made from tools/linux/athena/mkstore.sh; only the board and its /init differ.
 #
 #   mkstore.sh -r <rootfs.tar.gz> -k <authorized_keys>|none -o <system.img> [-i <inputs>] [-w <workdir>]
-#              [-f <fbprobe>] [-s <slot a state>] [-L <label>]
+#              [-f <fbprobe>] [-s <slot a state>] [-L <label>] [-F <unit firmware>]
 #
 # Linux (WSL) with qemu-user-static + binfmt for arm, Alpine's static apk at ~/apk/apk.static, a user
 # namespace (uidmap) and e2fsprogs; network for apk. What it makes:
@@ -21,6 +21,11 @@
 #   /.techo5-store        the store marker, naming the board (board=skylight): slotctl then installs
 #                         only a Skylight rootfs into the other slot
 #   /active, /slots/a (<rootfs.tar.gz>), /slots/a.state   the store, as slotctl has it
+#   /lib/firmware/brcm    -F <dir>: the unit's own Wi-Fi and Bluetooth firmware, copied from its stock
+#                         vendor partition (/vendor/etc/firmware: fw_bcm43456c5_ag.bin,
+#                         nvram_ap6256.txt, BCM4345C5.hcd), under the names the drivers ask for. They
+#                         are the vendor's, so a store image carrying them is for that unit only, never
+#                         published; without -F the unit has no Wi-Fi or Bluetooth until they are added.
 #
 # The filesystem has athena's feature set (no journal, no 64bit or metadata_csum), which slotctl grow
 # is known to handle, and is only as large as its contents need, so it writes quickly. The first boot grows it to fill the partition (slotctl grow, from /init), which is
@@ -33,7 +38,7 @@ set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 LINUX=$(cd "$HERE/.." && pwd)
 INPUTS=$(cd "$HERE/../../.." && pwd)/inputs
-ROOTFS=; KEYS=; OUT=; WORK=$HOME/techo5-skylight-store; FBPROBE=; STATE=good; LABEL=techo5-store
+ROOTFS=; KEYS=; OUT=; WORK=$HOME/techo5-skylight-store; FBPROBE=; STATE=good; LABEL=techo5-store; UNITFW=
 APK=${APK:-$HOME/apk/apk.static}
 INNER=
 while [ $# -gt 0 ]; do
@@ -46,6 +51,7 @@ while [ $# -gt 0 ]; do
 	-f) FBPROBE=$2; shift 2;;
 	-s) STATE=$2; shift 2;;
 	-L) LABEL=$2; shift 2;;
+	-F) UNITFW=$2; shift 2;;
 	--inner) INNER=1; shift;;
 	*) echo "mkstore: unknown argument $1" >&2; exit 1;;
 	esac
@@ -67,7 +73,7 @@ if [ -z "$INNER" ]; then
 	map=--map-auto; command -v newuidmap >/dev/null || map=
 	# Files owned by root (and by the slot's service users) without sudo.
 	exec unshare -Ur $map bash "$0" --inner -r "$ROOTFS" -k "$KEYS" -o "$OUT" -i "$INPUTS" -w "$WORK" \
-		${FBPROBE:+-f "$FBPROBE"} -s "$STATE" -L "$LABEL"
+		${FBPROBE:+-f "$FBPROBE"} -s "$STATE" -L "$LABEL" ${UNITFW:+-F "$UNITFW"}
 fi
 
 R=$WORK/root
@@ -119,6 +125,12 @@ for f in sbin/init usr/local/bin/techo5 etc/techo5/boot.sh etc/inittab store; do
 done
 grep -qx 'T5_BOARD=skylight' "$R/slots/a/etc/techo5/device.conf" 2>/dev/null ||
 	{ echo "mkstore: the rootfs has no Skylight device.conf (DEVICE_OVERLAY=tools/linux/skylight/overlay)" >&2; exit 1; }
+if [ -n "$UNITFW" ]; then
+	say "the unit's own firmware from $UNITFW"
+	install -D -m 644 "$UNITFW/fw_bcm43456c5_ag.bin" "$R/lib/firmware/brcm/brcmfmac43456-sdio.bin"
+	install -D -m 644 "$UNITFW/nvram_ap6256.txt" "$R/lib/firmware/brcm/brcmfmac43456-sdio.txt"
+	install -D -m 644 "$UNITFW/BCM4345C5.hcd" "$R/lib/firmware/brcm/BCM4345C5.hcd"
+fi
 printf '%s\n' "$STATE" > "$R/slots/a.state"
 echo a > "$R/active"
 echo "Skylight store built $(date -u '+%Y-%m-%dT%H:%MZ'); slot a: $(cat "$R/slots/a/etc/techo5-release")" > "$R/etc/techo5-store-release"
