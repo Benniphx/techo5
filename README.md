@@ -50,7 +50,7 @@ It started on the Show 5, which is where the name comes from.
 | **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
-| **Echo, 2nd gen** (2017, `radar`) | – | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
+| **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
