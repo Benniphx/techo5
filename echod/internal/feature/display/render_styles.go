@@ -231,8 +231,9 @@ func (r *renderer) analogStyle(s scene, box image.Rectangle) {
 		wy := mid + r.s(82)
 		ix := x
 		if s.weather.Condition != "" {
-			r.weatherIcon(s.weather.Condition, x+weatherMark/2, wy-r.s(12), weatherMark)
-			ix += weatherMark + r.s(14)
+			mark := r.s(weatherMark)
+			r.weatherIcon(s.weather.Condition, x+mark/2, wy-r.s(12), mark)
+			ix += mark + r.s(14)
 		}
 		r.text(r.small, line, ix, wy, dim)
 		r.setWeatherAt(image.Rect(x, wy-r.s(40), ix+r.width(r.small, line), wy+r.s(14)))
@@ -545,8 +546,9 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 			y := min(base+r.s(100), box.Max.Y)
 			ix := box.Min.X
 			if s.weather.Condition != "" {
-				r.weatherIcon(s.weather.Condition, ix+weatherMark/2, y-r.s(12), weatherMark)
-				ix += weatherMark + r.s(14)
+				mark := r.s(weatherMark)
+				r.weatherIcon(s.weather.Condition, ix+mark/2, y-r.s(12), mark)
+				ix += mark + r.s(14)
 			}
 			// Kept left of the divider, as the date is: a long condition would otherwise run into the
 			// events, which go further down without the row.

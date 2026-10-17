@@ -51,7 +51,7 @@ func (r *renderer) drawer(s scene) {
 
 	panel := image.Rect(r.w-r.cardIn()-r.drawerW(), r.cardIn(), r.w-r.cardIn(), r.h-r.cardIn())
 	r.addZone(zone{r: image.Rect(0, 0, panel.Min.X-r.s(4), r.h), kind: zoneDone}) // the dimmed clock closes it
-	r.roundShadow(panel, r.cardRad(), 26, 8, shadowAlpha()*1.2)
+	r.roundShadow(panel, r.cardRad(), r.sf(26), r.s(8), shadowAlpha()*1.2)
 	r.roundFill(panel, r.cardRad(), surface(3), surface(2))
 	r.roundHighlight(panel, r.cardRad())
 

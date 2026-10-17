@@ -212,21 +212,22 @@ func (r *renderer) background(rd home.Radio) {
 	}
 	// No picture from the service: a drawn one, faint, on the right where the text is not.
 	r.faded(28, func() {
-		cx, cy := r.w-260, r.h/2
+		s := r.s
+		cx, cy := r.w-s(260), r.h/2
 		if rd.Music {
 			// Two notes: heads, stems and a beam.
-			r.disc(cx-70, cy+90, 34, amber)
-			r.disc(cx+80, cy+70, 34, amber)
-			r.stroke(cx-42, cy+80, cx-42, cy-120, 14, amber)
-			r.stroke(cx+108, cy+60, cx+108, cy-140, 14, amber)
-			r.stroke(cx-48, cy-120, cx+114, cy-140, 30, amber)
+			r.disc(cx-s(70), cy+s(90), s(34), amber)
+			r.disc(cx+s(80), cy+s(70), s(34), amber)
+			r.stroke(cx-s(42), cy+s(80), cx-s(42), cy-s(120), s(14), amber)
+			r.stroke(cx+s(108), cy+s(60), cx+s(108), cy-s(140), s(14), amber)
+			r.stroke(cx-s(48), cy-s(120), cx+s(114), cy-s(140), s(30), amber)
 			return
 		}
 		// Talk: rings going out from a transmitter dot, largest first so each ring shows.
 		for _, rad := range []int{190, 130, 70} {
-			r.disc(cx, cy, rad+9, amber)
-			r.disc(cx, cy, rad-9, walnut)
+			r.disc(cx, cy, s(rad+9), amber)
+			r.disc(cx, cy, s(rad-9), walnut)
 		}
-		r.disc(cx, cy, 22, amber)
+		r.disc(cx, cy, s(22), amber)
 	})
 }

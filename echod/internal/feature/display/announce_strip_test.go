@@ -7,7 +7,8 @@ import "testing"
 // The strip is the only part of the screen an announcement owns, so it is the only part where a tap
 // ends one. A tap on the clock above it is a tap on the clock.
 func TestWhereATapEndsAnAnnouncement(t *testing.T) {
-	const w, h = 1024, 600
+	// The Show 5's panel, where the strip's sizes are drawn 1:1.
+	const w, h = showWide, showHigh
 
 	cases := []struct {
 		what string
@@ -25,5 +26,11 @@ func TestWhereATapEndsAnAnnouncement(t *testing.T) {
 		if got := onAnnounceStrip(c.x, c.y, w, h); got != c.want {
 			t.Errorf("%s: got %v, want %v", c.what, got, c.want)
 		}
+	}
+	// A wider panel draws the strip larger, twice over at 1920 across, and a tap follows it there.
+	const sw, sh = 1920, 1080
+	top := sh - 2*(announceInset+announceBar)
+	if !onAnnounceStrip(sw/2, top+2, sw, sh) || onAnnounceStrip(sw/2, top-4, sw, sh) {
+		t.Errorf("on a 1920 by 1080 panel the strip's top should be at %d", top)
 	}
 }

@@ -45,10 +45,10 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 	wordless := v.Caption != nil && v.Caption.Wordless()
 	if !wordless {
 		// Corners on a dark strip so they read over any picture.
-		draw.Draw(r.dst, image.Rect(0, 0, r.w, 44), image.NewUniform(shade), image.Point{}, draw.Over)
-		r.text(r.small, name, r.margin, 32, captionText)
+		draw.Draw(r.dst, image.Rect(0, 0, r.w, r.s(44)), image.NewUniform(shade), image.Point{}, draw.Over)
+		r.text(r.small, name, r.margin, r.s(32), captionText)
 		t := clockHM(s.now)
-		r.text(r.small, t, r.w-r.margin-r.width(r.small, t), 32, captionDim)
+		r.text(r.small, t, r.w-r.margin-r.width(r.small, t), r.s(32), captionDim)
 	}
 	left := time.Until(v.Until).Round(time.Second)
 	hint := "tap to close"
@@ -97,7 +97,7 @@ func (r *renderer) cameraView(s scene, v home.CameraView) {
 	} else if s.cameraSound {
 		end = r.cameraSoundBox(r.cameraSoundLabel(s)).Min.X - r.s(10)
 	}
-	r.text(r.tiny, r.clipTo(r.tiny, hint, end-r.margin), r.margin, r.h-11, captionDim)
+	r.text(r.tiny, r.clipTo(r.tiny, hint, end-r.margin), r.margin, r.h-r.s(11), captionDim)
 
 	// The sound's control, at the end of that strip and clear of the hint: a tap on it silences what
 	// the camera is saying and leaves the view up. Only while there is a sound to silence, and the

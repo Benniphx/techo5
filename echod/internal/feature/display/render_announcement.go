@@ -21,7 +21,8 @@ import (
 // forty-five seconds: an announcement is not a thing anybody has to answer.
 
 const (
-	// announceBar is how tall the strip is, and announceInset how far in from the edges it sits.
+	// announceBar is how tall the strip is, and announceInset how far in from the edges it sits, in
+	// Show 5 pixels (announceBox scales them).
 	announceBar   = 132
 	announceInset = 28
 
@@ -41,20 +42,19 @@ func (r *renderer) announcementStrip(s scene) {
 		who = "Another room"
 	}
 
-	top := r.h - announceBar - announceInset
-	box := image.Rect(announceInset, top, r.w-announceInset, r.h-announceInset)
-	r.roundShadow(box, r.cardRad(), 26, 8, shadowAlpha()*1.2)
+	box := announceBox(r.w, r.h)
+	r.roundShadow(box, r.cardRad(), r.sf(26), r.s(8), shadowAlpha()*1.2)
 	r.roundFill(box, r.cardRad(), surface(4), surface(2))
 	r.roundHighlight(box, r.cardRad())
 
 	// The way out, on the right of the heading rather than on a line of its own: the strip is a
 	// hundred and thirty pixels and the message has first claim on them.
-	r.rightText(r.tiny, dismissHint, box.Max.X-r.rowIn(), box.Min.Y+40, dim)
+	r.rightText(r.tiny, dismissHint, box.Max.X-r.rowIn(), box.Min.Y+r.s(40), dim)
 
 	if m.Text == "" {
 		// Nothing to read, so the room is the whole of it and is set large.
-		r.text(r.tiny, "ANNOUNCEMENT", box.Min.X+r.rowIn(), box.Min.Y+40, amber)
-		r.text(r.title, who, box.Min.X+r.rowIn(), box.Min.Y+92, cream)
+		r.text(r.tiny, "ANNOUNCEMENT", box.Min.X+r.rowIn(), box.Min.Y+r.s(40), amber)
+		r.text(r.title, who, box.Min.X+r.rowIn(), box.Min.Y+r.s(92), cream)
 		return
 	}
 
@@ -66,38 +66,45 @@ func (r *renderer) announcementStrip(s scene) {
 	// is the part that has to be read, so the message keeps the large face and the width.
 	head := "ANNOUNCEMENT  ·  " + strings.ToUpper(who)
 	// The heading stops short of the hint on its right.
-	room := box.Dx() - 2*r.rowIn() - r.width(r.tiny, dismissHint) - 24
-	r.text(r.tiny, clipText(r, r.tiny, head, room), box.Min.X+r.rowIn(), box.Min.Y+44, amber)
-	r.text(r.body, clipText(r, r.body, m.Text, box.Dx()-2*r.rowIn()), box.Min.X+r.rowIn(), box.Min.Y+100, cream)
+	room := box.Dx() - 2*r.rowIn() - r.width(r.tiny, dismissHint) - r.s(24)
+	r.text(r.tiny, clipText(r, r.tiny, head, room), box.Min.X+r.rowIn(), box.Min.Y+r.s(44), amber)
+	r.text(r.body, clipText(r, r.body, m.Text, box.Dx()-2*r.rowIn()), box.Min.X+r.rowIn(), box.Min.Y+r.s(100), cream)
 }
 
 // recordingStrip says this device's microphone is open and where what it hears is going. It is the
 // same strip in the same place, so the two read as one thing happening in two directions.
 func (r *renderer) recordingStrip(s scene) {
-	top := r.h - announceBar - announceInset
-	box := image.Rect(announceInset, top, r.w-announceInset, r.h-announceInset)
-	r.roundShadow(box, r.cardRad(), 26, 8, shadowAlpha()*1.2)
+	box := announceBox(r.w, r.h)
+	r.roundShadow(box, r.cardRad(), r.sf(26), r.s(8), shadowAlpha()*1.2)
 	r.roundFill(box, r.cardRad(), shift(surface(4), 6), surface(2))
-	r.roundStroke(box, r.cardRad(), 2, amber)
+	r.roundStroke(box, r.cardRad(), r.sf(2), amber)
 	r.roundHighlight(box, r.cardRad())
 
-	r.text(r.tiny, "SPEAKING TO THE HOUSE", box.Min.X+r.rowIn(), box.Min.Y+40, amber)
-	r.text(r.title, "Go ahead", box.Min.X+r.rowIn(), box.Min.Y+84, cream)
+	r.text(r.tiny, "SPEAKING TO THE HOUSE", box.Min.X+r.rowIn(), box.Min.Y+r.s(40), amber)
+	r.text(r.title, "Go ahead", box.Min.X+r.rowIn(), box.Min.Y+r.s(84), cream)
 
 	to := "It sends when you stop talking"
 	if s.announcePeers > 0 {
 		to = "Goes to " + devicesText(s.announcePeers)
 	}
-	r.text(r.body, to, box.Min.X+r.rowIn()+300, box.Min.Y+84, dim)
+	r.text(r.body, to, box.Min.X+r.rowIn()+r.s(300), box.Min.Y+r.s(84), dim)
 	// The way out, said on the strip that owns it.
-	r.text(r.tiny, "TAP TO SEND  ·  HOLD TO CANCEL", box.Min.X+r.rowIn(), box.Min.Y+112, dim)
+	r.text(r.tiny, "TAP TO SEND  ·  HOLD TO CANCEL", box.Min.X+r.rowIn(), box.Min.Y+r.s(112), dim)
+}
+
+// announceBox is where the strip is on a w by h panel, its fixed sizes scaled from the Show 5's as
+// the renderer scales everything else.
+func announceBox(w, h int) image.Rectangle {
+	p := &paint{sNum: w, sDen: drawnFor}
+	bar, in := p.s(announceBar), p.s(announceInset)
+	return image.Rect(in, h-bar-in, w-in, h-in)
 }
 
 // onAnnounceStrip is whether a finger landed on the strip, which is the only part of the screen an
 // announcement owns.
 func onAnnounceStrip(x, y, w, h int) bool {
-	top := h - announceBar - announceInset
-	return x >= announceInset && x <= w-announceInset && y >= top && y <= h-announceInset
+	b := announceBox(w, h)
+	return x >= b.Min.X && x <= b.Max.X && y >= b.Min.Y && y <= b.Max.Y
 }
 
 // clipText is as much of s as fits in width, with an ellipsis when that is not all of it.

@@ -84,7 +84,7 @@ func (r *renderer) wave(s scene) {
 // the height) and gives way to a long answer down to a quarter of the screen. It returns the picture's
 // top and bottom, the gap under it, the words' last baseline, and the words.
 func (r *renderer) eqLayout(s scene, pct int) (top, bot, under, bottom int, lines []eqLine) {
-	top, bottom = headerH+r.s(8), r.h-r.s(14)
+	top, bottom = r.s(headerH)+r.s(8), r.h-r.s(14)
 	under = r.s(54)
 	lines = r.eqWords(s, bottom-(r.h*28/100)-under)
 	words := 0
