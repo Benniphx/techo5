@@ -5,6 +5,9 @@ import "slices"
 // Screen is the panel: whether it is lit, how brightly in percent, and whether the room's light
 // is allowed to dim it below that. Only the Echo Show has one; on the Dot nothing reads this.
 type Screen struct {
+	// ClockHold tells Home Assistant of a finger held on the clock (feature/display, gesture_hold.go).
+	ClockHold bool `json:"clock_hold,omitempty"`
+
 	On         bool `json:"on"`
 	Brightness int  `json:"brightness"`
 	Auto       bool `json:"auto"`
@@ -281,4 +284,9 @@ func (w ScreenWriter) ClockTap(v string) error {
 // Custom saves a palette and makes it the theme.
 func (w ScreenWriter) Custom(p Palette) error {
 	return w.st.Update(func(c *Config) { c.Screen.Theme, c.Screen.Palette = "Custom", p })
+}
+
+// ClockHold is whether a finger held on the clock is told to Home Assistant.
+func (w ScreenWriter) ClockHold(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.ClockHold = v })
 }

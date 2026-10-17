@@ -233,7 +233,7 @@ func (d *Display) applyHolds() {
 // (dashScene does not run while the panel is off), and the dark panel wakes on a tap: with holds on, a
 // slow press there - a half-asleep hand on a night alarm - would be a hold and a release, and nothing.
 // Called with mu held.
-func (d *Display) holdsWanted() bool { return d.nightGlow || (d.dashHolds && d.on) }
+func (d *Display) holdsWanted() bool { return d.nightGlow || ((d.dashHolds || d.clockHolds) && d.on) }
 
 // dashGesture is a finger on the dashboard. It goes to the page as it moves, except a finger that
 // starts at one of the screen's edges: the left takes the dashboard away, the top brings the

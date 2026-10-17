@@ -438,6 +438,19 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   the camera cannot tell it from somebody leaning in. While Gestures is on the camera looks eight
   times a second, which costs a little more than presence alone.
 
+- **Clap gesture** (every device, experimental, off by default; the **Clap gesture** switch in Home
+  Assistant): two sharp claps 0.15 to 0.7 seconds apart, then quiet, send Home Assistant an
+  `esphome.techo5_gesture` event with `gesture: double_clap` and the `device`, for an automation to
+  act on. One clap, applause, a knock at the door, a door, footsteps or somebody talking is not two
+  claps. It does not listen while the device plays music or a sound of its own, rings, or is in a
+  request or a call. Only the event leaves the device: one microphone is read on it, as the wake
+  word already reads them. Its thresholds are worked out on made-up sound and not yet on a room, so
+  how near and how loud a clap has to be may change.
+- **Hold on the clock** (Show, off by default; the **Hold on the clock** switch in Home Assistant):
+  a finger held on the clock for half a second sends the same event with `gesture: hold`. Only on
+  the clock itself, with nothing else on the screen: every other page keeps its taps as they are.
+  With it on, a slow tap on the clock is a hold, so tap quickly to open what a tap opens.
+
 ## 7. Voice
 
 **Speaker gain** is an optional amplifier boost on Show 5 2nd gen units with a TI TAS5805M.

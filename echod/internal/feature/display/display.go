@@ -193,6 +193,7 @@ type Display struct {
 	dashClimate   *climateSheet         // the thermostat sheet, while it is up
 	sheetSent     sliderSent            // what a sheet's slider last sent, while a finger moves it
 	dashHolds     bool                  // the drawn dashboard is up, and wants a finger held still reported
+	clockHolds    bool                  // the plain clock is up and Hold on the clock is on (gesture_hold.go)
 
 	poke chan struct{}
 
@@ -1222,6 +1223,8 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 	switch g.Kind {
+	case touch.Hold:
+		d.clockHeld()
 	case touch.Tap:
 		d.mu.Lock()
 		weatherUp := time.Now().Before(d.weatherUntil)
@@ -2507,6 +2510,8 @@ func (d *Display) frame() time.Duration {
 	if s.showVideo {
 		boring = false
 	}
+	d.clockHoldScene(boring && !s.showDrawer && !s.setupAsking && !s.pin.open && !d.overDashboard(&s) &&
+		!d.answerUp(now) && d.wakeLight(now) == 0)
 
 	// The announcement state is read every frame like the setup page's, for the same reason: the
 	// drawer's button, the page an arriving one puts up and the line that says this microphone is

@@ -54,6 +54,7 @@ var registered = []string{
 	"camera_web_access",
 	"cancel_request",
 	"check_for_updates",
+	"clap_gesture",
 	"confirm_threshold",
 	"confirm_wake_with_home_assistant",
 	"cpu_cores",
