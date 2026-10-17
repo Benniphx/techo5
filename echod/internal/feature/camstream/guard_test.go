@@ -66,3 +66,33 @@ func TestAFullGuardForgetsNoCount(t *testing.T) {
 		t.Errorf("%d addresses remembered, want %d", len(g.by), guardKept)
 	}
 }
+
+// Wrong logins from everywhere do not keep out an address that logged in lately: the house's own
+// recorder goes on recording while a stranger guesses. A new address is still kept out.
+func TestARecorderThatLoggedInIsNotKeptOut(t *testing.T) {
+	noDelay(t)
+	var g guard
+	ok, done := g.attempt("192.168.1.20")
+	if !ok {
+		t.Fatal("the recorder's first login was refused")
+	}
+	done(false)
+	for i := range allAfter {
+		ok, done := g.attempt("198.51.100." + strconv.Itoa(i))
+		if !ok {
+			t.Fatalf("guess %d refused", i)
+		}
+		done(true)
+	}
+	if !g.refused("203.0.113.5") {
+		t.Error("a new address is let in after wrong logins from everywhere")
+	}
+	if g.refused("192.168.1.20") {
+		t.Error("the recorder that logged in is kept out")
+	}
+	if ok, done := g.attempt("192.168.1.20"); !ok {
+		t.Error("the recorder cannot log in")
+	} else {
+		done(false)
+	}
+}

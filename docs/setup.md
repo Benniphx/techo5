@@ -239,9 +239,9 @@ Digest is MD5: somebody on your network who records a login can try passwords ag
 long password of its own, not one you use anywhere else. An address that gets the login wrong 10 times
 is refused for 15 minutes; a public IPv6 address is counted with the rest of its /64, since a device
 can pick many there. After 50 wrong logins from anywhere within 10 minutes, every new login is refused
-for 15 minutes, so a guesser who keeps changing addresses is stopped too. A recorder that shares an
-address with a guesser (behind the same router, say) is refused with it, and during such a lockout a
-recorder that has to log in again waits it out as well.
+for 15 minutes, so a guesser who keeps changing addresses is stopped too. A recorder that logged in within
+the last day is not kept out by that, only by wrong logins from its own address; one that shares an
+address with a guesser (behind the same router, say) is refused with it.
 
 The device has no video encoder, so the stream is a series of JPEGs (RTP/JPEG, over TCP only), not
 H.264. ffmpeg, and Frigate and go2rtc with it, read it; a recorder that wants H.264 has to re-encode it,

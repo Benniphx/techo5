@@ -19,8 +19,11 @@ const (
 	lockFor    = 15 * time.Minute
 
 	// allAfter is how many wrong logins from anywhere, within lockWindow, stop every new login for lockFor:
-	// guessing from many addresses at once is no way round the count of one.
+	// guessing from many addresses at once is no way round the count of one. An address that logged in
+	// within knownFor (the house's own recorder) is not stopped by it, nor counted in it: a stranger
+	// guessing cannot keep the recorder out. It still has the count of its own address.
 	allAfter = 50
+	knownFor = 24 * time.Hour
 
 	// guardKept is how many addresses are remembered. Only those with nothing against them are let go to
 	// make room; with none to let go, a login from an address not yet known is refused.
@@ -31,8 +34,9 @@ const (
 type guard struct {
 	mu       sync.Mutex
 	by       map[string]*record
-	all      []time.Time // every wrong login
-	allUntil time.Time   // every new login refused until then
+	all      []time.Time          // every wrong login
+	allUntil time.Time            // every new login refused until then
+	known    map[string]time.Time // the addresses that logged in, and when they last did
 }
 
 type record struct {
@@ -62,7 +66,7 @@ func (g *guard) refused(from string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
-	if now.Before(g.allUntil) {
+	if now.Before(g.allUntil) && !g.isKnown(keyOf(from), now) {
 		return true
 	}
 	r := g.by[keyOf(from)]
@@ -77,7 +81,8 @@ func (g *guard) attempt(from string) (ok bool, done func(wrong bool)) {
 	g.mu.Lock()
 	now := time.Now()
 	r := g.record(from, now)
-	if r == nil || now.Before(g.allUntil) || now.Before(r.until) || countRecent(r.fails, now)+r.checking >= lockAfter {
+	if r == nil || (now.Before(g.allUntil) && !g.isKnown(from, now)) || now.Before(r.until) ||
+		countRecent(r.fails, now)+r.checking >= lockAfter {
 		g.mu.Unlock()
 		return false, nil
 	}
@@ -90,6 +95,9 @@ func (g *guard) attempt(from string) (ok bool, done func(wrong bool)) {
 		}
 		g.mu.Lock()
 		r.checking--
+		if !wrong {
+			g.loggedIn(from, time.Now())
+		}
 		g.mu.Unlock()
 	}
 }
@@ -126,7 +134,9 @@ func (g *guard) failed(from string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
-	g.all = append(recent(g.all, now), now)
+	if !g.isKnown(from, now) {
+		g.all = append(recent(g.all, now), now)
+	}
 	if len(g.all) >= allAfter && !now.Before(g.allUntil) {
 		g.allUntil = now.Add(lockFor)
 		g.all = nil
@@ -142,6 +152,32 @@ func (g *guard) failed(from string) {
 		r.fails = nil
 		slog.Warn("camera streaming: an address locked out after wrong logins", "from", from, "for", lockFor)
 	}
+}
+
+// isKnown is whether an address logged in within knownFor. g.mu is held.
+func (g *guard) isKnown(from string, now time.Time) bool {
+	at, ok := g.known[from]
+	return ok && now.Sub(at) < knownFor
+}
+
+// loggedIn notes an address that gave the right login, forgetting those that have not for knownFor, and
+// the longest ago when there are guardKept. g.mu is held.
+func (g *guard) loggedIn(from string, now time.Time) {
+	if g.known == nil {
+		g.known = map[string]time.Time{}
+	}
+	oldest := ""
+	for k, at := range g.known {
+		if now.Sub(at) >= knownFor {
+			delete(g.known, k)
+		} else if oldest == "" || at.Before(g.known[oldest]) {
+			oldest = k
+		}
+	}
+	if _, ok := g.known[from]; !ok && len(g.known) >= guardKept {
+		delete(g.known, oldest)
+	}
+	g.known[from] = now
 }
 
 // countRecent is how many failures are within lockWindow of now, leaving the list as it is.
