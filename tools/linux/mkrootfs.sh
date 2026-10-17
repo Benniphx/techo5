@@ -145,6 +145,10 @@ rm -rf "$R/etc/dropbear"
 ln -s /data/techo5-linux/dropbear "$R/etc/dropbear"
 rm -f "$R/etc/resolv.conf"
 ln -s /run/resolv.conf "$R/etc/resolv.conf"
+# The hosts file too: boot.sh writes localhost there, and echod adds the .local names it was given
+# (Home Assistant's, Music Assistant's), which nothing else here can look up (internal/lib/localname).
+rm -f "$R/etc/hosts"
+ln -s /run/hosts "$R/etc/hosts"
 
 # Root: no password, and no SSH key in the image. Keys live on userdata and only arrive from Home
 # Assistant (echod's ssh_keys action); echod starts dropbear when the SSH switch is on.
