@@ -404,6 +404,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		streamingSection(w, token)
 		fmt.Fprint(w, `<h3>Voice</h3>`)
 		brainSection(w, token)
+		realtimeSection(w, token)
 		listeningSection(w, token)
 		houseSection(w, token)
 		wakeWordsSection(w, token)
