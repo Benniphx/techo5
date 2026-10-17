@@ -68,6 +68,17 @@ Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a 
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🎥 **Your Echo as a camera for your recorder, and cameras by the grid** (v1.2.21). A Show or Spot can
+  serve its own camera to Frigate or any NVR over RTSP and ONVIF, with a login and a green dot on the
+  screen while it's watched; the Show shows up to six cameras at once, and go2rtc's streams join the
+  list. Off until you turn them on.
+- 🗣️ **The nearest Echo answers, and more you can run from home** (v1.2.21). With several devices in
+  earshot, only the one that heard you best answers. Thermostats open their controls in Drawn mode
+  ([#170](https://github.com/HuskerMinion/techo5/issues/170)); settings save to a file and restore;
+  a signed remote API and live logs; timers pause and take extra time from Home Assistant; and an
+  event on two calendars shows once. Thanks to [@remylpat](https://github.com/remylpat), and to
+  [@wonderslug](https://github.com/wonderslug) for the Echo 2nd gen's own speaker tuning
+  ([#169](https://github.com/HuskerMinion/techo5/pull/169)).
 - 🔊 **The Echo 2nd gen** (dot-v1.0.19). The 2017 Echo (`radar`) runs TECHO5 Dot: the same release,
   installer and daemon as the Dot, with its own amplifier, the speaker filters from the unit itself and
   its own Bluetooth kernel. Its USB is only inside the case:
