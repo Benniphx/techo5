@@ -68,6 +68,12 @@ Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a 
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🔗 **Settings that follow you, a realtime voice, and a camera that knows a person** (v1.2.22).
+  Pick a setting on the setup page and tick the other devices that should keep it in step: each one
+  agrees first, and a device that was off catches up when it's back. A wake word can be answered by a
+  speech-to-speech model at OpenAI, xAI or Gemini (it sends your voice to them, and they bill for it;
+  off until you choose it, with a daily limit). With presence detection on, a Show or Spot can tell a
+  person from anything else that moves, on the device. All three are new and not yet tried on a device.
 - 🎥 **Your Echo as a camera for your recorder, and cameras by the grid** (v1.2.21). A Show or Spot can
   serve its own camera to Frigate or any NVR over RTSP and ONVIF, with a login and a green dot on the
   screen while it's watched; the Show shows up to six cameras at once, and go2rtc's streams join the
