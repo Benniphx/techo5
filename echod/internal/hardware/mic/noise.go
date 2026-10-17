@@ -19,7 +19,7 @@ import (
 //
 // A window the device's own playback reached is thrown away, since what the microphones heard then is
 // mostly the speaker. The loopback says so, for anything that plays through the device, and the same
-// tail the echo canceller keeps after the loopback goes quiet covers the room still ringing.
+// tail the echo canceler keeps after the loopback goes quiet covers the room still ringing.
 type noiseMeter struct {
 	on atomic.Bool
 
