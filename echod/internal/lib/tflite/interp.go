@@ -251,7 +251,17 @@ func dequantize(t *Tensor, d *TensorDesc) error {
 		}
 		channels = len(d.Scale)
 		for _, n := range t.Shape[axis+1:] {
+			if n < 1 || inner > maxElements/n {
+				return fmt.Errorf("a shape %v no channel can be found in", t.Shape)
+			}
 			inner *= n
+		}
+	}
+	for _, sc := range d.Scale {
+		// A scale of nothing, or one that is not a number, gives weights that are not numbers either: a
+		// model that runs, and says nothing true, is worse than one refused.
+		if !(sc > 0) || math.IsInf(float64(sc), 0) {
+			return fmt.Errorf("a scale of %v", sc)
 		}
 	}
 	if len(d.ZeroPoint) > 1 && len(d.ZeroPoint) != len(d.Scale) {

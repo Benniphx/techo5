@@ -63,6 +63,9 @@ type Feature struct {
 
 	mu    sync.Mutex
 	judge judge
+
+	// failedAt is when the model last failed to load, so it is not tried every few seconds; only Run's.
+	failedAt time.Time
 }
 
 var (
@@ -134,15 +137,23 @@ func (f *Feature) Run(ctx context.Context) error {
 	}
 }
 
+// loadAgain is how long after the model failed to load it is tried again.
+const loadAgain = time.Hour
+
 // look runs the model on the camera's frames while it is wanted, and lets the model go after.
 func (f *Feature) look(ctx context.Context) {
 	score := f.score
 	if score == nil {
+		if !f.failedAt.IsZero() && time.Since(f.failedAt) < loadAgain {
+			return // said once, and tried again later rather than every few seconds
+		}
 		m, err := load()
 		if err != nil {
-			slog.Error("person detection: the model could not be loaded", "err", err)
+			f.failedAt = time.Now()
+			slog.Error("person detection: the model could not be loaded; tried again in an hour", "err", err)
 			return
 		}
+		f.failedAt = time.Time{}
 		score = m.score
 	}
 	frames := make(chan *camera.Frame, 1)
@@ -254,6 +265,11 @@ func load() (*detector, error) {
 	m, err := tflite.Parse(model)
 	if err != nil {
 		return nil, err
+	}
+	// The picture goes in as the int8 the model was quantized for (score): a model that takes anything
+	// else is not this one.
+	if g := m.Subgraphs; len(g) == 0 || len(g[0].Inputs) == 0 || g[0].Tensors[g[0].Inputs[0]].Type != tflite.Int8 {
+		return nil, errors.New("person detection: the model does not take an int8 picture")
 	}
 	in, err := tflite.New(m)
 	if err != nil {

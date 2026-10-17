@@ -1,6 +1,9 @@
 package tflite
 
-import "testing"
+import (
+	"math"
+	"testing"
+)
 
 func TestDepthwiseConv(t *testing.T) {
 	// Two channels, one filter each: the first sums its window, the second halves the sum.
@@ -123,5 +126,38 @@ func TestEmptyFilterRefused(t *testing.T) {
 	cw := &Tensor{Type: Float32, Shape: []int{1, 1 << 20, 0, 1}}
 	if err := kernels[OpConv2D](o, []*Tensor{x, cw, nil}, []*Tensor{out()}); err == nil {
 		t.Error("conv took an empty filter")
+	}
+}
+
+// A window as big as 65536 by 65536 wraps a 32-bit int's product to nothing: the budget is taken so it
+// cannot, and the operator is refused before anything is done. Run with GOARCH=386 too.
+func TestTheBudgetDoesNotWrap(t *testing.T) {
+	x := &Tensor{Type: Float32, Shape: []int{1, 32, 32, 8}}
+	o := &OpDesc{pool: poolParams{samePad: true, strideW: 1, strideH: 1, filterW: 65536, filterH: 65536}}
+	if err := kernels[OpAveragePool2D](o, []*Tensor{x}, []*Tensor{out()}); err == nil {
+		t.Error("an average pool past the budget")
+	}
+	if err := kernels[OpMaxPool2D](o, []*Tensor{x}, []*Tensor{out()}); err == nil {
+		t.Error("a max pool past the budget")
+	}
+	o.pool.filterW = 0
+	if err := kernels[OpMaxPool2D](o, []*Tensor{tf([]int{1, 1, 1, 1}, 1)}, []*Tensor{out()}); err == nil {
+		t.Error("a max pool with an empty filter")
+	}
+	if !tooMuch(65536, 65536, 1) || tooMuch(1, 96, 96, 8, 3, 3) || !tooMuch(1, -1) {
+		t.Error("tooMuch")
+	}
+}
+
+func TestScalesThatAreNoScale(t *testing.T) {
+	for _, sc := range []float32{0, -1, float32(math.NaN()), float32(math.Inf(1))} {
+		x := &Tensor{Type: Int8, Shape: []int{2}, I32: []int32{1, 2}}
+		if err := dequantize(x, &TensorDesc{Scale: []float32{sc}}); err == nil {
+			t.Errorf("a scale of %v taken", sc)
+		}
+	}
+	x := &Tensor{Type: Int8, Shape: []int{2, 0}, I32: nil}
+	if err := dequantize(x, &TensorDesc{Scale: []float32{1, 1}, QuantDim: 0}); err == nil {
+		t.Error("a shape with an empty dimension taken per channel")
 	}
 }

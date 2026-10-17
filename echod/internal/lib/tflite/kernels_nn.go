@@ -30,7 +30,7 @@ func conv2D(o *OpDesc, in, out []*Tensor) error {
 
 	oh := outputSize(ih, kh, p.strideH, p.dilationH, p.samePad)
 	ow := outputSize(iw, kw, p.strideW, p.dilationW, p.samePad)
-	if tooMuch(count([]int{batch, oh, ow, oc}), kh*kw*ic) {
+	if tooMuch(batch, oh, ow, oc, kh, kw, ic) {
 		return fmt.Errorf("an output of %dx%dx%dx%d from %dx%dx%d windows is more work than a model of this kind asks", batch, oh, ow, oc, kh, kw, ic)
 	}
 	y.resize([]int{batch, oh, ow, oc})
@@ -98,8 +98,14 @@ func maxPool2D(o *OpDesc, in, out []*Tensor) error {
 	}
 
 	batch, ih, iw, c := x.Shape[0], x.Shape[1], x.Shape[2], x.Shape[3]
+	if p.strideH < 1 || p.strideW < 1 || p.filterH < 1 || p.filterW < 1 {
+		return fmt.Errorf("stride %dx%d, filter %dx%d", p.strideH, p.strideW, p.filterH, p.filterW)
+	}
 	oh := outputSize(ih, p.filterH, p.strideH, 1, p.samePad)
 	ow := outputSize(iw, p.filterW, p.strideW, 1, p.samePad)
+	if tooMuch(batch, oh, ow, c, p.filterH, p.filterW) {
+		return fmt.Errorf("an output of %dx%dx%dx%d from %dx%d windows is more work than a model of this kind asks", batch, oh, ow, c, p.filterH, p.filterW)
+	}
 	y.resize([]int{batch, oh, ow, c})
 
 	padH, padW := 0, 0
@@ -257,9 +263,18 @@ func step(idx, shape, as, bs []int, ao, bo int) (int, int) {
 // maxElements whose windows would take minutes, and the models these kernels run need a few million.
 const maxWork = 1 << 28
 
-// tooMuch is whether an operator of out outputs, each reading window values, is past maxWork.
-func tooMuch(out, window int) bool {
-	return window > 0 && out > maxWork/window
+// tooMuch is whether an operator whose outputs and windows have these sizes is past maxWork. The product
+// is taken in floating point: in an int it can wrap round on the device, whose ints are 32 bits, to a
+// small number or none, and a minutes-long operator would pass.
+func tooMuch(dims ...int) bool {
+	w := 1.0
+	for _, d := range dims {
+		if d < 0 {
+			return true
+		}
+		w *= float64(d)
+	}
+	return w > maxWork
 }
 
 // depthwiseConv2D convolves each input channel with its own filters: depth multiplier of them, output
@@ -293,7 +308,7 @@ func depthwiseConv2D(o *OpDesc, in, out []*Tensor) error {
 
 	oh := outputSize(ih, kh, p.strideH, p.dilationH, p.samePad)
 	ow := outputSize(iw, kw, p.strideW, p.dilationW, p.samePad)
-	if tooMuch(count([]int{batch, oh, ow, oc}), kh*kw) {
+	if tooMuch(batch, oh, ow, oc, kh, kw) {
 		return fmt.Errorf("an output of %dx%dx%dx%d from %dx%d windows is more work than a model of this kind asks", batch, oh, ow, oc, kh, kw)
 	}
 	y.resize([]int{batch, oh, ow, oc})
@@ -362,7 +377,7 @@ func averagePool2D(o *OpDesc, in, out []*Tensor) error {
 	}
 	oh := outputSize(ih, p.filterH, p.strideH, 1, p.samePad)
 	ow := outputSize(iw, p.filterW, p.strideW, 1, p.samePad)
-	if tooMuch(count([]int{batch, oh, ow, c}), p.filterH*p.filterW) {
+	if tooMuch(batch, oh, ow, c, p.filterH, p.filterW) {
 		return fmt.Errorf("an output of %dx%dx%dx%d from %dx%d windows is more work than a model of this kind asks", batch, oh, ow, c, p.filterH, p.filterW)
 	}
 	y.resize([]int{batch, oh, ow, c})
