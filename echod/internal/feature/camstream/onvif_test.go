@@ -129,8 +129,14 @@ func TestONVIFParallelGuessesAreLimited(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	// Those turned away as busy (maxONVIF) were never checked: the guesser goes on one at a time.
+	for range lockAfter {
+		if _, body := soap(t, f, "198.51.100.9", token("viewer", "guess", time.Now(), false), `<trt:GetProfiles/>`); strings.Contains(body, "the login is wrong") {
+			checked.Add(1)
+		}
+	}
 	if n := checked.Load(); n > lockAfter {
-		t.Errorf("%d wrong logins checked at once", n)
+		t.Errorf("%d wrong logins checked", n)
 	}
 	if !f.guard.refused("198.51.100.9") {
 		t.Error("not locked out")
