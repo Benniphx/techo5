@@ -50,6 +50,7 @@ It started on the Show 5, which is where the name comes from.
 | **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
 | **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
+| **Echo, 2nd gen** (2017, `radar`) | – | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
@@ -67,6 +68,16 @@ Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a 
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🔊 **The Echo 2nd gen** (dot-v1.0.19). The 2017 Echo (`radar`) runs TECHO5 Dot: the same release,
+  installer and daemon as the Dot, with its own amplifier, the speaker filters from the unit itself and
+  its own Bluetooth kernel. Its USB is only inside the case:
+  [install steps](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen).
+- 🌄 **Light only alarms, and a night that's easier to live with** (v1.2.20). An alarm can be a
+  wake-up light with no sound ([#164](https://github.com/HuskerMinion/techo5/issues/164)), a tap can
+  lift the night light on the Show ([#163](https://github.com/HuskerMinion/techo5/issues/163)), and the
+  Spot's night clock comes sooner and goes dimmer
+  ([techo5-spot#7](https://github.com/HuskerMinion/techo5-spot/issues/7)). Thanks to
+  [@kevin909867](https://github.com/kevin909867) and [@paolofaz](https://github.com/paolofaz).
 - ⚡ **The Show 8 2nd gen at full speed** (v1.2.19). Its kernel now scales the CPUs up to 1.99 GHz
   instead of leaving them at the bootloader's 1.1 to 1.2 GHz: about 55% faster on one core and 60% on
   all eight, ahead of a Raspberry Pi 5 on all cores, with temperature control. The kernel comes over
@@ -416,7 +427,7 @@ supported on that kernel so far, and the installer checks yours. Every step:
 ## Sister projects
 
 **[TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot)** does the same for the Echo Dot 2nd
-generation: Linux in place of Fire OS, all seven microphones, Bluetooth speaker mode, signed
+generation and the Echo 2nd generation: Linux in place of Fire OS, all seven microphones, Bluetooth speaker mode, signed
 updates. **[TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot)** does it for the Echo Spot
 (1st gen), on its round screen. All three run the same daemon source, built per device.
 **[TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena)** tells the story of the 2nd gen
