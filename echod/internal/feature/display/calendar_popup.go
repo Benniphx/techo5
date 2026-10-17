@@ -51,7 +51,7 @@ func duePopups(events []hass.Event, now time.Time, c config.Calendar, shown map[
 	lead := time.Duration(c.PopupLead()) * time.Minute
 	var out []hass.Event
 	for _, e := range events {
-		if len(c.PopupCalendars) > 0 && !slices.Contains(c.PopupCalendars, e.Calendar) {
+		if len(c.PopupCalendars) > 0 && !slices.ContainsFunc(c.PopupCalendars, func(cal string) bool { return home.OnCalendar(e, cal) }) {
 			continue
 		}
 		if shown[popupKey(e)] {
