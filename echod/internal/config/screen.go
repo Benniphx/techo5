@@ -36,6 +36,10 @@ type Screen struct {
 	// NightLightLevel is how bright the night light is, 1 to 10; none is the panel's own default.
 	NightLightLevel int `json:"night_light_level,omitempty"`
 
+	// NightLightRescaled is whether a Spot's NightLightLevel is on the night clock's new scale, which
+	// starts at backlight 3 rather than 6: set once the old one has been moved over (rescaleNightLight).
+	NightLightRescaled bool `json:"night_light_rescaled,omitempty"`
+
 	// AutoDimmest is how far auto-brightness takes a Show's screen down in a dark room, in percent of
 	// Brightness, 1 to 50; none is the default (display.go).
 	AutoDimmest int `json:"auto_dimmest,omitempty"`

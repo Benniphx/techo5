@@ -90,6 +90,7 @@ func Load(path string) (*Store, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			st.c.Speaker.SoundsMoved = true // a new device starts on the new default: nothing to move
+			st.c.rescaleNightLight()        // nor a night clock level to put on the new scale
 			st.readable = true
 			return st, nil
 		}
@@ -100,6 +101,7 @@ func Load(path string) (*Store, error) {
 	}
 	_ = json.Unmarshal(b, &st.was)
 	st.c.moveSounds()
+	st.c.rescaleNightLight()
 
 	st.readable = true
 	return st, nil

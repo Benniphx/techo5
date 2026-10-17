@@ -39,7 +39,9 @@ const nightNever = "off"
 // clock across the room without a light on the ceiling. Step 1 is backlight 3, not the panel's lowest
 // light, 1: at 1 the panel may go dark altogether, and 3 looks the same. The steps widen from there,
 // where one step at the bottom is the difference between a glow and a light in a dark room. An owner
-// found the old bottom, 6, still too bright for a bedroom (techo5-spot#7).
+// found the old bottom, 6, still too bright for a bedroom (techo5-spot#7). A level saved on the old
+// scale is moved to the nearest step of this one once, as the settings load (config's
+// rescaleNightLight).
 var glowSteps = [...]int{3, 4, 6, 8, 12, 16, 22, 30, 40, 50}
 
 // glowDefault is the night clock's brightness on a Spot with none set: backlight 8.
