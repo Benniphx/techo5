@@ -1,0 +1,154 @@
+package realtime
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/url"
+)
+
+// openAI is OpenAI's Realtime API, and xAI's, which speaks the same events. Both the event names of the
+// API as released and those of its beta are read, since a relay or another provider may speak either.
+type openAI struct {
+	base         string
+	defaultModel string
+	defaultVoice string
+}
+
+const openAIRate = 24000
+
+func (o openAI) address(c Config) (string, http.Header, error) {
+	addr, keyOK, err := endpoint(c, o.base)
+	if err != nil {
+		return "", nil, err
+	}
+	u, err := url.Parse(addr)
+	if err != nil {
+		return "", nil, err
+	}
+	model := c.Model
+	if model == "" {
+		model = o.defaultModel
+	}
+	q := u.Query()
+	q.Set("model", model)
+	u.RawQuery = q.Encode()
+	h := http.Header{}
+	switch {
+	case c.Key != "" && keyOK:
+		h.Set("Authorization", "Bearer "+c.Key)
+	case c.Endpoint == "" && c.Key == "":
+		return "", nil, ErrNoKey
+	}
+	return u.String(), h, nil
+}
+
+func (o openAI) setup(c Config) []any {
+	voice := c.Voice
+	if voice == "" {
+		voice = o.defaultVoice
+	}
+	tools := []map[string]any{}
+	for _, f := range c.Functions {
+		params := f.Parameters
+		if params == nil {
+			params = map[string]any{"type": "object", "properties": map[string]any{}}
+		}
+		tools = append(tools, map[string]any{"type": "function", "name": f.Name, "description": f.Description, "parameters": params})
+	}
+	return []any{map[string]any{
+		"type": "session.update",
+		"session": map[string]any{
+			"type":         "realtime",
+			"instructions": c.Instructions,
+			"audio": map[string]any{
+				"input": map[string]any{
+					"format":         map[string]any{"type": "audio/pcm", "rate": openAIRate},
+					"turn_detection": nil, // the device says when somebody has finished
+					"transcription":  map[string]any{"model": "gpt-4o-mini-transcribe"},
+				},
+				"output": map[string]any{
+					"format": map[string]any{"type": "audio/pcm", "rate": openAIRate},
+					"voice":  voice,
+				},
+			},
+			"tools":       tools,
+			"tool_choice": "auto",
+		},
+	}}
+}
+
+func (o openAI) audio(pcm16k []int16) any {
+	return map[string]any{"type": "input_audio_buffer.append", "audio": pcmBase64(upTo24k(pcm16k))}
+}
+
+func (o openAI) endOfSpeech() []any {
+	return []any{
+		map[string]any{"type": "input_audio_buffer.commit"},
+		map[string]any{"type": "response.create"},
+	}
+}
+
+func (o openAI) toolResult(callID, name, output string) []any {
+	return []any{
+		map[string]any{"type": "conversation.item.create", "item": map[string]any{
+			"type": "function_call_output", "call_id": callID, "output": output,
+		}},
+		map[string]any{"type": "response.create"},
+	}
+}
+
+func (o openAI) cancel() any { return map[string]any{"type": "response.cancel"} }
+
+func (o openAI) read(msg []byte, emit func(Event)) {
+	var m struct {
+		Type       string `json:"type"`
+		Delta      string `json:"delta"`
+		Transcript string `json:"transcript"`
+		CallID     string `json:"call_id"`
+		Name       string `json:"name"`
+		Arguments  string `json:"arguments"`
+		Response   struct {
+			Status string `json:"status"`
+			Output []struct {
+				Type string `json:"type"`
+			} `json:"output"`
+		} `json:"response"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(msg, &m) != nil {
+		return
+	}
+	switch m.Type {
+	case "response.output_audio.delta", "response.audio.delta":
+		if pcm := pcmFrom(m.Delta); len(pcm) > 0 {
+			emit(Event{Kind: Audio, PCM: pcm, Rate: openAIRate})
+		}
+	case "response.output_audio_transcript.delta", "response.audio_transcript.delta":
+		emit(Event{Kind: Saying, Text: m.Delta})
+	case "response.output_audio_transcript.done", "response.audio_transcript.done":
+		emit(Event{Kind: Said, Text: m.Transcript})
+	case "conversation.item.input_audio_transcription.completed":
+		emit(Event{Kind: Heard, Text: m.Transcript})
+	case "response.function_call_arguments.done":
+		emit(Event{Kind: Call, CallID: m.CallID, Name: m.Name, Args: m.Arguments})
+	case "response.done":
+		// A response that only called functions is not the answer: the answer comes after their results.
+		calls := false
+		for _, o := range m.Response.Output {
+			if o.Type == "function_call" {
+				calls = true
+			}
+		}
+		switch {
+		case m.Response.Status == "cancelled":
+			emit(Event{Kind: Interrupt})
+		case !calls:
+			emit(Event{Kind: Done})
+		}
+	case "error":
+		emit(Event{Kind: Failed, Err: errors.New("realtime: " + m.Error.Message)})
+	}
+}
