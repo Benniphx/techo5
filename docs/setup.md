@@ -759,6 +759,37 @@ After a change the setup page is at the new address, and the browser has to be l
 Home Assistant follows the device by itself, about two minutes after the change: it first has to notice
 that the old connection is gone. To go back to DHCP, choose **Automatic**.
 
+## 10. Saving the settings
+
+On the setup page, **General**, **Download settings** saves everything the device is set to as a
+file, `techo5-settings.json`. **Restore settings from a file** takes one back: from this device
+after a reinstall, or from another device to start this one off the same way. You are shown which
+parts would change first, and nothing changes until you press **Restore and restart**; the device
+then restarts to use them and is back in about a minute. Anything changed on the device while you
+were deciding stays.
+
+The file leaves out what should not travel: keys and passwords (Home Assistant's, Music Assistant's,
+Immich's, the doorbell recorder's, the dashboard server's, the assistant's, OBS's and paired
+computers'), cameras' stream addresses and their login, calendars' private addresses, the settings
+lock's PIN, the house word, and any user, password or key written into an address. A restore keeps
+the device's own, but only for the same server: if the file points a setting at a different server,
+that setting's key or password is left empty for you to enter again. The page shows every server
+address the file changes, old and new, and names what will need entering again, including calendar
+links and paired computers that only the device the file came from has.
+
+A restore never opens a door on the device or has it listen or watch. Its privacy switches (SSH, the
+camera and screen pages, talking through cameras), AirPlay, Spotify Connect, DLNA, Sendspin, the
+Bluetooth proxy, video and the addresses allowed to send it video, the diagnostics settings, Drop
+In, sending the room to Home Assistant's wake word engine (streaming or confirming), keeping wake
+word clips, presence and gestures, and a choice of no wake word all stay as they are, and so do its
+paired Bluetooth speaker, its amplifier's gain and anything it is in the middle of (a snooze, a
+timer). Wi-Fi networks, SSH keys and a fixed address are not part of the settings and are never in
+the file.
+
+The file is still personal: it holds where the device is (for the weather), addresses on your home
+network, user names and the assistant's instructions. Keep it somewhere private, and don't post it
+or attach it to an issue; the diagnostics download is the one made for that.
+
 ## More
 
 - [Dashboards](dashboards.md): Home Assistant dashboards on the screen.

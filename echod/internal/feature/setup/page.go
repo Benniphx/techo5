@@ -92,6 +92,10 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 		f.wakeWordUpload(w, r)
 	case "/setup/diagnostics.txt":
 		f.diagnostics(w, r)
+	case "/setup/settings.json":
+		f.settingsFile(w, r)
+	case "/setup/restore":
+		f.restore(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -430,6 +434,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		updatesSection(w, token)
 		timezoneSection(w, token)
 		homeAssistantSection(w, token)
+		settingsFileSection(w, token)
 		diagnosticsSection(w)
 	}
 	fmt.Fprint(w, `</section></div></div>`)
