@@ -163,7 +163,10 @@ func addDrawer(w http.ResponseWriter, token string) {
 	daysField(w, config.DaysOnce)
 	ringOnField(w, "addring", "")
 	sunriseField(w, "addsun", 0)
+	// Light only is for an alarm; the page hides it while Reminder or Timer is chosen (.alarmonly).
+	fmt.Fprint(w, `<div class="alarmonly">`)
 	lightOnlyField(w, false)
+	fmt.Fprint(w, `</div>`)
 	fmt.Fprint(w, `<p class="note">Repeat days are for alarms and reminders at a time of day; "in" is once. Other
 	 devices are for reminders; the wake light and light only are for alarms.</p>
 	 <div class="btns"><button type="submit">Add</button></div></form></div></details>`)
@@ -356,6 +359,7 @@ func editFromPage(r *http.Request) string {
 				return "a reminder needs words to say"
 			}
 			al.RingOn = names(r.PostFormValue("ring_on"))
+			al.LightOnly = false // a reminder is said, never a light alone
 		} else {
 			al.Sunrise = sunriseOf(r)
 			if !al.Silent {
