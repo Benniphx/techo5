@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/api"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/diag"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
@@ -726,13 +727,30 @@ func houseSection(w http.ResponseWriter, token string) {
 	 <p class="note">Type the <strong>same word on every device in this house</strong>. They then find
 	  each other on the network, and speaking to one plays it on the others. Anything that does not
 	  have the word is ignored.</p>
+	 <p class="note">Case-sensitive: it has to match the other devices' exactly, capitals included.</p>%s
 	 <p class="note">Leave it empty to turn announcements and intercom calls off here: the device takes
 	  neither. The other devices can still see it on the network, but what they send it is refused.
 	  Reminders set to go off on other devices use it too.</p>
 	 <p class="note">Make it a long phrase, %d characters or more. What the devices send each other is
 	  signed with it, and anything on the network that hears them can try words until one fits.</p>%s
 	 <p><button type="submit">Save</button></p></form></fieldset>`,
-		html.EscapeString(word), longHouseWord, shortWordNote(word))
+		html.EscapeString(word), otherWordNote(announce.OtherWords()), longHouseWord, shortWordNote(word))
+}
+
+// otherWordNote names the devices here that refused this one's announcements in the last hour, for
+// having another house word.
+func otherWordNote(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	devices := "other devices here use"
+	if len(names) == 1 {
+		devices = "other device here uses"
+	}
+	return fmt.Sprintf(`
+	 <p class="note"><strong>%d %s a different house word: %s.</strong> They refuse what this one
+	  sends them. Check the word on each, capitals included.</p>`,
+		len(names), devices, html.EscapeString(strings.Join(names, ", ")))
 }
 
 // longHouseWord is how long a house word has to be before the page stops saying it is short. A short

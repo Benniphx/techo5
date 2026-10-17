@@ -2337,9 +2337,10 @@ and silence.
 > action is a way to start one rather than a route the audio takes. They keep working with Home
 > Assistant switched off; this action is simply not available then.
 >
-> Every device needs the same **house word** set on its setup page. A device with no word set
-> neither sends announcements nor takes them, and this action will say so in the log rather than
-> failing.
+> Every device needs the same **house word** set on its setup page, capitals included: the word is
+> case-sensitive. A device with no word set neither sends announcements nor takes them, and this
+> action will say so in the log rather than failing. A device that refuses announcements for having
+> a different word is named on the sender's setup page, next to the house word.
 >
 > Quiet hours are respected: inside them an announcement is shown and not sounded. Alarms, timers
 > and calls are not announcements and are not affected.

@@ -475,6 +475,7 @@ func post(p Peer, word string, body []byte, headers map[string]string) error {
 				continue
 			}
 		}
+		refusedBy(p.Name, resp.StatusCode) // otherword.go
 		if resp.StatusCode >= 300 {
 			return fmt.Errorf("%s said %s", p.Name, resp.Status)
 		}

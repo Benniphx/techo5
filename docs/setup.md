@@ -673,7 +673,10 @@ which is the faster one and not always the one you spoke to. With this on, a dev
 wake word tells the others how clearly it heard it and waits a moment to hear from them, and only
 the one that heard it best answers. The others go back to listening without a sound. Turn it on on
 every device that should take part; they need the same house word, set on each device's setup page,
-which signs what they tell each other so nothing else on the network can silence them.
+which signs what they tell each other so nothing else on the network can silence them. The house word
+is case-sensitive: it has to match exactly, capitals included. When another device refuses this one's
+announcements for having a different word, the setup page names it next to the house word for an
+hour, and the log says so.
 
 How clearly is how far the wake word stood out from that device's own room, so a device with hotter
 microphones or in a louder room does not win for that alone. Nothing you say during the wait is
