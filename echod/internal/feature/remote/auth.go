@@ -98,6 +98,23 @@ func looksSigned(header string) bool {
 	return len(parts) == 4 && parts[0] == "v1" && len(parts[3]) == 64
 }
 
+// inTime is whether a signed-looking header's time is one this device would take: within the skew,
+// and not from before the program started (started): the nonces remembered are gone after a restart,
+// and this keeps one taken before it from being sent again. Checked before the body is read.
+func inTime(header string, now time.Time) bool {
+	parts := strings.Fields(header)
+	if len(parts) != 4 {
+		return false
+	}
+	sec, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return false
+	}
+	at := time.Unix(sec, 0)
+	d := now.Sub(at)
+	return d <= skew && d >= -skew && !at.Before(started.Truncate(time.Second))
+}
+
 // verify checks a request's signature.
 func verify(secretHex, header, method, pathQuery string, body []byte, now time.Time) error {
 	if secretHex == "" {
@@ -119,7 +136,7 @@ func verify(secretHex, header, method, pathQuery string, body []byte, now time.T
 	if err != nil {
 		return errUnsigned
 	}
-	if d := now.Sub(time.Unix(sec, 0)); d > skew || d < -skew {
+	if d := now.Sub(time.Unix(sec, 0)); d > skew || d < -skew || time.Unix(sec, 0).Before(started.Truncate(time.Second)) {
 		return errStale
 	}
 	if !fresh(parts[2], now) {

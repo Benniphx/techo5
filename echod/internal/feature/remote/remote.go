@@ -137,6 +137,20 @@ func (f *Remote) serve(w http.ResponseWriter, r *http.Request) {
 		refuse(w, errUnsigned.Error(), http.StatusUnauthorized)
 		return
 	}
+	if !inTime(r.Header.Get(authHeader), now) {
+		failed(addr, now)
+		f.warn("remote api: a request signed at the wrong time", "from", addr)
+		refuse(w, errStale.Error(), http.StatusUnauthorized)
+		return
+	}
+	// Bodies not yet checked are read a few at a time: each is waited on for up to bodyWithin.
+	select {
+	case unverified <- struct{}{}:
+		defer func() { <-unverified }()
+	default:
+		refuse(w, "busy; try again", http.StatusServiceUnavailable)
+		return
+	}
 	// The deadline is taken off again once the whole body is in: the server goes on reading the connection
 	// in the background, and a deadline left on it would end a log stream when it passed. A body that did not
 	// come whole keeps it, and the connection is closed with the answer.
@@ -149,6 +163,7 @@ func (f *Remote) serve(w http.ResponseWriter, r *http.Request) {
 		refuse(w, "the request did not arrive whole in time", http.StatusRequestTimeout)
 		return
 	case len(body) > maxBody:
+		failed(addr, now)
 		refuse(w, "that request was too big", http.StatusRequestEntityTooLarge)
 		return
 	}
@@ -208,3 +223,10 @@ func (f *Remote) warn(msg string, args ...any) {
 		slog.Warn(msg, args...)
 	}
 }
+
+// unverified holds a place for each request whose body is being read before its signature is checked,
+// so a few slow senders can only ever hold a few of them.
+var unverified = make(chan struct{}, maxUnverified)
+
+// maxUnverified is how many such bodies are read at once.
+const maxUnverified = 4

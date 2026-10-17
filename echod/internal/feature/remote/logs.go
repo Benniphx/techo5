@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -79,7 +81,7 @@ func (f *Remote) logs(w http.ResponseWriter, r *http.Request) {
 		// A line is one event: a carriage return inside one would end it early, and what followed would
 		// read as a field of the stream's own.
 		line = strings.ReplaceAll(line, "\r", "")
-		if _, err := fmt.Fprintf(w, "data: %s\n\n", redact(line)); err != nil {
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", redact(withoutWords(line))); err != nil {
 			return false
 		}
 		return true
@@ -183,4 +185,20 @@ func tail(file *os.File) (int64, []string) {
 		lines = lines[len(lines)-backlog:]
 	}
 	return size, lines
+}
+
+// spoken is a log line's fields that hold words: what was heard and said, what was announced, and
+// what the assistant's tools were asked and answered (a page's text, a calendar's events). The stream
+// gives only their length: the device's own log keeps them, and the API is not encrypted.
+var spoken = regexp.MustCompile(`\b(text|result|args|summary|words)=("(?:[^"\\]|\\.)*"|\S*)`)
+
+// withoutWords is a line with the words in it given as their length.
+func withoutWords(line string) string {
+	return spoken.ReplaceAllStringFunc(line, func(m string) string {
+		k, v, _ := strings.Cut(m, "=")
+		if unq, err := strconv.Unquote(v); err == nil {
+			v = unq
+		}
+		return k + "=<" + strconv.Itoa(len([]rune(v))) + " characters>"
+	})
 }

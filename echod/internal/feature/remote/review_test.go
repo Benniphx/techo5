@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -187,5 +188,40 @@ func TestASlowBodyIsAnsweredAtOnce(t *testing.T) {
 			t.Errorf("%s: the server still held the connection after answering", name)
 		}
 		conn.Close()
+	}
+}
+
+// A request signed at a time this device would not take, or before it started, is turned away before
+// its body is read; so is one when the few places for unchecked bodies are all taken.
+func TestTimeAndPlaceAreCheckedBeforeTheBody(t *testing.T) {
+	now := time.Now()
+	h := func(at time.Time) string {
+		return "v1 " + strconv.FormatInt(at.Unix(), 10) + " n " + strings.Repeat("a", 64)
+	}
+	if !inTime(h(now), now) {
+		t.Error("a request signed now is out of time")
+	}
+	if inTime(h(now.Add(-2*skew)), now) || inTime(h(now.Add(2*skew)), now) {
+		t.Error("a request outside the skew is in time")
+	}
+	if inTime(h(started.Add(-2*time.Second)), started.Add(time.Second)) {
+		t.Error("a request signed before the start is in time")
+	}
+	for range maxUnverified {
+		unverified <- struct{}{}
+	}
+	t.Cleanup(func() {
+		for range maxUnverified {
+			<-unverified
+		}
+	})
+	f := &Remote{}
+	req := httptest.NewRequest(http.MethodGet, prefix+"device", nil)
+	req.Header.Set(authHeader, h(time.Now()))
+	req.RemoteAddr = "192.0.2.77:1234"
+	w := httptest.NewRecorder()
+	f.serve(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("with every place taken: %d, want 503", w.Code)
 	}
 }

@@ -88,12 +88,16 @@ type entity struct {
 	Unit     string   `json:"unit,omitempty"`
 }
 
+// unlisted is the entities the API leaves out altogether: what was last said in the room, and the
+// answer to it. They are words people spoke, and the API travels the network unencrypted.
+var unlisted = []string{"last_heard", "last_reply"}
+
 // list is every entity the API knows the kind of.
 func (f *Remote) list() []entity {
 	var out []entity
 	for _, e := range f.entities() {
 		b := base(e)
-		if b == nil {
+		if b == nil || slices.Contains(unlisted, b.ObjectID) {
 			continue
 		}
 		x := entity{ID: b.ObjectID, Name: b.Name, Writable: Writable(e)}
@@ -135,7 +139,7 @@ func (f *Remote) list() []entity {
 func (f *Remote) set(w http.ResponseWriter, id string, body []byte) {
 	var e esphome.Entity
 	for _, x := range f.entities() {
-		if b := base(x); b != nil && b.ObjectID == id {
+		if b := base(x); b != nil && b.ObjectID == id && !slices.Contains(unlisted, id) {
 			e = x
 			break
 		}
