@@ -910,7 +910,9 @@ here.
   page, reaches the other within a few seconds. A request that could not be delivered, the device
   being off say, is sent again, soon at first and then less often, up to once a day, and whenever you
   save; after a week with no answer it says *no answer* and is not sent again. A declined request is
-  remembered: the same device asking again for the same setting is turned down without being shown. A device linked with several passes a change on to the rest, so a
+  remembered: the same device asking again for the same setting is turned down without being shown,
+  for good. Only the device that declined can undo it, by ticking the other device for that setting
+  itself. A device linked with several passes a change on to the rest, so a
   group stays in step. There is no main device: every change is numbered one past the last, and the
   latest number wins, whatever any device's clock says; a device behind is brought up to date. **Last
   from** shows which device a value came from. Untick a device to take it out of the link; it is told, and unlinks too. A setting is linked

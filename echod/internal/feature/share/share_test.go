@@ -686,3 +686,50 @@ func TestChangesHereAndFromElsewhereAtOnce(t *testing.T) {
 		seen[n] = true
 	}
 }
+
+// Unticked and ticked again while the device cannot be reached, it is asked again in good time, whatever
+// happened to the asking before; and nothing is kept about asking once a link is settled or gone.
+func TestAskingStartsOverWithTheLink(t *testing.T) {
+	r := newRig(t)
+	reach := true
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		var m message
+		_ = json.Unmarshal(body, &m)
+		r.mu.Lock()
+		r.sent[to] = append(r.sent[to], m)
+		r.mu.Unlock()
+		if !reach {
+			return nil, fmt.Errorf("no route to %s", to)
+		}
+		return json.Marshal(reply{Results: map[string]string{m.ID: Asked}})
+	}
+	ctx := context.Background()
+	_, _ = r.f.Link(ctx, "bass", []string{"Office"}) // delivered
+	_, _ = r.f.Link(ctx, "bass", nil)                // taken out
+	r.f.askMu.Lock()
+	n := len(r.f.asks)
+	r.f.askMu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d asks kept after the link went", n)
+	}
+	reach = false
+	_, _ = r.f.Link(ctx, "bass", []string{"Office"}) // not delivered this time
+	sent := len(r.sentTo("Office"))
+	r.tick(askFirst)
+	r.f.askDue(ctx)
+	if got := len(r.sentTo("Office")); got != sent+1 {
+		t.Fatalf("not asked again after %v: %d messages, was %d", askFirst, got, sent)
+	}
+
+	// Accepted there: nothing kept about asking.
+	reach = true
+	before := len(r.sentTo("Office"))
+	r.receive(t, "Office", message{Kind: "link", Link: "accept", ID: "bass"})
+	waitFor(t, func() bool { return len(r.sentTo("Office")) == before+1 }) // the value it sends then
+	r.f.askMu.Lock()
+	n = len(r.f.asks)
+	r.f.askMu.Unlock()
+	if n != 0 {
+		t.Fatalf("%d asks kept after it was accepted", n)
+	}
+}

@@ -558,6 +558,9 @@ func (f *Feature) linkFrom(from, op, id string) string {
 		if err := config.Set().Share().Update(change); err != nil {
 			return BadValue
 		}
+		if op != "request" || outcome == Linked {
+			f.forget(id, from) // accepted or taken out: nothing waits on it here any more
+		}
 	}
 	slog.Info("share: link message", "setting", id, "from", from, "op", op, "outcome", outcome)
 	if op == "accept" && linked && waiting || op == "request" && linked && waiting {
@@ -649,6 +652,11 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		}
 	}
 
+	// Linked anew or taken out: how asking went before is no guide.
+	for _, d := range append(add, removed...) {
+		f.forget(id, d)
+	}
+
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	tell := func(d, op string) {
@@ -724,12 +732,23 @@ func (f *Feature) asked(id, d, outcome string) {
 		f.asks[k] = a
 	}
 	switch outcome {
-	case Asked, Linked, Declined, NotShared, NotHere:
-		a.delivered = true // answered: nothing gained by asking again
+	case Linked, Declined:
+		delete(f.asks, k) // settled: nothing waits on it any more
+	case Asked, NotShared, NotHere:
+		a.delivered = true // it got there and is kept there: nothing gained by asking again
 	default:
+		// Not delivered, this time, whatever happened before: tried again later.
+		a.delivered = false
 		a.delay = min(max(2*a.delay, askFirst), askMost)
 		a.next = f.now().Add(a.delay)
 	}
+}
+
+// forget drops how asking a device about a setting went: the link was made, taken out, or settled.
+func (f *Feature) forget(id, d string) {
+	f.askMu.Lock()
+	delete(f.asks, config.AskKey(id, d))
+	f.askMu.Unlock()
 }
 
 // NoAnswer is whether a device asked to link a setting has not answered in giveUpAfter: it is not asked
@@ -797,6 +816,7 @@ func (f *Feature) Accept(ctx context.Context, id, device string) (string, error)
 // answered as declined rather than shown again, and tells the device.
 func (f *Feature) Decline(ctx context.Context, id, device string) {
 	_ = config.Set().Share().Update(func(s *config.Share) { config.Decline(s, id, device, f.now()) })
+	f.forget(id, device)
 	f.deliver(ctx, device, message{Kind: "link", Link: "remove", ID: id})
 }
 
