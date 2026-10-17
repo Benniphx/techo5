@@ -477,7 +477,10 @@ func build() *Display {
 	btaudio.Get().Changed.Listen(func(btaudio.State) { d.wake() })
 	phone.Get().Changed.Listen(func(phone.State) { d.wake() })
 	doorbell.Get().Changed.Listen(func(struct{}) { d.wake() })
-	camstream.Get().Changed.Listen(func(struct{}) { d.wake() })
+	camstream.Get().Changed.Listen(func(struct{}) {
+		d.relight(true) // a dark panel keeps a little light while the camera is watched (watchedLight)
+		d.wake()
+	})
 	security.Get().Changed.Listen(func(struct{}) { d.wake() })
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	alarm.Get().Changed.Listen(func(struct{}) { d.wake() })
@@ -628,6 +631,7 @@ func (d *Display) relight(jump bool) {
 	if p := d.wakeLight(time.Now()); p > 0 && d.on {
 		target = float64(d.ceiling) * screen.BacklightMax / 100 * sunriseLevel(p)
 	}
+	target = watchedLight(target, d.on, camstream.Watching(), dimmest()*screen.BacklightMax)
 	if jump || d.level == 0 {
 		d.level = target
 	} else {
@@ -2295,6 +2299,15 @@ func (d *Display) frame() time.Duration {
 		video.Get().Covered(false)
 		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
 		return videoRecheck
+	}
+	if !on && camstream.Watching() {
+		// Dark, with the camera watched over the network: the dot that says so, alone on black, at the
+		// dimmest light (relight), so the room can tell. Looked at again until the watching ends.
+		d.r.watchedDark()
+		if err := d.dev.Present(); err != nil {
+			slog.Warn("presenting the frame failed", "err", err)
+		}
+		return 5 * time.Second
 	}
 	if !on {
 		// Dark panel: nothing to draw, and nothing to redraw until told, or until the night ends.
