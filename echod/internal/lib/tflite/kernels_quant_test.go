@@ -102,3 +102,12 @@ func TestDepthwiseRefusesTooMuchWork(t *testing.T) {
 		t.Fatal("a stride of 0 taken")
 	}
 }
+
+func TestConv2DRefusesTooMuchWork(t *testing.T) {
+	x := &Tensor{Type: Float32, Shape: []int{1, 2048, 2048, 16}}
+	w := &Tensor{Type: Float32, Shape: []int{16, 3, 3, 16}}
+	o := &OpDesc{Op: OpConv2D, conv: convParams{samePad: true, strideW: 1, strideH: 1, dilationW: 1, dilationH: 1}}
+	if err := kernels[OpConv2D](o, []*Tensor{x, w, nil}, []*Tensor{out()}); err == nil {
+		t.Fatal("taken")
+	}
+}

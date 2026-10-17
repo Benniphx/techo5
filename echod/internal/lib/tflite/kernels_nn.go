@@ -27,6 +27,9 @@ func conv2D(o *OpDesc, in, out []*Tensor) error {
 
 	oh := outputSize(ih, kh, p.strideH, p.dilationH, p.samePad)
 	ow := outputSize(iw, kw, p.strideW, p.dilationW, p.samePad)
+	if tooMuch(count([]int{batch, oh, ow, oc}), kh*kw*ic) {
+		return fmt.Errorf("an output of %dx%dx%dx%d from %dx%dx%d windows is more work than a model of this kind asks", batch, oh, ow, oc, kh, kw, ic)
+	}
 	y.resize([]int{batch, oh, ow, oc})
 
 	padH, padW := 0, 0
@@ -247,9 +250,8 @@ func step(idx, shape, as, bs []int, ao, bo int) (int, int) {
 	return ao, bo
 }
 
-// maxWork is the most multiply-adds one quantized model's operator may ask for: a damaged file can
-// describe an output inside maxElements whose windows would take minutes, and the models these kernels
-// are for need a few million.
+// maxWork is the most multiply-adds one operator may ask for: a damaged file can describe an output inside
+// maxElements whose windows would take minutes, and the models these kernels run need a few million.
 const maxWork = 1 << 28
 
 // tooMuch is whether an operator of out outputs, each reading window values, is past maxWork.
