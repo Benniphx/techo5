@@ -70,32 +70,31 @@ func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
 	user := llm.Message{Role: "user", Content: heard}
 	msgs = append(msgs, user)
 	added := []llm.Message{user}
-	read := false // the turn has read the web: only the question and the answer are kept (remember)
 
-	ts := toolList()
-	var web webTurn
+	// The lockout after reading the web, which realtime voice shares (gate.go). A turn that has read
+	// the web keeps only its question and answer (remember).
+	g := NewTurnGate()
 	for range rounds {
-		m, err := c.Chat(ctx, msgs, specs(ts))
+		m, err := c.Chat(ctx, msgs, g.Tools())
 		if err != nil {
 			return "", err
 		}
 		msgs = append(msgs, m)
 		added = append(added, m)
 		if len(m.ToolCalls) == 0 {
-			a.remember(added, read)
+			a.remember(added, g.Read())
 			return spoken(m.Content), nil
 		}
 		for _, call := range m.ToolCalls {
-			result := web.check(ts, call)
-			read = read || readsTheWeb[call.Function.Name]
+			result := g.Run(call)
 			slog.Info("assistant: tool", "name", call.Function.Name, "args", call.Function.Arguments, "result", result)
 			r := llm.Message{Role: "tool", ToolCallID: call.ID, Name: call.Function.Name, Content: result}
 			msgs = append(msgs, r)
 			added = append(added, r)
 		}
-		web.endRound(read)
+		g.EndRound()
 	}
-	a.remember(added, read)
+	a.remember(added, g.Read())
 	return "Sorry, I got stuck on that one.", nil
 }
 
