@@ -1444,6 +1444,12 @@ func (d *Display) gesture(g touch.Gesture) {
 					return
 				}
 			}
+			// A screen without microphones has no voice turn to start: Assist there is the
+			// dashboard when one is set up, and otherwise nothing.
+			if !hasMicrophone() {
+				d.openDashboard()
+				return
+			}
 		}
 		voice.Get().Action()
 	case touch.SwipeLeft:
