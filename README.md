@@ -44,13 +44,13 @@ It started on the Show 5, which is where the name comes from.
 
 | Device | Model | Repository | Status |
 |---|---|---|---|
-| **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N8S | this one | In daily use |
-| **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
-| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
-| **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
-| **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
-| **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
-| **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
+| <img src="docs/images/badges/cronos.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N8S | this one | In daily use |
+| <img src="docs/images/badges/checkers.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
+| <img src="docs/images/badges/crown.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
+| <img src="docs/images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
+| <img src="docs/images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
+| <img src="docs/images/badges/biscuit.png" alt="" width="36" align="absmiddle"> **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
+| <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
@@ -435,7 +435,9 @@ Echo Show 8 port, which lives here in this repository.
 
 ## Made possible by
 
-TECHO5 exists because of these projects and the people behind them.
+TECHO5 exists because of these projects and the people behind them. The codename badges in the device
+table are photos from Wikimedia Commons; who took each one, and its license, is in
+[docs/images/badges/CREDITS.md](docs/images/badges/CREDITS.md).
 
 **The path here**
 - [EchoLocal](https://github.com/ygelfand/echolocal) (MIT, Yuri Gelfand): the daemon TECHO5 is built
