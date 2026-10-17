@@ -187,10 +187,11 @@ func tail(file *os.File) (int64, []string) {
 	return size, lines
 }
 
-// spoken is a log line's fields that hold words: what was heard and said, what was announced, and
-// what the assistant's tools were asked and answered (a page's text, a calendar's events). The stream
+// spoken is a log line's fields that hold words: what was heard and said, what was announced, what
+// the assistant's tools were asked and answered (a page's text, a calendar's events), an event's,
+// alarm's or reminder's words and a notification's message. The stream
 // gives only their length: the device's own log keeps them, and the API is not encrypted.
-var spoken = regexp.MustCompile(`\b(text|result|args|summary|words)=("(?:[^"\\]|\\.)*"|\S*)`)
+var spoken = regexp.MustCompile(`\b(text|result|args|summary|words|label|message)=("(?:[^"\\]|\\.)*"|\S*)`)
 
 // withoutWords is a line with the words in it given as their length.
 func withoutWords(line string) string {

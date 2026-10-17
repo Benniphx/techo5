@@ -12,6 +12,8 @@ func TestTheStreamCarriesNoWords(t *testing.T) {
 		`2026/10/17 07:00:01 INFO replying slot=1 text=hello`,
 		`2026/10/17 07:00:02 INFO assistant: tool name=calendar args="{\"day\":\"today\"}" result="Dentist at 3"`,
 		`2026/10/17 07:00:03 INFO announcing text="dinner is ready" seconds=0 to=3`,
+		`2026/10/17 07:00:04 INFO calendar: pop-up summary="Dentist at noon" starts=12:00PM night=false`,
+		`2026/10/17 07:00:05 INFO reminder id=r1 label="Dentist call" from=""`,
 	} {
 		got := withoutWords(line)
 		for _, said := range []string{"calendar today", "hello", "Dentist", "dinner is ready", `\"day\"`} {
