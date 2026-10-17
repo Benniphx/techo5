@@ -26,6 +26,7 @@ var registered = []string{
 	"alarm_sound",
 	"alarm_sounding",
 	"alarm_stop",
+	"alarm_words",
 	"ambient_noise",
 	"ambient_noise_sensor",
 	"bass",

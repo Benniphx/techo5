@@ -629,6 +629,16 @@ has rung, so delete it instead, or cancel the snoozes: the Snoozed row on the sc
 on the setup page. An alarm followed from a Home Assistant helper works the same way when its on/off
 switch is turned off.
 
+**Said as it rings** (the Alarms card, the setup page, or **Alarm words** in Home Assistant) is what
+an alarm says after its first chime: **Its words** (the default) says the words an alarm was given,
+**The time and its words** says the time first ("7:05 AM. Take the trash out"), so an alarm with no
+words still says something, and **Nothing** leaves the ring alone. The time follows the clock's 12
+or 24 hour setting; AM and PM are said only with the screen language on English or all languages,
+and otherwise a 12 hour time is the hour and minutes alone. A Dot has no clock setting, so it says a
+12 hour time. Words that only say "alarm" are not said. The chime holds back for up to nine seconds
+while they are said. Home Assistant speaks them, in its assistant's voice and language, so with Home
+Assistant out of reach the alarm rings without them.
+
 **Wake with light** lights the room for a while before an alarm: the screen on a Show or a Spot, the
 light ring on a Dot. Set the default on the Alarms card or the setup page, and give an alarm its own
 in its editor (5 to 30 minutes, or off). Once an alarm with a wake light rings, the light stays at
