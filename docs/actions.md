@@ -1050,6 +1050,39 @@ data:
   seconds: 60
 ```
 
+## Show several cameras at once
+
+In YAML, refer to this action as `esphome.<node>_home_show_cameras`. On the Echo Show only.
+
+Puts up to six cameras on the screen at once, two or three across, each refreshed from its snapshot
+about once a second, or as often as fetching the others allows. A tap on one puts that camera up on
+its own, live where Live camera video is on; a tap on the strip at the top or the foot closes the
+grid. The cameras' own sound is not played in the grid. The same grid is the **All cameras** row at
+the top of the Cameras drawer, when there are two cameras or more.
+
+### cameras (Required)
+
+*string*
+
+The cameras' entity ids, comma separated, in the order they go in: left to right, then down. Empty for
+the first six of the device's list (`home_cameras`, or every camera Home Assistant has). The device's
+own camera is not shown in the grid, and only cameras are: Home Assistant's (`camera.`) and a Reolink
+recorder's.
+
+### seconds (Required)
+
+*int*
+
+How long the grid stays up, an hour at most; 0 for 30 seconds.
+
+```yaml
+# Somebody at the door after dark: the door, the drive and the yard together.
+action: esphome.kitchen_home_show_cameras
+data:
+  cameras: camera.front_door, camera.driveway, camera.yard
+  seconds: 60
+```
+
 ## Show a camera with its sound decided here
 
 In YAML, refer to this action as `esphome.<node>_home_show_camera_sound`.

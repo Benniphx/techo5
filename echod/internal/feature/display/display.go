@@ -825,8 +825,9 @@ func (d *Display) volumeMoved(step int) {
 // toggleTalk and toggleSound are what the camera page's Talk and sound controls do; variables only so
 // that a test can see a tap reach them.
 var (
-	toggleTalk  = func(entity string) { talkback.Get().Toggle(entity) }
-	toggleSound = func() { home.Get().ToggleCameraSound() }
+	toggleTalk      = func(entity string) { talkback.Get().Toggle(entity) }
+	toggleSound     = func() { home.Get().ToggleCameraSound() }
+	showCameraAlone = func(entity string) { home.Get().ShowCamera(entity, cameraScreenTime()) }
 )
 
 // cameraTap is a tap on the camera page for view v: it takes the view down, unless it lands on the
@@ -834,6 +835,15 @@ var (
 // use of it at a doorbell — or on Talk, which starts or ends talking through the camera. By day and on
 // the night light both come here, so a hand reaching for Talk in the dark does not lose the view.
 func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
+	if len(v.Grid) > 0 {
+		// The grid: a camera tapped goes up on its own, live where it can be; the strips close it.
+		if i := d.gridCellAt(image.Pt(g.X, g.Y), len(v.Grid)); i >= 0 {
+			go showCameraAlone(v.Grid[i].Entity)
+		} else {
+			go closeCamera(v)
+		}
+		return
+	}
 	if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
 		go toggleTalk(v.Entity)
 	} else if d.r != nil && d.r.cameraSoundTapped(image.Pt(g.X, g.Y)) {

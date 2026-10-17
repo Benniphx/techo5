@@ -539,7 +539,7 @@ func (f *Feature) locationAction() *esphome.Action {
 // Actions are how Home Assistant configures this: which weather entity to show, and how the
 // radio page is wired. Both persist and take effect at the next connection.
 func (f *Feature) Actions() []*esphome.Action {
-	actions := append(f.cameraActions(), f.accessAction())
+	actions := append(append(f.cameraActions(), f.gridActions()...), f.accessAction())
 	if hasScreen {
 		actions = append(actions, f.slideshowAction(), f.calendarAction(), f.locationAction())
 	}

@@ -5,6 +5,7 @@ import (
 	"image"
 	_ "image/jpeg" // Home Assistant serves camera snapshots as JPEG
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,8 @@ type CameraView struct {
 	Error  string      // why there is no frame, when there is none
 	// Caption is a notification's words over the view (feature/notify); nil for a plain camera.
 	Caption *Caption
+	// Grid is the cameras of the camera grid, while the grid is up (Entity is GridEntity); nil otherwise.
+	Grid []GridCell
 	// OverPlain is a notification's picture put over a camera somebody was already watching (a
 	// doorbell's): the screen does not hold it back at night (display's gateCamera), since the camera
 	// was up anyway.
@@ -144,7 +147,9 @@ func (f *Feature) Camera() (CameraView, bool) {
 	if f.cam.Entity == "" || time.Now().After(f.cam.Until) {
 		return CameraView{}, false
 	}
-	return f.cam, true
+	v := f.cam
+	v.Grid = slices.Clone(f.cam.Grid) // the grid's fetch writes its cells while the screen reads this
+	return v, true
 }
 
 // ShowCamera puts a camera up for d, with its sound if the device's own setting asks for it.
@@ -161,6 +166,9 @@ func (f *Feature) showCamera(entity string, d time.Duration, sound bool) {
 // showCameraCaptioned puts a camera up with a notification's words over it, or none (nil): a camera
 // asked for any other way is a plain camera, so a caption never outlasts its notification.
 func (f *Feature) showCameraCaptioned(entity string, d time.Duration, sound bool, c *Caption) {
+	if entity == GridEntity {
+		return // the grid's name, not a camera's: the grid goes up with ShowGrid
+	}
 	name, listed := entity, false
 	for _, cam := range f.Cameras() {
 		if cam.Entity == entity {
