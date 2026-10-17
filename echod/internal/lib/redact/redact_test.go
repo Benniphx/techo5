@@ -177,6 +177,10 @@ func TestPhonesNextToLetters(t *testing.T) {
 		{"5551234567/+15559876543", "<phone-1>/<phone-2>"},
 		{"5551234567-5559876543", "<phone-1>-<phone-2>"},
 		{"5551234567 and 5551234567 again", "<phone-1> and <phone-1> again"},
+		// A name made of hex letters glued to a number is still a name and a number.
+		{"a5551234567", "a<phone-1>"},
+		{"Ada5551234567", "Ada<phone-1>"},
+		{"5551234567abc", "<phone-1>abc"},
 	} {
 		if got := New().Text(tc.in); got != tc.want {
 			t.Errorf("%q came out as %q, want %q", tc.in, got, tc.want)
@@ -198,6 +202,9 @@ func TestPhonesNextToLetters(t *testing.T) {
 		"offset=-1234567890 ts=1697461234.567",
 		"rate 1234567890.5 and 0.1234567890",
 		"version 1.2.3.4567890123",
+		"uuid 12345678-1234-1234-1234-123456789012",
+		"build 1.2.19-1234567890",
+		"year 2026-1234567890",
 	} {
 		if got := New().Text(line); got != line {
 			t.Errorf("changed:\n old: %s\n new: %s", line, got)

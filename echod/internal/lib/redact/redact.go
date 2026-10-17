@@ -163,7 +163,13 @@ func isPhone(s string, from, digits, end int) bool {
 		case '.':
 			return false
 		case '-':
-			if from < 2 || !isDigit(s[from-2]) {
+			// Only between two phone numbers: a dash after a shorter run is a UUID's, a date's or a
+			// version's.
+			n := 0
+			for i := from - 2; i >= 0 && isDigit(s[i]); i-- {
+				n++
+			}
+			if n < 10 || n > 15 {
 				return false
 			}
 		}
@@ -185,7 +191,10 @@ func isPhone(s string, from, digits, end int) bool {
 	if len(word) > 2 && word[0] == '0' && (word[1] == 'x' || word[1] == 'X') {
 		return false
 	}
-	if isHex(word) && (len(word) > 15 || strings.ContainsAny(word, "abcdefABCDEF")) {
+	// A hex word is a pointer or a hash when it is long, or when its letters sit among digits other than
+	// the run itself; a name of hex letters glued to a number ("Ada5551234567") is not.
+	if isHex(word) && (len(word) > 15 || strings.ContainsAny(word, "abcdefABCDEF") &&
+		strings.ContainsAny(s[start:digits]+s[end:stop], "0123456789")) {
 		return false
 	}
 	return true
