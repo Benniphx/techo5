@@ -3,8 +3,10 @@ package camstream
 import (
 	"bytes"
 	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"html"
@@ -85,6 +87,15 @@ func (f *Feature) onvif(w http.ResponseWriter, r *http.Request) {
 		web.Refuse(w, "ONVIF takes POST", http.StatusMethodNotAllowed)
 		return
 	}
+	// A few requests at a time: each one's body is read and its login checked before anything else, and
+	// a recorder asks one thing at a time.
+	select {
+	case onvifBusy <- struct{}{}:
+		defer func() { <-onvifBusy }()
+	default:
+		web.Refuse(w, "busy; try again", http.StatusServiceUnavailable)
+		return
+	}
 	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(readWithin))
 	b, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil || len(b) > maxBody {
@@ -163,7 +174,7 @@ func (f *Feature) answer(op, profile, host string) (string, bool) {
 	case "GetDeviceInformation":
 		return `<tds:GetDeviceInformationResponse><tds:Manufacturer>TECHO5</tds:Manufacturer><tds:Model>` +
 			html.EscapeString(layout.Model) + `</tds:Model><tds:FirmwareVersion>` + html.EscapeString(layout.Version) +
-			`</tds:FirmwareVersion><tds:SerialNumber>` + html.EscapeString(config.Get().Device.Name) +
+			`</tds:FirmwareVersion><tds:SerialNumber>` + serialNumber(config.Get().Device.Name) +
 			`</tds:SerialNumber><tds:HardwareId>TECHO5</tds:HardwareId></tds:GetDeviceInformationResponse>`, true
 	case "GetScopes":
 		return `<tds:GetScopesResponse>` + scope("onvif://www.onvif.org/type/video_encoder") +
@@ -311,4 +322,17 @@ func fault(w http.ResponseWriter, status int, subcode, reason string) {
 	reply(w, status, `<s:Fault><s:Code><s:Value>s:Sender</s:Value><s:Subcode><s:Value>`+subcode+
 		`</s:Value></s:Subcode></s:Code><s:Reason><s:Text xml:lang="en">`+html.EscapeString(reason)+
 		`</s:Text></s:Reason></s:Fault>`)
+}
+
+// onvifBusy holds a place for each ONVIF request being answered.
+var onvifBusy = make(chan struct{}, maxONVIF)
+
+// maxONVIF is how many ONVIF requests are answered at once.
+const maxONVIF = 4
+
+// serialNumber is what a recorder is told the device's serial number is: steady for the device, so the
+// recorder knows it again, and not its name, which is often a room.
+func serialNumber(name string) string {
+	sum := sha256.Sum256([]byte("techo5-onvif serial:" + name))
+	return "TECHO5-" + strings.ToUpper(hex.EncodeToString(sum[:6]))
 }

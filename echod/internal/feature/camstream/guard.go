@@ -2,6 +2,7 @@ package camstream
 
 import (
 	"log/slog"
+	"net/netip"
 	"sync"
 	"time"
 )
@@ -17,15 +18,21 @@ const (
 	lockWindow = 10 * time.Minute
 	lockFor    = 15 * time.Minute
 
-	// guardKept is how many addresses are remembered before the ones with nothing against them now are let
-	// go.
+	// allAfter is how many wrong logins from anywhere, within lockWindow, stop every new login for lockFor:
+	// guessing from many addresses at once is no way round the count of one.
+	allAfter = 50
+
+	// guardKept is how many addresses are remembered. Only those with nothing against them are let go to
+	// make room; with none to let go, a login from an address not yet known is refused.
 	guardKept = 256
 )
 
-// guard counts wrong logins by address.
+// guard counts wrong logins by address, and all of them together.
 type guard struct {
-	mu sync.Mutex
-	by map[string]*record
+	mu       sync.Mutex
+	by       map[string]*record
+	all      []time.Time // every wrong login
+	allUntil time.Time   // every new login refused until then
 }
 
 type record struct {
@@ -34,22 +41,43 @@ type record struct {
 	checking int // logins being checked now
 }
 
-// refused is whether an address is locked out now.
+// keyOf is the address a login is counted against: an IPv6 address on the internet by its /64, which one
+// household holds whole, so rotating through it is no way round the count; anything else as it is.
+func keyOf(from string) string {
+	a, err := netip.ParseAddr(from)
+	if err != nil {
+		return from
+	}
+	a = a.Unmap()
+	if a.Is6() && !a.IsLinkLocalUnicast() && !a.IsPrivate() && !a.IsLoopback() {
+		if p, err := a.Prefix(64); err == nil {
+			return p.String()
+		}
+	}
+	return a.String()
+}
+
+// refused is whether an address is locked out now, or every login is.
 func (g *guard) refused(from string) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	r := g.by[from]
-	return r != nil && time.Now().Before(r.until)
+	now := time.Now()
+	if now.Before(g.allUntil) {
+		return true
+	}
+	r := g.by[keyOf(from)]
+	return r != nil && now.Before(r.until)
 }
 
 // attempt is a login from an address about to be checked: false when the address is locked out, or has
 // as many wrong and unsettled logins as it may. Otherwise done is called with whether it was wrong, and
 // waits wrongDelay when it was.
 func (g *guard) attempt(from string) (ok bool, done func(wrong bool)) {
+	from = keyOf(from)
 	g.mu.Lock()
 	now := time.Now()
 	r := g.record(from, now)
-	if now.Before(r.until) || countRecent(r.fails, now)+r.checking >= lockAfter {
+	if r == nil || now.Before(g.allUntil) || now.Before(r.until) || countRecent(r.fails, now)+r.checking >= lockAfter {
 		g.mu.Unlock()
 		return false, nil
 	}
@@ -66,7 +94,7 @@ func (g *guard) attempt(from string) (ok bool, done func(wrong bool)) {
 	}
 }
 
-// record is an address's, made when it has none; g.mu is held.
+// record is an address's, made when it has none; nil when there is no room for it. g.mu is held.
 func (g *guard) record(from string, now time.Time) *record {
 	if g.by == nil {
 		g.by = map[string]*record{}
@@ -83,24 +111,31 @@ func (g *guard) record(from string, now time.Time) *record {
 		}
 	}
 	if len(g.by) >= guardKept {
-		// Still full: what is forgotten now is wrong logins that have not yet locked anybody out.
-		for k, v := range g.by {
-			if v.checking == 0 && !now.Before(v.until) {
-				delete(g.by, k)
-			}
-		}
+		// Still full, all of it wrong logins not yet run out: none of them is forgotten to make room,
+		// which would wipe its count. The new address waits until one runs out.
+		return nil
 	}
 	r = &record{}
 	g.by[from] = r
 	return r
 }
 
-// failed counts a wrong login, locking the address out at lockAfter.
+// failed counts a wrong login, locking the address out at lockAfter, and every login at allAfter.
 func (g *guard) failed(from string) {
+	from = keyOf(from)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	now := time.Now()
+	g.all = append(recent(g.all, now), now)
+	if len(g.all) >= allAfter && !now.Before(g.allUntil) {
+		g.allUntil = now.Add(lockFor)
+		g.all = nil
+		slog.Warn("camera streaming: too many wrong logins from everywhere; every login refused for a while", "for", lockFor)
+	}
 	r := g.record(from, now)
+	if r == nil {
+		return
+	}
 	r.fails = append(recent(r.fails, now), now)
 	if len(r.fails) >= lockAfter && !now.Before(r.until) {
 		r.until = now.Add(lockFor)

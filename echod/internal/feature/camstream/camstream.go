@@ -89,8 +89,9 @@ type Feature struct {
 	mu      sync.Mutex
 	ln      net.Listener
 	conns   map[net.Conn]struct{}
-	pending int            // connections that have not logged in
-	waiting map[string]int // the same, by address
+	pending int                 // connections that have not logged in
+	waiting map[string]int      // the same, by address
+	since   map[net.Conn]waiter // each connection not logged in yet, and when it came
 	subs    map[chan rtpjpeg.Frame]struct{}
 	stopPic func() // ends the pictures, while anybody watches
 }
@@ -116,6 +117,7 @@ func build() *Feature {
 		wake:      make(chan struct{}, 1),
 		conns:     map[net.Conn]struct{}{},
 		waiting:   map[string]int{},
+		since:     map[net.Conn]waiter{},
 		subs:      map[chan rtpjpeg.Frame]struct{}{},
 	}
 	f.on.OnCommand = func(on bool) {
@@ -252,45 +254,71 @@ func (f *Feature) serve(ln net.Listener) {
 	}
 }
 
-// admit counts a new connection as one that has not logged in, unless too many are waiting already (or
-// from its address), its address is locked out, or the listener it came in on has been shut since.
+// waiter is a connection that has not logged in yet: where from, and since when.
+type waiter struct {
+	from string
+	at   time.Time
+}
+
+// admit counts a new connection as one that has not logged in, unless its address has as many waiting
+// as it may, its address is locked out, or the listener it came in on has been shut since. With every
+// place taken, the connection that has waited longest is let go for it: a recorder logs in at once, so
+// what has waited longest is what never meant to.
 func (f *Feature) admit(ln net.Listener, conn net.Conn, from string) bool {
 	if f.guard.refused(from) {
 		return false
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if f.ln != ln || f.pending >= maxPending || f.waiting[from] >= maxPendingFrom {
+	if f.ln != ln || f.waiting[from] >= maxPendingFrom {
 		return false
+	}
+	if f.pending >= maxPending {
+		var oldest net.Conn
+		var at time.Time
+		for c, w := range f.since {
+			if oldest == nil || w.at.Before(at) {
+				oldest, at = c, w.at
+			}
+		}
+		if oldest == nil {
+			return false
+		}
+		f.unwait(oldest)
+		_ = oldest.Close()
 	}
 	f.pending++
 	f.waiting[from]++
+	f.since[conn] = waiter{from: from, at: time.Now()}
 	f.conns[conn] = struct{}{}
 	return true
 }
 
 // loggedIn moves a connection from waiting to logged in.
-func (f *Feature) loggedIn(from string) {
+func (f *Feature) loggedIn(conn net.Conn) {
 	f.mu.Lock()
-	f.unwait(from)
+	f.unwait(conn)
 	f.mu.Unlock()
 }
 
 // gone forgets a connection.
-func (f *Feature) gone(conn net.Conn, from string, authed bool) {
+func (f *Feature) gone(conn net.Conn) {
 	f.mu.Lock()
 	delete(f.conns, conn)
-	if !authed {
-		f.unwait(from)
-	}
+	f.unwait(conn)
 	f.mu.Unlock()
 }
 
-// unwait takes a connection off the waiting; f.mu is held.
-func (f *Feature) unwait(from string) {
+// unwait takes a connection off the waiting, once, if it is on it; f.mu is held.
+func (f *Feature) unwait(conn net.Conn) {
+	w, ok := f.since[conn]
+	if !ok {
+		return
+	}
+	delete(f.since, conn)
 	f.pending--
-	if f.waiting[from]--; f.waiting[from] <= 0 {
-		delete(f.waiting, from)
+	if f.waiting[w.from]--; f.waiting[w.from] <= 0 {
+		delete(f.waiting, w.from)
 	}
 }
 

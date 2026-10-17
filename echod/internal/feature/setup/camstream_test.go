@@ -20,21 +20,21 @@ func postCamStream(user, pass string) string {
 // A password is set, kept when the field is left empty, and refused when short or more than one line.
 func TestCamStreamLogin(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
-	if problem := postCamStream("recorder", "long enough"); problem != "" {
+	if problem := postCamStream("recorder", "long enough here"); problem != "" {
 		t.Fatal(problem)
 	}
 	if problem := postCamStream("recorder", ""); problem != "" {
 		t.Fatal(problem)
 	}
-	if user, pass := config.Get().CamStream.Login(); user != "recorder" || pass != "long enough" {
+	if user, pass := config.Get().CamStream.Login(); user != "recorder" || pass != "long enough here" {
 		t.Errorf("login %q:%q", user, pass)
 	}
-	for _, bad := range [][2]string{{"recorder", "short"}, {"recorder", "two\nlines!"}, {"a:b", "long enough"}, {`a"b`, "long enough"}} {
+	for _, bad := range [][2]string{{"recorder", "short"}, {"recorder", "two\nlines!"}, {"a:b", "long enough here"}, {`a"b`, "long enough here"}} {
 		if postCamStream(bad[0], bad[1]) == "" {
 			t.Errorf("%q:%q was taken", bad[0], bad[1])
 		}
 	}
-	if _, pass := config.Get().CamStream.Login(); pass != "long enough" {
+	if _, pass := config.Get().CamStream.Login(); pass != "long enough here" {
 		t.Errorf("a refused save changed the password to %q", pass)
 	}
 }

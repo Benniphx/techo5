@@ -77,7 +77,8 @@ func TestViewersCapped(t *testing.T) {
 	}
 }
 
-// Connections that never log in are few, and do not hold a viewer's place.
+// Connections that never log in are few, and do not hold a viewer's place: one address has two places
+// at most, and with every place taken the one that has waited longest is let go for a new one.
 func TestStrangersCannotFillTheStream(t *testing.T) {
 	_, addr, _, _ := server(t)
 	open := func(from string) *client {
@@ -87,7 +88,8 @@ func TestStrangersCannotFillTheStream(t *testing.T) {
 		}
 		return c
 	}
-	for range maxPendingFrom {
+	first := open("127.0.0.1")
+	for range maxPendingFrom - 1 {
 		open("127.0.0.1")
 	}
 	// One address cannot take every place.
@@ -97,8 +99,10 @@ func TestStrangersCannotFillTheStream(t *testing.T) {
 	for range maxPending - maxPendingFrom {
 		open("127.0.0.2")
 	}
-	if c := dialFrom(t, "127.0.0.3", addr, "", ""); !c.closed(5 * time.Second) {
-		t.Fatal("a connection past the waiting ones was taken")
+	// Every place taken: a new one gets in, and the one that waited longest goes.
+	open("127.0.0.3")
+	if !first.closed(5 * time.Second) {
+		t.Fatal("the connection that waited longest was kept")
 	}
 }
 

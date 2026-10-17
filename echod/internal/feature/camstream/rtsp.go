@@ -86,7 +86,7 @@ func (f *Feature) session(conn net.Conn) {
 	defer func() {
 		s.end()
 		_ = conn.Close()
-		f.gone(conn, s.from, s.authed)
+		f.gone(conn)
 	}()
 	for {
 		switch {
@@ -350,7 +350,7 @@ func (s *session) login(req request) bool {
 	}
 	if !s.authed {
 		s.authed = true
-		s.f.loggedIn(s.from)
+		s.f.loggedIn(s.conn)
 	}
 	return true
 }

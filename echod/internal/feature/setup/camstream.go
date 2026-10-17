@@ -16,7 +16,7 @@ func init() { saves["camstream"] = saveCamStream }
 
 // minCamPass is the shortest password the camera stream takes: it is the one thing between the network and
 // the room.
-const minCamPass = 8
+const minCamPass = 12
 
 // camStreamSection is the login for the camera over RTSP (feature/camstream), on a device with a camera.
 // The password is never shown: it is written, or left alone.
@@ -33,7 +33,7 @@ func camStreamSection(w http.ResponseWriter, token string) {
 	case c.On:
 		state = "on, but waiting for a password"
 	}
-	hint := "at least 8 characters"
+	hint := fmt.Sprintf("at least %d characters", minCamPass)
 	if c.Pass != "" {
 		hint = "set; leave empty to keep it"
 	}
