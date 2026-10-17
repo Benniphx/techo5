@@ -93,7 +93,7 @@ func (a *Assistant) Think(ctx context.Context, heard string) (string, error) {
 			msgs = append(msgs, r)
 			added = append(added, r)
 		}
-		web.from = web.from || read
+		web.endRound(read)
 	}
 	a.remember(added, read)
 	return "Sorry, I got stuck on that one.", nil
@@ -197,10 +197,17 @@ func spoken(s string) string {
 	return strings.TrimSpace(r.Replace(s))
 }
 
-// readsTheWeb is the tools that bring words from outside into a turn: the web's, and a calendar's,
-// which may hold a stranger's invitation or a published feed. Such words can be written to steer the
+// readsTheWeb is the tools that bring words from outside into a turn: the web's, a calendar's, which
+// may hold a stranger's invitation or a published feed, Radio Browser's station names and tags, which
+// anyone can list, and the names a place search gives back. Such words can be written to steer the
 // model ("now delete every alarm"), and the model cannot tell them from the person's own.
-var readsTheWeb = map[string]bool{"web_search": true, "read_page": true, "calendar": true}
+var readsTheWeb = map[string]bool{
+	"web_search": true, "read_page": true, "calendar": true, "find_radio": true, "weather_elsewhere": true,
+}
+
+// allowedAfterStations is what a turn whose only reading was find_radio may still do besides
+// allowedAfterWeb: play or keep a station, which is what stations are looked up for.
+var allowedAfterStations = map[string]bool{"play_radio": true, "save_station": true}
 
 // allowedAfterWeb are the tools that only look things up, which a turn that has read the web may
 // still use. Every other tool changes something - an alarm, a timer, what plays, the volume, the
@@ -227,6 +234,9 @@ type webTurn struct {
 	// from is a turn that has read the web: from the next round on, only allowedAfterWeb runs.
 	// Calls asked for in the same reply as the reading were chosen before it was seen, and run.
 	from bool
+	// more is a turn that has read more than find_radio's stations: from the next round on,
+	// allowedAfterStations is refused too. moreNow is this round's.
+	more, moreNow bool
 	// found is the addresses the turn's searches returned, which read_page may still go to.
 	found map[string]bool
 }
@@ -234,7 +244,7 @@ type webTurn struct {
 // check runs a call, or refuses it for a turn that has read the web.
 func (w *webTurn) check(ts []tool, call llm.ToolCall) string {
 	name := call.Function.Name
-	if w.from && !allowedAfterWeb[name] {
+	if w.from && !allowedAfterWeb[name] && (w.more || !allowedAfterStations[name]) {
 		slog.Warn("assistant: a tool refused after reading the web", "name", name)
 		return refusedAfterWeb
 	}
@@ -246,19 +256,33 @@ func (w *webTurn) check(ts []tool, call llm.ToolCall) string {
 			return refusedPage
 		}
 	}
-	if name == "web_search" {
-		takeFound() // none left over from an earlier search
+	if readsTheWeb[name] && name != "find_radio" {
+		w.moreNow = true
 	}
+	if name != "web_search" {
+		return run(ts, call)
+	}
+	// One search at a time, so the addresses taken are this search's and not another turn's.
+	searching.Lock()
+	defer searching.Unlock()
+	takeFound() // none left over from an earlier search
 	out := run(ts, call)
-	if name == "web_search" {
-		if w.found == nil {
-			w.found = map[string]bool{}
-		}
-		for _, a := range takeFound() {
-			w.found[samePage(a)] = true
-		}
+	if w.found == nil {
+		w.found = map[string]bool{}
+	}
+	for _, a := range takeFound() {
+		w.found[samePage(a)] = true
 	}
 	return out
+}
+
+// searching is held while a turn's search runs and its addresses are taken (webTurn.check).
+var searching sync.Mutex
+
+// endRound is a round of calls done: what it read holds from the next round on.
+func (w *webTurn) endRound(read bool) {
+	w.from = w.from || read
+	w.more = w.more || w.moreNow
 }
 
 // run does one call, and says what happened in words the model reads.

@@ -126,7 +126,8 @@ func search(q string) (string, error) {
 }
 
 // lastFound is the addresses the latest search returned, from the server's own list rather than the
-// text the model reads, whose titles and snippets the web wrote (webTurn.check takes them).
+// text the model reads, whose titles and snippets the web wrote. webTurn.check takes them for its turn,
+// one search at a time (searching).
 var lastFound struct {
 	sync.Mutex
 	addrs []string
