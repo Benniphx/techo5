@@ -190,6 +190,7 @@ type Display struct {
 	dashAdjust    dashAdjusting
 	dashColor     *dashboard.LightColor // the color sheet, while it is up
 	dashMedia     *mediaSheet           // the media sheet, while it is up
+	dashClimate   *climateSheet         // the thermostat sheet, while it is up
 	sheetSent     sliderSent            // what a sheet's slider last sent, while a finger moves it
 	dashHolds     bool                  // the drawn dashboard is up, and wants a finger held still reported
 

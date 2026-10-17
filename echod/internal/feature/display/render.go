@@ -65,16 +65,17 @@ type scene struct {
 
 	// The dashboard page, drawn instead of the clock while showDash is set: how it is shown, and
 	// when streamed, what arrived.
-	showDash   bool
-	dashAsked  bool // the dashboard a tap on the night screen opened (dashNight): shown over the night clock
-	dashMode   config.DashboardMode
-	dash       dashboard.View
-	drawn      dashboard.Drawn
-	dashScroll int
-	dashAdjust dashAdjusting         // a level a finger is sliding
-	dashTiles  string                // the Dashboard tiles setting: "", "large" or "fill"
-	dashColor  *dashboard.LightColor // the color sheet over the page, while it is up
-	dashMedia  *mediaView            // the media sheet over the page, while it is up
+	showDash    bool
+	dashAsked   bool // the dashboard a tap on the night screen opened (dashNight): shown over the night clock
+	dashMode    config.DashboardMode
+	dash        dashboard.View
+	drawn       dashboard.Drawn
+	dashScroll  int
+	dashAdjust  dashAdjusting         // a level a finger is sliding
+	dashTiles   string                // the Dashboard tiles setting: "", "large" or "fill"
+	dashColor   *dashboard.LightColor // the color sheet over the page, while it is up
+	dashMedia   *mediaView            // the media sheet over the page, while it is up
+	dashClimate *climateView          // the thermostat sheet over the page, while it is up
 
 	// bt is the Bluetooth audio state: the pairing page replaces everything while it is on, and a
 	// connected device is named in the footer.
@@ -255,7 +256,8 @@ type scene struct {
 // renderer draws scenes onto one canvas. Faces are made once: parsing a font is cheap, but
 // building a face at each size is not something to do per frame.
 type renderer struct {
-	paint // the canvas, its size, and the settings screen's tap zones
+	paint        // the canvas, its size, and the settings screen's tap zones
+	climateParts // the thermostat sheet's, where it was last drawn (climate_sheet.go)
 	// glow is the Glow style's images, kept between frames (glow.go).
 	glow glowBuffers
 

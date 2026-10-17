@@ -623,6 +623,8 @@ func (s *session) pendingOn(t *Tile) {
 		entity = t.Tap.Entity
 	case t.Adjust != nil:
 		entity = t.Adjust.Entity
+	default:
+		entity = t.Entity // a thermostat with neither: set from its sheet
 	}
 	p, ok := s.pending[entity]
 	if entity == "" || !ok || time.Since(p.at) > 10*time.Second {
