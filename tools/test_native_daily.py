@@ -175,5 +175,33 @@ class StableMergeTests(unittest.TestCase):
             self.prepare()
 
 
+class Stable120MergeTests(unittest.TestCase):
+    def test_actual_voice_source_preserves_native_and_stock_effect(self):
+        root = Path(__file__).resolve().parents[1]
+        path = "echod/internal/feature/voice/voice.go"
+        stable = "0d4cb94cb08dbae20f70b312ce7a265c20f8510f"
+        # The new stable object is absent before first preparation. Its previous
+        # stable ancestor is already in the maintained fork's tested history.
+        available = subprocess.run(["git", "cat-file", "-e", stable + "^{commit}"],
+                                   cwd=root, capture_output=True, check=False)
+        ancestor = (subprocess.check_output(["git", "merge-base", "HEAD", stable],
+                    cwd=root, text=True).strip() if available.returncode == 0 else
+                    "db45fb2f8dc51a420caf0f85a858a31ef04ee2e4")
+        base = subprocess.check_output(["git", "show", ancestor + ":" + path], cwd=root)
+        with tempfile.TemporaryDirectory() as directory:
+            native, original = Path(directory) / "native", Path(directory) / "base"
+            native.write_bytes((root / path).read_bytes())
+            original.write_bytes(base)
+            fixture = root / "tools/fixtures/voice-v1.2.20.txt"
+            merged = subprocess.run(["git", "merge-file", "-p", str(native), str(original), str(fixture)],
+                                    capture_output=True, text=True, check=False)
+        self.assertEqual(merged.returncode, 0, "Native voice conflicts with stable v1.2.20")
+        for retained in ("realtime *realtime", "effect *esphome.Action", "v.nativeRealtimeStart()",
+                         "v.Start(0)", "v.realtime.stop()", "HomeAssistant()",
+                         "func (v *Voice) ShowEffect(", "v.turn.askEffect(name)", "releaseRing()"):
+            # gofmt column alignment is immaterial to the retained fields.
+            self.assertIn(" ".join(retained.split()), " ".join(merged.stdout.split()))
+
+
 if __name__ == "__main__":
     unittest.main()
