@@ -189,6 +189,8 @@ type scene struct {
 	// (the idle wait has already been checked); slideshowOverlay is its clock/date size.
 	slideshowScreensaver *image.RGBA
 	slideshowOverlay     string
+	// slideshowCaptions are when and where the screensaver's photos were taken, to write over them.
+	slideshowCaptions []home.PhotoCaption
 
 	// slideshowTrouble is why the slideshow has no photo, once it has given up looking; it sits in
 	// the footer so a folder that went away is visible rather than silently retried.

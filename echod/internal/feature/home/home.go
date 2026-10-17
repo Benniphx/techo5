@@ -223,7 +223,17 @@ type Feature struct {
 	slideshowSubfoldersSw *esphome.Switch
 	// slideshowWholeSw shows photos whole, with blurred sides, instead of cropped to fill.
 	slideshowWholeSw *esphome.Switch
-	slideshow        slideshowState
+	// slideshowPairsSw puts two tall photos side by side; slideshowCaptionSw writes when and where an
+	// Immich photo was taken over it.
+	slideshowPairsSw   *esphome.Switch
+	slideshowCaptionSw *esphome.Switch
+	// immichFavoritesSw, immichPersonTxt, immichFromTxt and immichToTxt narrow an Immich source.
+	immichFavoritesSw *esphome.Switch
+	immichPersonTxt   *esphome.Text
+	immichFromTxt     *esphome.Text
+	immichToTxt       *esphome.Text
+
+	slideshow slideshowState
 	// slideshowGen counts the slideshow's changes of source (changeSlideshow, ResetImmich), so a list
 	// gathered for the source before is not kept for the one after.
 	slideshowGen uint64
@@ -457,6 +467,12 @@ func (f *Feature) Restore(c config.Config) {
 		f.slideshowArtSw.Set(c.Home.Slideshow.Art)
 		f.slideshowSubfoldersSw.Set(!c.Home.Slideshow.TopOnly)
 		f.slideshowWholeSw.Set(c.Home.Slideshow.WholePhoto)
+		f.slideshowPairsSw.Set(c.Home.Slideshow.Pairs && PairsHere())
+		f.slideshowCaptionSw.Set(c.Home.Slideshow.Caption)
+		f.immichFavoritesSw.Set(c.Home.Slideshow.ImmichFavorites)
+		f.immichPersonTxt.Set(c.Home.Slideshow.ImmichPerson)
+		f.immichFromTxt.Set(c.Home.Slideshow.ImmichFrom)
+		f.immichToTxt.Set(c.Home.Slideshow.ImmichTo)
 	}
 	f.want(c.Home)
 }

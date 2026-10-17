@@ -2546,6 +2546,9 @@ func (d *Display) frame() time.Duration {
 			}
 		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
+		if s.slideshowScreensaver != nil && !home.Get().SlideshowArt() {
+			s.slideshowCaptions = home.Get().SlideshowCaptions()
+		}
 	}
 
 	// The Call button is on the clock itself and only there: on any other page a tap where it would be

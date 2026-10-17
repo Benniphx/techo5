@@ -24,7 +24,7 @@ func TestImmichPagesThatAddNothingEnd(t *testing.T) {
 		fmt.Fprint(w, `{"assets":{"total":1,"count":1,"items":[{"id":"0a0a0a0a-0000-4000-8000-000000000001","type":"VIDEO"}],"nextPage":"2"}}`)
 	}))
 	t.Cleanup(srv.Close)
-	photos, err := immichPhotos(context.Background(), config.Immich{Server: srv.URL, Key: testKey}, ImmichAll, 5000)
+	photos, err := immichPhotos(context.Background(), config.Immich{Server: srv.URL, Key: testKey}, ImmichAll, immichFilter{}, 5000)
 	if err != nil {
 		t.Fatal(err)
 	}

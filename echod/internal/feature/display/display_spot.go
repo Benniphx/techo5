@@ -1569,6 +1569,9 @@ func (d *Display) frame() time.Duration {
 			}
 		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
+		if s.slideshowScreensaver != nil && !home.Get().SlideshowArt() {
+			s.slideshowCaptions = home.Get().SlideshowCaptions()
+		}
 	}
 
 	d.dashSceneSpot(&s)

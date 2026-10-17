@@ -1120,6 +1120,12 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "wholephoto":
 		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
+	case "photopairs":
+		home.Get().SetSlideshowPairs(!home.Get().SlideshowPairs())
+	case "photocaption":
+		home.Get().SetSlideshowCaption(!home.Get().SlideshowCaption())
+	case "immichfav":
+		home.Get().SetImmichFavorites(!home.Get().ImmichFavorites())
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "clockpos", "datecolor", "camtime", "answertime", "callring", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap":
 		d.openPicker(id)

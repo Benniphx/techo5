@@ -266,6 +266,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveImmich(r)
 	case "immich-album":
 		problem = chooseImmichAlbum(r)
+	case "immich-show":
+		problem = saveImmichShow(r)
 	case "immich-forget":
 		problem = forgetImmich()
 	case "font-remove":

@@ -135,7 +135,25 @@ type Slideshow struct {
 	// Art shows weather art in place of the photos: a landscape the device draws for the weather and
 	// the time of day (display/weather_art.go). Source is kept, for turning it off again.
 	Art bool `json:"weather_art,omitempty"`
+
+	// Pairs shows two tall photos side by side, each filling half the screen, rather than one with
+	// blurred sides. The Show only: a round screen has no halves.
+	Pairs bool `json:"pairs,omitempty"`
+
+	// Caption shows when and where an Immich photo was taken, over it in Screensaver mode.
+	Caption bool `json:"caption,omitempty"`
+
+	// ImmichFavorites, ImmichFrom, ImmichTo and ImmichPerson narrow an Immich source: to its favorites;
+	// to photos taken on or after ImmichFrom and on or before ImmichTo (dates, 2006-01-02, either may be
+	// empty); to photos of the person Immich knows by the name ImmichPerson.
+	ImmichFavorites bool   `json:"immich_favorites,omitempty"`
+	ImmichFrom      string `json:"immich_from,omitempty"`
+	ImmichTo        string `json:"immich_to,omitempty"`
+	ImmichPerson    string `json:"immich_person,omitempty"`
 }
+
+// PhotoDay is the form ImmichFrom and ImmichTo are kept in.
+const PhotoDay = "2006-01-02"
 
 // Camera is one camera on the screen's list.
 type Camera struct {

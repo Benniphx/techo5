@@ -58,6 +58,13 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
    device and the page never shows it again; **Forget this server** removes it. Once set up, Immich and
    its albums are in the device's own **Photo folder** list too. Photos only, no videos; each is shown
    as Immich's preview of it.
+
+   Under the album, on the same page, Immich's own choices narrow what shows: **Favorites only**,
+   **Taken from** and **Taken through** (whole days on the device's clock; leave either empty for no
+   limit), and **Of this person** (a name as Immich's People page has it). **Date and place** writes
+   when and where each photo was taken at its foot on the screensaver, as Immich knows it. All are off
+   until set, and are also entities in Home Assistant (**Immich favorites only**, **Immich first day**,
+   **Immich last day**, **Immich person**, **Slideshow date and place**).
 2. **Check** that the photos show in Home Assistant under **Media → My media**. If Home Assistant
    can see them, the device can too.
 3. **On the device**, swipe down for Settings, then **Display**:
@@ -67,6 +74,9 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
    - **Time per photo**, **Shuffle photos** and **Include subfolders** are optional.
    - **Show whole photo** shows each photo in full, with a blurred copy of it filling the sides.
      Off, photos fill the screen, which crops tall ones.
+   - **Photo pairs** (the Show) puts two tall photos side by side, each filling half the screen,
+     in place of one with blurred sides. A tall photo with no other near it in the list shows alone.
+   - With an Immich source, **Date and place** and **Favorites only** are here too.
 
 The same settings are entities in Home Assistant, and the folder can be set with the
 [`home_slideshow` action](actions.md#set-the-slideshows-photo-source).
