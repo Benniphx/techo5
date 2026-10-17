@@ -109,7 +109,19 @@ func servers(c Config) []ServerChange {
 		{What: "The doorbell recorder", New: c.Home.Reolink.Base},
 		{What: "OBS", New: c.Deck.OBS.Addr},
 		{What: "go2rtc", New: withoutLogin(c.Home.Go2RTC.Base)},
+		{What: "Realtime voice (the provider and its relay)", New: realtimeServer(c.Realtime)},
 	}
+}
+
+// realtimeServer is where realtime voice goes: its provider, and the relay in its place if there is one.
+func realtimeServer(r Realtime) string {
+	if r.Provider == "" {
+		return ""
+	}
+	if r.Endpoint != "" {
+		return r.Provider + " via " + withoutLogin(r.Endpoint)
+	}
+	return r.Provider
 }
 
 // withoutLogin is an address with any user and password taken out of it, for comparing and showing.
@@ -250,6 +262,8 @@ func ClearSecrets(c *Config) {
 	c.Deck.OBS.Password = ""
 	c.Remote.Secret = ""
 	c.CamStream.Pass = ""
+	c.Realtime.Key = ""
+	c.Realtime.MCPToken = ""
 	for i := range c.Deck.Computers {
 		c.Deck.Computers[i].Key = ""
 	}
@@ -282,6 +296,10 @@ func KeepSecrets(c *Config, from Config) (reenter []string) {
 		c.Home.Reolink.Base == from.Home.Reolink.Base && c.Home.Reolink.User == from.Home.Reolink.User &&
 			c.Home.Reolink.Fingerprint == from.Home.Reolink.Fingerprint, "the doorbell recorder's password")
 	keep(&c.Deck.OBS.Password, from.Deck.OBS.Password, c.Deck.OBS.Addr == from.Deck.OBS.Addr, "OBS's password")
+	keep(&c.Realtime.Key, from.Realtime.Key,
+		c.Realtime.Provider == from.Realtime.Provider && c.Realtime.Endpoint == from.Realtime.Endpoint, "realtime voice's key")
+	// The token is for this device's Home Assistant, which a settings file does not name: kept whole.
+	c.Realtime.MCPToken = from.Realtime.MCPToken
 	// go2rtc's login is in its address: the device's is kept only for the same server (scheme, host and
 	// port), and a file naming another server gets that server with no login.
 	if mine := from.Home.Go2RTC.Base; mine != "" && withoutLogin(mine) == withoutLogin(c.Home.Go2RTC.Base) {
@@ -333,7 +351,11 @@ func KeepOwn(c *Config, from Config) {
 		if i < len(from.Wake.Words) {
 			c.Wake.Words[i].Recordings = from.Wake.Words[i].Recordings
 		}
+		// Sending a slot's voice to a company is chosen on the device, never by a file.
+		c.Wake.Words[i].Realtime = i < len(from.Wake.Words) && from.Wake.Words[i].Realtime
 	}
+	// What realtime voice has used today is the device's count.
+	c.Realtime.UsedDay, c.Realtime.UsedSeconds = from.Realtime.UsedDay, from.Realtime.UsedSeconds
 
 	// Sendspin keeps a port open and says so on the network; the Bluetooth proxy hears nearby phones for
 	// Home Assistant. Neither is a restore's to turn on: Sendspin is on by default, so a file from before
