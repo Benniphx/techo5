@@ -186,15 +186,36 @@ func (f *Feature) saveShare(w http.ResponseWriter, r *http.Request) {
 	if on {
 		// Each message has its own time to arrive (share's deliver), however many settings changed.
 		ctx := context.WithoutCancel(r.Context())
+		// What is kept, in one write, and only when it changed.
+		keep := map[string]bool{}
+		for _, id := range r.PostForm["id"] {
+			if share.Shareable(id) {
+				keep[id] = r.PostFormValue("keep_"+id) == "1"
+			}
+		}
+		cur := config.Get().Share
+		changed := false
+		for id, k := range keep {
+			if cur.Kept(id) != k {
+				changed = true
+			}
+		}
+		if changed {
+			if err := config.Set().Share().Update(func(s *config.Share) {
+				for id, k := range keep {
+					setKept(s, id, k)
+				}
+			}); err != nil {
+				problems = append(problems, err.Error())
+			}
+		}
 		for _, id := range r.PostForm["id"] {
 			if !share.Shareable(id) {
 				continue
 			}
-			if err := config.Set().Share().Keep(id, r.PostFormValue("keep_"+id) == "1"); err != nil {
-				problems = append(problems, err.Error())
-			}
 			want := r.PostForm["link_"+id]
-			if sameDevices(want, config.Get().Share.Linked(id)) {
+			// Unchanged, and nothing still asked: nothing to send. A device still asked is asked again.
+			if sameDevices(want, cur.Linked(id)) && len(cur.Waiting[id]) == 0 {
 				continue
 			}
 			results, err := share.Get().Link(ctx, id, want)
@@ -316,4 +337,16 @@ func (f *Feature) answerShare(w http.ResponseWriter, r *http.Request) {
 		to = back("general", "problem", "accept or decline")
 	}
 	http.Redirect(w, r, to, http.StatusSeeOther)
+}
+
+// setKept marks a setting kept, or not, in s.
+func setKept(s *config.Share, id string, keep bool) {
+	i := slices.Index(s.Keep, id)
+	switch {
+	case keep && i < 0:
+		s.Keep = append(s.Keep, id)
+		slices.Sort(s.Keep)
+	case !keep && i >= 0:
+		s.Keep = slices.Delete(s.Keep, i, i+1)
+	}
 }

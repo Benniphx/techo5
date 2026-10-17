@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -387,4 +389,209 @@ func waitFor(t *testing.T, ok func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("not in time")
+}
+
+func (r *rig) receiveReply(t *testing.T, from string, m message) reply {
+	t.Helper()
+	body, _ := json.Marshal(m)
+	raw, err := r.f.receive(from, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rep reply
+	if err := json.Unmarshal(raw, &rep); err != nil {
+		t.Fatal(err)
+	}
+	return rep
+}
+
+// A change refused as older is answered with what this device has.
+func TestAnOlderChangeIsAnsweredWithWhatIsHere(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office")
+	r.receive(t, "Office", set("bass", "5", 40, "Office"))
+	rep := r.receiveReply(t, "Office", set("bass", "1", 2, "Office"))
+	cur, ok := rep.Current["bass"]
+	if rep.Results["bass"] != Older || !ok || cur.Value != "5" || cur.N != 40 || cur.Origin != "Office" {
+		t.Fatalf("%+v", rep)
+	}
+}
+
+// Told it is behind, a device catches up.
+func TestASenderCatchesUp(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office")
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		return json.Marshal(reply{Results: map[string]string{"bass": Older},
+			Current: map[string]item{"bass": {ID: "bass", Value: "4", N: 50, Origin: "Office"}}})
+	}
+	r.f.deliver(context.Background(), "Office", set("bass", "1", 3, "Kitchen"))
+	if from := config.Get().Share.From["bass"]; r.bass.Get() != 4 || from.N != 50 {
+		t.Fatalf("bass %v from %+v", r.bass.Get(), from)
+	}
+}
+
+// Linked anew, the two settle on the later of what they have, whichever asked.
+func TestANewLinkSettlesOnTheLater(t *testing.T) {
+	r := newRig(t)
+	_ = config.Set().Share().Update(func(s *config.Share) {
+		s.From = map[string]config.ShareFrom{"screen_theme": {Device: "Kitchen", N: 1}}
+	})
+	var sets int
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		var m message
+		_ = json.Unmarshal(body, &m)
+		if m.Kind == "link" {
+			return json.Marshal(reply{Results: map[string]string{m.ID: Asked}})
+		}
+		sets++
+		return json.Marshal(reply{Results: map[string]string{"screen_theme": Older},
+			Current: map[string]item{"screen_theme": {ID: "screen_theme", Value: "Light", N: 40, Origin: "Office"}}})
+	}
+	if _, err := r.f.Link(context.Background(), "screen_theme", []string{"Office"}); err != nil {
+		t.Fatal(err)
+	}
+	r.receive(t, "Office", message{Kind: "link", Link: "accept", ID: "screen_theme"})
+	waitFor(t, func() bool { return r.theme.Get() == "Light" })
+	if from := config.Get().Share.From["screen_theme"]; from.N != 40 || from.Device != "Office" || sets != 1 {
+		t.Fatalf("from %+v, %d sets", from, sets)
+	}
+}
+
+func TestACopyIsHeldToTheOrderToo(t *testing.T) {
+	r := newRig(t)
+	_ = config.Set().Share().Update(func(s *config.Share) {
+		s.From = map[string]config.ShareFrom{"bass": {Device: "Kitchen", N: 7}}
+	})
+	copyOf := func(value string, n uint64) string {
+		return r.receive(t, "Office", message{Kind: "copy", Items: []item{{ID: "bass", Value: value, N: n, Origin: "Office"}}})["bass"]
+	}
+	if got := copyOf("2", 7+maxJump+1); got != BadValue {
+		t.Errorf("a number from nowhere: %q", got)
+	}
+	if got := copyOf("2", math.MaxUint64); got != BadValue {
+		t.Errorf("the last number there is: %q", got)
+	}
+	if got := copyOf("0", 3); got != Same || config.Get().Share.From["bass"].N != 7 {
+		t.Errorf("a copy of what is here: %q, from %+v", got, config.Get().Share.From["bass"])
+	}
+	if got := copyOf("2", 3); got != Applied || config.Get().Share.From["bass"].N != 8 {
+		t.Errorf("a copy: %q, from %+v", got, config.Get().Share.From["bass"])
+	}
+	if next(math.MaxUint64) != math.MaxUint64 {
+		t.Error("the order wrapped round")
+	}
+}
+
+func TestNamesAreHeldToALength(t *testing.T) {
+	r := newRig(t)
+	long := strings.Repeat("x", maxName+1)
+	if _, err := r.f.receive(long, []byte(`{"kind":"copy"}`)); err == nil {
+		t.Error("a name past the limit was taken")
+	}
+	if _, err := r.f.receive("Office\x07", []byte(`{"kind":"copy"}`)); err == nil {
+		t.Error("a name with a control character was taken")
+	}
+	body, _ := json.Marshal(message{Kind: "set", Items: []item{{ID: "bass", Value: "1", N: 1, Origin: long}}})
+	if _, err := r.f.receive("Office", body); err == nil {
+		t.Error("an origin past the limit was taken")
+	}
+	if !ValidName("Kitchen Show 5") || ValidName("") || ValidName("\xff") {
+		t.Error("ValidName")
+	}
+}
+
+func TestAcceptingPastTheLimit(t *testing.T) {
+	r := newRig(t)
+	for i := range config.MaxLinked {
+		link(t, "bass", fmt.Sprintf("Room %d", i))
+	}
+	_ = config.Set().Share().Update(func(s *config.Share) { config.AddRequest(s, "bass", "Office", time.Now()) })
+	if out, err := r.f.Accept(context.Background(), "bass", "Office"); err == nil || out != Full {
+		t.Fatalf("%q %v", out, err)
+	}
+	if config.Get().Share.LinkedWith("bass", "Office") {
+		t.Fatal("linked past the limit")
+	}
+}
+
+// A device that could not be asked is asked again, now and then and on the next save.
+func TestALinkNotYetAcceptedIsAskedAgain(t *testing.T) {
+	r := newRig(t)
+	reach := false
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		var m message
+		_ = json.Unmarshal(body, &m)
+		r.mu.Lock()
+		r.sent[to] = append(r.sent[to], m)
+		r.mu.Unlock()
+		if !reach {
+			return nil, fmt.Errorf("no route to %s", to)
+		}
+		return json.Marshal(reply{Results: map[string]string{m.ID: Asked}})
+	}
+	out, _ := r.f.Link(context.Background(), "bass", []string{"Office"})
+	if out["Office"] != Unreachable || !config.Get().Share.WaitingFor("bass", "Office") {
+		t.Fatalf("%v", out)
+	}
+	reach = true
+	r.f.askAgain(context.Background())
+	if m := r.sentTo("Office"); len(m) != 2 || m[1].Link != "request" {
+		t.Fatalf("asked %+v", m)
+	}
+	// A save with the same devices asks again too.
+	_, _ = r.f.Link(context.Background(), "bass", []string{"Office"})
+	if m := r.sentTo("Office"); len(m) != 3 {
+		t.Fatalf("asked %d times", len(m))
+	}
+}
+
+// Changes made here and changes taken from another device, at once, never let an older one win: each
+// change sent from here is numbered past every one before it.
+func TestChangesHereAndFromElsewhereAtOnce(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office")
+	var sentN []uint64
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		var m message
+		_ = json.Unmarshal(body, &m)
+		r.mu.Lock()
+		for _, it := range m.Items {
+			sentN = append(sentN, it.N)
+		}
+		r.mu.Unlock()
+		return json.Marshal(reply{Results: map[string]string{"bass": Applied}})
+	}
+	ctx := context.Background()
+	r.f.watch(ctx)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := range 100 {
+			r.receive(t, "Office", set("bass", fmt.Sprint(i%5), uint64(2*i+2), "Office"))
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := range 100 {
+			r.bass.OnCommand(float32(-(i % 5)))
+			r.f.watch(ctx)
+		}
+	}()
+	wg.Wait()
+	time.Sleep(100 * time.Millisecond)
+	from := config.Get().Share.From["bass"]
+	if from.N < 200 {
+		t.Errorf("the last change taken was lost: %+v", from)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	seen := map[uint64]bool{}
+	for _, n := range sentN {
+		if seen[n] {
+			t.Fatalf("two changes sent with the same number %d: %v", n, sentN)
+		}
+		seen[n] = true
+	}
 }

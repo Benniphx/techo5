@@ -5,6 +5,7 @@
 //     screen, Home Assistant or the setup page, reaches the others, passed on from one to the next. There is
 //     no leader. Each change is numbered one past the highest the device making it had seen, and the
 //     highest number wins (the device's name breaks a tie), so the order does not rest on any device's clock.
+//     A device that refuses a change as older answers with what it has, and the sender catches up.
 //   - A link is made on each device, never by another: ticking a device for a setting here links it here and
 //     asks that device, which links back only when somebody accepts there. A device can always take itself
 //     out of a link.
@@ -25,9 +26,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
@@ -45,6 +49,10 @@ const (
 	// watchEvery is how often the linked settings are looked at for a change made here.
 	watchEvery = time.Second
 
+	// askAgainEvery is how often a link asked for and not accepted yet is asked again: the device may
+	// have been away, or its answer lost.
+	askAgainEvery = 5 * time.Minute
+
 	// sendWithin is how long one message to one device may take.
 	sendWithin = 10 * time.Second
 
@@ -52,6 +60,10 @@ const (
 	// elsewhere while it was away number a handful, and a number far past that would end every change
 	// made here after it.
 	maxJump = 1 << 20
+
+	// maxName is the longest device name taken: it is kept, with where each value came from and with
+	// each request, in the settings file.
+	maxName = 64
 )
 
 // Outcomes, as a device answers for each setting sent to it.
@@ -62,7 +74,7 @@ const (
 	NotLinked   = "not linked"    // a linked change from a device this one has not linked the setting with
 	NotHere     = "not here"      // this device has no such setting
 	NotShared   = "not shareable" // not on the list
-	Older       = "older"         // this device has a later change
+	Older       = "older"         // this device has a later change, which it answers with
 	BadValue    = "bad value"     // not a value the setting takes, or a number out of order
 	NotTaking   = "not taking"    // sharing is off on that device
 	Unreachable = "unreachable"   // the device could not be reached
@@ -89,6 +101,9 @@ type item struct {
 
 type reply struct {
 	Results map[string]string `json:"results"`
+	// Current is, for each change refused as older, what this device has instead, for the sender to
+	// catch up with.
+	Current map[string]item `json:"current,omitempty"`
 }
 
 type Feature struct {
@@ -102,6 +117,9 @@ type Feature struct {
 
 	wake chan struct{}
 
+	// mu is held while settings are taken or a change here is looked for, so the two never cross. The
+	// settings' commands run under it: they are quick (they save a setting and set it going), and a slow
+	// one would only hold up sharing.
 	mu   sync.Mutex
 	last map[string]string // the linked settings' values as last seen or taken, so a change is seen once
 }
@@ -153,10 +171,34 @@ func (f *Feature) SetOn(on bool) {
 	}
 }
 
-// Run watches the linked settings for a change made here, while sharing is on, and sends it on.
+// ValidName is whether a device name is one this takes: short, and plain text.
+func ValidName(s string) bool {
+	if s == "" || len(s) > maxName || !utf8.ValidString(s) {
+		return false
+	}
+	for _, r := range s {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// next is the number after n, which never wraps round.
+func next(n uint64) uint64 {
+	if n == math.MaxUint64 {
+		return n
+	}
+	return n + 1
+}
+
+// Run watches the linked settings for a change made here, while sharing is on, and sends it on; and asks
+// again, now and then, for links not accepted yet.
 func (f *Feature) Run(ctx context.Context) error {
 	tick := time.NewTicker(watchEvery)
 	defer tick.Stop()
+	askAgain := time.NewTicker(askAgainEvery)
+	defer askAgain.Stop()
 	for {
 		f.watch(ctx)
 		select {
@@ -164,6 +206,8 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-f.wake:
 		case <-tick.C:
+		case <-askAgain.C:
+			f.askAgain(ctx)
 		}
 	}
 }
@@ -171,14 +215,14 @@ func (f *Feature) Run(ctx context.Context) error {
 // watch looks at every linked setting once, and sends each that changed here to the devices it is linked
 // with (those that have accepted).
 func (f *Feature) watch(ctx context.Context) {
-	c := config.Get().Share
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := config.Get().Share // after the lock: a change taken meanwhile is in it
 	if !c.On {
 		return
 	}
 	me := f.me()
 	out := map[string][]item{}
-	f.mu.Lock()
-	defer f.mu.Unlock()
 	from := map[string]config.ShareFrom{}
 	for id, devices := range c.Links {
 		e, ok := entities(id)
@@ -194,7 +238,7 @@ func (f *Feature) watch(ctx context.Context) {
 		if !seen || was == v {
 			continue // the first look only learns the value
 		}
-		it := item{ID: id, Value: v, N: c.From[id].N + 1, Origin: me}
+		it := item{ID: id, Value: v, N: next(c.From[id].N), Origin: me}
 		from[id] = config.ShareFrom{Device: me, At: f.now(), N: it.N}
 		for _, d := range devices {
 			if !c.WaitingFor(id, d) {
@@ -203,12 +247,11 @@ func (f *Feature) watch(ctx context.Context) {
 		}
 	}
 	if len(from) > 0 {
-		// Under the lock, so a change taken from another device in between is not written over.
 		_ = config.Set().Share().Update(func(s *config.Share) {
+			if s.From == nil {
+				s.From = map[string]config.ShareFrom{}
+			}
 			for id, fr := range from {
-				if s.From == nil {
-					s.From = map[string]config.ShareFrom{}
-				}
 				s.From[id] = fr
 			}
 		})
@@ -218,7 +261,8 @@ func (f *Feature) watch(ctx context.Context) {
 	}
 }
 
-// deliver sends a message to one device, within sendWithin, and answers what it made of it.
+// deliver sends a message to one device, within sendWithin, and answers what it made of it. Where it
+// refused a change as older, this device catches up with what it has instead.
 func (f *Feature) deliver(ctx context.Context, to string, m message) map[string]string {
 	body, err := json.Marshal(m)
 	if err != nil {
@@ -246,16 +290,31 @@ func (f *Feature) deliver(ctx context.Context, to string, m message) map[string]
 	if json.Unmarshal(raw, &r) != nil {
 		return nil
 	}
+	var behind []item
 	for id, outcome := range r.Results {
-		if outcome != Applied && outcome != Same && outcome != Linked {
+		switch outcome {
+		case Applied, Same, Linked, Asked:
+		case Older:
+			if cur, ok := r.Current[id]; ok && cur.ID == id {
+				behind = append(behind, cur)
+			}
+		default:
 			slog.Info("share: a device did not take a setting", "to", to, "setting", id, "outcome", outcome)
 		}
+	}
+	if len(behind) > 0 {
+		// Taken as a linked change from that device, so the order decides, as for any other.
+		got := f.take(to, behind, false)
+		slog.Info("share: caught up with a later change", "from", to, "results", got)
 	}
 	return r.Results
 }
 
 // receive is a message from another device.
 func (f *Feature) receive(from string, body []byte) ([]byte, error) {
+	if !ValidName(from) {
+		return nil, errors.New("not a device name this device takes")
+	}
 	var m message
 	if err := json.Unmarshal(body, &m); err != nil {
 		return nil, errors.New("not a message this device reads")
@@ -263,46 +322,64 @@ func (f *Feature) receive(from string, body []byte) ([]byte, error) {
 	if strings.EqualFold(from, f.me()) {
 		return nil, errors.New("a message from this device's own name")
 	}
-	results := map[string]string{}
+	for _, it := range m.Items {
+		if it.Origin != "" && !ValidName(it.Origin) {
+			return nil, errors.New("not a device name this device takes")
+		}
+	}
+	rep := reply{Results: map[string]string{}}
 	if !config.Get().Share.On {
 		for _, it := range m.Items {
-			results[it.ID] = NotTaking
+			rep.Results[it.ID] = NotTaking
 		}
 		if m.ID != "" {
-			results[m.ID] = NotTaking
+			rep.Results[m.ID] = NotTaking
 		}
-		return json.Marshal(reply{Results: results})
+		return json.Marshal(rep)
 	}
 	switch m.Kind {
 	case "set", "copy":
-		results = f.take(from, m.Items, m.Kind == "copy")
+		rep = f.takeReply(from, m.Items, m.Kind == "copy")
 	case "link":
-		results[m.ID] = f.linkFrom(from, m.Link, m.ID)
+		rep.Results[m.ID] = f.linkFrom(from, m.Link, m.ID)
 	default:
 		return nil, fmt.Errorf("not a kind of message this device reads: %q", m.Kind)
 	}
-	return json.Marshal(reply{Results: results})
+	return json.Marshal(rep)
 }
 
-// take is settings from another device. A linked change is taken only from a device this one has linked
-// the setting with, and only when it comes later in the setting's order than the one this device has; a
-// copy is taken whenever it comes, as the latest change. Either way a setting kept here is left, and what
-// is taken is passed on to the setting's other links. Where every setting came from is written once.
+// take is takeReply's outcomes.
 func (f *Feature) take(from string, items []item, copied bool) map[string]string {
-	c := config.Get().Share
-	results := map[string]string{}
+	return f.takeReply(from, items, copied).Results
+}
+
+// takeReply is settings from another device. A linked change is taken only from a device this one has
+// linked the setting with, and only when it comes later in the setting's order than the one this device
+// has; one that does not is answered with what this device has. A copy is taken whenever it comes, as the
+// latest change. Either way a setting kept here is left, and what is taken is passed on to the setting's
+// other links. Where every setting came from is written once.
+func (f *Feature) takeReply(from string, items []item, copied bool) reply {
+	rep := reply{Results: map[string]string{}}
 	newFrom := map[string]config.ShareFrom{}
 	forward := map[string][]item{}
 	now := f.now()
 
 	f.mu.Lock()
+	c := config.Get().Share // after the lock: a change made here meanwhile is in it
 	for _, it := range items {
-		outcome, fr, ok := f.takeOne(from, it, copied, c, now)
-		results[it.ID] = outcome
-		if !ok {
+		outcome, fr, write, cur := f.takeOne(from, it, copied, c, now)
+		rep.Results[it.ID] = outcome
+		if cur != nil {
+			if rep.Current == nil {
+				rep.Current = map[string]item{}
+			}
+			rep.Current[it.ID] = *cur
+		}
+		if !write {
 			continue
 		}
 		newFrom[it.ID] = fr
+		c.From = mapWith(c.From, it.ID, fr) // a later item for the same setting is ordered against this
 		if outcome == Applied {
 			// Passed on, numbered as taken, to every other device this one has linked it with: the number
 			// stops it going round, since a device that has it already answers it is older.
@@ -316,11 +393,8 @@ func (f *Feature) take(from string, items []item, copied bool) map[string]string
 	}
 	if len(newFrom) > 0 {
 		_ = config.Set().Share().Update(func(s *config.Share) {
-			if s.From == nil {
-				s.From = map[string]config.ShareFrom{}
-			}
 			for id, fr := range newFrom {
-				s.From[id] = fr
+				s.From = mapWith(s.From, id, fr)
 			}
 		})
 	}
@@ -329,69 +403,85 @@ func (f *Feature) take(from string, items []item, copied bool) map[string]string
 	for d, its := range forward {
 		safe.Go("share", func() { f.deliver(context.Background(), d, message{Kind: "set", Items: its}) })
 	}
-	return results
+	return rep
 }
 
-// takeOne is one setting; with f.mu held. It answers the outcome, and where the setting now came from
-// when that is to be written.
-func (f *Feature) takeOne(from string, it item, copied bool, c config.Share, now time.Time) (string, config.ShareFrom, bool) {
+func mapWith(m map[string]config.ShareFrom, id string, fr config.ShareFrom) map[string]config.ShareFrom {
+	if m == nil {
+		m = map[string]config.ShareFrom{}
+	}
+	m[id] = fr
+	return m
+}
+
+// takeOne is one setting; with f.mu held. It answers the outcome; where the setting now came from, and
+// whether that is to be written; and, for a change refused as older, what this device has instead.
+func (f *Feature) takeOne(from string, it item, copied bool, c config.Share, now time.Time) (string, config.ShareFrom, bool, *item) {
+	none := config.ShareFrom{}
 	if !Shareable(it.ID) {
-		return NotShared, config.ShareFrom{}, false
+		return NotShared, none, false, nil
 	}
 	e, ok := entities(it.ID)
 	if !ok {
-		return NotHere, config.ShareFrom{}, false
+		return NotHere, none, false, nil
 	}
 	if c.Kept(it.ID) {
 		slog.Info("share: kept this device's own", "setting", it.ID, "from", from)
-		return Kept, config.ShareFrom{}, false
+		return Kept, none, false, nil
 	}
 	have := c.From[it.ID]
+	if it.N > have.N && it.N-have.N > maxJump {
+		return BadValue, none, false, nil // a number from nowhere, which would end every change after it
+	}
+	was, _ := valueOf(e)
 	origin := it.Origin
 	if origin == "" || copied {
 		origin = from
 	}
-	n := it.N
+	var n uint64
 	if copied {
-		// A copy is the latest change, wherever the sender's own order stands.
-		n = max(have.N, it.N) + 1
+		if was == it.Value {
+			f.last[it.ID] = was
+			return Same, none, false, nil // a copy of what is here already changes nothing, not even the order
+		}
+		n = max(have.N, it.N)
+		if n == math.MaxUint64 {
+			return BadValue, none, false, nil
+		}
+		n++ // a copy is the latest change, wherever the sender's own order stands
 	} else {
 		if !c.LinkedWith(it.ID, from) || c.WaitingFor(it.ID, from) {
-			return NotLinked, config.ShareFrom{}, false
+			return NotLinked, none, false, nil
 		}
-		if n > have.N+maxJump {
-			return BadValue, config.ShareFrom{}, false
-		}
+		n = it.N
 		if n < have.N || (n == have.N && strings.ToLower(origin) <= strings.ToLower(have.Device)) {
-			return Older, config.ShareFrom{}, false
+			holder := have.Device
+			if holder == "" {
+				holder = f.me()
+			}
+			return Older, none, false, &item{ID: it.ID, Value: was, N: have.N, Origin: holder}
 		}
 	}
 	fr := config.ShareFrom{Device: origin, At: now, N: n}
-	was, _ := valueOf(e)
 	if was == it.Value {
 		f.last[it.ID] = was
-		if n == have.N && strings.EqualFold(origin, have.Device) {
-			return Same, config.ShareFrom{}, false // nothing new to write
-		}
-		return Same, fr, true
+		return Same, fr, true, nil // the same value, later in the order: only where it came from is new
 	}
-	// What this applies is no change made here: the watch is told the new value first, so it does not
-	// send it back.
+	// What this applies is no change made here: the watch is told the value applied, so it does not send
+	// it back, even if the command sets it going a moment later than it returns.
 	f.last[it.ID] = it.Value
-	err := apply(e, it.Value)
-	now2, _ := valueOf(e)
-	f.last[it.ID] = now2
-	if err != nil {
-		return BadValue, config.ShareFrom{}, false
+	if err := apply(e, it.Value); err != nil {
+		f.last[it.ID] = was
+		return BadValue, none, false, nil
 	}
 	slog.Info("share: setting changed by another device", "setting", it.ID, "from", from, "origin", origin,
-		"was", was, "now", now2, "copied", copied)
-	return Applied, fr, true
+		"was", was, "now", it.Value, "copied", copied)
+	return Applied, fr, true, nil
 }
 
 // linkFrom is another device asking about a link. It can ask (kept as a request here until somebody
 // accepts or declines it), accept one this device asked for, or take itself out of one: never link this
-// device by itself.
+// device by itself. Nothing is written for a message that changes nothing.
 func (f *Feature) linkFrom(from, op, id string) string {
 	if !Shareable(id) {
 		return NotShared
@@ -399,49 +489,64 @@ func (f *Feature) linkFrom(from, op, id string) string {
 	if _, ok := entities(id); !ok && op != "remove" {
 		return NotHere
 	}
-	var outcome string
-	err := config.Set().Share().Update(func(s *config.Share) {
-		switch op {
-		case "request":
-			if s.LinkedWith(id, from) {
-				config.SetWaiting(s, id, from, false)
-				outcome = Linked
-				return
-			}
-			config.AddRequest(s, id, from, f.now())
-			outcome = Asked
-		case "accept":
-			// Only a link this device asked for: anything else is a request like any other.
-			if s.LinkedWith(id, from) && s.WaitingFor(id, from) {
-				config.SetWaiting(s, id, from, false)
-				outcome = Linked
-				return
-			}
-			if s.LinkedWith(id, from) {
-				outcome = Linked
-				return
-			}
-			outcome = NotLinked
-		case "remove":
-			config.RemoveLink(s, id, from)
-			outcome = Applied
-		default:
-			outcome = BadValue
+	c := config.Get().Share
+	linked, waiting := c.LinkedWith(id, from), c.WaitingFor(id, from)
+	requested := false
+	for _, r := range c.Requests {
+		if r.ID == id && strings.EqualFold(r.Device, from) {
+			requested = true
 		}
-	})
-	if err != nil {
+	}
+	var outcome string
+	var change func(s *config.Share)
+	switch op {
+	case "request":
+		switch {
+		case linked:
+			outcome = Linked
+			if waiting {
+				change = func(s *config.Share) { config.SetWaiting(s, id, from, false) }
+			}
+		case requested:
+			outcome = Asked
+		default:
+			outcome = Asked
+			change = func(s *config.Share) { config.AddRequest(s, id, from, f.now()) }
+		}
+	case "accept":
+		// Only a link this device asked for: anything else is no link.
+		switch {
+		case linked && waiting:
+			outcome = Linked
+			change = func(s *config.Share) { config.SetWaiting(s, id, from, false) }
+		case linked:
+			outcome = Linked
+		default:
+			outcome = NotLinked
+		}
+	case "remove":
+		outcome = Applied
+		if linked || waiting || requested {
+			change = func(s *config.Share) { config.RemoveLink(s, id, from) }
+		}
+	default:
 		return BadValue
 	}
+	if change != nil {
+		if err := config.Set().Share().Update(change); err != nil {
+			return BadValue
+		}
+	}
 	slog.Info("share: link message", "setting", id, "from", from, "op", op, "outcome", outcome)
-	if op == "accept" && outcome == Linked {
-		// The link is in place both ways now: this device's value goes to the one that accepted, as the
-		// latest change, so the two start out the same.
+	if op == "accept" && linked && waiting || op == "request" && linked && waiting {
+		// The link is in place both ways now: the two settle on the later of what they have.
 		safe.Go("share", func() { f.sendValue(context.Background(), id, from) })
 	}
 	return outcome
 }
 
-// sendValue sends this device's value for a setting to one linked device, as a new change.
+// sendValue sends this device's value for a setting to one linked device, numbered as it is here: the
+// other takes it if it is later than what it has, and answers with its own if not.
 func (f *Feature) sendValue(ctx context.Context, id, to string) {
 	e, ok := entities(id)
 	if !ok {
@@ -453,43 +558,42 @@ func (f *Feature) sendValue(ctx context.Context, id, to string) {
 		f.mu.Unlock()
 		return
 	}
-	me := f.me()
-	var n uint64
-	_ = config.Set().Share().Update(func(s *config.Share) {
-		n = s.From[id].N + 1
-		if s.From == nil {
-			s.From = map[string]config.ShareFrom{}
-		}
-		s.From[id] = config.ShareFrom{Device: me, At: f.now(), N: n}
-	})
+	have := config.Get().Share.From[id]
+	origin := have.Device
+	if origin == "" {
+		origin = f.me()
+	}
 	f.last[id] = v
 	f.mu.Unlock()
-	f.deliver(ctx, to, message{Kind: "set", Items: []item{{ID: id, Value: v, N: n, Origin: me}}})
+	f.deliver(ctx, to, message{Kind: "set", Items: []item{{ID: id, Value: v, N: have.N, Origin: origin}}})
 }
 
 // Link sets the devices a setting is linked with, from here. Devices added are linked here and asked; each
-// links back once it is accepted there. Devices taken out are unlinked here and told. Answers, by device,
-// what each made of it.
+// links back once it is accepted there. Devices still not accepted are asked again. Devices taken out are
+// unlinked here and told. Answers, by device, what each made of it.
 func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[string]string, error) {
 	if !Shareable(id) {
 		return nil, fmt.Errorf("%s is not a setting that can be shared", id)
 	}
 	me := f.me()
-	c := config.Get().Share
 	var want []string
 	for _, d := range devices {
 		d = strings.TrimSpace(d)
-		if d != "" && !strings.EqualFold(d, me) && !containsFold(want, d) {
+		if !ValidName(d) {
+			continue
+		}
+		if !strings.EqualFold(d, me) && !containsFold(want, d) {
 			want = append(want, d)
 		}
 	}
 	if len(want) > config.MaxLinked {
 		return nil, fmt.Errorf("a setting is linked with %d devices at most", config.MaxLinked)
 	}
-	var added, removed []string
+	c := config.Get().Share
+	var ask, removed []string
 	for _, d := range want {
-		if !c.LinkedWith(id, d) {
-			added = append(added, d)
+		if !c.LinkedWith(id, d) || c.WaitingFor(id, d) {
+			ask = append(ask, d)
 		}
 	}
 	for _, d := range c.Linked(id) {
@@ -497,19 +601,27 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 			removed = append(removed, d)
 		}
 	}
-	if err := config.Set().Share().Update(func(s *config.Share) {
-		for _, d := range removed {
-			config.RemoveLink(s, id, d)
+	results := map[string]string{}
+	if len(ask) > 0 || len(removed) > 0 {
+		if err := config.Set().Share().Update(func(s *config.Share) {
+			for _, d := range removed {
+				config.RemoveLink(s, id, d)
+			}
+			var asked []string
+			for _, d := range ask {
+				if config.AddLink(s, id, d) {
+					config.SetWaiting(s, id, d, true)
+					asked = append(asked, d)
+				} else {
+					results[d] = Full
+				}
+			}
+			ask = asked
+		}); err != nil {
+			return nil, err
 		}
-		for _, d := range added {
-			config.AddLink(s, id, d)
-			config.SetWaiting(s, id, d, true)
-		}
-	}); err != nil {
-		return nil, err
 	}
 
-	results := map[string]string{}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	tell := func(d, op string) {
@@ -519,12 +631,12 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		results[d] = outcome
 		mu.Unlock()
 		if op == "request" && outcome == Linked {
-			// It had this device linked already: settled both ways, and the two start out the same.
+			// It had this device linked already: settled both ways, and the two settle on the later value.
 			_ = config.Set().Share().Update(func(s *config.Share) { config.SetWaiting(s, id, d, false) })
 			f.sendValue(ctx, id, d)
 		}
 	}
-	for _, d := range added {
+	for _, d := range ask {
 		wg.Add(1)
 		go tell(d, "request")
 	}
@@ -533,14 +645,29 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		go tell(d, "remove")
 	}
 	wg.Wait()
-	slog.Info("share: links set here", "setting", id, "added", added, "removed", removed)
+	if len(ask) > 0 || len(removed) > 0 {
+		slog.Info("share: links set here", "setting", id, "asked", ask, "removed", removed)
+	}
 	return results, nil
 }
 
-// Accept accepts another device's request to link a setting: linked here, and the device is told, which
-// sends its value as the latest change.
+// askAgain asks again every device a link is waiting on.
+func (f *Feature) askAgain(ctx context.Context) {
+	c := config.Get().Share
+	if !c.On {
+		return
+	}
+	for id, devices := range c.Waiting {
+		if Shareable(id) && len(devices) > 0 {
+			_, _ = f.Link(ctx, id, c.Linked(id))
+		}
+	}
+}
+
+// Accept accepts another device's request to link a setting: linked here, and the device is told. Once
+// it has heard, the two settle on the later value.
 func (f *Feature) Accept(ctx context.Context, id, device string) (string, error) {
-	if !Shareable(id) {
+	if !Shareable(id) || !ValidName(device) {
 		return "", fmt.Errorf("%s is not a setting that can be shared", id)
 	}
 	ok := false
@@ -582,7 +709,7 @@ func (f *Feature) Copy(ctx context.Context, ids, devices []string) map[string]ma
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, d := range devices {
-		if strings.EqualFold(d, me) {
+		if strings.EqualFold(d, me) || !ValidName(d) {
 			continue
 		}
 		wg.Add(1)
