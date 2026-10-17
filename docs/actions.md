@@ -828,6 +828,8 @@ alarms:
     next: "2026-09-24T06:45:00-05:00"
     reminder: false      # true for one set with reminder_set
     ring_on: []          # the other devices a reminder goes off on
+    silent: false        # true for one set with alarm_set_silent
+    light_only: false    # true for a wake light alone (alarm_set_light_only)
 snoozed: []              # each {label, at}
 followed: []             # each {entity, label, armed, next}
 timers:
