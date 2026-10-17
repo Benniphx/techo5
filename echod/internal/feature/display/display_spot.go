@@ -1410,20 +1410,27 @@ func (d *Display) frame() time.Duration {
 	if !on && !video.Get().State().Active() {
 		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
-	if !on && vs.Frames {
+	playing := !on && vs.Frames
+	if playing {
 		// Dark with a video playing: its frames are taken as they fall due so its sound goes on.
 		video.Get().Covered(false)
 		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
-		return videoRecheck
 	}
 	if !on && camstream.Watching() {
-		// Dark, with the camera watched over the network: its mark, alone on black, at the dimmest light
-		// (relight), so the room can tell. Looked at again until the watching ends.
+		// Dark, with the camera watched over the network: its mark, alone on black (not a video's last
+		// frame), at the dimmest light (relight), so the room can tell. Looked at again until the
+		// watching ends.
 		d.r.watchedDark()
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
+		if playing {
+			return videoRecheck
+		}
 		return 5 * time.Second
+	}
+	if playing {
+		return videoRecheck
 	}
 	if !on {
 		if d.darkByNight() {

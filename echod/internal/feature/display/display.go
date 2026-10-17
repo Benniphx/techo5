@@ -631,7 +631,7 @@ func (d *Display) relight(jump bool) {
 	if p := d.wakeLight(time.Now()); p > 0 && d.on {
 		target = float64(d.ceiling) * screen.BacklightMax / 100 * sunriseLevel(p)
 	}
-	target = watchedLight(target, d.on, camstream.Watching(), dimmest()*screen.BacklightMax)
+	target = watchedLight(target, d.on, camstream.Watching(), float64(glowSteps[0]))
 	if jump || d.level == 0 {
 		d.level = target
 	} else {
@@ -2293,21 +2293,28 @@ func (d *Display) frame() time.Duration {
 	if !on && !video.Get().State().Active() {
 		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
-	if !on && video.Get().State().Frames {
+	playing := !on && video.Get().State().Frames
+	if playing {
 		// A dark panel with a video playing: its frames are still taken as they fall due, so its sound
 		// goes on (the decoder makes both), and nothing is drawn.
 		video.Get().Covered(false)
 		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
-		return videoRecheck
 	}
 	if !on && camstream.Watching() {
-		// Dark, with the camera watched over the network: the dot that says so, alone on black, at the
-		// dimmest light (relight), so the room can tell. Looked at again until the watching ends.
+		// Dark, with the camera watched over the network: the dot that says so, alone on black (not a
+		// video's last frame), at the panel's lowest light (relight), so the room can tell. Looked at
+		// again until the watching ends.
 		d.r.watchedDark()
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
+		if playing {
+			return videoRecheck
+		}
 		return 5 * time.Second
+	}
+	if playing {
+		return videoRecheck
 	}
 	if !on {
 		// Dark panel: nothing to draw, and nothing to redraw until told, or until the night ends.
