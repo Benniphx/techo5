@@ -242,11 +242,13 @@ type pending struct {
 func (f *Feature) Drawn(width int) Drawn {
 	d := config.Get().Dashboard
 	path := d.Path
+	_, web := WebPage(path) // a dashcast web page, listed or no longer
 	for _, k := range d.Known {
-		if k.Path == path && k.Streamed {
-			f.CloseDrawn()
-			return Drawn{Problem: "This page can only be streamed: set Dashboard to Streamed, or pick another."}
-		}
+		web = web || k.Path == path && k.Streamed
+	}
+	if web {
+		f.CloseDrawn()
+		return Drawn{Problem: "This page can only be streamed: set Dashboard to Streamed, or pick another."}
 	}
 	f.mu.Lock()
 	s := f.drawn
