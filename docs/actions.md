@@ -895,6 +895,60 @@ data:
   id: "{{ started.id }}"
 ```
 
+## Pause or resume a timer
+
+In YAML, refer to these actions as `esphome.<node>_timer_pause` and `esphome.<node>_timer_resume`.
+
+Pause stops one of the device's own timers where it is; resume sets it counting again from there. A
+paused timer is listed as `running: false` in `alarms_list`, shows in the device's **Timers** sensor
+as `Bread paused (4:05 left)` after the running ones (as do Assist's timers paused by voice), and
+stays paused across a restart. A timer that has just run out is left to ring rather than paused.
+Pausing a paused timer, or resuming a running one, changes nothing. Timers set by voice through Home
+Assistant's Assist are paused and resumed by voice, and these actions refuse them.
+
+### id (Required)
+
+*string*
+
+A timer's `id`, from `timer_start`'s answer or `alarms_list`'s `timers`, or `all` for every timer of
+the device's own.
+
+```yaml
+# Pause the kitchen's timers while the doorbell camera is up.
+action: esphome.kitchen_timer_pause
+data:
+  id: all
+```
+
+## Add or take time off a timer
+
+In YAML, refer to these actions as `esphome.<node>_timer_add` and `esphome.<node>_timer_remove`.
+
+Gives one of the device's own timers more time, or less, whether it is running or paused. Taking off
+more than the timer has left is refused (cancel it instead), as is going past 24 hours or changing a
+timer that has just run out, which is left to ring. Assist's timers are changed by voice, as above.
+
+### id (Required)
+
+*string*
+
+A timer's `id`, from `timer_start`'s answer or `alarms_list`'s `timers`. These take one timer, not
+`all`.
+
+### duration (Required)
+
+*string*
+
+How much, written the way `timer_start` takes it: `5 minutes`, `1h30m`, `00:05:00` or a bare number
+of minutes.
+
+```yaml
+action: esphome.office_timer_add
+data:
+  id: "{{ started.id }}"
+  duration: 5 minutes
+```
+
 ## Follow Home Assistant helpers as alarms
 
 In YAML, refer to this action as `esphome.<node>_alarms_follow`.
