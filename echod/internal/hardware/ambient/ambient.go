@@ -10,7 +10,8 @@
 // IIO device on this board is the auxadc, which is why metrics.LuxPath finds nothing.)
 //
 // The 2nd gen Show 8 on TECHO5's mainline kernel is different: its TCS3400 is an IIO device with raw
-// color counts and no lux, so it is polled and converted here (iio.go).
+// color counts and no lux, so it is polled and converted here (iio.go). So is the Skylight Calendar's
+// EM3071X, which has no driver at all and is read over I2C (em3071x.go).
 package ambient
 
 import (
@@ -51,8 +52,14 @@ type Sensor struct {
 	last float64
 	at   time.Time
 
-	dev *input.Device
-	iio *tcs3400 // athena on mainline instead of dev
+	dev  *input.Device
+	poll poller // athena on mainline and the Skylight instead of dev
+}
+
+// poller is a sensor read every period rather than one that reports by itself.
+type poller interface {
+	sample() (lux float64, ok bool, err error)
+	close() error
 }
 
 var (
@@ -77,8 +84,7 @@ func (s *Sensor) Current() (lux float64, at time.Time, ok bool) {
 // Start switches the sensor on and opens its input node.
 func (s *Sensor) Start(context.Context) error {
 	if layout.Skylight() {
-		// Its EM3071X light sensor has no driver in TECHO5's mainline kernel.
-		return fmt.Errorf("ambient: no light sensor driver on this device")
+		return s.startEM3071X()
 	}
 	if layout.AthenaMainline() {
 		return s.startIIO()
@@ -122,11 +128,11 @@ func (s *Sensor) seed(abs func(code uint16) (input.AbsInfo, error)) (float64, bo
 
 func (s *Sensor) Close() error {
 	s.mu.Lock()
-	t, dev := s.iio, s.dev
-	s.iio, s.dev = nil, nil
+	p, dev := s.poll, s.dev
+	s.poll, s.dev = nil, nil
 	s.mu.Unlock()
-	if t != nil {
-		return nil
+	if p != nil {
+		return p.close()
 	}
 	_ = os.WriteFile(misc+"/alsactive", []byte("0"), 0o644)
 	if dev == nil {
@@ -143,10 +149,10 @@ var errNotOpen = errors.New("ambient: the sensor is not open")
 // first, or while it runs, leaves it nothing to read rather than a nil sensor.
 func (s *Sensor) Run(ctx context.Context) error {
 	s.mu.Lock()
-	t, dev := s.iio, s.dev
+	p, dev := s.poll, s.dev
 	s.mu.Unlock()
-	if t != nil {
-		return s.runIIO(ctx, t)
+	if p != nil {
+		return s.runPoll(ctx, p)
 	}
 	if dev == nil {
 		return errNotOpen

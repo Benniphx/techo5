@@ -10,7 +10,7 @@ U-Boot cannot pick one of its own) and the boot logo. `uname -r` says `6.18.56-s
   generic writes; the chip is not identified.
 - `skylight.config`: merged over arm64 `defconfig`; `build.sh` checks that every line stuck. Modules
   stay enabled but none are shipped, so what the board and TECHO5 need is built in (netfilter for the
-  Wi-Fi firewall, IPv6, Bluetooth, the sound card).
+  Wi-Fi firewall, IPv6, Bluetooth, the sound card, /dev/i2c-N for the light sensor).
 - `pack-sky.py`: the boot image. Its header ID is checked against the stock image's algorithm.
 - `mklogo.py`: the kernel's boot logo and U-Boot's `logo.bmp`, from `logo/TECHO5_logo.png`.
 - `bench/`: the bench initramfs (a root shell on USB serial, `BENCH=1`).

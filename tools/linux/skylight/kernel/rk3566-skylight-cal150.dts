@@ -453,6 +453,14 @@
 	status = "okay";
 };
 
+/*
+ * The light sensor (Everlight EM3071X at 0x24, "ls_em3071x" in the stock tree) on I2C1. It has no
+ * mainline driver: echod reads it through /dev/i2c-1 (hardware/ambient, CONFIG_I2C_CHARDEV).
+ */
+&i2c1 {
+	status = "okay";
+};
+
 /* Touch (Goodix GT9xx) and the battery-backed RTC share I2C5 on its m1 pins. */
 &i2c5 {
 	pinctrl-names = "default";

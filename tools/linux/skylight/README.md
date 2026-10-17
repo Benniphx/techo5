@@ -20,8 +20,10 @@ Status: bench work on one unit. Not in any release.
 | Clock | HYM8563 on I2C5 (battery backed) and the RK809's |
 | CPU | cpufreq 408 MHz to 1.8 GHz, the SYR827 regulator |
 | Boot logo | the kernel's fbcon logo, TECHO5's mark where the daemon's splash puts it |
+| Light sensor | EM3071X on I2C1, read by echod through /dev/i2c-1 (no kernel driver) |
 
-The light sensor (EM3071X) has no mainline driver. The MAC is not the Wi-Fi chip's (the stock NVRAM
+The light sensor (EM3071X, at 0x24 on I2C1) has no mainline driver: echod reads it through
+/dev/i2c-1 for the room's brightness (`echod/internal/hardware/ambient/em3071x.go`). The MAC is not the Wi-Fi chip's (the stock NVRAM
 gives every unit Broadcom's placeholder): it is made from the eMMC's CID (`device.conf`, and
 `echod/internal/layout/skylight.go` for the factory MAC).
 
