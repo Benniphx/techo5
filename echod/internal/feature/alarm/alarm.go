@@ -120,8 +120,10 @@ type Alarms struct {
 	// alarm's window; under mu.
 	bridge bridge
 	// glow is when the light held at full after a light-only alarm's time lets go (lightOnlyGlow);
-	// zero for none, under mu.
-	glow time.Time
+	// zero for none, under mu. glowKey is the alarm that set it. Neither is saved: a restart inside
+	// the half hour lets the light go.
+	glow    time.Time
+	glowKey string
 
 	// lightLevel and lightColor are the wake light in Home Assistant, for lamps in the room to follow;
 	// told is what they last said.
@@ -186,13 +188,13 @@ func build() *Alarms {
 		// From Home Assistant, stop also means a snoozed alarm is not wanted back - when nothing is
 		// sounding - and the wake light held for the next alarm not wanted either. Asked of the ring
 		// and not of End, which also takes down a reminder on the screen and would otherwise leave the
-		// snooze standing.
+		// snooze standing. The light a light-only alarm left up goes either way.
 		sounding := ring.IsSounding()
 		ring.End()
+		a.dropGlow()
 		if !sounding {
 			a.CancelSnoozes()
 			a.dropBridge()
-			a.dropGlow()
 		}
 	}}
 	a.snooze = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_snooze", Name: "Snooze alarm", Icon: "mdi:alarm-snooze"}, OnPress: func() { a.Snooze() }}
@@ -477,7 +479,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 	// A light-only alarm has had its light: what is left is the night ending, with nothing to stop.
 	if s.lightOnly {
 		a.mu.Lock()
-		a.glow = now.Add(lightOnlyGlow)
+		a.glow, a.glowKey = now.Add(lightOnlyGlow), s.key
 		a.mu.Unlock()
 		slog.Info("wake light held after a light-only alarm", "key", s.key, "until", now.Add(lightOnlyGlow).Format("15:04"))
 		fireEvent("light_only", s.key, s.label, now)
@@ -563,8 +565,10 @@ func (a *Alarms) rang() {
 			a.saveBridge()
 		}
 	}
-	// A snoozed ring has said so already, and rings again later; any other end is a stop.
+	// A snoozed ring has said so already, and rings again later; any other end is a stop, and a stop
+	// ends the light a light-only alarm left up as well: the alarm that woke somebody is done with.
 	if r != nil && !r.snoozed {
+		a.dropGlow()
 		fireEvent("stopped", r.Key, r.Label, r.At)
 		for _, f := range r.folded {
 			fireEvent("stopped", f.key, f.label, f.at)
@@ -892,18 +896,21 @@ func (a *Alarms) Put(al config.Alarm) error {
 	}
 	if wasOn && !al.On {
 		a.dropSnooze(al.ID)
+		a.dropGlowOf(al.ID)
 	}
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil
 }
 
-// Delete removes an alarm set on the device, and its snooze with it.
+// Delete removes an alarm set on the device, and its snooze with it, and the light it left up if it
+// is light only.
 func (a *Alarms) Delete(id string) error {
 	if err := config.Set().Alarms().Delete(id); err != nil {
 		return err
 	}
 	a.dropSnooze(id)
+	a.dropGlowOf(id)
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil

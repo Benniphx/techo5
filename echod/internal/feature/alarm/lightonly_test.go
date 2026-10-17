@@ -139,3 +139,100 @@ func TestALightOnlyAlarmHoldsItsLight(t *testing.T) {
 		t.Error("a second stop found the light still held")
 	}
 }
+
+// An alarm that rings during the light a light-only alarm left up, and is stopped, ends that light as
+// well; one snoozed leaves it. Stop in Home Assistant ends it whether or not something is sounding.
+func TestAStoppedRingEndsTheLightOnlyLight(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	events(t)
+	a := build()
+	endRing(t, a)
+	glowing := func() bool { _, ok := a.LightOnlyGlow(time.Now()); return ok }
+
+	a.fire(source{key: "light", lightOnly: true, sunrise: 20}, time.Now())
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now()}
+	a.silence = func() {}
+	a.mu.Unlock()
+	if !a.SnoozeFor(9) {
+		t.Fatal("nothing to snooze")
+	}
+	a.rang()
+	if !glowing() {
+		t.Error("a snooze let go of the light a light-only alarm left up")
+	}
+	a.CancelSnoozes()
+
+	a.mu.Lock()
+	a.ringing = &Ring{Key: "wake", At: time.Now()}
+	a.mu.Unlock()
+	a.rang()
+	if glowing() {
+		t.Error("a stopped ring left the light a light-only alarm left up")
+	}
+
+	// Stop in Home Assistant, with an alarm sounding.
+	a.fire(source{key: "light", lightOnly: true, sunrise: 20}, time.Now())
+	a.fire(source{key: "wake", label: "Wake up"}, time.Now())
+	if !ring.IsSounding() {
+		t.Fatal("the alarm is not sounding")
+	}
+	a.stop.OnPress()
+	if glowing() {
+		t.Error("Stop in Home Assistant left the light a light-only alarm left up")
+	}
+}
+
+// Turning a light-only alarm off, or deleting it, lets go of the light it left up, as it lets go of a
+// light held for it; another alarm turned off does not.
+func TestTurningALightOnlyAlarmOffEndsItsLight(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	events(t)
+	a := build()
+	endRing(t, a)
+	glowing := func() bool { _, ok := a.LightOnlyGlow(time.Now()); return ok }
+
+	light, err := a.Set(6, 30, config.DaysEvery, "Light")
+	if err != nil {
+		t.Fatal(err)
+	}
+	light.LightOnly = true
+	if err := a.Put(light); err != nil {
+		t.Fatal(err)
+	}
+	other, err := a.Set(7, 0, config.DaysEvery, "Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	a.fire(source{key: light.ID, lightOnly: true, sunrise: 20, local: true, days: config.DaysEvery}, time.Now())
+	other.On = false
+	if err := a.Put(other); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Delete(other.ID); err != nil {
+		t.Fatal(err)
+	}
+	if !glowing() {
+		t.Fatal("another alarm turned off and deleted let go of the light")
+	}
+	light.On = false
+	if err := a.Put(light); err != nil {
+		t.Fatal(err)
+	}
+	if glowing() {
+		t.Error("the light-only alarm turned off left its light up")
+	}
+
+	light.On = true
+	if err := a.Put(light); err != nil {
+		t.Fatal(err)
+	}
+	a.fire(source{key: light.ID, lightOnly: true, sunrise: 20, local: true, days: config.DaysEvery}, time.Now())
+	if err := a.Delete(light.ID); err != nil {
+		t.Fatal(err)
+	}
+	if glowing() {
+		t.Error("the light-only alarm deleted left its light up")
+	}
+}

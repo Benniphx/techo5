@@ -638,10 +638,12 @@ Assistant, for room lights to follow; see [docs/actions.md](actions.md#follow-th
 the light comes up as above, and at the alarm's time there is no sound and nothing to dismiss; the
 night ends instead, so the screen is back as by day until the night hours next start. The light
 stays at full for 30 minutes after the alarm's time, so room lights following it do not go dark at
-wake time, then goes off; a stop with nothing ringing turns it off sooner, as above. A light-only
-alarm always has a light: its own, the default, or 30 minutes when both are off; its editor's
-**Wake with light** row shows the minutes it gets. On a Dot, which has no screen, it is the light
-ring's sunrise and nothing else: no sound, and no night to end.
+wake time, then goes off. A stop with nothing ringing turns it off sooner, as above, and so do
+stopping an alarm that rings in that half hour (snoozing it does not) and turning the light-only
+alarm off or deleting it. The half hour is not saved: a restart inside it turns the light off. A
+light-only alarm always has a light: its own, the default, or 30 minutes when both are off; its
+editor's **Wake with light** row shows the minutes it gets. On a Dot, which has no screen, it is the
+light ring's sunrise and nothing else: no sound, and no night to end.
 
 ## 8. Settings lock
 

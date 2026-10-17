@@ -43,7 +43,9 @@ const sunriseEvery = 2 * time.Second
 //
 // A light-only alarm has no ring to hold the light, so its time would drop it, and every lamp
 // following the light with it, at the moment it was meant to wake somebody. The light stays at
-// full for lightOnlyGlow after it instead (glow), or until a stop lets it go.
+// full for lightOnlyGlow after it instead (glow), or until a stop lets it go: a stop with nothing
+// ringing, a ring stopped rather than snoozed, or the alarm itself turned off or deleted. It is not
+// saved, so a restart inside the half hour lets it go too.
 func (a *Alarms) SunriseProgress(now time.Time) float64 {
 	return a.lightNow(a.sources(now), now)
 }
@@ -221,10 +223,26 @@ func (a *Alarms) LightOnlyGlow(now time.Time) (until time.Time, ok bool) {
 
 // dropGlow lets go of the light held after a light-only alarm, for a stop. It reports whether it
 // was held.
-func (a *Alarms) dropGlow() bool {
+func (a *Alarms) dropGlow() bool { return a.endGlow("") }
+
+// dropGlowOf lets go of the light held after the light-only alarm key, for that alarm turned off or
+// deleted, as a bridge lets go of one. It reports whether that alarm held it.
+func (a *Alarms) dropGlowOf(key string) bool {
+	if key == "" {
+		return false
+	}
+	return a.endGlow(key)
+}
+
+// endGlow is dropGlow, or dropGlowOf for a key.
+func (a *Alarms) endGlow(key string) bool {
 	a.mu.Lock()
+	if key != "" && key != a.glowKey {
+		a.mu.Unlock()
+		return false
+	}
 	had := time.Now().Before(a.glow)
-	a.glow = time.Time{}
+	a.glow, a.glowKey = time.Time{}, ""
 	a.mu.Unlock()
 	if had {
 		slog.Info("wake light held after a light-only alarm let go")
