@@ -40,6 +40,10 @@ const sunriseEvery = 2 * time.Second
 // light each, from full at 8:00 to the first glow of the 8:30 one. A snooze bridges the same way: the
 // light holds through it, and the rule is asked again when its ring is stopped. A stop with no such
 // alarm ahead ends the light. Stopped or rung out are the same here; only a snooze is not an end.
+//
+// A light-only alarm has no ring to hold the light, so its time would drop it, and every lamp
+// following the light with it, at the moment it was meant to wake somebody. The light stays at
+// full for lightOnlyGlow after it instead (glow), or until a stop lets it go.
 func (a *Alarms) SunriseProgress(now time.Time) float64 {
 	return a.lightNow(a.sources(now), now)
 }
@@ -47,7 +51,7 @@ func (a *Alarms) SunriseProgress(now time.Time) float64 {
 // lightNow is SunriseProgress over these sources.
 func (a *Alarms) lightNow(sources []source, now time.Time) float64 {
 	a.mu.Lock()
-	hold := wakeHold{ringing: a.ringing != nil && a.ringing.lit, bridge: a.bridge}
+	hold := wakeHold{ringing: a.ringing != nil && a.ringing.lit, bridge: a.bridge, glow: a.glow}
 	a.mu.Unlock()
 	return wakeLight(sources, hold, now)
 }
@@ -56,7 +60,11 @@ func (a *Alarms) lightNow(sources []source, now time.Time) float64 {
 type wakeHold struct {
 	ringing bool // an alarm with a wake light is sounding
 	bridge  bridge
+	glow    time.Time // the light after a light-only alarm holds until then
 }
+
+// lightOnlyGlow is how long the light stays at full after a light-only alarm's time.
+const lightOnlyGlow = 30 * time.Minute
 
 // bridge is the alarm the light is held for after a ring ended inside its window.
 type bridge struct {
@@ -103,6 +111,9 @@ func heldBy(sources []source, hold wakeHold, now time.Time) (until time.Time, sn
 	if hold.bridge.holds(sources, now) {
 		return hold.bridge.at, false, true
 	}
+	if now.Before(hold.glow) {
+		return hold.glow, false, true
+	}
 	// A lit snooze holds until it is gone from the list, which is when it rings (or is canceled or
 	// missed), not when its time comes: the moment between the two must not drop the light.
 	for _, s := range sources {
@@ -119,7 +130,7 @@ func heldBy(sources []source, hold wakeHold, now time.Time) (until time.Time, sn
 func (a *Alarms) WakeHold(now time.Time) (until time.Time, snooze, ok bool) {
 	sources := a.sources(now)
 	a.mu.Lock()
-	hold := wakeHold{ringing: a.ringing != nil && a.ringing.lit, bridge: a.bridge}
+	hold := wakeHold{ringing: a.ringing != nil && a.ringing.lit, bridge: a.bridge, glow: a.glow}
 	a.mu.Unlock()
 	return heldBy(sources, hold, now)
 }
@@ -194,14 +205,44 @@ func (a *Alarms) dropBridge() bool {
 	return had
 }
 
+// glowUntil is when the light held after a light-only alarm lets go, zero for none.
+func (a *Alarms) glowUntil() time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.glow
+}
+
+// LightOnlyGlow is when the light held at full after a light-only alarm lets go, and whether it is
+// held so now, for the screen to say.
+func (a *Alarms) LightOnlyGlow(now time.Time) (until time.Time, ok bool) {
+	until = a.glowUntil()
+	return until, now.Before(until)
+}
+
+// dropGlow lets go of the light held after a light-only alarm, for a stop. It reports whether it
+// was held.
+func (a *Alarms) dropGlow() bool {
+	a.mu.Lock()
+	had := time.Now().Before(a.glow)
+	a.glow = time.Time{}
+	a.mu.Unlock()
+	if had {
+		slog.Info("wake light held after a light-only alarm let go")
+		a.poke()
+		a.Changed.Emit(struct{}{})
+	}
+	return had
+}
+
 // LetGoOfLight lets go of the wake light held at full, for a stop on the device with nothing sounding
-// (#161): the stop word, the action button, a tap on the screen. Both holds go, the one for the next
-// alarm (dropBridge) and the one a lit snooze keeps, but the snooze itself stays and rings as it
+// (#161): the stop word, the action button, a tap on the screen. The holds go, the one for the next
+// alarm (dropBridge), the one after a light-only alarm (dropGlow) and the one a lit snooze keeps, but the snooze itself stays and rings as it
 // would have, only with the room left as it is until then: a stop with nothing ringing never canceled
 // a snooze on the device. Stop in Home Assistant does that as well. It reports whether anything held
 // the light.
 func (a *Alarms) LetGoOfLight() bool {
 	bridged := a.dropBridge()
+	glowed := a.dropGlow()
 	a.mu.Lock()
 	unlit := false
 	for i := range a.snoozed {
@@ -216,7 +257,7 @@ func (a *Alarms) LetGoOfLight() bool {
 		a.poke()
 		a.Changed.Emit(struct{}{})
 	}
-	return bridged || unlit
+	return bridged || glowed || unlit
 }
 
 // saveBridge writes down the alarm the light is held for, so a restart while it waits keeps the light

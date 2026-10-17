@@ -3,6 +3,7 @@
 package display
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -37,5 +38,34 @@ func TestTheAlarmEditorSetsLightOnly(t *testing.T) {
 		if r.id == "e.lightonly" {
 			t.Error("a silent alarm offered Light only")
 		}
+	}
+}
+
+// A light-only alarm always has a light, so the editor's Wake with light row says the minutes it gets
+// where its own setting would say Off, or Default with no default.
+func TestTheLightOnlyRowSaysItsLight(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	for _, tc := range []struct {
+		al   config.Alarm
+		want string
+	}{
+		{config.Alarm{Sunrise: config.SunriseOff}, "Off"},
+		{config.Alarm{}, "Default"},
+		{config.Alarm{LightOnly: true, Sunrise: config.SunriseOff}, fmt.Sprintf("%d min", config.LightOnlyMinutes)},
+		{config.Alarm{LightOnly: true}, fmt.Sprintf("%d min", config.LightOnlyMinutes)},
+		{config.Alarm{LightOnly: true, Sunrise: 10}, "10 min"},
+	} {
+		if got := alarmSunriseValue(tc.al); got != tc.want {
+			t.Errorf("%+v: the row says %q, want %q", tc.al, got, tc.want)
+		}
+	}
+	if err := config.Set().Alarms().SunriseMinutes(15); err != nil {
+		t.Fatal(err)
+	}
+	if got := alarmSunriseValue(config.Alarm{LightOnly: true}); got != "Default" {
+		t.Errorf("with a default the row says %q, want Default", got)
+	}
+	if got := alarmSunriseValue(config.Alarm{LightOnly: true, Sunrise: config.SunriseOff}); got != "15 min" {
+		t.Errorf("with the light off and a default of 15 the row says %q", got)
 	}
 }

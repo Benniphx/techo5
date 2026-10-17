@@ -44,11 +44,13 @@ func (a *Alarms) setFromHA(hour, minute int, days uint8, label, date string, k a
 
 // endNight ends the screen's night at a light-only alarm's time, as the Night mode switch turned off
 // does: it holds until the night hours next start, or, with the night left to Home Assistant, until
-// Home Assistant turns it on again.
-func endNight(now time.Time) {
+// Home Assistant turns it on again. The screen listens to Changed, so it wakes to the day and says
+// so on the switch at once, as the switch's own command does.
+func (a *Alarms) endNight(now time.Time) {
 	if err := config.Set().Screen().NightOverride("off", now.Unix()); err != nil {
 		slog.Warn("ending the night for a light-only alarm failed", "err", err)
 		return
 	}
 	slog.Info("night ended by a light-only alarm")
+	a.Changed.Emit(struct{}{})
 }

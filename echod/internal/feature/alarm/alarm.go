@@ -119,6 +119,9 @@ type Alarms struct {
 	// bridge is the next alarm the light is held at full for, after a lit ring ended inside that
 	// alarm's window; under mu.
 	bridge bridge
+	// glow is when the light held at full after a light-only alarm's time lets go (lightOnlyGlow);
+	// zero for none, under mu.
+	glow time.Time
 
 	// lightLevel and lightColor are the wake light in Home Assistant, for lamps in the room to follow;
 	// told is what they last said.
@@ -189,6 +192,7 @@ func build() *Alarms {
 		if !sounding {
 			a.CancelSnoozes()
 			a.dropBridge()
+			a.dropGlow()
 		}
 	}}
 	a.snooze = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_snooze", Name: "Snooze alarm", Icon: "mdi:alarm-snooze"}, OnPress: func() { a.Snooze() }}
@@ -472,8 +476,12 @@ func (a *Alarms) fire(s source, now time.Time) {
 	}
 	// A light-only alarm has had its light: what is left is the night ending, with nothing to stop.
 	if s.lightOnly {
+		a.mu.Lock()
+		a.glow = now.Add(lightOnlyGlow)
+		a.mu.Unlock()
+		slog.Info("wake light held after a light-only alarm", "key", s.key, "until", now.Add(lightOnlyGlow).Format("15:04"))
 		fireEvent("light_only", s.key, s.label, now)
-		endNight(now)
+		a.endNight(now)
 		return
 	}
 	a.mu.Lock()
@@ -571,6 +579,16 @@ func (a *Alarms) Ringing() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.ringing != nil
+}
+
+// ringingKey is the alarm ringing now, empty for none.
+func (a *Alarms) ringingKey() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ringing == nil {
+		return ""
+	}
+	return a.ringing.Key
 }
 
 // Stop silences a ringing alarm and reports whether there was one.
@@ -763,6 +781,10 @@ func (a *Alarms) setOn(hour, minute int, days uint8, label, date string, k *alar
 		if !al.Remind && al.Hour == hour && al.Minute == minute && al.Days == days && al.Label == label && al.Date == date {
 			al.On = true
 			if k != nil {
+				if (al.Silent != k.silent || al.LightOnly != k.lightOnly) && a.ringingKey() == al.ID {
+					slog.Warn("a ringing alarm was set to another kind; it rings on until stopped, and is the new kind from its next time",
+						"silent", k.silent, "light_only", k.lightOnly)
+				}
 				al.Silent, al.LightOnly = k.silent, k.lightOnly
 			}
 			return al, a.Put(al)

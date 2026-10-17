@@ -27,6 +27,9 @@ var sunriseProgress = func(now time.Time) float64 { return alarm.Get().SunrisePr
 // sunriseHold is what holds the light at full after an alarm, if anything (alarm.Alarms.WakeHold).
 var sunriseHold = func(now time.Time) (until time.Time, snooze, ok bool) { return alarm.Get().WakeHold(now) }
 
+// sunriseGlow is the light held at full after a light-only alarm, if it is (alarm.Alarms.LightOnlyGlow).
+var sunriseGlow = func(now time.Time) (until time.Time, ok bool) { return alarm.Get().LightOnlyGlow(now) }
+
 // releaseLight lets go of the wake light held after an alarm, as a stop with nothing sounding does
 // (ring.Release).
 var releaseLight = ring.Release
@@ -90,6 +93,9 @@ func sunriseSub() string {
 		case snooze:
 			return "On until the " + clockText(until) + " snooze"
 		}
+		if glow, held := sunriseGlow(now); held && glow.Equal(until) {
+			return "On until " + clockText(until)
+		}
 		return "On until the " + clockText(until) + " alarm"
 	}
 	if sunriseProgress(now) > 0 {
@@ -135,6 +141,11 @@ func alarmSunriseIndex(a config.Alarm) int {
 
 // alarmSunriseValue is what the editor's row says for an alarm.
 func alarmSunriseValue(a config.Alarm) string {
+	// A light-only alarm always has a light (config.Alarms.SunriseFor), so where its own says Off, or
+	// Default with no default, the row says the minutes it gets instead.
+	if c := config.Get().Alarms; a.LightOnly && !a.Remind && !a.Silent && (a.Sunrise < 0 || a.Sunrise == 0 && c.SunriseMinutes <= 0) {
+		return fmt.Sprintf("%d min", c.SunriseFor(a))
+	}
 	switch {
 	case a.Sunrise < 0:
 		return "Off"

@@ -636,8 +636,12 @@ Assistant, for room lights to follow; see [docs/actions.md](actions.md#follow-th
 
 **Light only** in an alarm's editor (and on the setup page) makes it a wake light and nothing more:
 the light comes up as above, and at the alarm's time there is no sound and nothing to dismiss; the
-night ends instead, so the screen is back as by day until the night hours next start. A light-only
-alarm always has a light: its own, the default, or 30 minutes when both are off.
+night ends instead, so the screen is back as by day until the night hours next start. The light
+stays at full for 30 minutes after the alarm's time, so room lights following it do not go dark at
+wake time, then goes off; a stop with nothing ringing turns it off sooner, as above. A light-only
+alarm always has a light: its own, the default, or 30 minutes when both are off; its editor's
+**Wake with light** row shows the minutes it gets. On a Dot, which has no screen, it is the light
+ring's sunrise and nothing else: no sound, and no night to end.
 
 ## 8. Settings lock
 

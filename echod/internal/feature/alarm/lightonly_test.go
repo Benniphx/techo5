@@ -90,3 +90,52 @@ func TestAnOldAlarmLoadsAsOneThatRings(t *testing.T) {
 		t.Errorf("loaded %+v", list)
 	}
 }
+
+// A light-only alarm's time does not drop the light, nor the lamps following it: it stays at full for
+// lightOnlyGlow, then goes; a stop on the device lets it go sooner. Its time also tells the screen
+// (Changed), which ends the night on it and on the Night mode switch at once.
+func TestALightOnlyAlarmHoldsItsLight(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	events(t)
+	a := build()
+	endRing(t, a)
+	changed := make(chan struct{}, 8)
+	a.Changed.Listen(func(struct{}) {
+		select {
+		case changed <- struct{}{}:
+		default:
+		}
+	})
+	now := time.Now()
+	a.fire(source{key: "wake", lightOnly: true, sunrise: 20}, now)
+	select {
+	case <-changed:
+	case <-time.After(time.Second):
+		t.Error("the screen was not told the night ended")
+	}
+
+	for _, after := range []time.Duration{0, time.Minute, lightOnlyGlow - time.Minute} {
+		if got := a.SunriseProgress(now.Add(after)); got != 1 {
+			t.Errorf("%v after a light-only alarm the light is at %.2f, want full", after, got)
+		}
+	}
+	if until, snooze, ok := a.WakeHold(now.Add(time.Minute)); !ok || snooze || !until.Equal(now.Add(lightOnlyGlow)) {
+		t.Errorf("hold %v snooze %v ok %v, want until %v", until, snooze, ok, now.Add(lightOnlyGlow))
+	}
+	if until, ok := a.LightOnlyGlow(now.Add(time.Minute)); !ok || !until.Equal(now.Add(lightOnlyGlow)) {
+		t.Errorf("glow %v %v", until, ok)
+	}
+	if got := a.SunriseProgress(now.Add(lightOnlyGlow + time.Second)); got != 0 {
+		t.Errorf("the light is at %.2f after its half hour, want off", got)
+	}
+
+	if !a.LetGoOfLight() {
+		t.Error("a stop found nothing holding the light")
+	}
+	if got := a.SunriseProgress(now.Add(time.Minute)); got != 0 {
+		t.Errorf("the light is at %.2f after a stop, want off", got)
+	}
+	if a.LetGoOfLight() {
+		t.Error("a second stop found the light still held")
+	}
+}

@@ -207,9 +207,12 @@ The same as `alarm_set`, with the same `time`, `days` and `label`, for a wake li
 else: the light comes up before it as for any alarm with **Wake with light** (the device's default,
 or 30 minutes where that is off), and at its time there is no sound and nothing to dismiss. The night
 ends instead, as the **Night mode** switch turned off does, so the screen is back as by day until the
-night hours next start. It fires the `light_only` [alarm event](#alarm-events). Setting the same
-alarm again with `alarm_set` makes it ring again. **Light only** in an alarm's editor on the device,
-and on the setup page, does the same.
+night hours next start. The light, and **Wake light brightness** with it, stays at full for 30
+minutes after the alarm's time, then goes off; **Stop alarm or timer**, the stop word, the action
+button or a tap on the light's page turns it off sooner. On a Dot there is no screen: the light ring
+comes up and stays, and that is all. It fires the `light_only` [alarm event](#alarm-events). Setting
+the same alarm again with `alarm_set` makes it ring again. **Light only** in an alarm's editor on the
+device, and on the setup page, does the same.
 
 ```yaml
 action: esphome.office_alarm_set_light_only

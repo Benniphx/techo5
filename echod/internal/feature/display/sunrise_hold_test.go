@@ -11,8 +11,9 @@ import (
 // the length of a test.
 func heldLight(t *testing.T, until time.Time, snooze, ok bool) {
 	t.Helper()
-	wasProgress, wasHold := sunriseProgress, sunriseHold
-	t.Cleanup(func() { sunriseProgress, sunriseHold = wasProgress, wasHold })
+	wasProgress, wasHold, wasGlow := sunriseProgress, sunriseHold, sunriseGlow
+	t.Cleanup(func() { sunriseProgress, sunriseHold, sunriseGlow = wasProgress, wasHold, wasGlow })
+	sunriseGlow = func(time.Time) (time.Time, bool) { return time.Time{}, false }
 	sunriseProgress = func(time.Time) float64 {
 		if ok {
 			return 1
@@ -46,6 +47,13 @@ func TestTheRowSaysWhatHoldsTheLight(t *testing.T) {
 		if got := sunriseSub(); got != tc.want {
 			t.Errorf("%s: the row says %q, want %q", tc.name, got, tc.want)
 		}
+	}
+
+	// After a light-only alarm the light waits for no alarm: it says how long it stays.
+	heldLight(t, at, false, true)
+	sunriseGlow = func(time.Time) (time.Time, bool) { return at, true }
+	if got, want := sunriseSub(), "On until 8:30 AM"; got != want {
+		t.Errorf("after a light-only alarm the row says %q, want %q", got, want)
 	}
 }
 
