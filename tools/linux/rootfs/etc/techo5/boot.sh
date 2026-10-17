@@ -98,7 +98,9 @@ if [ -n "${VENDOR_DEV:-}" ] && ! mountpoint -q /vendor; then
 		log "vendor tree: mounting $VENDOR_DEV failed"
 fi
 [ -n "${FIRMWARE_PATH:-}" ] && printf %s "$FIRMWARE_PATH" > /sys/module/firmware_class/parameters/path 2>/dev/null
-if [ -z "${VENDOR_DEV:-}" ] && [ ! -e "/store/vendor/$VMOD" ]; then
+# A unit whose Wi-Fi driver is built into its kernel and that has no vendor partition (the Skylight)
+# has no vendor tree to keep at all.
+if [ -z "${VENDOR_DEV:-}" ] && [ "$WIFI_MODULE" != builtin ] && [ ! -e "/store/vendor/$VMOD" ]; then
 	src=
 	for d in /vendor /store/slots/a/vendor /store/slots/b/vendor; do
 		[ -e "$d/$VMOD" ] && { src=$d; break; }
