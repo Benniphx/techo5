@@ -109,3 +109,22 @@ func TestRefusals(t *testing.T) {
 		t.Error("an answer past the limit taken")
 	}
 }
+
+// The token goes only to the address given: a redirect is not followed.
+func TestNoRedirect(t *testing.T) {
+	got := false
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("Authorization") != ""
+	}))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL, http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	if err := New(srv.URL, "secret").Start(context.Background()); err == nil {
+		t.Error("a redirect taken as an answer")
+	}
+	if got {
+		t.Fatal("the token followed a redirect")
+	}
+}

@@ -24,7 +24,7 @@ func init() {
 	voice.SetThink(Get().Think)
 	// Realtime voice runs its model's calls under the same lockout, with the same instructions.
 	voice.SetRealtime(func() voice.ToolGate { return NewTurnGate() },
-		func() string { return instructions(config.Get().Brain, time.Now()) })
+		func() string { return instructions(config.Get().Brain, time.Now()) + realtimeInstructions })
 }
 
 // rounds bounds how many times one turn may go back to the model with tool results: a model that
@@ -309,3 +309,10 @@ func run(ts []tool, call llm.ToolCall) string {
 	}
 	return "error: there is no tool called " + call.Function.Name
 }
+
+// realtimeInstructions are added for realtime voice, whose model can reach Home Assistant's tools: to act
+// on the house by name, through Home Assistant's own intents, rather than reading the house's state first,
+// which can carry words a stranger wrote (a song's title, a notification).
+const realtimeInstructions = " To control the house, call Home Assistant's Hass tools (HassTurnOn, " +
+	"HassTurnOff, HassLightSet and the like) with the name of the device or area you were told, " +
+	"directly. Read the house's state (GetLiveContext) only when you are asked about it."

@@ -44,13 +44,14 @@ func TestRealtimeForm(t *testing.T) {
 	if !strings.Contains(body, "sends what you say, as audio, to\n\t OpenAI") && !strings.Contains(body, "OpenAI, while you speak") {
 		t.Error("the page does not say where the voice goes")
 	}
-	if !strings.Contains(body, "bill by the minute") {
+	if !strings.Contains(body, "They bill for it") {
 		t.Error("the page does not say it is billed")
 	}
 
 	for name, v := range map[string]url.Values{
 		"a provider that is not one": {"provider": {"someone"}, "minutes": {"20"}},
 		"an http relay":              {"provider": {"openai"}, "endpoint": {"http://relay"}, "minutes": {"20"}},
+		"a ws:// relay":              {"provider": {"openai"}, "endpoint": {"ws://relay"}, "minutes": {"20"}},
 		"a relay with a login":       {"provider": {"openai"}, "endpoint": {"wss://u:p@relay"}, "minutes": {"20"}},
 		"no minutes":                 {"provider": {"openai"}, "minutes": {"0"}},
 		"too many minutes":           {"provider": {"openai"}, "minutes": {"601"}},

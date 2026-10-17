@@ -60,6 +60,7 @@ const (
 	Said      = "said"      // the answer's words, whole (Text)
 	Audio     = "audio"     // a piece of the answer's speech (PCM, Rate)
 	Call      = "call"      // the model calls a function (CallID, Name, Args)
+	Calls     = "calls"     // the model's calls so far are all made: their results go back, then Continue
 	Done      = "done"      // the answer is finished
 	Failed    = "failed"    // the session failed (Err)
 	Interrupt = "interrupt" // the provider cut its answer short
@@ -84,7 +85,13 @@ type codec interface {
 	audio(pcm16k []int16) any
 	endOfSpeech() []any
 	toolResult(callID, name, output string) []any
+	// goOn is what has the model go on once every call's result is in; nothing where it goes on by itself.
+	goOn() []any
 	cancel() any
+	// ready is whether a message says the session is set up, for a provider that says so (Gemini); a
+	// provider that does not answers true to its first message, or to none (readyFirst).
+	ready(msg []byte) bool
+	readyFirst() bool
 	read(msg []byte, emit func(Event))
 }
 
@@ -101,8 +108,10 @@ type Session struct {
 
 const (
 	// maxMessage is the most one message from a provider may be: a second of speech, encoded, is under
-	// a hundred kilobytes.
-	maxMessage = 4 << 20
+	// a hundred kilobytes. With eventsKept, it bounds what a provider, or a relay posing as one, can make
+	// the device hold.
+	maxMessage = 1 << 20
+	eventsKept = 64
 	// writeWithin is how long one message may take to go.
 	writeWithin = 10 * time.Second
 	// dialWithin is how long the connection may take.
@@ -133,8 +142,36 @@ func Dial(ctx context.Context, c Config) (*Session, error) {
 		return nil, fmt.Errorf("realtime: %s: %w", c.Provider, scrub(err, c.Key))
 	}
 	conn.SetReadLimit(maxMessage)
-	s := &Session{conn: conn, codec: cd, events: make(chan Event, 256), closed: make(chan struct{})}
-	for _, m := range cd.setup(c) {
+	s := &Session{conn: conn, codec: cd, events: make(chan Event, eventsKept), closed: make(chan struct{})}
+	setup := cd.setup(c)
+	if err := s.write(setup[0]); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	// A provider that says when it is set up is waited for before anything else is sent.
+	if !cd.readyFirst() {
+		_ = conn.SetReadDeadline(time.Now().Add(dialWithin))
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				_ = conn.Close()
+				return nil, fmt.Errorf("realtime: %s did not finish setting up: %w", c.Provider, scrub(err, c.Key))
+			}
+			if cd.ready(msg) {
+				break
+			}
+			var e []Event
+			cd.read(msg, func(ev Event) { e = append(e, ev) })
+			for _, ev := range e {
+				if ev.Kind == Failed {
+					_ = conn.Close()
+					return nil, ev.Err
+				}
+			}
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+	}
+	for _, m := range setup[1:] {
 		if err := s.write(m); err != nil {
 			_ = conn.Close()
 			return nil, err
@@ -156,18 +193,22 @@ func codecFor(provider string) (codec, error) {
 	return nil, fmt.Errorf("realtime: not a provider: %q", provider)
 }
 
-// endpoint is the address to use, and whether the key may go to it: the provider's own always, an
-// endpoint of the user's own only when it is a secure one (wss).
+// endpoint is the address to use: the provider's own, or a relay of the user's own, which has to be a
+// secure one (wss://), since the voice and what is said go through it. Insecure lets a test use ws://, and
+// the key never goes to such an address.
 func endpoint(c Config, own string) (addr string, keyOK bool, err error) {
 	if c.Endpoint == "" {
 		return own, true, nil
 	}
 	u, err := url.Parse(c.Endpoint)
-	if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Host == "" {
-		return "", false, errors.New("realtime: the endpoint is not a ws:// or wss:// address")
+	if err != nil || u.Host == "" || u.User != nil || (u.Scheme != "wss" && !(Insecure && u.Scheme == "ws")) {
+		return "", false, errors.New("realtime: the relay is not a wss:// address")
 	}
 	return c.Endpoint, u.Scheme == "wss", nil
 }
+
+// Insecure lets a relay be a plain ws:// address, for the tests' servers only.
+var Insecure = false
 
 // Events is what the session says, until it closes.
 func (s *Session) Events() <-chan Event { return s.events }
@@ -185,9 +226,20 @@ func (s *Session) EndOfSpeech() error {
 	return nil
 }
 
-// ToolResult answers a function call, and has the model go on.
+// ToolResult answers a function call. The model goes on once Continue is sent, after every call of the
+// response that made them is answered.
 func (s *Session) ToolResult(callID, name, output string) error {
 	for _, m := range s.codec.toolResult(callID, name, output) {
+		if err := s.write(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Continue has the model go on, its calls answered.
+func (s *Session) Continue() error {
+	for _, m := range s.codec.goOn() {
 		if err := s.write(m); err != nil {
 			return err
 		}

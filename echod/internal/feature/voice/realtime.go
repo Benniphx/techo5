@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
@@ -24,10 +25,14 @@ import (
 // (the microphones taken, a call, a ring, the stop word, another wake) stops it, and its speech plays
 // through the reply, under the same claim on the speaker, so whatever outranks a reply cuts it off.
 //
+// Every turn has a session of its own, opened at its start and closed at its end: nothing a turn read is
+// in the next one's session, and the next turn's lockout starts clean because its session does.
+//
 // The model may call the device's own tools and, with a token for it, Home Assistant's (its MCP server),
 // every call under the same lockout as the assistant's own (feature/assistant's TurnGate): once a turn
 // has read outside words, nothing that changes anything runs in it. A Home Assistant tool changes
-// something unless it is known to only look things up.
+// something unless it is known to only look things up, and brings outside words in unless it is one of
+// Home Assistant's own intents that do not (bringsOutsideWords).
 //
 // Every session is held to a turn's length (realtimeTurn) and the day's minutes (config.Realtime), which
 // the provider bills by.
@@ -55,20 +60,30 @@ func SetRealtime(gate func() ToolGate, instr func() string) {
 const (
 	// realtimeTurn is the longest one turn's session may run, whatever happens in it.
 	realtimeTurn = 5 * time.Minute
-	// realtimeIdle is how long a session is kept open after a turn for the next one (a follow-up).
-	realtimeIdle = 60 * time.Second
 	// realtimePreroll is the most speech kept while the session opens: what is said meanwhile is sent once
 	// it is open.
 	realtimePreroll = 16000 * 15
 	// mcpWithin is how long Home Assistant has to answer a tool call.
 	mcpWithin = 15 * time.Second
+
+	// What a Home Assistant tool may bring to the provider: its description, its parameters (as JSON),
+	// and what a call answers; past these a description and an answer are cut, a tool is left out.
+	maxToolDescription = 1 << 10
+	maxToolSchema      = 4 << 10
+	maxToolResult      = 32 << 10
+
+	// Home Assistant's tool list is kept, so a turn does not wait on it: asked again in the background
+	// once it is haStale, and waited for only on the first turn, haFirst at most.
+	haStale = 2 * time.Minute
+	haFirst = 3 * time.Second
 )
 
 // readOnlyTools are Home Assistant's tools known to only look things up.
 var readOnlyTools = map[string]bool{"GetLiveContext": true, "GetDateTime": true}
 
-// outsideWords is part of a tool's name that says it brings outside words into a turn.
-var outsideWords = []string{"calendar", "todo", "search", "web", "news", "feed", "mail", "message"}
+// outsideWords is part of a tool's name that says it brings outside words into a turn, whatever else is
+// true of it.
+var outsideWords = []string{"calendar", "todo", "search", "web", "news", "feed", "mail", "message", "weather"}
 
 type rtBackend struct {
 	post func(event)
@@ -78,27 +93,39 @@ type rtBackend struct {
 	mcpFor func(token string) mcpClient
 	now    func() time.Time
 
+	// ha is Home Assistant's tools as last listed, for the token they were listed with.
+	haMu      sync.Mutex
+	haList    []mcp.Tool
+	haToken   string
+	haAt      time.Time
+	haBusy    bool
+	haUpdated chan struct{} // closed when a listing under way is done
+
 	mu      sync.Mutex
-	sess    rtSession
-	sessAt  time.Time // when the session opened, for the day's count
-	gen     int       // which session's events are this turn's
-	slot    int
-	ready   bool
+	turn    *rtTurn // the open turn, or none
+	gen     int     // which turn's events are wanted
 	preroll []int16
 	ended   bool // the speaker finished before the session was open
-	gate    ToolGate
-	tools   map[string]mcp.Tool
-	mcp     mcpClient
-	idle    *time.Timer
-	cap     *time.Timer
-	saying  strings.Builder
-	spoke   bool // audio of this answer has gone to the reply
+}
+
+// rtTurn is one turn's session and what goes with it, for as long as it is open.
+type rtTurn struct {
+	gen    int
+	sess   rtSession
+	at     time.Time // when the session opened, for the day's count
+	gate   ToolGate  // this turn's lockout, never swapped
+	tools  map[string]mcp.Tool
+	token  string // Home Assistant's, for its tools' calls
+	cap    *time.Timer
+	saying strings.Builder
+	spoke  bool // audio of the answer has gone to the reply
 }
 
 type rtSession interface {
 	Audio([]int16) error
 	EndOfSpeech() error
 	ToolResult(callID, name, output string) error
+	Continue() error
 	Events() <-chan realtime.Event
 	Close() error
 }
@@ -132,87 +159,52 @@ func (r *rtBackend) Ready() bool {
 	return rc.Ready() && rc.SecondsLeft(r.now()) > 0
 }
 
-// Start opens a turn: on the session kept from the last turn, or a new one, opened meanwhile, with what
-// is said until it is open kept to send then.
+// Start opens a turn: a session of its own, opened meanwhile, with what is said until it is open kept to
+// send then.
 func (r *rtBackend) Start(string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.idle != nil {
-		r.idle.Stop()
-	}
-	if newGate != nil {
-		r.gate = newGate()
-	}
-	r.preroll, r.ended, r.spoke = r.preroll[:0], false, false
-	r.saying.Reset()
-	limit := min(realtimeTurn, time.Duration(config.Get().Realtime.SecondsLeft(r.now()))*time.Second)
-	if r.sess != nil && r.ready {
-		r.armCap(r.gen, limit)
-		return nil // a follow-up: the same session, which remembers what was said
-	}
 	r.closeLocked()
 	r.gen++
+	r.preroll, r.ended = r.preroll[:0], false
 	gen := r.gen
-	r.armCap(gen, limit)
 	safe.Go("realtime open", func() { r.open(gen) })
 	return nil
 }
 
-// armCap ends session gen's turn at d, with r.mu held.
-func (r *rtBackend) armCap(gen int, d time.Duration) {
-	if r.cap != nil {
-		r.cap.Stop()
-	}
-	r.cap = time.AfterFunc(d, func() {
-		r.mu.Lock()
-		stale := r.gen != gen
-		r.mu.Unlock()
-		if stale {
-			return
-		}
-		slog.Warn("realtime: the turn ran past its time, or the day's minutes", "limit", d.Round(time.Second))
-		_ = r.Stop()
-		r.post(event{kind: evError, code: "realtime-limit", msg: "realtime voice reached its time limit"})
-	})
-}
-
-// open dials the session for turn gen, gathering the tools first.
+// open dials turn gen's session, gathering its tools first, and holds it to the turn's time.
 func (r *rtBackend) open(gen int) {
 	rc := config.Get().Realtime
 	ctx := context.Background()
-	r.mu.Lock()
-	gate := r.gate
-	r.mu.Unlock()
+	var gate ToolGate
+	if newGate != nil {
+		gate = newGate()
+	}
+	t := &rtTurn{gen: gen, gate: gate, tools: map[string]mcp.Tool{}, token: rc.MCPToken}
 
 	var fns []realtime.Function
+	seen := map[string]bool{}
 	if gate != nil {
-		for _, t := range gate.Tools() {
-			fns = append(fns, realtime.Function{Name: t.Name, Description: t.Description, Parameters: t.Parameters})
+		for _, d := range gate.Tools() {
+			seen[d.Name] = true
+			fns = append(fns, realtime.Function{Name: d.Name, Description: d.Description, Parameters: d.Parameters})
 		}
 	}
-	tools := map[string]mcp.Tool{}
-	var mc mcpClient
-	if c := r.mcpFor(rc.MCPToken); c != nil {
-		tctx, cancel := context.WithTimeout(ctx, mcpWithin)
-		ts, err := func() ([]mcp.Tool, error) {
-			if err := c.Start(tctx); err != nil {
-				return nil, err
-			}
-			return c.Tools(tctx)
-		}()
-		cancel()
-		if err != nil {
-			slog.Warn("realtime: Home Assistant's tools could not be had; the device's own only", "err", err)
-		} else {
-			mc = c
-			for _, t := range ts {
-				if _, clash := tools[t.Name]; clash {
-					continue
-				}
-				tools[t.Name] = t
-				fns = append(fns, realtime.Function{Name: t.Name, Description: t.Description, Parameters: t.InputSchema})
-			}
+	for _, ht := range r.haTools(rc.MCPToken) {
+		// A name the device's own tools or another of Home Assistant's has is left out: two of a
+		// name could not be told apart, and a provider refuses a session with both.
+		if seen[ht.Name] {
+			slog.Info("realtime: a Home Assistant tool left out: its name is taken", "name", ht.Name)
+			continue
 		}
+		if b, _ := json.Marshal(ht.InputSchema); len(b) > maxToolSchema {
+			slog.Info("realtime: a Home Assistant tool left out: its parameters are too long", "name", ht.Name)
+			continue
+		}
+		seen[ht.Name] = true
+		t.tools[ht.Name] = ht
+		fns = append(fns, realtime.Function{Name: ht.Name, Description: clipText(ht.Description, maxToolDescription),
+			Parameters: ht.InputSchema})
 	}
 
 	sess, err := r.dial(ctx, realtime.Config{
@@ -233,19 +225,32 @@ func (r *rtBackend) open(gen int) {
 		r.post(event{kind: evError, code: "realtime-failed", msg: err.Error()})
 		return
 	}
-	r.sess, r.sessAt, r.ready, r.tools, r.mcp = sess, r.now(), true, tools, mc
-	pre, ended := r.preroll, r.ended
-	r.preroll = nil
-	r.mu.Unlock()
-	slog.Info("realtime: session open", "provider", rc.Provider, "functions", len(fns))
-
-	safe.Go("realtime events", func() { r.pump(gen, sess) })
-	if len(pre) > 0 {
-		_ = sess.Audio(pre)
+	t.sess, t.at = sess, r.now()
+	limit := min(realtimeTurn, time.Duration(rc.SecondsLeft(t.at))*time.Second)
+	t.cap = time.AfterFunc(limit, func() {
+		r.mu.Lock()
+		stale := r.gen != gen
+		r.mu.Unlock()
+		if stale {
+			return
+		}
+		slog.Warn("realtime: the turn ran past its time, or the day's minutes", "limit", limit.Round(time.Second))
+		_ = r.Stop()
+		r.post(event{kind: evError, code: "realtime-limit", msg: "realtime voice reached its time limit"})
+	})
+	// What was said while it opened goes first, and the end of speech after it, before anything sent from
+	// now on: under the lock, so a frame arriving meanwhile waits behind them.
+	if len(r.preroll) > 0 {
+		_ = sess.Audio(r.preroll)
 	}
-	if ended {
+	if r.ended {
 		_ = sess.EndOfSpeech()
 	}
+	r.preroll, r.ended = nil, false
+	r.turn = t
+	r.mu.Unlock()
+	slog.Info("realtime: session open", "provider", rc.Provider, "functions", len(fns))
+	safe.Go("realtime events", func() { r.pump(t) })
 }
 
 // Audio sends a frame of the microphone, or keeps it while the session opens.
@@ -255,83 +260,79 @@ func (r *rtBackend) Audio(frame []byte) error {
 		pcm[i] = int16(binary.LittleEndian.Uint16(frame[2*i:]))
 	}
 	r.mu.Lock()
-	sess, ready := r.sess, r.ready
-	if !ready {
+	defer r.mu.Unlock()
+	if r.turn == nil {
 		if len(r.preroll)+len(pcm) <= realtimePreroll {
 			r.preroll = append(r.preroll, pcm...)
 		}
-		r.mu.Unlock()
 		return nil
 	}
-	r.mu.Unlock()
-	return sess.Audio(pcm)
+	return r.turn.sess.Audio(pcm)
 }
 
 // End says the speaker has finished: the answer is asked for.
 func (r *rtBackend) End() error {
 	r.mu.Lock()
-	sess, ready := r.sess, r.ready
-	if !ready {
+	defer r.mu.Unlock()
+	if r.turn == nil {
 		r.ended = true
-		r.mu.Unlock()
 		return nil
 	}
-	r.mu.Unlock()
-	return sess.EndOfSpeech()
+	return r.turn.sess.EndOfSpeech()
 }
 
-// Stop ends the session at once, and what it was saying with it.
+// Stop ends the turn's session at once, and what it was saying with it. Safe from any goroutine.
 func (r *rtBackend) Stop() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gen++
 	r.closeLocked()
-	if r.cap != nil {
-		r.cap.Stop()
-	}
 	return nil
 }
 
-// closeLocked closes the session and counts its minutes, with r.mu held.
+// closeLocked closes the turn's session and counts its minutes, with r.mu held.
 func (r *rtBackend) closeLocked() {
-	if r.idle != nil {
-		r.idle.Stop()
-	}
-	if r.sess == nil {
-		r.ready = false
+	t := r.turn
+	r.turn = nil
+	if t == nil {
 		return
 	}
-	_ = r.sess.Close()
-	secs := int(r.now().Sub(r.sessAt).Round(time.Second) / time.Second)
+	if t.cap != nil {
+		t.cap.Stop()
+	}
+	_ = t.sess.Close()
+	secs := int(r.now().Sub(t.at).Round(time.Second) / time.Second)
 	if err := config.Set().Realtime().Used(max(secs, 1), r.now()); err != nil {
 		slog.Warn("realtime: the day's minutes could not be counted", "err", err)
 	}
 	slog.Info("realtime: session closed", "seconds", secs)
-	r.sess, r.ready, r.mcp, r.tools = nil, false, nil, nil
 }
 
-// pump turns the session's events into the conversation's, until the session closes or another takes
-// its place.
-func (r *rtBackend) pump(gen int, sess rtSession) {
-	for e := range sess.Events() {
-		r.mu.Lock()
-		stale := r.gen != gen
-		r.mu.Unlock()
-		if stale {
+// current is whether t is still the open turn.
+func (r *rtBackend) current(t *rtTurn) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.turn == t && r.gen == t.gen
+}
+
+// pump turns the turn's session's events into the conversation's, until it closes.
+func (r *rtBackend) pump(t *rtTurn) {
+	for e := range t.sess.Events() {
+		if !r.current(t) {
 			return
 		}
 		switch e.Kind {
 		case realtime.Heard:
 			slog.Info("realtime: heard", "text", e.Text)
-			r.post(event{kind: evHeard, text: strings.TrimSpace(e.Text)})
+			r.postFor(t, event{kind: evHeard, text: strings.TrimSpace(e.Text)})
 		case realtime.Saying:
 			r.mu.Lock()
-			r.saying.WriteString(e.Text)
+			t.saying.WriteString(e.Text)
 			r.mu.Unlock()
 		case realtime.Said:
 			r.mu.Lock()
-			r.saying.Reset()
-			r.saying.WriteString(e.Text)
+			t.saying.Reset()
+			t.saying.WriteString(e.Text)
 			r.mu.Unlock()
 		case realtime.Audio:
 			pcm := media.ToVoiceRate(e.PCM, e.Rate)
@@ -340,16 +341,22 @@ func (r *rtBackend) pump(gen int, sess rtSession) {
 				binary.LittleEndian.PutUint16(out[2*i:], uint16(s))
 			}
 			r.mu.Lock()
-			r.spoke = true
+			t.spoke = true
 			r.mu.Unlock()
-			r.post(event{kind: evStreamAudio, audio: out})
+			r.postFor(t, event{kind: evStreamAudio, audio: out})
 		case realtime.Call:
-			out := r.call(e.Name, e.Args)
-			_ = sess.ToolResult(e.CallID, e.Name, out)
+			out := r.call(t, e.Name, e.Args)
+			_ = t.sess.ToolResult(e.CallID, e.Name, out)
+		case realtime.Calls:
+			// Every call of the response is answered (each was, as it came): one request to go on.
+			_ = t.sess.Continue()
 		case realtime.Done, realtime.Interrupt:
-			r.finish()
+			r.finish(t)
 		case realtime.Failed:
 			slog.Warn("realtime: the session failed", "err", e.Err)
+			if !r.current(t) {
+				return
+			}
 			_ = r.Stop()
 			r.post(event{kind: evError, code: "realtime-failed", msg: errorText(e.Err)})
 			return
@@ -357,64 +364,118 @@ func (r *rtBackend) pump(gen int, sess rtSession) {
 	}
 }
 
-// finish is an answer done: its words, its end, and the session kept a while for a follow-up.
-func (r *rtBackend) finish() {
+// finish is an answer done: its words, and its end. The conversation ends the turn, and the session with
+// it.
+func (r *rtBackend) finish(t *rtTurn) {
 	r.mu.Lock()
-	said := strings.TrimSpace(r.saying.String())
-	r.saying.Reset()
-	spoke := r.spoke
-	r.spoke = false
-	gen := r.gen
-	if r.cap != nil {
-		r.cap.Stop()
-	}
-	if r.idle != nil {
-		r.idle.Stop()
-	}
-	r.idle = time.AfterFunc(realtimeIdle, func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		if r.gen == gen {
-			r.gen++
-			r.closeLocked()
-		}
-	})
+	said := strings.TrimSpace(t.saying.String())
+	t.saying.Reset()
+	spoke := t.spoke
+	t.spoke = false
 	r.mu.Unlock()
 
 	if said != "" {
 		slog.Info("realtime: replying", "text", said)
-		r.post(event{kind: evReplyText, text: said})
+		r.postFor(t, event{kind: evReplyText, text: said})
 		if strings.HasSuffix(said, "?") {
-			r.post(event{kind: evContinue})
+			r.postFor(t, event{kind: evContinue})
 		}
 	}
 	if spoke {
-		r.post(event{kind: evStreamEnd})
+		r.postFor(t, event{kind: evStreamEnd})
 	}
-	r.post(event{kind: evRunEnd})
+	r.postFor(t, event{kind: evRunEnd})
+}
+
+// postFor posts a turn's event, unless another turn has taken its place. The lock is not held across the
+// post, which can wait for room: the conversation, which empties the queue, also stops turns.
+func (r *rtBackend) postFor(t *rtTurn, e event) {
+	if r.current(t) {
+		r.post(e)
+	}
+}
+
+// haTools is Home Assistant's tools for a token: as last listed, asking again in the background once that
+// is haStale; listed now, haFirst at most, the first time.
+func (r *rtBackend) haTools(token string) []mcp.Tool {
+	if token == "" || r.mcpFor(token) == nil {
+		return nil
+	}
+	r.haMu.Lock()
+	have := r.haToken == token && !r.haAt.IsZero()
+	list, stale := r.haList, r.now().Sub(r.haAt) > haStale
+	wait := r.refreshHA(token, !have || stale)
+	r.haMu.Unlock()
+	if have {
+		return list
+	}
+	select {
+	case <-wait:
+	case <-time.After(haFirst):
+		slog.Info("realtime: Home Assistant's tools not listed in time; this turn has the device's own")
+	}
+	r.haMu.Lock()
+	defer r.haMu.Unlock()
+	if r.haToken == token {
+		return r.haList
+	}
+	return nil
+}
+
+// refreshHA lists Home Assistant's tools in the background, when asked and none is under way; with
+// r.haMu held. It answers what closes when the listing under way is done.
+func (r *rtBackend) refreshHA(token string, ask bool) <-chan struct{} {
+	if r.haBusy || !ask {
+		if r.haUpdated == nil {
+			done := make(chan struct{})
+			close(done)
+			return done
+		}
+		return r.haUpdated
+	}
+	r.haBusy = true
+	done := make(chan struct{})
+	r.haUpdated = done
+	safe.Go("realtime home assistant tools", func() {
+		defer close(done)
+		c := r.mcpFor(token)
+		ctx, cancel := context.WithTimeout(context.Background(), mcpWithin)
+		defer cancel()
+		var ts []mcp.Tool
+		err := c.Start(ctx)
+		if err == nil {
+			ts, err = c.Tools(ctx)
+		}
+		r.haMu.Lock()
+		defer r.haMu.Unlock()
+		r.haBusy = false
+		if err != nil {
+			slog.Warn("realtime: Home Assistant's tools could not be listed", "err", err)
+			return
+		}
+		r.haList, r.haToken, r.haAt = ts, token, r.now()
+	})
+	return done
 }
 
 // call runs a function the model called, under the turn's lockout: the device's own through the gate,
 // Home Assistant's through its MCP server once the gate allows it.
-func (r *rtBackend) call(name, args string) string {
-	r.mu.Lock()
-	gate, mc := r.gate, r.mcp
-	t, fromHA := r.tools[name]
-	r.mu.Unlock()
-	if gate == nil {
+func (r *rtBackend) call(t *rtTurn, name, args string) string {
+	if t.gate == nil {
 		return "error: no tools are available"
 	}
-	defer gate.EndRound() // the model asks for one call at a time: each is a round
+	defer t.gate.EndRound() // the model asks for one call at a time: each is a round
 
+	ht, fromHA := t.tools[name]
 	if !fromHA {
 		var tc llm.ToolCall
 		tc.Function.Name, tc.Function.Arguments = name, args
-		out := gate.Run(tc)
+		out := t.gate.Run(tc)
 		slog.Info("realtime: tool", "name", name, "args", args, "result", out)
 		return out
 	}
-	readOnly := t.ReadOnly() || readOnlyTools[name]
-	if ok, refused := gate.Allow(readOnly); !ok {
+	readOnly := ht.ReadOnly() || readOnlyTools[name]
+	if ok, refused := t.gate.Allow(readOnly); !ok {
 		slog.Warn("realtime: a Home Assistant tool refused after reading outside words", "name", name)
 		return refused
 	}
@@ -426,18 +487,31 @@ func (r *rtBackend) call(name, args string) string {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), mcpWithin)
 	defer cancel()
-	out, failed, err := mc.Call(ctx, name, a)
-	gate.Saw(bringsOutsideWords(name))
-	slog.Info("realtime: Home Assistant tool", "name", name, "args", args, "result", out, "failed", failed)
+	c := r.mcpFor(t.token)
+	if c == nil {
+		return "error: Home Assistant is not reachable"
+	}
+	if err := c.Start(ctx); err != nil {
+		return "error: " + err.Error()
+	}
+	out, failed, err := c.Call(ctx, name, a)
+	t.gate.Saw(bringsOutsideWords(name))
+	// The answer can be the whole house, named: its length is logged, not the answer.
+	slog.Info("realtime: Home Assistant tool", "name", name, "args", args, "result_bytes", len(out), "failed", failed)
 	if err != nil {
 		return "error: " + err.Error()
 	}
+	out = clipText(out, maxToolResult)
 	if failed {
 		return "error: " + out
 	}
 	return out
 }
 
+// bringsOutsideWords is whether a Home Assistant tool can bring outside words into a turn: any that is not
+// one of Home Assistant's own intents (Hass..., which act on the house and say what they did), or that
+// looks up what the house knows (the date, the house's own state), is taken to; and any whose name says
+// it reads something from outside is, whatever it is.
 func bringsOutsideWords(name string) bool {
 	n := strings.ToLower(name)
 	for _, w := range outsideWords {
@@ -445,7 +519,21 @@ func bringsOutsideWords(name string) bool {
 			return true
 		}
 	}
-	return false
+	if readOnlyTools[name] {
+		return false
+	}
+	return !strings.HasPrefix(name, "Hass")
+}
+
+// clipText is s cut to at most n bytes, at a character's start.
+func clipText(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
 }
 
 func errorText(err error) string {

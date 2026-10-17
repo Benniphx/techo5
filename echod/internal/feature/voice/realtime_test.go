@@ -20,6 +20,7 @@ type fakeSession struct {
 	mu      sync.Mutex
 	audio   int
 	ended   int
+	goOns   int
 	results []string
 	closed  bool
 	events  chan realtime.Event
@@ -40,6 +41,7 @@ func (s *fakeSession) ToolResult(id, name, out string) error {
 	s.mu.Unlock()
 	return nil
 }
+func (s *fakeSession) Continue() error               { s.mu.Lock(); s.goOns++; s.mu.Unlock(); return nil }
 func (s *fakeSession) Events() <-chan realtime.Event { return s.events }
 func (s *fakeSession) Close() error {
 	s.mu.Lock()
@@ -204,14 +206,6 @@ func TestARealtimeTurn(t *testing.T) {
 		t.Errorf("audio not brought to the voice rate: %v", evs[1].audio)
 	}
 
-	// A follow-up uses the same session.
-	_ = g.r.Start("")
-	select {
-	case <-g.dialed:
-		t.Fatal("a follow-up opened another session")
-	case <-time.After(50 * time.Millisecond):
-	}
-
 	// Stopped: closed at once, and its time counted.
 	_ = g.r.Stop()
 	s.mu.Lock()
@@ -220,6 +214,76 @@ func TestARealtimeTurn(t *testing.T) {
 	if !closed || config.Get().Realtime.UsedSeconds < 1 {
 		t.Fatalf("closed %v, used %d", closed, config.Get().Realtime.UsedSeconds)
 	}
+
+	// The next turn, a follow-up too, has a session of its own: nothing the last one read is in it.
+	_ = g.r.Start("")
+	if s2 := g.waitDial(t); s2 == s {
+		t.Fatal("the same session")
+	}
+}
+
+// Calls made together are each answered, and the model told once to go on.
+func TestRealtimeCallsTogether(t *testing.T) {
+	g := newRTRig(t)
+	_ = g.r.Start("")
+	s := g.waitDial(t)
+	s.events <- realtime.Event{Kind: realtime.Call, CallID: "a", Name: "HassTurnOn", Args: `{}`}
+	s.events <- realtime.Event{Kind: realtime.Call, CallID: "b", Name: "HassTurnOn", Args: `{}`}
+	s.events <- realtime.Event{Kind: realtime.Calls}
+	waitUntilT(t, func() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.goOns == 1 })
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.results) != 2 {
+		t.Fatalf("%v", s.results)
+	}
+}
+
+func TestOutsideWords(t *testing.T) {
+	for name, want := range map[string]bool{
+		"HassTurnOn": false, "HassLightSet": false, "GetLiveContext": false, "GetDateTime": false,
+		"HassGetWeather": true, "get_headlines": true, "read_inbox_summary": true, "calendar_get_events": true,
+		"script_morning": true,
+	} {
+		if got := bringsOutsideWords(name); got != want {
+			t.Errorf("%s: %v, want %v", name, got, want)
+		}
+	}
+}
+
+// A Home Assistant tool with the name of one of the device's own is left out, not offered twice.
+func TestAToolsNameIsTakenOnce(t *testing.T) {
+	g := newRTRig(t)
+	clash := &clashMCP{}
+	g.r.mcpFor = func(string) mcpClient { return clash }
+	var fns []realtime.Function
+	g.r.dial = func(ctx context.Context, c realtime.Config) (rtSession, error) {
+		fns = c.Functions
+		g.dialed <- struct{}{}
+		return newFakeSession(), nil
+	}
+	_ = g.r.Start("")
+	<-g.dialed
+	names := map[string]int{}
+	for _, f := range fns {
+		names[f.Name]++
+	}
+	if names["set_timer"] != 1 || names["HassTurnOn"] != 1 || len(fns) != 3 {
+		t.Fatalf("%v", names)
+	}
+}
+
+type clashMCP struct{ fakeMCP }
+
+func (m *clashMCP) Tools(context.Context) ([]mcp.Tool, error) {
+	return []mcp.Tool{{Name: "set_timer"}, {Name: "HassTurnOn"}}, nil
+}
+
+// Audio after the reply's stream has ended is dropped, not sent into a closed queue.
+func TestAStreamAfterItsEnd(t *testing.T) {
+	st := newStream(0, 0, 0)
+	st.done()
+	st.send([]byte{1, 2})
+	st.done()
 }
 
 // The model's calls go through the lockout: the device's own through the gate, Home Assistant's through

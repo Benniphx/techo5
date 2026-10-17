@@ -559,9 +559,9 @@ either, but it does not move when night volume turns the device down.
 ### Realtime voice
 
 A wake word can be answered by a speech-to-speech model at OpenAI, xAI (Grok) or Google (Gemini) in
-place of its usual assistant: answers start almost as soon as you stop, in a natural voice, and keep
-what was said for a follow-up. **It sends what you say, as audio, to that company while you speak, and
-they bill by the minute.** It is off until you choose a wake word for it, on the setup page only: Home
+place of its usual assistant: answers start almost as soon as you stop, in a natural voice. **It sends
+what you say, as audio, to that company while you speak, and they bill for it, by the amount of audio
+heard and spoken.** It is off until you choose a wake word for it, on the setup page only: Home
 Assistant has no switch for it.
 
 1. Get a key from the provider (an OpenAI or xAI API key, or a Gemini API key from Google AI Studio).
@@ -570,23 +570,34 @@ Assistant has no switch for it.
 
 The key is never shown again; leave the field empty to keep it. Choosing another provider or relay
 clears it, so a key is never sent where it was not given for. **Relay** is optional: a server on your
-network in place of the provider's address, which can hold the key itself; the key is sent to it only
-on a `wss://` address.
+network in place of the provider's address, which can hold the key itself; it has to be a `wss://`
+address, since your voice goes through it. A settings file never chooses a wake word for realtime
+voice, and one that moves it to another provider or relay leaves every wake word off it.
 
-The device still decides when you have finished speaking, and the stop word, the action button and
-another wake word stop an answer as they stop any other. Its speech plays as any answer does, so an
-alarm, a ring or a call cuts it off. A turn ends after five minutes whatever happens, and once the
-day's minutes are used up the wake word says it cannot answer until the next day. The setup page
-shows the minutes used today.
+Each turn has a session of its own, so the model does not remember the last turn: a follow-up
+question starts afresh. The device still decides when you have finished speaking, and the stop word,
+the action button and another wake word stop an answer as they stop any other. Its speech plays as any
+answer does, so an alarm, a ring or a call cuts it off. A turn ends after five minutes whatever
+happens. The minutes a day count all the time a session is open, not only speech, and once they are
+used up the wake word chimes and sounds its failure tone until the next day. The setup page shows the
+minutes used today. The provider's model and voice are its own unless you name them; the defaults the
+device names (gpt-realtime and marin for OpenAI, grok-voice and Ara for xAI, Gemini's native audio
+model and Puck) are untried.
 
 To do things in the house, add Home Assistant's **Model Context Protocol Server** integration, make a
 Home Assistant user of its own for it with no administrator rights, and give a long-lived token of that
-user in **Home Assistant token for its MCP server**: the model then has the tools Assist has. Without
-it, it has the device's own abilities (timers, alarms, the radio, the volume). Either way the same rule
-as for the device's own assistant holds: once a turn has read the web or a calendar, nothing that
-changes anything runs in it, and none of the provider's own tools (its web search, code, files) are
-ever turned on. Untried with the providers so far: built and tested against their published formats,
-not yet against their servers.
+user in **Home Assistant token for its MCP server**: the model then has the tools Assist has, for the
+entities exposed to Assist. Without it, it has the device's own abilities (timers, alarms, the radio,
+the volume). Either way the same rule as for the device's own assistant holds: once a turn has read
+the web, a calendar or anything else from outside, nothing that changes anything runs in it, and none
+of the provider's own tools (its web search, code, files) are ever turned on.
+
+An entity whose state is free text written by someone outside your home can carry instructions aimed
+at the model: a media player's title (an internet radio station names its songs), the companion app's
+last notification sensor, a mail or feed sensor, a text helper, a calendar. Home Assistant hands those
+to the model with the rest of the house when it reads the house's state, which this device does not
+treat as outside words. Do not expose such entities to Assist. Untried with the providers so far:
+built and tested against their published formats, not yet against their servers.
 
 ### A wake word of your own
 

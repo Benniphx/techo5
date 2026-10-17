@@ -619,8 +619,15 @@ func (f *Feature) accessAction() *esphome.Action {
 		Name: "home_assistant",
 		Args: []esphome.Arg{{Name: "url", Type: esphome.ArgString}, {Name: "token", Type: esphome.ArgString}},
 		Run: func(c esphome.Call) (any, error) {
+			was := hass.Get().Address()
 			if err := hass.Get().Set(c.String("url"), c.String("token")); err != nil {
 				return nil, err
+			}
+			// Realtime voice's token is for the Home Assistant it was given for: another address does
+			// not get it.
+			if now := hass.Get().Address(); was != "" && now != was && config.Get().Realtime.MCPToken != "" {
+				_ = config.Set().Realtime().SetMCPToken("")
+				slog.Warn("home: Home Assistant's address changed; realtime voice's token for it was cleared")
 			}
 			slog.Info("home: home assistant access stored")
 			f.wake()

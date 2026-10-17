@@ -34,9 +34,9 @@ func realtimeSection(w http.ResponseWriter, token string) {
 		who = n
 	}
 	fmt.Fprintf(w, `<p class="note"><strong>A wake word chosen for realtime voice sends what you say, as audio, to
-	 %s, while you speak, and their model answers out loud. They bill by the minute.</strong> The device keeps
-	 to the minutes a day set here, and ends any one turn after five minutes. Off until a wake word is ticked
-	 below.</p>`, html.EscapeString(who))
+	 %s, while you speak, and their model answers out loud. They bill for it, by the amount of audio.</strong>
+	 The device keeps to the minutes a day set here, counting all the time a session is open, and ends any one
+	 turn after five minutes. Off until a wake word is ticked below.</p>`, html.EscapeString(who))
 	fmt.Fprint(w, `<label for="rtp">Provider</label><select id="rtp" name="provider"><option value="">None</option>`)
 	for _, p := range config.RealtimeProviders {
 		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, p, selected(rt.Provider == p), html.EscapeString(providerNames[p]))
@@ -48,7 +48,7 @@ func realtimeSection(w http.ResponseWriter, token string) {
 	 <label for="rtend">Relay (optional)</label>
 	 <input id="rtend" name="endpoint" value="%s" placeholder="wss://relay.home.arpa/realtime" autocomplete="off">
 	 <p class="note">A relay on your network in place of the provider's own address, which can hold the key
-	  itself. The key is sent to a relay only on a wss:// address.</p>
+	  itself: a wss:// address only, since your voice goes through it.</p>
 	 <label for="rtmodel">Model</label>
 	 <input id="rtmodel" name="model" value="%s" placeholder="the provider's own" autocomplete="off">
 	 <label for="rtvoice">Voice</label>
@@ -93,8 +93,8 @@ func saveRealtime(r *http.Request) string {
 	}
 	if endpoint != "" {
 		u, err := url.Parse(endpoint)
-		if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") || u.Host == "" || u.User != nil {
-			return "the relay should be an address like wss://relay.home.arpa/realtime, with no login in it"
+		if err != nil || u.Scheme != "wss" || u.Host == "" || u.User != nil {
+			return "the relay should be a secure address like wss://relay.home.arpa/realtime, with no login in it"
 		}
 	}
 	minutes, err := strconv.Atoi(v("minutes"))

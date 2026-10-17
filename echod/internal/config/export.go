@@ -189,6 +189,13 @@ func Restored(cur Config, file []byte, model string) (Restoration, error) {
 
 	r := Restoration{Reenter: append(KeepSecrets(&c, cur), missing...)}
 	KeepOwn(&c, cur)
+	// A slot sends its voice only where it was chosen to: a file that moves realtime voice to another
+	// provider or relay leaves every slot off it, for somebody to choose again here.
+	if c.Realtime.Provider != cur.Realtime.Provider || c.Realtime.Endpoint != cur.Realtime.Endpoint {
+		for i := range c.Wake.Words {
+			c.Wake.Words[i].Realtime = false
+		}
+	}
 	c.Device = cur.Device
 	r.Config, r.Changed, r.Servers = c, Changed(cur, c), serverChanges(cur, c)
 	if other {

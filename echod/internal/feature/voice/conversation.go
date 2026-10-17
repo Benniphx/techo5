@@ -336,13 +336,13 @@ func newConversation(vs *esphome.VoiceSatellite) *conversation {
 		ring:    light.Get(),
 		leds:    led.Get(),
 		log:     activity.Get(),
-		events:  make(chan event, 32),
+		events:  make(chan event, 128),
 		out:     make(chan func() error, outDepth),
 		now:     time.Now,
 	}
 	c.ha = ha{vs: vs, watch: c.startWatch}
 	c.direct = newDirect(c.post)
-	c.realtime = newRealtime(c.post)
+	c.realtime = newRealtime(c.postSure)
 	c.be = c.ha
 
 	vs.OnPipelineEvent = c.pipeline
@@ -413,6 +413,20 @@ func (c *conversation) post(e event) {
 		slog.Warn("conversation event dropped", "kind", e.kind, "phase", c.Phase())
 	}
 }
+
+// postSure is post for what must arrive (an answer's speech and its end, from realtime voice): it waits a
+// while for room rather than dropping it. Never from the conversation's own goroutine, which empties the
+// queue.
+func (c *conversation) postSure(e event) {
+	select {
+	case c.events <- e:
+	case <-time.After(postWait):
+		slog.Warn("conversation event dropped after waiting", "kind", e.kind, "phase", c.Phase())
+	}
+}
+
+// postWait is how long postSure waits for room.
+const postWait = 2 * time.Second
 
 // Phase is what it is doing, for anything outside that needs to know.
 func (c *conversation) Phase() phase { return phase(c.visible.Load()) }
@@ -532,7 +546,10 @@ func (c *conversation) turnEvent(e event) {
 		//
 		// Home Assistant goes on with the run it was told to stop, and its last events are still to
 		// come: a wake in the meantime waits for them (draining), or they would land in its turn.
-		if c.woke && c.phase != phaseIdle && onlyNoise(e.text) {
+		// Realtime voice's transcript can come after its answer has begun: by then the answer is the
+		// turn, whatever the words were taken for.
+		_, rt := c.be.(*rtBackend)
+		if c.woke && c.phase != phaseIdle && onlyNoise(e.text) && !(rt && c.phase == phaseReplying) {
 			slog.Info("heard only what noise is written as; the wake was a mistake", "slot", c.slot+1)
 			slot, opened := c.slot, c.opened
 			c.clearPending()
@@ -991,7 +1008,13 @@ func (c *conversation) idle(why string, how activity.Ending) {
 	c.disarm()
 
 	if was != phaseIdle {
-		c.send("stop", c.be.Stop)
+		if rt, ok := c.be.(*rtBackend); ok {
+			// Stopped here and now, never dropped with a full queue: a session left open goes on, and is
+			// billed, until its limit.
+			_ = rt.Stop()
+		} else {
+			c.send("stop", c.be.Stop)
+		}
 		c.stoppedAt = c.now()
 	}
 

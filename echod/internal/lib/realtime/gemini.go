@@ -55,7 +55,9 @@ func (g gemini) setup(c Config) []any {
 	for _, f := range c.Functions {
 		d := map[string]any{"name": f.Name, "description": f.Description}
 		if f.Parameters != nil {
-			d["parameters"] = f.Parameters
+			// As JSON Schema, which Home Assistant's tools are written in: "parameters" takes only a part
+			// of OpenAPI's.
+			d["parametersJsonSchema"] = f.Parameters
 		}
 		decls = append(decls, d)
 	}
@@ -91,6 +93,19 @@ func (g gemini) audio(pcm16k []int16) any {
 func (g gemini) endOfSpeech() []any {
 	return []any{map[string]any{"realtimeInput": map[string]any{"activityEnd": map[string]any{}}}}
 }
+
+// goOn is nothing: Gemini goes on by itself once a call is answered.
+func (g gemini) goOn() []any { return nil }
+
+// ready is the setupComplete that answers the setup: until then nothing else is sent.
+func (g gemini) ready(msg []byte) bool {
+	var m struct {
+		SetupComplete *struct{} `json:"setupComplete"`
+	}
+	return json.Unmarshal(msg, &m) == nil && m.SetupComplete != nil
+}
+
+func (g gemini) readyFirst() bool { return false }
 
 func (g gemini) toolResult(callID, name, output string) []any {
 	return []any{map[string]any{"toolResponse": map[string]any{"functionResponses": []any{

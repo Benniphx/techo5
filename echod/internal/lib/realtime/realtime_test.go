@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,12 @@ import (
 
 	"github.com/gorilla/websocket"
 )
+
+// The tests' servers are plain ws:// ones.
+func TestMain(m *testing.M) {
+	Insecure = true
+	os.Exit(m.Run())
+}
 
 // fakeServer is a provider: it records what it is sent and its request's header, and answers each message
 // with what script says.
@@ -103,8 +110,9 @@ func TestOpenAITurn(t *testing.T) {
 		if calls == 1 {
 			return []string{
 				`{"type":"conversation.item.input_audio_transcription.completed","transcript":"turn on the kitchen light"}`,
-				`{"type":"response.function_call_arguments.done","call_id":"c1","name":"HassTurnOn","arguments":"{\"name\":\"kitchen\"}"}`,
-				`{"type":"response.done","response":{"status":"completed","output":[{"type":"function_call"}]}}`,
+				`{"type":"response.output_item.done","item":{"type":"function_call","call_id":"c1","name":"HassTurnOn","arguments":"{\"name\":\"kitchen\"}"}}`,
+				`{"type":"response.output_item.done","item":{"type":"function_call","call_id":"c2","name":"HassTurnOn","arguments":"{\"name\":\"hall\"}"}}`,
+				`{"type":"response.done","response":{"status":"completed","output":[{"type":"function_call"},{"type":"function_call"}]}}`,
 			}
 		}
 		return []string{
@@ -126,12 +134,18 @@ func TestOpenAITurn(t *testing.T) {
 	if err := s.EndOfSpeech(); err != nil {
 		t.Fatal(err)
 	}
-	evs := collect(t, s, Call)
-	if kinds(evs) != "heard,call" || evs[0].Text != "turn on the kitchen light" || evs[1].Name != "HassTurnOn" ||
-		evs[1].CallID != "c1" || evs[1].Args != `{"name":"kitchen"}` {
+	evs := collect(t, s, Calls)
+	if kinds(evs) != "heard,call,call,calls" || evs[0].Text != "turn on the kitchen light" || evs[1].Name != "HassTurnOn" ||
+		evs[1].CallID != "c1" || evs[1].Args != `{"name":"kitchen"}` || evs[2].CallID != "c2" {
 		t.Fatalf("%+v", evs)
 	}
-	if err := s.ToolResult("c1", "HassTurnOn", "ok"); err != nil {
+	// Both answered, then one request to go on: a second while one is going would be refused.
+	_ = s.ToolResult("c1", "HassTurnOn", "ok")
+	_ = s.ToolResult("c2", "HassTurnOn", "ok")
+	if n := countType(f.sent(), "response.create"); n != 1 {
+		t.Fatalf("%d responses asked for before the calls were answered", n)
+	}
+	if err := s.Continue(); err != nil {
 		t.Fatal(err)
 	}
 	evs = collect(t, s, Done)
@@ -161,6 +175,9 @@ func TestGeminiTurn(t *testing.T) {
 	answer := pcmBase64([]int16{1, 2, 3, 4})
 	f := &fakeServer{}
 	f.script = func(m map[string]any) []string {
+		if _, ok := m["setup"]; ok {
+			return []string{`{"setupComplete":{}}`}
+		}
 		if ri, ok := m["realtimeInput"].(map[string]any); ok {
 			if _, end := ri["activityEnd"]; end {
 				return []string{
@@ -200,6 +217,9 @@ func TestGeminiTurn(t *testing.T) {
 	setup, _ := got[0]["setup"].(map[string]any)
 	if setup == nil || !strings.Contains(fmtJSON(setup), `"disabled":true`) || !strings.HasPrefix(setup["model"].(string), "models/") {
 		t.Errorf("setup %s", fmtJSON(got[0]))
+	}
+	if _, ok := got[1]["realtimeInput"].(map[string]any)["activityStart"]; !ok {
+		t.Errorf("the turn was not started after the setup: %s", fmtJSON(got[1]))
 	}
 	if f.header.Get("x-goog-api-key") != "" {
 		t.Error("the key went to a ws:// endpoint")
@@ -258,3 +278,63 @@ func TestAFailureIsSaid(t *testing.T) {
 }
 
 func fmtJSON(v any) string { b, _ := json.Marshal(v); return string(b) }
+
+func countType(ms []map[string]any, typ string) int {
+	n := 0
+	for _, m := range ms {
+		if m["type"] == typ {
+			n++
+		}
+	}
+	return n
+}
+
+// An answer that failed is said to have, not ended quietly; an error that refuses one request leaves the
+// session as it was.
+func TestOpenAIFailuresAndErrors(t *testing.T) {
+	f := &fakeServer{script: func(m map[string]any) []string {
+		if m["type"] != "response.create" {
+			return nil
+		}
+		return []string{
+			`{"type":"error","error":{"code":"conversation_already_has_active_response","message":"busy"}}`,
+			`{"type":"response.done","response":{"status":"failed","status_details":{"error":{"message":"quota exceeded"}},"output":[]}}`,
+		}
+	}}
+	addr := f.start(t)
+	s, err := Dial(context.Background(), Config{Provider: OpenAI, Endpoint: addr})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	_ = s.EndOfSpeech()
+	evs := collect(t, s, Failed)
+	if len(evs) != 1 || !strings.Contains(evs[0].Err.Error(), "quota exceeded") {
+		t.Fatalf("%+v", evs)
+	}
+}
+
+func TestARelayMustBeSecure(t *testing.T) {
+	Insecure = false
+	defer func() { Insecure = true }()
+	for _, e := range []string{"ws://relay.home.arpa/rt", "wss://user:pass@relay.home.arpa/rt", "https://relay"} {
+		if _, _, err := endpoint(Config{Endpoint: e}, "x"); err == nil {
+			t.Errorf("%s was taken", e)
+		}
+	}
+	if _, keyOK, err := endpoint(Config{Endpoint: "wss://relay.home.arpa/rt"}, "x"); err != nil || !keyOK {
+		t.Errorf("%v %v", keyOK, err)
+	}
+}
+
+// Gemini that never says it is set up is not used.
+func TestGeminiNeverSetUp(t *testing.T) {
+	f := &fakeServer{script: func(m map[string]any) []string {
+		return []string{`{"error":{"message":"bad model"}}`}
+	}}
+	addr := f.start(t)
+	if _, err := Dial(context.Background(), Config{Provider: Gemini, Endpoint: addr}); err == nil ||
+		!strings.Contains(err.Error(), "bad model") {
+		t.Fatalf("%v", err)
+	}
+}

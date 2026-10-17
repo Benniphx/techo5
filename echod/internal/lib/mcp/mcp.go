@@ -67,7 +67,11 @@ type Client struct {
 
 // New is a client for a server's address and token.
 func New(url, token string) *Client {
-	return &Client{URL: url, Token: token, HTTP: &http.Client{Timeout: callWithin}}
+	return &Client{URL: url, Token: token, HTTP: &http.Client{
+		Timeout: callWithin,
+		// The token goes to the address given, never on to one a redirect names.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}
 }
 
 type request struct {

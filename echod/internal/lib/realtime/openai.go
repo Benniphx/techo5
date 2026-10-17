@@ -7,8 +7,9 @@ import (
 	"net/url"
 )
 
-// openAI is OpenAI's Realtime API, and xAI's, which speaks the same events. Both the event names of the
-// API as released and those of its beta are read, since a relay or another provider may speak either.
+// openAI is OpenAI's Realtime API as released (its session.update is that version's), and xAI's, which
+// speaks the same events. The audio and transcript events are read by their beta names too, which some
+// servers still send; what is sent is the released form only.
 type openAI struct {
 	base         string
 	defaultModel string
@@ -90,12 +91,23 @@ func (o openAI) endOfSpeech() []any {
 }
 
 func (o openAI) toolResult(callID, name, output string) []any {
-	return []any{
-		map[string]any{"type": "conversation.item.create", "item": map[string]any{
-			"type": "function_call_output", "call_id": callID, "output": output,
-		}},
-		map[string]any{"type": "response.create"},
-	}
+	return []any{map[string]any{"type": "conversation.item.create", "item": map[string]any{
+		"type": "function_call_output", "call_id": callID, "output": output,
+	}}}
+}
+
+// goOn asks for the next response: one, after all of a response's calls are answered, since a second
+// while one is going is refused.
+func (o openAI) goOn() []any { return []any{map[string]any{"type": "response.create"}} }
+
+func (o openAI) ready([]byte) bool { return true }
+func (o openAI) readyFirst() bool  { return true }
+
+// nonFatal are errors that refuse one request and leave the session as it was.
+var nonFatal = map[string]bool{
+	"conversation_already_has_active_response": true,
+	"response_cancel_not_active":               true,
+	"input_audio_buffer_commit_empty":          true,
 }
 
 func (o openAI) cancel() any { return map[string]any{"type": "response.cancel"} }
@@ -105,16 +117,26 @@ func (o openAI) read(msg []byte, emit func(Event)) {
 		Type       string `json:"type"`
 		Delta      string `json:"delta"`
 		Transcript string `json:"transcript"`
-		CallID     string `json:"call_id"`
-		Name       string `json:"name"`
-		Arguments  string `json:"arguments"`
-		Response   struct {
-			Status string `json:"status"`
+		Item       struct {
+			Type      string `json:"type"`
+			CallID    string `json:"call_id"`
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"item"`
+		Response struct {
+			Status        string `json:"status"`
+			StatusDetails struct {
+				Reason string `json:"reason"`
+				Error  struct {
+					Message string `json:"message"`
+				} `json:"error"`
+			} `json:"status_details"`
 			Output []struct {
 				Type string `json:"type"`
 			} `json:"output"`
 		} `json:"response"`
 		Error struct {
+			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
 	}
@@ -132,23 +154,39 @@ func (o openAI) read(msg []byte, emit func(Event)) {
 		emit(Event{Kind: Said, Text: m.Transcript})
 	case "conversation.item.input_audio_transcription.completed":
 		emit(Event{Kind: Heard, Text: m.Transcript})
-	case "response.function_call_arguments.done":
-		emit(Event{Kind: Call, CallID: m.CallID, Name: m.Name, Args: m.Arguments})
+	case "response.output_item.done":
+		// A call is read from the item whole, which always has its name.
+		if m.Item.Type == "function_call" {
+			emit(Event{Kind: Call, CallID: m.Item.CallID, Name: m.Item.Name, Args: m.Item.Arguments})
+		}
 	case "response.done":
-		// A response that only called functions is not the answer: the answer comes after their results.
+		// A response that called functions is not the answer: the answer comes after their results.
 		calls := false
 		for _, o := range m.Response.Output {
 			if o.Type == "function_call" {
 				calls = true
 			}
 		}
-		switch {
-		case m.Response.Status == "cancelled":
+		switch m.Response.Status {
+		case "cancelled":
 			emit(Event{Kind: Interrupt})
-		case !calls:
-			emit(Event{Kind: Done})
+		case "failed", "incomplete":
+			why := m.Response.StatusDetails.Error.Message
+			if why == "" {
+				why = m.Response.StatusDetails.Reason
+			}
+			emit(Event{Kind: Failed, Err: errors.New("realtime: the answer " + m.Response.Status + ": " + why)})
+		default:
+			if calls {
+				emit(Event{Kind: Calls})
+			} else {
+				emit(Event{Kind: Done})
+			}
 		}
 	case "error":
+		if nonFatal[m.Error.Code] {
+			return
+		}
 		emit(Event{Kind: Failed, Err: errors.New("realtime: " + m.Error.Message)})
 	}
 }

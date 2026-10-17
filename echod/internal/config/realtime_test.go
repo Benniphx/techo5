@@ -82,3 +82,27 @@ func TestRealtimeWriter(t *testing.T) {
 		t.Fatalf("%+v", ws)
 	}
 }
+
+// A file that moves realtime voice to another provider or relay leaves every slot off it; one that keeps
+// them leaves the device's choice as it was.
+func TestARestoreThatMovesRealtimeChoosesNoSlot(t *testing.T) {
+	here := Defaults()
+	here.Realtime = Realtime{Provider: "openai", Key: "sk-mine"}
+	here.Wake.Words = []WakeWord{DefaultWakeWord()}
+	here.Wake.Words[0].Realtime = true
+
+	from := Defaults()
+	from.Realtime = Realtime{Provider: "openai"}
+	from.Wake.Words = []WakeWord{DefaultWakeWord()}
+	file, _ := Export(from, "", "v0")
+	r, _ := Restored(here, file, "")
+	if !r.Config.Wake.Words[0].Realtime {
+		t.Fatal("the same provider: the device's choice was lost")
+	}
+	from.Realtime.Endpoint = "wss://elsewhere.example/rt"
+	file, _ = Export(from, "", "v0")
+	r, _ = Restored(here, file, "")
+	if r.Config.Wake.Words[0].Realtime {
+		t.Fatal("a file sent the slot's voice to its own relay")
+	}
+}
