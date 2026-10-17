@@ -16,6 +16,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/asp"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
@@ -41,6 +42,15 @@ const (
 	// codecSettle is how long the codec sits powered and idle before the amplifier is enabled,
 	// measured from the vendor HAL doing the same thing on a route change.
 	codecSettle = 1100 * time.Millisecond
+
+	// muteSettle is how long an amplifier with a mute of its own (MuteSwitch) sits switched on before
+	// the mute is let go, so the switch's own step is behind the mute and not heard.
+	muteSettle = 75 * time.Millisecond
+
+	// unmuteAfter is how many periods the stream writes before an amplifier mute is let go: one more
+	// than the ring holds, so the write that returns has had to wait for the card to take a period,
+	// and the card is playing, not only filled.
+	unmuteAfter = periods + 1
 
 	// upsampleTaps is the length of each phase of the filter that takes a period up to hwRate, where
 	// the card runs faster than Rate: 96 taps at 96 kHz, flat to 21 kHz and about 74 dB down on the
@@ -137,6 +147,10 @@ type Player struct {
 
 	// fed is whether the last block had anything in it, and belongs to the write loop alone.
 	fed bool
+
+	// playing is whether the card is taking the stream's periods (unmuteAfter), which is when an
+	// amplifier mute (MuteSwitch) may be let go.
+	playing atomic.Bool
 
 	// underruns is the card running out while we were away. Write blocks against the whole ring, so
 	// each one means the loop was starved for as long as the ring is deep.
@@ -255,6 +269,7 @@ func New() *Player {
 	p.on.Store(config.DefaultASP)
 
 	if !DriverTuning {
+		slog.Info("this board plays without the driver tuning for now", "board", layout.Board)
 		return p
 	}
 	t, err := asp.Load(asp.VendorDir)
@@ -371,9 +386,10 @@ func (p *Player) route() {
 }
 
 // amp switches the speaker amplifier, where the device has a switch that is safe to touch: see
-// AmpSwitch in paths_dot.go and paths_cronos.go.
+// AmpSwitch in paths_dot.go and paths_cronos.go. Turning it on also lets go of the amplifier's mute
+// (MuteSwitch) once the stream is playing; before then Run lets go of it itself.
 func (p *Player) amp(on bool) {
-	if AmpSwitch == "" {
+	if AmpSwitch == "" && MuteSwitch == "" {
 		return
 	}
 
@@ -383,11 +399,66 @@ func (p *Player) amp(on bool) {
 	if p.out != OutputSpeaker {
 		return
 	}
-	value := "Off"
-	if on {
-		value = "On"
+	if !on {
+		p.apply(ampOff())
+		return
 	}
-	p.apply([]kctl{{name: AmpSwitch, value: value}})
+	on1, release := ampOn(p.playing.Load())
+	p.apply(on1)
+	if len(release) > 0 {
+		time.Sleep(muteSettle)
+		p.apply(release)
+	}
+}
+
+// unmute lets go of the amplifier's mute once the stream has started, where the speaker is the output
+// and its path is in place.
+func (p *Player) unmute() {
+	if MuteSwitch == "" {
+		return
+	}
+	p.pathMu.Lock()
+	defer p.pathMu.Unlock()
+	if p.out != OutputSpeaker || p.draining {
+		return
+	}
+	p.apply([]kctl{{name: MuteSwitch, value: "Off"}})
+}
+
+// stopped holds the amplifier's mute again as the stream ends, for whatever reason it ends.
+func (p *Player) stopped() {
+	p.playing.Store(false)
+	if MuteSwitch == "" {
+		return
+	}
+	p.pathMu.Lock()
+	defer p.pathMu.Unlock()
+	p.apply([]kctl{{name: MuteSwitch, value: "On"}})
+}
+
+// ampOff silences the speaker's amplifier: its mute first, where the board has one, then its switch.
+func ampOff() []kctl {
+	var seq []kctl
+	if MuteSwitch != "" {
+		seq = append(seq, kctl{name: MuteSwitch, value: "On"})
+	}
+	if AmpSwitch != "" {
+		seq = append(seq, kctl{name: AmpSwitch, value: "Off"})
+	}
+	return seq
+}
+
+// ampOn is ampOff the other way round: the switch first (on), and the mute let go last (unmute),
+// muteSettle later, and only when release says the stream is running. Without a mute, unmute is
+// empty and on is all of it.
+func ampOn(release bool) (on, unmute []kctl) {
+	if AmpSwitch != "" {
+		on = append(on, kctl{name: AmpSwitch, value: "On"})
+	}
+	if MuteSwitch != "" && release {
+		unmute = append(unmute, kctl{name: MuteSwitch, value: "Off"})
+	}
+	return on, unmute
 }
 
 // Output reports which output the player is driving. It never waits on a switch in progress.
@@ -412,9 +483,7 @@ func (p *Player) setOutput(out Output) {
 	// The tuning's history is of what went out the old way: Headphone to Both starts it again, and
 	// it should not start from audio it never processed.
 	p.stale.Store(true)
-	if AmpSwitch != "" {
-		p.apply([]kctl{{name: AmpSwitch, value: "Off"}})
-	}
+	p.apply(ampOff())
 	if out == OutputHeadphone && p.sink.Load() == nil {
 		if _, mixer := p.device(); mixer != nil {
 			// Keep the jack closed until old-gain samples have cleared the playback ring.
@@ -565,7 +634,10 @@ func (p *Player) Run(ctx context.Context) error {
 	buf := make([]byte, period*Channels*Bits/8)
 
 	// The order the vendor HAL uses on a route change: route with the amplifier off, let the
-	// codec sit idle, enable the amplifier, then feed.
+	// codec sit idle, enable the amplifier, then feed. An amplifier mute (MuteSwitch) is held through
+	// all of it and let go once the card is playing, on silence or whatever is queued: after
+	// unmuteAfter periods, when the ring has filled and the card has taken from it.
+	defer p.stopped()
 	out := p.Output()
 	p.apply(initSequence)
 	p.route()
@@ -590,6 +662,7 @@ func (p *Player) Run(ctx context.Context) error {
 	safe.Go("jack watcher", func() { p.watchJack(ctx) })
 
 	silence := make([]byte, len(buf))
+	muted := 0 // periods written while an amplifier mute is still held
 
 	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go).
 	var up *audio.Upsampler
@@ -623,6 +696,12 @@ func (p *Player) Run(ctx context.Context) error {
 				return nil
 			}
 			return err
+		}
+		if !p.playing.Load() {
+			if muted++; muted >= unmuteAfter {
+				p.playing.Store(true)
+				p.unmute()
+			}
 		}
 		// What the card holds now is what the period rendered next waits behind, so it is read here,
 		// between the write and the render, and published with the count it belongs to: in frames at

@@ -415,6 +415,7 @@ func (e *Engine) score(frame []int16, source *mic.Source) {
 			heard[k] = scores
 		}
 	}
+	e.dropFailed()
 
 	now := time.Now()
 	for i := range e.slots {
@@ -435,6 +436,22 @@ func (e *Engine) score(frame []int16, source *mic.Source) {
 			}
 		}
 		e.judge(i, s, score, now, source)
+	}
+}
+
+// dropFailed takes the wake words a backend gave up on during feed out of their slots, so a slot does
+// not go on claiming a word it can no longer hear, and choosing it again loads it afresh. Held with mu.
+func (e *Engine) dropFailed() {
+	for k, b := range e.backends {
+		for _, id := range b.failed() {
+			for i := range e.slots {
+				if s := e.slots[i]; s.loaded && s.model.Kind == k && s.model.ID == id {
+					slog.Error("wake word taken out of its slot: its model failed", "slot", i+1, "id", id)
+					e.slots[i] = slot{}
+					e.drop(s)
+				}
+			}
+		}
 	}
 }
 

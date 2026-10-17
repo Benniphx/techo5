@@ -90,6 +90,7 @@ func Load(path string) (*Store, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			st.c.Speaker.SoundsMoved = true // a new device starts on the new default: nothing to move
+			st.c.rescaleNightLight()        // nor a night clock level to put on the new scale
 			st.readable = true
 			return st, nil
 		}
@@ -100,6 +101,7 @@ func Load(path string) (*Store, error) {
 	}
 	_ = json.Unmarshal(b, &st.was)
 	st.c.moveSounds()
+	st.c.rescaleNightLight()
 
 	st.readable = true
 	return st, nil
@@ -119,6 +121,10 @@ func (st *Store) Get() Config {
 	}
 	c.Alarms.Follow = slices.Clone(st.c.Alarms.Follow)
 	c.Alarms.Snoozed = slices.Clone(st.c.Alarms.Snoozed)
+	if h := st.c.Alarms.Held; h != nil {
+		held := *h
+		c.Alarms.Held = &held
+	}
 	c.Timers.Local = slices.Clone(st.c.Timers.Local)
 	c.Screen.WorldClocks = slices.Clone(st.c.Screen.WorldClocks)
 	c.Deck = st.c.Deck.clone()

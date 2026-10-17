@@ -2,11 +2,13 @@ package home
 
 import (
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
 // Radio that puts itself back on when the stream drops.
@@ -156,6 +158,7 @@ func (f *Feature) askStation(station string) {
 // claim takes the next stream to start within claimFor for station (liveURL). Under f.mu.
 func (f *Feature) claim(station string, claimFor time.Duration) {
 	f.claiming, f.claimName, f.claimAt, f.claimFor = true, station, time.Now(), claimFor
+	f.claimByScript = false
 }
 
 // unask is a station asked for that will not start after all (it is not on the list, or Home
@@ -172,16 +175,56 @@ func (f *Feature) unask(station string) {
 // Assistant itself (a dashboard, an automation running the favorites script), not asked for here. The
 // next stream to start is taken for it, as for one asked for here; but not when a stream was just taken
 // for a station, whose name this is arriving after it.
+//
+// The station script turning on (Radio.Service, when it is a script) is a station started too: the
+// house's text changes only when the station does, so the same station started again by voice names
+// nothing, and Home Assistant's own scripts may not write the text at all. The station is then the one
+// the text names, if any.
 func (f *Feature) stationStarted(u hastate.Update) {
-	entity := config.Get().Home.Radio.Now
-	if entity == "" || u.Entity != entity || u.Attribute != "" || u.First {
+	radio := config.Get().Home.Radio
+	if u.Attribute != "" || u.First || u.Entity == "" {
 		return
 	}
-	if u.Value == "" || u.Value == "unknown" || u.Value == "unavailable" {
+	named := func(v string) bool { return v != "" && v != "unknown" && v != "unavailable" }
+	var station string
+	viaScript := false
+	switch {
+	case radio.Now != "" && u.Entity == radio.Now:
+		if !named(u.Value) {
+			return
+		}
+		station = u.Value
+	case strings.HasPrefix(radio.Service, "script.") && u.Entity == radio.Service:
+		if u.Value != "on" {
+			return
+		}
+		viaScript = true
+		// The text as it is: the station before, if the script writes the new one after it starts
+		// (or never). A name arriving within liveClaim replaces it (below); until then it is what
+		// there is, and a station needs a name to be put back on.
+		station = "Radio"
+		if radio.Now != "" {
+			if v := hastate.Get().State(radio.Now); named(v) {
+				station = v
+			}
+		}
+	default:
 		return
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if !viaScript {
+		// The name of a station the script just started, arriving after the script turned on: it is
+		// that station's, in place of the text's old one.
+		if f.claiming && f.claimByScript && time.Since(f.claimAt) < f.claimFor {
+			f.claimName = station
+			return
+		}
+		if f.byScript && time.Since(f.claimedAt) < liveClaim {
+			f.asked = station
+			return
+		}
+	}
 	if time.Since(f.claimedAt) < liveClaim {
 		return
 	}
@@ -190,8 +233,38 @@ func (f *Feature) stationStarted(u hastate.Update) {
 	if f.claiming && time.Since(f.claimAt) < f.claimFor {
 		return
 	}
-	f.claim(u.Value, stationClaim)
+	// Which arrives first, the stream or the word that a station started, is not fixed: Home Assistant
+	// plays the station from the same script run that turns the script on. A stream that came first
+	// would wait for a claim that takes only the next one, and play on as if it were not radio: given
+	// 30 seconds of quiet rather than 8, never fetched again, its end not put back (a station started
+	// by voice stopped for good when Home Assistant's proxy cut it). So a stream that started within
+	// stationClaim before, that nothing was taken for, is the station started.
+	// Only a stream Home Assistant sent (its media proxy, which every station it plays here comes
+	// through): a phone's audio, a camera's sound or this device's own stream is not it.
+	if url := f.url; url != "" && url != f.stationURL && time.Since(f.urlAt) < stationClaim && fromHAProxy(url) {
+		f.claiming, f.stationURL, f.claimedAt = false, url, time.Now()
+		f.asked, f.askedAt = station, f.claimedAt
+		// Put back by its url (as a stream this device plays itself), not by a name that may be
+		// the station before it.
+		f.ownURL, f.byScript = url, viaScript
+		f.stationGen++
+		safe.Go("mark the station live", func() {
+			marked := markLive(url)
+			slog.Info("radio: the stream that had just started is the station Home Assistant started",
+				"station", station, "live", marked)
+		})
+		return
+	}
+	f.claim(station, stationClaim)
+	f.claimByScript = viaScript
 }
+
+// fromHAProxy is a url of Home Assistant's media proxy for ESPHome devices, which a station played
+// on this device from Home Assistant comes through.
+func fromHAProxy(url string) bool { return strings.Contains(url, "/api/esphome/ffmpeg_proxy/") }
+
+// markLive makes the track playing now live radio (media.MarkLive); a variable for the tests.
+var markLive = func(url string) bool { return media.Get().MarkLive(url) }
 
 // liveURL says whether url, as its track starts, is a live station (media.SetLive): the first stream
 // to start after a station was asked for, or that same stream again. Decided here, once, rather than
@@ -205,6 +278,11 @@ func (f *Feature) liveURL(url string) bool {
 		// The station this is: one started from Home Assistant becomes the one put back on when its
 		// stream ends (ended), rather than whatever was asked for here before it.
 		f.asked, f.askedAt = f.claimName, f.claimedAt
+		// One the station script started, whose name may be the station before, goes back on by url.
+		f.byScript = f.claimByScript
+		if f.claimByScript {
+			f.ownURL = url
+		}
 		return true
 	}
 	f.claiming = false

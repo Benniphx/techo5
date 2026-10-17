@@ -221,9 +221,15 @@ t5_bt_up "$BT_MODULE" /var/log
 			log "network: no address for $down min"
 		fi
 		if [ $down -ge 15 ]; then
-			log "network: rebooting"
-			sync
-			reboot
+			# A kernel on trial is rebooted by its own loop below, which tells a boot that only
+			# lacked a network from one that failed: this reboot would count it as failed.
+			if [ -n "${KERNEL_UPDATE:-}" ] && grep -q '^trial' /data/techo5-linux/kernel/state 2>/dev/null; then
+				[ $down -eq 15 ] && log "network: down, but a kernel is on trial; its own loop reboots"
+			else
+				log "network: rebooting"
+				sync
+				reboot
+			fi
 		fi
 		killall udhcpc wpa_supplicant 2>/dev/null
 		# A new supplicant has no channel pin (t5_wifi_prefer5).
@@ -275,6 +281,104 @@ TRIAL_TIMEOUT=${TRIAL_TIMEOUT:-900}
 		fi
 	done
 ) &
+
+# --- Kernel (KERNEL_UPDATE, device.conf: athena on mainline). The slot carries the kernel it was
+# tested with, and once the slot is good that kernel goes to the boot partition with the unit's own
+# amp tuning (`techo5 tools kernel`, echod/internal/update/kernel). A new kernel is on trial as a new
+# slot is: every boot takes a try, a daemon that settles commits it, and one that never settles
+# reboots at TRIAL_TIMEOUT to use up a try; out of tries, the previous kernel is put back.
+# Settled means more for a kernel than for a slot: Wi-Fi, the sound card and the backlight are the
+# kernel's, and a kernel that keeps the daemon up without a network could never be updated again. So
+# it also needs an address with a default route, and every HW_WAIT device. A boot that had all of it
+# but a default route still uses its try (the kernel may have broken Wi-Fi), but says so
+# (`techo5 tools kernel noroute`): a kernel whose every try ended that way is put back without being
+# marked bad, since the router may only have been down, and is tried again a day later.
+#
+# Both reboots wait while the daemon says the unit is busy (/run/techo5/busy, echod
+# feature/busy): an alarm or timer ringing, a voice request, a call, a sound, music, the wake light,
+# or an alarm due within 30 minutes. Not forever: after BUSY_LIMIT seconds of busy in a row only a
+# ring, or an alarm or timer due within the minute, still holds them, so a unit that is never idle, or a kernel that keeps something from
+# ending, still gets its update or its verdict.
+BUSY_LIMIT=${BUSY_LIMIT:-7200}
+t5_hw_there() {
+	for p in ${HW_WAIT:-}; do [ -e "$p" ] || return 1; done
+	return 0
+}
+t5_kernel_works() {
+	ip route show default 2>/dev/null | grep -q default && t5_hw_there
+}
+# t5_busy: whether a reboot now would cut something off. The marker names the daemon's pid and the
+# uptime it was written at, and the daemon writes it again every few seconds: one more than a minute
+# old, or whose pid is not the daemon's (gone, or reused), says nothing. busy_since is the caller's,
+# kept across calls.
+t5_busy() {
+	bp=$(sed -n 's/^pid //p' /run/techo5/busy 2>/dev/null)
+	ba=$(sed -n 's/^at //p' /run/techo5/busy 2>/dev/null)
+	bt=$(cut -d. -f1 /proc/uptime)
+	case "$bp" in ""|*[!0-9]*) ba=-999;; esac
+	case "$ba" in ""|*[!0-9]*) ba=-999;; esac
+	if [ $((bt-ba)) -gt 60 ] || [ "$(cat "/proc/$bp/comm" 2>/dev/null)" != techo5 ]; then
+		busy_since=
+		return 1
+	fi
+	if [ -z "$busy_since" ]; then
+		busy_since=$bt
+		log "kernel: waiting to reboot, the unit is busy: $(grep -vE '^(pid|at) ' /run/techo5/busy | xargs)"
+	fi
+	[ $((bt-busy_since)) -lt $BUSY_LIMIT ] && return 0
+	# past the limit, only what rings now or within the minute
+	grep -qxE 'ring|soon' /run/techo5/busy
+}
+if [ -n "${KERNEL_UPDATE:-}" ]; then
+	/usr/local/bin/techo5 tools kernel boot >> /run/boot.log 2>&1
+	(
+		s=$(cat /run/techo5/slot 2>/dev/null)
+		[ -n "$s" ] || exit 0
+		routed=; settled=; up=; busy_since=
+		while true; do
+			sleep 15
+			now=$(cut -d. -f1 /proc/uptime)
+			ip route show default 2>/dev/null | grep -q default && routed=1
+			up=
+			pid=$(pidof techo5 | cut -d' ' -f1)
+			if [ -n "$pid" ]; then
+				started=$(awk '{print int($22/100)}' /proc/$pid/stat 2>/dev/null)
+				# The slot trial above commits at this same moment: wait for the slot to be good.
+				[ -n "$started" ] && [ $((now-started)) -ge $TRIAL_SETTLE ] &&
+					[ "$(cat "/store/slots/$s.state" 2>/dev/null)" = good ] && up=1
+			fi
+			if [ -n "$up" ] && t5_kernel_works; then
+				if [ -z "$settled" ]; then
+					/usr/local/bin/techo5 tools kernel settled >> /run/boot.log 2>&1
+					cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
+					settled=1
+				fi
+				# apply reboots when it writes a kernel
+				t5_busy && continue
+				/usr/local/bin/techo5 tools kernel apply >> /run/boot.log 2>&1
+				cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
+				exit 0
+			fi
+			if [ $now -ge $TRIAL_TIMEOUT ] && grep -q '^trial' /data/techo5-linux/kernel/state 2>/dev/null; then
+				# Busy: the trial runs on until it is not, and may still settle meanwhile.
+				t5_busy && continue
+				if [ -n "$up" ] && [ -z "$routed" ] && t5_hw_there; then
+					log "kernel: no default route all this boot, nothing else wrong; rebooting to use up a try"
+					/usr/local/bin/techo5 tools kernel noroute >> /run/boot.log 2>&1
+				else
+					log "kernel: daemon did not settle within $TRIAL_TIMEOUT s; rebooting to use up a try"
+				fi
+				cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
+				sync
+				# Read again at the last moment: a ring may have started meanwhile. noroute counts
+				# a boot once, so going round again is safe.
+				t5_busy && continue
+				reboot
+				exit 0
+			fi
+		done
+	) &
+fi
 
 cp /run/boot.log $LOGDIR/boot.log 2>/dev/null
 log "boot script done"

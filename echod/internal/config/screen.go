@@ -25,12 +25,20 @@ type Screen struct {
 	// for a while. Only without NightLight. A Show's screen goes out whenever NightLight is off.
 	NightDark bool `json:"night_dark,omitempty"`
 
+	// NightTapLifts has a tap on a Show's night light bring the screen back as by day, as a long press
+	// does, until the room has been quiet a while. Off, a tap on the night light does nothing.
+	NightTapLifts bool `json:"night_tap_lifts,omitempty"`
+
 	// NightClockStyle is how the red clock looks: empty for the ordinary clock face, "led" for an LED
 	// clock's seven segments, "flip" for a flip clock's cards.
 	NightClockStyle string `json:"night_clock_style,omitempty"`
 
 	// NightLightLevel is how bright the night light is, 1 to 10; none is the panel's own default.
 	NightLightLevel int `json:"night_light_level,omitempty"`
+
+	// NightLightRescaled is whether a Spot's NightLightLevel is on the night clock's new scale, which
+	// starts at backlight 3 rather than 6: set once the old one has been moved over (rescaleNightLight).
+	NightLightRescaled bool `json:"night_light_rescaled,omitempty"`
 
 	// AutoDimmest is how far auto-brightness takes a Show's screen down in a dark room, in percent of
 	// Brightness, 1 to 50; none is the default (display.go).
@@ -165,6 +173,10 @@ func (w ScreenWriter) AutoDimmest(v int) error {
 
 func (w ScreenWriter) NightLight(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightLight = v })
+}
+
+func (w ScreenWriter) NightTapLifts(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NightTapLifts = v })
 }
 
 func (w ScreenWriter) NightClockStyle(v string) error {

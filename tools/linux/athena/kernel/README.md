@@ -33,6 +33,7 @@ below in order, builds `Image.gz` and the DTB, packs the boot image and checks i
 | `boot-athena.img` | the boot image (header v1, kernel + DTB, firmware ramdisk) |
 | `Image.gz`, `athena.dtb`, `ramdisk.cpio.gz` | the parts |
 | `kernel.config` | the full configuration used |
+| `linux-6.18.56-techo5-athena-source.tar.xz` | the whole patched source tree the image was built from, with `kernel.config` in it as `techo5-athena.config`: what a release publishes beside the boot image, for the GPL. Built reproducibly, checked for anything of the build computer (paths, user names) and by `check-source.py` |
 | `SHA256SUMS` | |
 
 Environment: `WORK`, `OUT`, `JOBS`, `CROSS_COMPILE` and `KTREE` (use an unpacked linux-6.18.56 tree
@@ -61,6 +62,8 @@ reasoning; each one checks its anchors and is a no-op on a tree it has already p
 | `patch-mt7663s-firmware-hold.py` | mt7663s: load the four MT7663 firmware files at init, while the initramfs is still the root, and keep them, so that later requests (Wi-Fi's init work, Bluetooth at 8 s) are served from memory after the real root has replaced the initramfs. See [Firmware](#firmware). |
 | `patch-display.py` + `panel/0001`-`0004` | Panel tables for athena's ILI9881C and JD9365 panels (bindings and drivers), and mediatek-drm removes the bootloader's simple-framebuffer when it binds, so its fbdev emulation becomes `/dev/fb0`. |
 | `patch-tas5805m-dsp-slot.py` | tas5805m: take the DSP configuration from the device-tree slot, and keep the sound card up without one (below). `tas5805m-dsp-slot.diff` shows the change it makes, for reading. |
+| `patch-cci-sram.py` | mtk-cci-devfreq: SRAM voltage limits for MT8183, the same as mediatek-cpufreq has. athena gives the CCI an SRAM supply (Fire OS sets the CPU SRAM rails in software), and without limits the driver asked for a range with a maximum of 0 V and the kernel stopped at boot. |
+| `patch-thermal-devinfo.py` | auxadc_thermal: when the efuse reads as zeros (Amazon's secure firmware hides it from Linux), take the thermal calibration from the copy LK puts in `/chosen` as `atag,devinfo`. Without it the driver used default values and read several degrees off. |
 
 New files, copied into the tree:
 

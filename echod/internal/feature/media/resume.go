@@ -57,6 +57,18 @@ var liveCheck atomic.Pointer[func(url string) bool]
 // fetched again when it drops. It is asked once per track, as the track starts.
 func SetLive(f func(url string) bool) { liveCheck.Store(&f) }
 
+// MarkLive is how the radio feature says a track that has just started is a live station after all:
+// Home Assistant names the station it started a moment after the stream has started (its "now
+// playing" text is written after the play), so the station was not known yet when SetLive was asked.
+// Only the track playing now, and only if it is url; it says whether it was. Whatever is named later
+// never reaches here (the radio feature calls this only within seconds of the stream starting).
+func (p *Player) MarkLive(url string) bool {
+	if p == nil {
+		return false
+	}
+	return p.stream.markLive(url)
+}
+
 // liveURL asks the radio feature about url, as its track starts.
 func liveURL(url string) bool {
 	f := liveCheck.Load()

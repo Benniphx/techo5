@@ -40,6 +40,7 @@ func init() {
 	// time a button can be pressed this is already in place.
 	ring.Silences(func() bool { return Get().Stop() })
 	ring.Snoozes(func(minutes int) bool { return Get().SnoozeFor(minutes) })
+	ring.Releases(func() bool { return Get().LetGoOfLight() })
 }
 
 const (
@@ -66,6 +67,10 @@ type Ring struct {
 	// local is an alarm set on the device, or its snooze: one deleted or turned off while it rings is
 	// not snoozed back (SnoozeFor).
 	local bool
+
+	// lit is a ring with a wake light, its own or a folded alarm's: the light stays at full while it
+	// rings and through its snooze (sunrise.go).
+	lit bool
 }
 
 // folded is an alarm that joined a ring already sounding.
@@ -111,6 +116,20 @@ type Alarms struct {
 	// everything quieter; lighting is whether it is showing anything.
 	sun      *led.Claim
 	lighting bool
+	// bridge is the next alarm the light is held at full for, after a lit ring ended inside that
+	// alarm's window; under mu.
+	bridge bridge
+	// glow is when the light held at full after a light-only alarm's time lets go (lightOnlyGlow);
+	// zero for none, under mu. glowKey is the alarm that set it. Neither is saved: a restart inside
+	// the half hour lets the light go.
+	glow    time.Time
+	glowKey string
+
+	// lightLevel and lightColor are the wake light in Home Assistant, for lamps in the room to follow;
+	// told is what they last said.
+	lightLevel *esphome.Sensor
+	lightColor *esphome.TextSensor
+	told       lightTold
 
 	// sound and snoozeFor are the ring's settings in Home Assistant; the screen sets them too.
 	sound     *esphome.Select
@@ -160,16 +179,22 @@ func build() *Alarms {
 		sun:  led.Get().Claim(led.PriorityTimer),
 		wake: make(chan struct{}, 1),
 	}
+	// The wake light as it is now, for a lamp in the room to follow (sunrise.go).
+	a.lightLevel = &esphome.Sensor{Base: esphome.Base{ObjectID: "wake_light_brightness", Name: "Wake light brightness", Icon: "mdi:weather-sunset-up"}, Unit: "%"}
+	a.lightColor = &esphome.TextSensor{Base: esphome.Base{ObjectID: "wake_light_color", Name: "Wake light color", Icon: "mdi:palette"}}
 	// Stops whatever is ringing, a timer as much as an alarm. The object id stays "alarm_stop" from
 	// when it only stopped alarms, so automations that press it keep working.
 	a.stop = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_stop", Name: "Stop alarm or timer", Icon: "mdi:alarm-off"}, OnPress: func() {
 		// From Home Assistant, stop also means a snoozed alarm is not wanted back - when nothing is
-		// sounding. Asked of the ring and not of End, which also takes down a reminder on the screen
-		// and would otherwise leave the snooze standing.
+		// sounding - and the wake light held for the next alarm not wanted either. Asked of the ring
+		// and not of End, which also takes down a reminder on the screen and would otherwise leave the
+		// snooze standing. The light a light-only alarm left up goes either way.
 		sounding := ring.IsSounding()
 		ring.End()
+		a.dropGlow()
 		if !sounding {
 			a.CancelSnoozes()
+			a.dropBridge()
 		}
 	}}
 	a.snooze = &esphome.Button{Base: esphome.Base{ObjectID: "alarm_snooze", Name: "Snooze alarm", Icon: "mdi:alarm-snooze"}, OnPress: func() { a.Snooze() }}
@@ -197,7 +222,7 @@ func build() *Alarms {
 func (a *Alarms) Name() string { return "alarms" }
 
 func (a *Alarms) Entities() []esphome.Entity {
-	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.snoozeFor, a.ringVol}
+	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.snoozeFor, a.ringVol, a.lightLevel, a.lightColor}
 }
 
 func (a *Alarms) Restore(c config.Config) {
@@ -227,7 +252,7 @@ func (a *Alarms) Restore(c config.Config) {
 			ring.Missed("snooze", s.Label, s.At)
 			continue
 		}
-		live = append(live, source{key: s.Key, label: s.Label, once: s.At})
+		live = append(live, source{key: s.Key, label: s.Label, once: s.At, lit: s.Lit})
 	}
 
 	a.mu.Lock()
@@ -236,6 +261,26 @@ func (a *Alarms) Restore(c config.Config) {
 
 	if len(live) != len(c.Alarms.Snoozed) {
 		a.saveSnoozes()
+	}
+
+	// The light held for the next alarm comes back too, so a restart while it waits does not drop the
+	// room to wherever that alarm's ramp is (#161). Only while it still holds: an alarm turned off,
+	// moved or gone by while the device was down lets it go, as it would have with the device up.
+	//
+	// A helper followed from Home Assistant cannot be asked yet: its state comes in a moment after the
+	// start, and until then it is no alarm at all. Its hold comes back unless its time has gone by, and
+	// holds() decides on every look once Home Assistant has said; it used to be dropped every time.
+	if h := c.Alarms.Held; h != nil {
+		b := bridge{key: h.Key, at: h.At}
+		local := slices.ContainsFunc(c.Alarms.List, func(al config.Alarm) bool { return al.ID == h.Key })
+		if b.holds(a.sources(now), now) || !local && !now.After(b.at.Add(bridgeGrace)) {
+			a.mu.Lock()
+			a.bridge = b
+			a.mu.Unlock()
+			slog.Info("wake light held for the next alarm, as it was", "key", b.key, "at", b.at.Format("15:04"))
+		} else {
+			a.saveBridge()
+		}
 	}
 }
 
@@ -360,9 +405,11 @@ func (a *Alarms) Run(ctx context.Context) error {
 			wait = max(time.Until(at), 50*time.Millisecond)
 		}
 		// The light before an alarm is repainted often enough that it rises rather than steps.
-		if a.sunriseRing(now) {
+		light := a.SunriseProgress(now)
+		if a.sunriseRing(light) {
 			wait = min(wait, sunriseEvery)
 		}
+		a.tellLight(light, now)
 		select {
 		case <-ctx.Done():
 			a.Stop()
@@ -381,7 +428,8 @@ func (a *Alarms) sources(now time.Time) []source {
 	for _, al := range c.List {
 		if al.On {
 			src := source{key: al.ID, label: al.Label, hour: al.Hour, min: al.Minute, days: al.Days, local: true,
-				remind: al.Remind, ringOn: al.RingOn, sunrise: c.SunriseFor(al), silent: al.Silent}
+				remind: al.Remind, ringOn: al.RingOn, sunrise: c.SunriseFor(al), silent: al.Silent,
+				lightOnly: al.LightOnly && !al.Remind && !al.Silent}
 			// A dated one-off is a fixed moment, the way a snooze is.
 			if at, ok := al.OnDate(); ok {
 				src.once = at
@@ -428,6 +476,16 @@ func (a *Alarms) fire(s source, now time.Time) {
 		fireEvent("silent", s.key, s.label, now)
 		return
 	}
+	// A light-only alarm has had its light: what is left is the night ending, with nothing to stop.
+	if s.lightOnly {
+		a.mu.Lock()
+		a.glow, a.glowKey = now.Add(lightOnlyGlow), s.key
+		a.mu.Unlock()
+		slog.Info("wake light held after a light-only alarm", "key", s.key, "until", now.Add(lightOnlyGlow).Format("15:04"))
+		fireEvent("light_only", s.key, s.label, now)
+		a.endNight(now)
+		return
+	}
 	a.mu.Lock()
 	before := len(a.snoozed)
 	a.snoozed = slices.DeleteFunc(a.snoozed, func(x source) bool { return x.key == s.key })
@@ -436,6 +494,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 	spent := len(a.snoozed) != before
 	if a.ringing != nil {
 		a.ringing.folded = append(a.ringing.folded, folded{key: s.key, label: s.label, at: now})
+		a.ringing.lit = a.ringing.lit || lights(s)
 		a.mu.Unlock()
 		if spent {
 			a.saveSnoozes()
@@ -450,7 +509,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 		return
 	}
 	key := strings.TrimPrefix(s.key, "snooze:")
-	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key))}
+	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key)), lit: lights(s)}
 	// Started under the lock, so there is no moment where an alarm is ringing and Stop finds
 	// nothing to stop. The bell calls rang from its own goroutine, never from here.
 	a.silence = ring.Start("alarm", s.label, speaker.AlarmSound(a.Sound()), a.rang)
@@ -466,6 +525,10 @@ func (a *Alarms) fire(s source, now time.Time) {
 		safe.Go("alarm label", func() { sayOverRing(s.label) })
 	}
 }
+
+// lights is whether s ringing holds the wake light at full: it has a wake light, or is the snooze of
+// an alarm that had one.
+func lights(s source) bool { return s.sunrise > 0 || s.lit }
 
 // sayFor is how long the ring holds its chime back for an alarm's label: long enough for Home
 // Assistant to make the words and for them to be said, short enough that an alarm whose words never
@@ -494,8 +557,18 @@ func (a *Alarms) rang() {
 	r := a.ringing
 	a.ringing, a.silence = nil, nil
 	a.mu.Unlock()
-	// A snoozed ring has said so already, and rings again later; any other end is a stop.
+	// A lit ring that ended for good hands the light to the next alarm whose window is already open,
+	// or lets it go. A snoozed one holds it through its snooze instead.
+	if r != nil && r.lit && !r.snoozed {
+		now := time.Now()
+		if a.endLight(a.sources(now), now) {
+			a.saveBridge()
+		}
+	}
+	// A snoozed ring has said so already, and rings again later; any other end is a stop, and a stop
+	// ends the light a light-only alarm left up as well: the alarm that woke somebody is done with.
 	if r != nil && !r.snoozed {
+		a.dropGlow()
 		fireEvent("stopped", r.Key, r.Label, r.At)
 		for _, f := range r.folded {
 			fireEvent("stopped", f.key, f.label, f.at)
@@ -510,6 +583,16 @@ func (a *Alarms) Ringing() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.ringing != nil
+}
+
+// ringingKey is the alarm ringing now, empty for none.
+func (a *Alarms) ringingKey() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.ringing == nil {
+		return ""
+	}
+	return a.ringing.Key
 }
 
 // Stop silences a ringing alarm and reports whether there was one.
@@ -549,7 +632,7 @@ func (a *Alarms) pruneSnoozes(now time.Time) {
 func snoozeList(snoozed []source) []config.Snooze {
 	out := make([]config.Snooze, 0, len(snoozed))
 	for _, s := range snoozed {
-		out = append(out, config.Snooze{Key: s.key, Label: s.label, At: s.once})
+		out = append(out, config.Snooze{Key: s.key, Label: s.label, At: s.once, Lit: s.lit})
 	}
 	return out
 }
@@ -645,7 +728,7 @@ func (a *Alarms) SnoozeFor(minutes int) bool {
 	r.snoozed = true
 	now := time.Now()
 	at := now.Add(time.Duration(minutes) * time.Minute).Truncate(time.Second)
-	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at})
+	a.snoozed = append(a.snoozed, source{key: "snooze:" + r.Key, label: r.Label, once: at, lit: r.lit})
 	a.lastSnooze = snoozeMade{made: now, until: at, minutes: minutes}
 	a.mu.Unlock()
 
@@ -689,23 +772,31 @@ func (a *Alarms) SetOn(hour, minute int, days uint8, label, date string) (config
 	return a.setOn(hour, minute, days, label, date, nil)
 }
 
-// setOn is SetOn, making the alarm silent or not as well when silent says which, in the one save.
-func (a *Alarms) setOn(hour, minute int, days uint8, label, date string, silent *bool) (config.Alarm, error) {
+// alarmKind is what an alarm set from Home Assistant goes off as: silent, light only, or neither (the zero
+// value, an alarm that rings).
+type alarmKind struct{ silent, lightOnly bool }
+
+// setOn is SetOn, making the alarm the kind k says as well when there is one, in the one save.
+func (a *Alarms) setOn(hour, minute int, days uint8, label, date string, k *alarmKind) (config.Alarm, error) {
 	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
 		return config.Alarm{}, fmt.Errorf("alarms: %d:%02d is not a time of day", hour, minute)
 	}
 	for _, al := range config.Get().Alarms.List {
 		if !al.Remind && al.Hour == hour && al.Minute == minute && al.Days == days && al.Label == label && al.Date == date {
 			al.On = true
-			if silent != nil {
-				al.Silent = *silent
+			if k != nil {
+				if (al.Silent != k.silent || al.LightOnly != k.lightOnly) && a.ringingKey() == al.ID {
+					slog.Warn("a ringing alarm was set to another kind; it rings on until stopped, and is the new kind from its next time",
+						"silent", k.silent, "light_only", k.lightOnly)
+				}
+				al.Silent, al.LightOnly = k.silent, k.lightOnly
 			}
 			return al, a.Put(al)
 		}
 	}
 	al := config.Alarm{ID: strconv.FormatInt(time.Now().UnixNano(), 36), Hour: hour, Minute: minute, Days: days, Label: label, On: true, Date: date}
-	if silent != nil {
-		al.Silent = *silent
+	if k != nil {
+		al.Silent, al.LightOnly = k.silent, k.lightOnly
 	}
 	return al, a.Put(al)
 }
@@ -805,18 +896,21 @@ func (a *Alarms) Put(al config.Alarm) error {
 	}
 	if wasOn && !al.On {
 		a.dropSnooze(al.ID)
+		a.dropGlowOf(al.ID)
 	}
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil
 }
 
-// Delete removes an alarm set on the device, and its snooze with it.
+// Delete removes an alarm set on the device, and its snooze with it, and the light it left up if it
+// is light only.
 func (a *Alarms) Delete(id string) error {
 	if err := config.Set().Alarms().Delete(id); err != nil {
 		return err
 	}
 	a.dropSnooze(id)
+	a.dropGlowOf(id)
 	a.poke()
 	a.Changed.Emit(struct{}{})
 	return nil
@@ -888,7 +982,7 @@ func (a *Alarms) Actions() []*esphome.Action {
 				if err != nil {
 					return nil, err
 				}
-				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, false)
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{})
 				if err != nil {
 					return nil, err
 				}
@@ -910,11 +1004,33 @@ func (a *Alarms) Actions() []*esphome.Action {
 				if err != nil {
 					return nil, err
 				}
-				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, true)
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{silent: true})
 				if err != nil {
 					return nil, err
 				}
 				slog.Info("silent alarm set from home assistant", "time", fmt.Sprintf("%d:%02d", al.Hour, al.Minute), "days", config.DaysLabel(al.Days), "label", al.Label)
+				return nil, nil
+			},
+		},
+		{
+			// alarm_set's twin for a wake light alone (#164): the light comes up before it, and at its
+			// time the night ends, with no sound and nothing to stop.
+			Name: "alarm_set_light_only",
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "days", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				hour, minute, err := parseClock(c.String("time"))
+				if err != nil {
+					return nil, err
+				}
+				days, date, err := daysOrDate(c.String("days"), hour, minute, time.Now())
+				if err != nil {
+					return nil, err
+				}
+				al, err := a.setFromHA(hour, minute, days, strings.TrimSpace(c.String("label")), date, alarmKind{lightOnly: true})
+				if err != nil {
+					return nil, err
+				}
+				slog.Info("light-only alarm set from home assistant", "time", fmt.Sprintf("%d:%02d", al.Hour, al.Minute), "days", config.DaysLabel(al.Days), "label", al.Label)
 				return nil, nil
 			},
 		},

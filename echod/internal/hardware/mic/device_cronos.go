@@ -116,6 +116,9 @@ const MediaService = "vendor.audio-hal"
 // /vendor/etc/audio-algorithms, which is worth reading one day but is not the Dot's either.
 const VendorBeamformer = false
 
+// vendorBeamformerSkipped is false: no Show was ever offered it, so there is nothing to say.
+const vendorBeamformerSkipped = false
+
 // resetsOnMute is whether the mute latch takes the converter down with it, so that the stream has to
 // be opened again once the button releases it. The 1st gen Echo Show 5 does; the 2nd gen does not.
 //

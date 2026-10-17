@@ -373,6 +373,8 @@ func (d *Display) setAtNight(i int) {
 		if glowing {
 			d.relight(true)
 		}
+	} else if c.red {
+		d.nightClockSoon()
 	}
 	d.wake()
 }

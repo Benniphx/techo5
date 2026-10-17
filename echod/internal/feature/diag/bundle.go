@@ -16,6 +16,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/redact"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
@@ -84,6 +85,7 @@ func Bundle() string {
 		"slot: " + readTrim("/run/techo5/slot"),
 		"uptime: " + uptime(),
 		"go: " + runtime.Version(),
+		"time zone: " + zoneSummary(),
 	}, "\n"))
 
 	section("settings", settingsSummary(c))
@@ -101,6 +103,24 @@ func Bundle() string {
 	section("kernel messages", tail("", 0))
 
 	return r.Text(b.String())
+}
+
+// zoneSummary is the zone in force, where it came from, and whether the image has the zone database:
+// a clock that is hours out is nearly always one of those three.
+func zoneSummary() string {
+	z := timezone.Get()
+	zone, from := z.Current(), "from Home Assistant"
+	if zone == "" {
+		zone = "none set, so UTC"
+	}
+	if z.SetHere() {
+		from = "set on the device"
+	}
+	db := "zone database present"
+	if !timezone.HasDatabase() {
+		db = "no zone database"
+	}
+	return fmt.Sprintf("%s (%s, %s; local time %s)", zone, from, db, time.Now().Format("15:04 MST"))
 }
 
 // settingsSummary is what the device is set to, without the settings that are secrets in themselves.

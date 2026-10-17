@@ -209,6 +209,17 @@ loops. Every command runs the same on Windows, Linux and macOS once the Dot is u
    *Check:* the installer ends with the Dot healthy and its Home Assistant port answering.
 7. **Add it to Home Assistant**: see [After installing](#after-installing-every-device).
 
+### The Echo 2nd gen (radar)
+
+The Echo 2nd gen (2017, `radar`) is built like the Dot inside: the same chip, sound card,
+microphones, light ring and buttons. It takes the Dot's release, installer and daemon, which
+recognizes it when it starts and drives its speaker, which has an amplifier of its own. From
+dot-v1.0.19 the release carries its own Bluetooth kernel. Supported, tested on one unit so far.
+
+Its USB is only on pads inside the case, so the install starts with opening it. The steps are in
+the [TECHO5 Dot README](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen). It plays without
+Amazon's sound tuning files, and the volume curve is a first guess.
+
 ### Going back to TWRP or Fire OS
 
 TECHO5 Dot lives in the Dot's recovery partition, where TWRP was, and asks for recovery on every

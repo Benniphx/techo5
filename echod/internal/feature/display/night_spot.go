@@ -36,19 +36,55 @@ const nightNever = "off"
 
 // glowSteps is the night clock's scale, 1 to 10, as backlight out of screen.BacklightMax. All of it is
 // under backlightMin, where the panel is too dim to read in a lit room: in a dark one that is a red
-// clock across the room without a light on the ceiling. A first guess: the bottom of the Spot's
-// panel has not been measured in the dark yet.
-var glowSteps = [...]int{6, 10, 14, 20, 28, 38, 50, 64, 80, 100}
+// clock across the room without a light on the ceiling. Step 1 is backlight 3, not the panel's lowest
+// light, 1: at 1 the panel may go dark altogether, and 3 looks the same. The steps widen from there,
+// where one step at the bottom is the difference between a glow and a light in a dark room. An owner
+// found the old bottom, 6, still too bright for a bedroom (techo5-spot#7). A level saved on the old
+// scale is moved to the nearest step of this one once, as the settings load (config's
+// rescaleNightLight).
+var glowSteps = [...]int{3, 4, 6, 8, 12, 16, 22, 30, 40, 50}
 
-// glowDefault is the night clock's brightness on a Spot with none set.
-const glowDefault = 5
+// glowDefault is the night clock's brightness on a Spot with none set: backlight 8.
+const glowDefault = 4
 
 // glowSetting is the night clock's brightness on its 1 to 10 scale: the one set, or glowDefault.
-func (d *Display) glowSetting() int {
+func (d *Display) glowSetting() int { return glowLevelSet() }
+
+// glowLevelSet is glowSetting, for the settings sheet's rows.
+func glowLevelSet() int {
 	if v := config.Get().Screen.NightLightLevel; v > 0 {
 		return v
 	}
 	return glowDefault
+}
+
+// hasGlowRow: the Spot sets the night clock's brightness in its own settings too, under Display.
+const hasGlowRow = true
+
+// glowPreview is how long a step of the brightness row shows itself on the backlight at night, the
+// settings still open, before the sheet's own dimmed light comes back.
+const glowPreview = 3 * time.Second
+
+// stepGlow moves the night clock's brightness a step from the settings sheet, keeps Home Assistant's
+// number with it, and at night shows the new level on the backlight at once (glowPreview), so it can
+// be set in the dark while looking at it.
+func (d *Display) stepGlow(delta int) {
+	v := min(max(glowLevelSet()+delta, 1), len(glowSteps))
+	if err := config.Set().Screen().NightLightLevel(v); err != nil {
+		slog.Error("saving the night light brightness failed", "err", err)
+		return
+	}
+	if d.glowLevel != nil {
+		d.glowLevel.Set(float32(v))
+	}
+	if nightNow(time.Now()) {
+		d.mu.Lock()
+		d.glowUntil = time.Now().Add(glowPreview)
+		d.mu.Unlock()
+		time.AfterFunc(glowPreview, func() { d.relight(true) })
+	}
+	d.relight(true)
+	d.wake()
 }
 
 // glowBacklight is the backlight the night clock shows at.
@@ -64,6 +100,18 @@ func (d *Display) Actions() []*esphome.Action {
 		Args: []esphome.Arg{{Name: "start", Type: esphome.ArgString}, {Name: "end", Type: esphome.ArgString}},
 		Run:  func(c esphome.Call) (any, error) { return nil, d.setNightHours(c.String("start"), c.String("end")) },
 	}}
+}
+
+// nightSoon is how soon the red clock comes up when it was just asked for: the night starting, Night
+// clock chosen, or the settings or the menu closing. Long enough to see the choice made, short enough
+// that nobody wonders whether it worked.
+const nightSoon = 10 * time.Second
+
+// nightClockSoon asks for the red clock soon (nightSoon), as Night clock is chosen.
+func (d *Display) nightClockSoon() {
+	d.mu.Lock()
+	d.soonAt = time.Now()
+	d.mu.Unlock()
 }
 
 // nightDarkOn is whether the night puts the face out (Screen at night set to Screen off).
@@ -86,6 +134,12 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	d.showNightMode(in)
 	d.mu.Lock()
 	glowing, dark, touched, viewAt, using := d.nightGlow, d.nightDark, d.touchedAt, d.viewAt, d.menuOpen || d.sheetOpen
+	// The night beginning, and the settings or the menu closing, ask for the clock soon (nightSoon).
+	if (in && !d.nightIn) || (!using && d.nightUsing) {
+		d.soonAt = now
+	}
+	d.nightIn, d.nightUsing = in, using
+	soonAt := d.soonAt
 	d.mu.Unlock()
 	switch {
 	case dark && !on && !(in && nightDarkOn()):
@@ -104,8 +158,12 @@ func (d *Display) night(now time.Time, on bool, view voice.State) bool {
 	clock, out := in && on && nightClockOn(), in && on && nightDarkOn()
 	if clock || out {
 		lift := phone.Get().Busy() || talkback.Get().Busy() || sunriseProgress(now) > 0 || setup.Get().Waiting()
-		active := view.Phase != "idle" || now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle || using ||
-			video.Get().State().Active()
+		recent := now.Sub(touched) < nightIdle || now.Sub(viewAt) < nightIdle
+		if clock && !soonAt.IsZero() && !touched.After(soonAt) && !viewAt.After(soonAt) {
+			// Asked for since the last touch or turn: only a short wait from then, never a longer one.
+			recent = recent && now.Sub(soonAt) < nightSoon
+		}
+		active := view.Phase != "idle" || recent || using || video.Get().State().Active()
 		if out {
 			_, reminding := remind.Get().Showing()
 			if lift || active || reminding || announcing() || announce.Get().Recording() || ringingNow(now).any() {

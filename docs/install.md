@@ -42,6 +42,14 @@ the installer. Afterwards fastboot reports `product: CRONOS` and `unlock_status:
 3.7.0. Signs of the old unlock: TWRP 3.2.3, `fastboot getvar product` answering `CHECKERS`, and
 `adb reboot recovery` from TWRP starting Android instead.
 
+**`image is not a boot image`?** If `fastboot flash boot` prints `[amonet] Injecting microloader...`
+and then fails with `FAILED (remote: 'image is not a boot image')`, the Show 5 2nd gen runs another
+build of the unlock, one that rewrites the boot image on its way in. Nothing is written, and
+`fastboot continue` starts the unit again. Flash `amonet-cronos-v2.0.1.zip` in TWRP as above. On a
+Show 5 2nd gen the installer reads the unlock's version first (`fastboot getvar kaeru-version`;
+v2.0.1 answers `2.0.0`) and stops before flashing when it is another one; `--any-unlock` flashes
+anyway.
+
 ## What you need
 
 - An Echo Show, **unlocked as above**, running LineageOS 18.1 — the `cronos`, `checkers` or `crown`
@@ -114,7 +122,8 @@ python3 tools/show-wifi.py "MyNetwork"
 It asks for the passphrase, saves the network on the unit, restarts it, and says whether it joined.
 
 If an install stops partway, after the boot image was flashed, the unit is left in the rescue
-environment (its screen says RESCUE) and a re-run can't see it over adb; the installer says so. The
+environment (its screen shows color bars, TECHO5 and a ticking clock, or RESCUE on a boot image built
+from newer sources) and a re-run can't see it over adb; the installer says so. The
 unit isn't lost: the steps from [step 4](#4-create-the-slot-store-and-install) on can be done by hand
 on its USB serial console, and `STORE=/store slotctl status` there says how far it got.
 
@@ -179,9 +188,10 @@ fastboot -s <serial> continue
 ```
 
 The unit boots the TECHO5 initramfs. With LineageOS still on `system` there is no slot store, so it
-stays in the **rescue environment**: it joins the Wi-Fi network Android saved and puts **RESCUE** on
-the screen, with a ticking clock and a line saying why — at this point, "No slot store yet - normal
-at install", which is exactly where you should be. Open a root shell on it:
+stays in the **rescue environment**: it joins the Wi-Fi network Android saved and shows a test screen,
+color bars with TECHO5 and a ticking clock. That is exactly where you should be. (A boot image built
+from newer sources puts **RESCUE** on the screen instead, with a line saying why — at this point, "No
+slot store yet - normal at install".) Open a root shell on it:
 
 - **USB serial console** (any boot image), at 115200 baud; press Enter for a `#` prompt:
   - Windows: a new "USB Serial Device (COMn)" in Device Manager; open it in PuTTY (connection type

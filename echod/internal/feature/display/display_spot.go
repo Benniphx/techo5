@@ -221,6 +221,16 @@ type Display struct {
 	nightGlow bool
 	redShown  bool
 	nightDark bool
+	// soonAt is when the red clock was last asked for at once (nightSoon): the night starting, Night
+	// clock chosen, or the settings or the menu closing. A touch or a turn after it waits nightIdle as
+	// before. nightIn and nightUsing are what the last frame found, to see the night begin and the
+	// settings close.
+	soonAt     time.Time
+	nightIn    bool
+	nightUsing bool
+	// glowUntil is the end of a step of the night clock's brightness showing on the backlight, from
+	// the settings sheet at night (stepGlow).
+	glowUntil time.Time
 
 	// The night's settings in Home Assistant, as on the Show (night_select.go): its hours, their two
 	// ends to the quarter hour, what it does to the face, the red clock's look and brightness.
@@ -432,6 +442,9 @@ func (d *Display) command(s esphome.LightState) {
 	d.apply(s.On, pct, true)
 }
 
+// wakeLight is the light before an alarm as this face shows it: all of it, here.
+func (d *Display) wakeLight(now time.Time) float64 { return sunriseProgress(now) }
+
 func (d *Display) apply(on bool, pct int, save bool) {
 	presence.Hush() // the screen's own light is about to change; the camera is not to take it for somebody
 	pct = min(max(pct, 0), 100)
@@ -500,8 +513,9 @@ func (d *Display) relight(jump bool) {
 			}
 		}
 		target = backlightMin + (screen.BacklightMax-backlightMin)*math.Min(math.Max(pct, 0), 100)/100
-		if d.nightGlow {
-			// The red night clock: the night light's level, whatever the room and the brightness ask.
+		if d.nightGlow || (night && time.Now().Before(d.glowUntil)) {
+			// The red night clock: the night light's level, whatever the room and the brightness ask. A
+			// step of its brightness on the settings sheet shows it the same way for a moment.
 			target = float64(d.glowBacklight())
 		}
 	}
@@ -829,6 +843,12 @@ func (d *Display) gesture(g touch.Gesture) {
 		// A finished turn's words: a tap puts them away rather than starting another turn.
 		if d.answerUp(time.Now()) {
 			d.clearAnswer()
+			return
+		}
+		// The wake light's face, held at full after an alarm with nothing ringing: a tap lets it go, as
+		// stop does (#161). While it is only coming up before an alarm, the tap is the clock's as ever.
+		if tapLetsGoOfLight(time.Now()) {
+			d.wake()
 			return
 		}
 		d.mu.Lock()

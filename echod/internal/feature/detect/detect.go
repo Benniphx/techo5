@@ -299,6 +299,7 @@ func (d *Detect) load(ids []string) []string {
 		accepted = append(accepted, m.ID)
 		loaded = append(loaded, slot)
 	}
+	wake.Lib().Loaded(accepted)
 
 	// Only the slots that took a wake word are waited on. A selection that loaded nothing has nothing to
 	// warm up, so the ring goes back to what it was showing rather than animating for a device that is

@@ -213,8 +213,40 @@ the rescue environment (USB serial and RNDIS at 172.16.42.1).
 - `slotctl status`, `slotctl rollback` (mark the running slot bad, boot the other next) and
   `slotctl switch a|b` work as on the other Shows.
 
-A new kernel comes with a new boot image: run the installer again from TWRP. It keeps the name, the
-Home Assistant key and the first backup.
+### Kernel updates
+
+The athena rootfs carries the kernel it was tested with. Once a new slot has committed, it checks
+the kernel on `boot`. If that's a different one, it writes the new kernel the way the installer
+does, with the unit's own speaker tuning taken from `boot`, and reboots into it. So an update can
+take two reboots. The second one comes about five minutes after the first, once the unit isn't
+busy: it waits while an alarm or timer is ringing, while it's hearing or answering a voice request,
+during a call, while music or an announcement is playing, while the wake light is on, and when an
+alarm is due within 30 minutes. After two hours of waiting it only waits for a ring to stop, or for
+an alarm or timer due within the minute, so a unit that is never idle still gets its kernel.
+
+A new kernel is on trial too. It has three boots to settle: the daemon up for five minutes, with a
+network address and a default route, and the sound card and backlight there. A boot that doesn't
+settle within 15 minutes reboots to try again, with the same wait for the unit not to be busy. If
+it never settles, the unit writes the previous kernel back (it keeps a copy in
+`/data/techo5-linux/kernel`) and never tries that kernel again. A system update waits while a
+kernel is on trial.
+
+One case is treated differently: every try had everything but a network (no default route), say
+because the router was down. The previous kernel still goes back, since a kernel that broke Wi-Fi
+would otherwise leave the unit unreachable. But the new kernel isn't marked bad, and the unit tries
+it again a day later.
+
+- `/usr/local/bin/techo5 tools kernel status` shows where it is.
+- `/usr/local/bin/techo5 tools kernel restore` puts the previous kernel back by hand and reboots,
+  for a kernel that settled but doesn't work right. Run it from the USB shell.
+
+What this can't catch: anything that stops the unit before TECHO5's boot script runs. That's a
+kernel that hangs or panics early, or one that can't find the eMMC. A power cut during the second
+the kernel is being written is the same. The way back from those is the way the unit was unlocked
+(mtkclient). Kernels are tested on units before they are released for this reason.
+
+Running the installer again from TWRP still works too. It keeps the name, the Home Assistant key
+and the first backup.
 
 ## The USB cable is a root shell
 

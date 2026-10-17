@@ -99,6 +99,14 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			if nightClockOn() {
 				rows = append(rows, settingRow{id: "nightstyle", label: "Night clock", sub: "How the night clock looks",
 					kind: ctlChoice, value: nightStyleLabel()})
+				if hasGlowRow {
+					rows = append(rows, settingRow{id: "nightglow", label: "Night clock brightness", sub: "Shown as you change it, at night",
+						kind: ctlStepper, value: fmt.Sprintf("%d of %d", glowLevelSet(), len(glowSteps))})
+				}
+			}
+			if hasNightTap && config.Get().Screen.NightLight {
+				rows = append(rows, settingRow{id: "nighttap", label: "Tap lifts the night light",
+					sub: "A tap brings the screen back until the room is quiet", kind: ctlToggle, on: config.Get().Screen.NightTapLifts})
 			}
 		}
 		// The light first, then each group under its name: what is changed most near the top.
@@ -913,6 +921,13 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		case partPlus:
 			d.stepDimmest(+1)
 		}
+	case "nightglow":
+		switch p {
+		case partMinus:
+			d.stepGlow(-1)
+		case partPlus:
+			d.stepGlow(+1)
+		}
 	case "auto":
 		d.mu.Lock()
 		on := d.autoOn
@@ -932,6 +947,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetCameraSound(!home.CameraSound())
 	case "lyrics":
 		safe.Go("lyrics from the screen", func() { home.Get().SetLyricsOn(!home.LyricsOn()) })
+	case "nighttap":
+		d.setNightTapLifts(!config.Get().Screen.NightTapLifts)
 	case "weatherfx":
 		setWeatherAnimationSaved(d.weatherFx, !weatherAnimation.Load())
 	case "dnd":

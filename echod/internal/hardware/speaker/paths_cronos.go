@@ -345,6 +345,9 @@ const MediaService = "vendor.audio-hal"
 // (found 2026-09-14). The amplifier is left as the kernel brought it up.
 const AmpSwitch = ""
 
+// MuteSwitch is a mute on the amplifier besides AmpSwitch: none on any Show.
+const MuteSwitch = ""
+
 // mayHaveTAS5805M is whether a board of this build can carry the TAS5805M amplifier (GainAvailable):
 // some 2nd gen Show 5 units do, and the Show 8's kernel carries its driver too.
 const mayHaveTAS5805M = true
