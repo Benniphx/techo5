@@ -167,6 +167,16 @@ func TestPhonesNextToLetters(t *testing.T) {
 		{"caller=Bob5551234567", "caller=Bob<phone-1>"},
 		{"call to +15551234567 failed", "call to <phone-1> failed"},
 		{"phone 5551234567", "phone <phone-1>"},
+		{"deadbeef1234567890 5551234567", "deadbeef1234567890 <phone-1>"},
+		{"commit 1234567890abcdef 5551234567", "commit 1234567890abcdef <phone-1>"},
+		{"call 5551234567.", "call <phone-1>."},
+		{"pid 1234 then 5551234567", "pid 1234 then <phone-1>"},
+		// Two numbers a character apart are two numbers, and the second is not lost to the first.
+		{"5551234567 5559876543", "<phone-1> <phone-2>"},
+		{"5551234567,5559876543", "<phone-1>,<phone-2>"},
+		{"5551234567/+15559876543", "<phone-1>/<phone-2>"},
+		{"5551234567-5559876543", "<phone-1>-<phone-2>"},
+		{"5551234567 and 5551234567 again", "<phone-1> and <phone-1> again"},
 	} {
 		if got := New().Text(tc.in); got != tc.want {
 			t.Errorf("%q came out as %q, want %q", tc.in, got, tc.want)
@@ -180,6 +190,14 @@ func TestPhonesNextToLetters(t *testing.T) {
 		"commit 1234567890abcdef1234567890abcdef12345678",
 		"per_second=49.98765432109876",
 		"uptime 12345678901234567890",
+		"[  242.667317] [<00000a1234567890>] kthread+0xf8/0x100",
+		"x0 : 0x1234567890 x1 : 0X1234567890",
+		"cookie 9b1234567890",
+		"key deadbeef1234567890",
+		"id=12345678901234567890g",
+		"offset=-1234567890 ts=1697461234.567",
+		"rate 1234567890.5 and 0.1234567890",
+		"version 1.2.3.4567890123",
 	} {
 		if got := New().Text(line); got != line {
 			t.Errorf("changed:\n old: %s\n new: %s", line, got)

@@ -48,15 +48,10 @@ var patterns = []struct {
 	// parts taken for an address; and the character before may not be a letter, so v1.2.3.4 stays put.
 	{"ip", regexp.MustCompile(`(?:^|[^0-9A-Za-z.])((?:\d{1,3}\.){3,}\d{1,3})`), true},
 	{"email", regexp.MustCompile(`\b[\w.+-]+@[\w-]+\.[\w.-]+\b`), false},
-	// A telephone number, and not the tail of a number that merely holds ten digits: a rate of
-	// 49.98765432109876 has a run of digits after the point that this used to take for a phone, which
-	// left a log reading "per_second=49.<phone-130>" line after line and nothing in it worth reading.
-	// The match takes in what is either side of the number so it can tell; only the number goes. The
-	// letters and digits run on to the number either side are taken in too (the first and last
-	// groups), because a word that is hex all through is no phone: a kernel stack trace's
-	// [<0000000012e3d9f7>] came out as [<<phone-1>e3d9f7>]. Any other letter next to it still leaves a
-	// phone, as in caller=Bob5551234567, tel%3A5551234567 or 5551234567ext.
-	{"phone", regexp.MustCompile(`(?:^|[^\d.+-])([A-Za-z]*)(\+?\d{10,15})([0-9A-Za-z]*)(?:$|[^\d.])`), true},
+	// A telephone number is any run of digits, and phones decides which runs are one: what a number is
+	// depends on what is either side of it, and a pattern that takes in its neighbors to look at them
+	// also swallows the next number's neighbor, so of two numbers a character apart only the first went.
+	{"phone", regexp.MustCompile(`\d+`), false},
 	{"url", regexp.MustCompile(`\b(?:https?)://[^\s"'<>]+`), false},
 }
 
@@ -130,24 +125,76 @@ func (r *Redactor) Text(s string) string {
 	return s
 }
 
-// phones puts the placeholders in for the numbers the phone pattern finds in s, unless a number and
-// what runs on to it either side make one word of hex: an address, not a phone. It works from the
-// positions in s, because matched again on its own a match reads differently: the character before
-// the number becomes part of the word.
+// phones puts the placeholders in for the runs of digits in s that are telephone numbers: ten to
+// fifteen digits, with the + in front of them if there is one. Only the number goes; the letters run
+// on to it stay, as in caller=Bob<phone-1> or <phone-1>x12.
 func (r *Redactor) phones(re *regexp.Regexp, s string) string {
 	var out strings.Builder
 	last := 0
-	for _, at := range re.FindAllStringSubmatchIndex(s, -1) {
-		lead, number, trail := s[at[2]:at[3]], s[at[4]:at[5]], s[at[6]:at[7]]
-		if lead+trail != "" && isHex(lead+number+trail) {
+	for _, at := range re.FindAllStringIndex(s, -1) {
+		from, digits, end := at[0], at[0], at[1]
+		if n := end - digits; n < 10 || n > 15 {
 			continue
 		}
-		out.WriteString(s[last:at[4]])
-		out.WriteString(r.placeholder("phone", number))
-		last = at[5]
+		if from > 0 && s[from-1] == '+' {
+			from--
+		}
+		if !isPhone(s, from, digits, end) {
+			continue
+		}
+		out.WriteString(s[last:from])
+		out.WriteString(r.placeholder("phone", s[from:end]))
+		last = end
 	}
 	out.WriteString(s[last:])
 	return out.String()
+}
+
+// isPhone judges the number at s[from:end], whose digits start at s[digits], by what is around it in
+// s. A number with a point either side of it is part of a decimal, a version or a timestamp: a rate
+// of 49.98765432109876 once read "per_second=49.<phone-130>" line after line. One after a minus sign
+// that follows no digit is a negative number. And a number inside a word that is hex all through is
+// an address or a hash, not a phone: a kernel stack trace's [<0000000012e3d9f7>] came out as
+// [<<phone-1>e3d9f7>]. The word is the letters and digits run on to the number either side, less a
+// URL escape in front (tel%3A5551234567 is a phone after "tel:").
+func isPhone(s string, from, digits, end int) bool {
+	if from > 0 {
+		switch s[from-1] {
+		case '.':
+			return false
+		case '-':
+			if from < 2 || !isDigit(s[from-2]) {
+				return false
+			}
+		}
+	}
+	if end+1 < len(s) && s[end] == '.' && isDigit(s[end+1]) {
+		return false
+	}
+	start, stop := digits, end
+	for start > 0 && isWord(s[start-1]) {
+		start--
+	}
+	for stop < len(s) && isWord(s[stop]) {
+		stop++
+	}
+	if start > 0 && s[start-1] == '%' && start+2 <= digits && isHex(s[start:start+2]) {
+		start += 2
+	}
+	word := s[start:stop]
+	if len(word) > 2 && word[0] == '0' && (word[1] == 'x' || word[1] == 'X') {
+		return false
+	}
+	if isHex(word) && (len(word) > 15 || strings.ContainsAny(word, "abcdefABCDEF")) {
+		return false
+	}
+	return true
+}
+
+func isDigit(c byte) bool { return c >= '0' && c <= '9' }
+
+func isWord(c byte) bool {
+	return isDigit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
 // isHex is whether s is hex digits all through.
