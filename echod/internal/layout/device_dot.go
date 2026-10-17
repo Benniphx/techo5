@@ -3,7 +3,9 @@
 package layout
 
 import (
-	"log/slog"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"strings"
@@ -80,9 +82,9 @@ func boardInfo(board string) (string, string, string) {
 
 // detectBoard reads the product id, and on Fire OS falls back to its ro.product.device where idme
 // says nothing we know. A board neither names is run as a Dot, which is what this build was before it
-// knew another, and said so.
+// knew another, and BoardDoubt says so for boot.Run to log.
 func detectBoard() string {
-	typeID, _ := os.ReadFile(deviceTypePath)
+	typeID, err := os.ReadFile(deviceTypePath)
 	if board, ok := dotBoard(string(typeID), ""); ok {
 		return board
 	}
@@ -93,10 +95,21 @@ func detectBoard() string {
 	}
 	board, ok := dotBoard(string(typeID), product)
 	if !ok {
-		slog.Error("this Echo is not a board TECHO5 knows, running it as an Echo Dot 2 (biscuit)",
-			"device_type_id", cleanID(string(typeID)), "product", cleanID(product))
+		BoardDoubt = boardDoubt(string(typeID), err, product, OnAndroid())
 	}
 	return board
+}
+
+// boardDoubt is BoardDoubt for a board neither idme nor Fire OS named. Without idme at all on the
+// Linux image there is nothing to tell the boards apart by, and an Echo 2nd gen run as a Dot never
+// lets go of its speaker's mute, so that one is said louder.
+func boardDoubt(typeID string, readErr error, product string, android bool) string {
+	if errors.Is(readErr, fs.ErrNotExist) && !android {
+		return "there is no " + deviceTypePath + " on this image, so the board cannot be told: running it as an " +
+			"Echo Dot 2 (biscuit), and an Echo 2nd gen (radar) will play nothing through its speaker"
+	}
+	return fmt.Sprintf("this Echo is not a board TECHO5 knows, running it as an Echo Dot 2 (biscuit): device_type_id %q, product %q",
+		cleanID(typeID), cleanID(product))
 }
 
 // dotBoard names the board from idme's product id or, failing that, Fire OS's product name

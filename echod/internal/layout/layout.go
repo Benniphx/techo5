@@ -28,6 +28,11 @@ var (
 	OldBinary  = Binary + ".old"
 )
 
+// BoardDoubt says why Board is a guess, empty where it is known (and off the Dot's build, where there
+// is only one board). The board is found as the package loads, before the daemon's logger is set up,
+// so boot.Run logs this rather than detection itself.
+var BoardDoubt string
+
 const (
 	KeyPath  = StateDir + "/psk"
 	NamePath = StateDir + "/name"

@@ -2,7 +2,11 @@
 
 package layout
 
-import "testing"
+import (
+	"io/fs"
+	"strings"
+	"testing"
+)
 
 // idme's product id decides, as read with the NUL and newline it can end in; Fire OS's product name
 // stands in where idme says nothing we know; anything else is run as a Dot and reported.
@@ -44,5 +48,20 @@ func TestBoardInfo(t *testing.T) {
 		if b != c.wantBoard || m != c.model || n != c.name {
 			t.Errorf("boardInfo(%q) = %q, %q, %q; want %q, %q, %q", c.board, b, m, n, c.wantBoard, c.model, c.name)
 		}
+	}
+}
+
+// A board that is a guess is said at start (boot.Run), and loudest where the Linux image has no idme
+// to tell the boards by: an Echo 2nd gen would run muted as a Dot.
+func TestBoardDoubt(t *testing.T) {
+	missing := &fs.PathError{Op: "open", Path: deviceTypePath, Err: fs.ErrNotExist}
+	if got := boardDoubt("", missing, "", false); !strings.Contains(got, "no "+deviceTypePath) || !strings.Contains(got, "radar") {
+		t.Errorf("no idme on Linux: %q", got)
+	}
+	if got := boardDoubt("AXXXXXXXXXXX\x00", nil, "", false); !strings.Contains(got, `"AXXXXXXXXXXX"`) {
+		t.Errorf("an unknown id: %q", got)
+	}
+	if got := boardDoubt("", missing, "rook\n", true); !strings.Contains(got, `"rook"`) || strings.Contains(got, "no "+deviceTypePath) {
+		t.Errorf("Fire OS with an unknown product: %q", got)
 	}
 }

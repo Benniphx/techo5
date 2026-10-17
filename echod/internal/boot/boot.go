@@ -31,6 +31,9 @@ import (
 func Run(ctx context.Context) error {
 	slog.Info("echod starting", "version", layout.Version, "board", layout.Board,
 		"pid", os.Getpid(), "uid", os.Getuid(), "context", selinuxContext())
+	if layout.BoardDoubt != "" {
+		slog.Error(layout.BoardDoubt)
+	}
 
 	_ = prop.Set(layout.StartedProp, fmt.Sprintf("%.2f", metrics.Uptime()))
 	_ = prop.Set(layout.StateProp, "starting")
