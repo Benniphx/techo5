@@ -97,6 +97,11 @@ func sign(word, to string, body []byte, now time.Time) string {
 // restart, while the nonces it remembers are gone, cannot be sent again.
 var started = time.Now()
 
+// startedWall is when this program started, by the wall clock as it reads at now: worked out from the
+// monotonic clock, so a clock set back after the start (by NTP, say) does not put the start ahead of
+// every claim until the time catches up.
+func startedWall(now time.Time) time.Time { return now.Add(-time.Since(started)).Truncate(time.Second) }
+
 // looksSigned checks a claim's header before its body is read: its form, and a time this device would
 // take. A request that fails it is turned away without waiting on anything it sends.
 func looksSigned(header string, now time.Time) error {
@@ -109,7 +114,7 @@ func looksSigned(header string, now time.Time) error {
 		return errUnsigned
 	}
 	at := time.Unix(sec, 0)
-	if d := now.Sub(at); d > skew || d < -skew || at.Before(started.Truncate(time.Second)) {
+	if d := now.Sub(at); d > skew || d < -skew || at.Before(startedWall(now)) {
 		return errStale
 	}
 	return nil

@@ -204,8 +204,15 @@ func TestTimeAndPlaceAreCheckedBeforeTheBody(t *testing.T) {
 	if inTime(h(now.Add(-2*skew)), now) || inTime(h(now.Add(2*skew)), now) {
 		t.Error("a request outside the skew is in time")
 	}
-	if inTime(h(started.Add(-2*time.Second)), started.Add(time.Second)) {
+	was := started
+	started = now
+	t.Cleanup(func() { started = was })
+	if inTime(h(now.Add(-2*time.Second)), now) {
 		t.Error("a request signed before the start is in time")
+	}
+	// The clock set back an hour after the start: a request signed by it is still in time.
+	if back := now.Add(-time.Hour); !inTime(h(back), back) {
+		t.Error("a clock set back after the start refuses everything")
 	}
 	for range maxUnverified {
 		unverified <- struct{}{}
@@ -223,5 +230,24 @@ func TestTimeAndPlaceAreCheckedBeforeTheBody(t *testing.T) {
 	f.serve(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("with every place taken: %d, want 503", w.Code)
+	}
+}
+
+// Requests signed by a clock that is out are refused, and not counted against the address: a script
+// whose clock is wrong is not locked out once it is put right.
+func TestAClockOutIsNotAGuesser(t *testing.T) {
+	f, _, _ := testRemote(t)
+	for range failures + 1 {
+		req := httptest.NewRequest("GET", "/api/v1/device", nil)
+		req.RemoteAddr = "192.0.2.50:4000"
+		req.Header.Set(authHeader, Sign(testKey, "GET", "/api/v1/device", nil, time.Now().Add(-time.Hour)))
+		w := httptest.NewRecorder()
+		f.serve(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("a request an hour out: %d", w.Code)
+		}
+	}
+	if w := call(f, "GET", "/api/v1/device", "", true); w.Code != http.StatusOK {
+		t.Errorf("after a clock that was out: %d %s", w.Code, w.Body)
 	}
 }

@@ -112,8 +112,13 @@ func inTime(header string, now time.Time) bool {
 	}
 	at := time.Unix(sec, 0)
 	d := now.Sub(at)
-	return d <= skew && d >= -skew && !at.Before(started.Truncate(time.Second))
+	return d <= skew && d >= -skew && !at.Before(startedWall(now))
 }
+
+// startedWall is when this program started, by the wall clock as it reads at now: worked out from the
+// monotonic clock, so a clock set back after the start (by NTP, say) does not put the start ahead of
+// every request until the time catches up.
+func startedWall(now time.Time) time.Time { return now.Add(-time.Since(started)).Truncate(time.Second) }
 
 // verify checks a request's signature.
 func verify(secretHex, header, method, pathQuery string, body []byte, now time.Time) error {
@@ -136,7 +141,7 @@ func verify(secretHex, header, method, pathQuery string, body []byte, now time.T
 	if err != nil {
 		return errUnsigned
 	}
-	if d := now.Sub(time.Unix(sec, 0)); d > skew || d < -skew || time.Unix(sec, 0).Before(started.Truncate(time.Second)) {
+	if d := now.Sub(time.Unix(sec, 0)); d > skew || d < -skew || time.Unix(sec, 0).Before(startedWall(now)) {
 		return errStale
 	}
 	if !fresh(parts[2], now) {

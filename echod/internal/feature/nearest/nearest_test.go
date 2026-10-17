@@ -454,6 +454,11 @@ func TestOldFormAndBeforeTheStartAreRefused(t *testing.T) {
 	if err := verify(word, "Office", sign(word, "Office", body, now), body, now.Add(3*time.Second)); err != errStale {
 		t.Errorf("a claim from before the start: %v", err)
 	}
+	// The clock set back an hour after the start: a claim signed by it is taken.
+	started = now
+	if back := now.Add(-time.Hour); verify(word, "Office", sign(word, "Office", body, back), body, back) != nil {
+		t.Error("a clock set back after the start refuses every claim")
+	}
 }
 
 // A claim whose body never arrives whole is answered once its time is up, and its connection closed:

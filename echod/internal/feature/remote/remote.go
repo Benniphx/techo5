@@ -137,8 +137,9 @@ func (f *Remote) serve(w http.ResponseWriter, r *http.Request) {
 		refuse(w, errUnsigned.Error(), http.StatusUnauthorized)
 		return
 	}
+	// A time out of reach is not counted against the address: it is as likely a clock as a guesser, and
+	// counting it would lock a script out over its clock.
 	if !inTime(r.Header.Get(authHeader), now) {
-		failed(addr, now)
 		f.warn("remote api: a request signed at the wrong time", "from", addr)
 		refuse(w, errStale.Error(), http.StatusUnauthorized)
 		return
@@ -169,7 +170,9 @@ func (f *Remote) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = rc.SetReadDeadline(time.Time{})
 	if err := verify(config.Get().Remote.Secret, r.Header.Get(authHeader), r.Method, r.URL.RequestURI(), body, now); err != nil {
-		failed(addr, now)
+		if err != errStale {
+			failed(addr, now)
+		}
 		f.warn("remote api: a request that does not check out", "from", addr, "err", err)
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
