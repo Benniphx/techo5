@@ -9,45 +9,89 @@ import (
 
 // Share is settings shared with the other devices of the house (feature/share): whether this device takes
 // part, which of its settings are linked with which devices, the ones it keeps to itself whatever the
-// others do, and where each linked setting's value last came from. All of it is this device's own: a
-// settings file neither carries nor changes it (KeepOwn).
+// others do, where each value came from, and the links asked for that are not settled yet. All of it is
+// this device's own: a settings file neither carries nor changes it (KeepOwn).
+//
+// A link is made on each device, never by another: this device lists a device for a setting when somebody
+// ticked it here, or accepted that device's request here.
 type Share struct {
 	On bool `json:"on,omitempty"`
 
-	// Links is, by setting (its entity's object ID), the other devices it is kept in step with.
+	// Links is, by setting (its entity's object ID), the other devices it is kept in step with, at most
+	// MaxLinked of them.
 	Links map[string][]string `json:"links,omitempty"`
 
 	// Keep is the settings this device keeps its own: nothing another device sends changes them.
 	Keep []string `json:"keep,omitempty"`
 
-	// From is, by setting, the device and time its value last came from (this device's own name for a
-	// change made here), so the latest change wins and each device can say where a value came from.
+	// From is, by setting, where its value came from and its place in the order of changes.
 	From map[string]ShareFrom `json:"from,omitempty"`
+
+	// Requests is links other devices have asked for, waiting to be accepted or declined here, at most
+	// MaxRequests of them.
+	Requests []ShareRequest `json:"requests,omitempty"`
+
+	// Waiting is, by setting, the devices asked to link with this one that have not accepted yet.
+	Waiting map[string][]string `json:"waiting,omitempty"`
 }
 
-// ShareFrom is where a setting's value came from.
+const (
+	// MaxLinked is the most devices one setting is linked with.
+	MaxLinked = 16
+	// MaxRequests is the most link requests kept waiting; the oldest goes first.
+	MaxRequests = 64
+)
+
+// ShareFrom is where a setting's value came from: the device a change was made on, when this device
+// took it (by its own clock, for showing), and N, the change's place in the setting's order: every change
+// is one more than the highest the device making it had seen, so the order does not depend on any
+// device's clock.
 type ShareFrom struct {
+	Device string    `json:"device"`
+	At     time.Time `json:"at"`
+	N      uint64    `json:"n"`
+}
+
+// ShareRequest is a link another device asked for.
+type ShareRequest struct {
+	ID     string    `json:"id"`
 	Device string    `json:"device"`
 	At     time.Time `json:"at"`
 }
 
 func (s Share) clone() Share {
-	s.Links = maps.Clone(s.Links)
-	for k, v := range s.Links {
-		s.Links[k] = slices.Clone(v)
-	}
+	s.Links = cloneLists(s.Links)
+	s.Waiting = cloneLists(s.Waiting)
 	s.Keep = slices.Clone(s.Keep)
 	s.From = maps.Clone(s.From)
+	s.Requests = slices.Clone(s.Requests)
 	return s
+}
+
+func cloneLists(m map[string][]string) map[string][]string {
+	m = maps.Clone(m)
+	for k, v := range m {
+		m[k] = slices.Clone(v)
+	}
+	return m
+}
+
+func hasName(list []string, name string) bool {
+	return slices.ContainsFunc(list, func(d string) bool { return strings.EqualFold(d, name) })
+}
+
+func withoutName(list []string, name string) []string {
+	return slices.DeleteFunc(slices.Clone(list), func(d string) bool { return strings.EqualFold(d, name) })
 }
 
 // Linked is the devices a setting is kept in step with.
 func (s Share) Linked(id string) []string { return s.Links[id] }
 
 // LinkedWith is whether a setting is kept in step with a device, by its name however cased.
-func (s Share) LinkedWith(id, device string) bool {
-	return slices.ContainsFunc(s.Links[id], func(d string) bool { return strings.EqualFold(d, device) })
-}
+func (s Share) LinkedWith(id, device string) bool { return hasName(s.Links[id], device) }
+
+// WaitingFor is whether a device has been asked to link a setting and has not accepted yet.
+func (s Share) WaitingFor(id, device string) bool { return hasName(s.Waiting[id], device) }
 
 // Kept is whether this device keeps a setting its own.
 func (s Share) Kept(id string) bool { return slices.Contains(s.Keep, id) }
@@ -56,20 +100,6 @@ type ShareWriter struct{ st *Store }
 
 func (w ShareWriter) On(v bool) error {
 	return w.st.Update(func(c *Config) { c.Share.On = v })
-}
-
-// Link sets the devices a setting is kept in step with; none unlinks it.
-func (w ShareWriter) Link(id string, devices []string) error {
-	return w.st.Update(func(c *Config) {
-		if len(devices) == 0 {
-			delete(c.Share.Links, id)
-			return
-		}
-		if c.Share.Links == nil {
-			c.Share.Links = map[string][]string{}
-		}
-		c.Share.Links[id] = slices.Clone(devices)
-	})
 }
 
 // Keep sets whether this device keeps a setting its own.
@@ -86,12 +116,67 @@ func (w ShareWriter) Keep(id string, keep bool) error {
 	})
 }
 
-// From records where a setting's value came from.
-func (w ShareWriter) From(id string, f ShareFrom) error {
-	return w.st.Update(func(c *Config) {
-		if c.Share.From == nil {
-			c.Share.From = map[string]ShareFrom{}
-		}
-		c.Share.From[id] = f
+// Update changes the sharing settings as one write: for several changes made together, such as where
+// each of the settings a message carried came from.
+func (w ShareWriter) Update(f func(s *Share)) error {
+	return w.st.Update(func(c *Config) { f(&c.Share) })
+}
+
+// AddLink links a setting with a device, unless it already is or the setting has MaxLinked; answers
+// whether it is linked now. Asking and being asked about it are settled.
+func AddLink(s *Share, id, device string) bool {
+	s.Requests = slices.DeleteFunc(s.Requests, func(r ShareRequest) bool {
+		return r.ID == id && strings.EqualFold(r.Device, device)
 	})
+	if hasName(s.Links[id], device) {
+		return true
+	}
+	if len(s.Links[id]) >= MaxLinked {
+		return false
+	}
+	if s.Links == nil {
+		s.Links = map[string][]string{}
+	}
+	s.Links[id] = append(s.Links[id], device)
+	return true
+}
+
+// RemoveLink unlinks a setting from a device, and forgets any request either way.
+func RemoveLink(s *Share, id, device string) {
+	if l := withoutName(s.Links[id], device); len(l) > 0 {
+		s.Links[id] = l
+	} else {
+		delete(s.Links, id)
+	}
+	SetWaiting(s, id, device, false)
+	s.Requests = slices.DeleteFunc(s.Requests, func(r ShareRequest) bool {
+		return r.ID == id && strings.EqualFold(r.Device, device)
+	})
+}
+
+// SetWaiting marks a device asked to link a setting, or no longer waited on.
+func SetWaiting(s *Share, id, device string, waiting bool) {
+	l := withoutName(s.Waiting[id], device)
+	if waiting {
+		l = append(l, device)
+	}
+	if len(l) > 0 {
+		if s.Waiting == nil {
+			s.Waiting = map[string][]string{}
+		}
+		s.Waiting[id] = l
+	} else {
+		delete(s.Waiting, id)
+	}
+}
+
+// AddRequest keeps a device's request to link a setting, once, the oldest going past MaxRequests.
+func AddRequest(s *Share, id, device string, at time.Time) {
+	if slices.ContainsFunc(s.Requests, func(r ShareRequest) bool { return r.ID == id && strings.EqualFold(r.Device, device) }) {
+		return
+	}
+	s.Requests = append(s.Requests, ShareRequest{ID: id, Device: device, At: at})
+	if n := len(s.Requests) - MaxRequests; n > 0 {
+		s.Requests = slices.Delete(s.Requests, 0, n)
+	}
 }

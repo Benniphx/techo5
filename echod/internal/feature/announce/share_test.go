@@ -3,6 +3,7 @@ package announce
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -148,5 +149,22 @@ func TestSendShareAcrossClocks(t *testing.T) {
 	}
 	if _, err := SendShare(context.Background(), "Garage", []byte(`{}`)); err == nil {
 		t.Error("sent to a device that is not on the network")
+	}
+}
+
+// A device with sharing off answers as though there were nothing there: said as not taking, not as gone.
+func TestSendShareToADeviceNotTaking(t *testing.T) {
+	shareRig(t)
+	srv := httptest.NewServer(http.NotFoundHandler())
+	defer srv.Close()
+	host, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+	p, _ := strconv.Atoi(port)
+	peers.Lock()
+	was := peers.by
+	peers.by = map[string]known{"office": {Peer: Peer{Name: "Office", Address: host, Port: p}, at: time.Now()}}
+	peers.Unlock()
+	defer func() { peers.Lock(); peers.by = was; peers.Unlock() }()
+	if _, err := SendShare(context.Background(), "Office", []byte(`{}`)); !errors.Is(err, ErrShareNotTaking) {
+		t.Fatalf("%v", err)
 	}
 }

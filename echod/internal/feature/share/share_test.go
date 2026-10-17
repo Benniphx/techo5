@@ -3,6 +3,7 @@ package share
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -15,14 +16,14 @@ import (
 
 // rig is this device as "Kitchen", three settings of its own, and what it sends, kept.
 type rig struct {
-	f      *Feature
-	bass   *esphome.Number
-	theme  *esphome.Select
-	lyrics *esphome.Switch
+	f       *Feature
+	bass    *esphome.Number
+	theme   *esphome.Select
+	shuffle *esphome.Switch
 
-	mu   sync.Mutex
-	sent map[string][]message
-	at   time.Time
+	mu         sync.Mutex
+	sent       map[string][]message
+	linkAnswer string // what a device answers a link message
 }
 
 func newRig(t *testing.T) *rig {
@@ -31,22 +32,23 @@ func newRig(t *testing.T) *rig {
 	if err := config.Set().Share().On(true); err != nil {
 		t.Fatal(err)
 	}
-	r := &rig{sent: map[string][]message{}, at: time.Unix(1_000_000, 0)}
+	r := &rig{sent: map[string][]message{}, linkAnswer: Asked}
 	r.bass = &esphome.Number{Base: esphome.Base{ObjectID: "bass"}, Min: -6, Max: 6, Step: 1}
 	r.bass.OnCommand = func(v float32) { r.bass.Set(v) }
 	r.theme = &esphome.Select{Base: esphome.Base{ObjectID: "screen_theme"}, Options: []string{"Dark", "Light"}}
 	r.theme.OnCommand = func(v string) { r.theme.Set(v) }
 	r.theme.Set("Dark")
-	r.lyrics = &esphome.Switch{Base: esphome.Base{ObjectID: "lyrics"}}
-	r.lyrics.OnCommand = func(v bool) { r.lyrics.Set(v) }
-	own := map[string]esphome.Entity{"bass": r.bass, "screen_theme": r.theme, "lyrics": r.lyrics}
+	r.shuffle = &esphome.Switch{Base: esphome.Base{ObjectID: "slideshow_shuffle"}}
+	r.shuffle.OnCommand = func(v bool) { r.shuffle.Set(v) }
+	own := map[string]esphome.Entity{"bass": r.bass, "screen_theme": r.theme, "slideshow_shuffle": r.shuffle}
 	was := entities
 	entities = func(id string) (esphome.Entity, bool) { e, ok := own[id]; return e, ok }
 	t.Cleanup(func() { entities = was })
 
+	at := time.Unix(1_000_000, 0)
 	r.f = &Feature{
 		me:   func() string { return "Kitchen" },
-		now:  func() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.at },
+		now:  func() time.Time { return at },
 		wake: make(chan struct{}, 1),
 		last: map[string]string{},
 	}
@@ -57,23 +59,30 @@ func newRig(t *testing.T) *rig {
 		}
 		r.mu.Lock()
 		r.sent[to] = append(r.sent[to], m)
+		answer := r.linkAnswer
 		r.mu.Unlock()
 		results := map[string]string{}
 		for _, it := range m.Items {
 			results[it.ID] = Applied
 		}
-		for _, l := range m.Links {
-			results[l.ID] = Applied
+		if m.Kind == "link" {
+			results[m.ID] = answer
 		}
 		return json.Marshal(reply{Results: results})
 	}
 	return r
 }
 
-func (r *rig) tick(d time.Duration) {
-	r.mu.Lock()
-	r.at = r.at.Add(d)
-	r.mu.Unlock()
+// link links a setting here with devices, settled both ways, as though accepted long ago.
+func link(t *testing.T, id string, devices ...string) {
+	t.Helper()
+	if err := config.Set().Share().Update(func(s *config.Share) {
+		for _, d := range devices {
+			config.AddLink(s, id, d)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func (r *rig) receive(t *testing.T, from string, m message) map[string]string {
@@ -90,6 +99,10 @@ func (r *rig) receive(t *testing.T, from string, m message) map[string]string {
 	return rep.Results
 }
 
+func set(id, value string, n uint64, origin string) message {
+	return message{Kind: "set", Items: []item{{ID: id, Value: value, N: n, Origin: origin}}}
+}
+
 func (r *rig) sentTo(name string) []message {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -98,53 +111,105 @@ func (r *rig) sentTo(name string) []message {
 
 func TestALinkedChangeIsTakenOnlyFromALinkedDevice(t *testing.T) {
 	r := newRig(t)
-	_ = config.Set().Share().Link("bass", []string{"Office"})
-
-	got := r.receive(t, "Office", message{Kind: "set", Items: []item{{ID: "bass", Value: "3", At: r.at}}})
-	if got["bass"] != Applied || r.bass.Get() != 3 {
+	link(t, "bass", "Office")
+	if got := r.receive(t, "Office", set("bass", "3", 1, "Office")); got["bass"] != Applied || r.bass.Get() != 3 {
 		t.Fatalf("from a linked device: %v, bass %v", got, r.bass.Get())
 	}
-	if from := config.Get().Share.From["bass"]; from.Device != "Office" {
+	if from := config.Get().Share.From["bass"]; from.Device != "Office" || from.N != 1 {
 		t.Errorf("where it came from: %+v", from)
 	}
-	got = r.receive(t, "Bedroom", message{Kind: "set", Items: []item{{ID: "bass", Value: "5", At: r.at.Add(time.Minute)}}})
-	if got["bass"] != NotLinked || r.bass.Get() != 3 {
+	if got := r.receive(t, "Bedroom", set("bass", "5", 9, "Bedroom")); got["bass"] != NotLinked || r.bass.Get() != 3 {
 		t.Fatalf("from a device it is not linked with: %v, bass %v", got, r.bass.Get())
 	}
 }
 
-func TestTheLatestChangeWins(t *testing.T) {
+// A device asked here and not yet accepted there is not taken from either.
+func TestAWaitingLinkTakesNothing(t *testing.T) {
 	r := newRig(t)
-	_ = config.Set().Share().Link("bass", []string{"Office"})
-	r.receive(t, "Office", message{Kind: "set", Items: []item{{ID: "bass", Value: "3", At: r.at}}})
-	got := r.receive(t, "Office", message{Kind: "set", Items: []item{{ID: "bass", Value: "1", At: r.at.Add(-time.Second)}}})
-	if got["bass"] != Older || r.bass.Get() != 3 {
-		t.Fatalf("an older change: %v, bass %v", got, r.bass.Get())
+	if _, err := r.f.Link(context.Background(), "bass", []string{"Office"}); err != nil {
+		t.Fatal(err)
+	}
+	if !config.Get().Share.WaitingFor("bass", "Office") {
+		t.Fatal("not waiting on the device asked")
+	}
+	if got := r.receive(t, "Office", set("bass", "3", 1, "Office")); got["bass"] != NotLinked {
+		t.Fatalf("%v", got)
+	}
+}
+
+func TestTheOrderOfChanges(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office")
+	r.receive(t, "Office", set("bass", "3", 5, "Office"))
+	for _, c := range []struct {
+		value  string
+		n      uint64
+		origin string
+		want   string
+	}{
+		{"1", 4, "Office", Older},                  // earlier in the order
+		{"1", 5, "Attic", Older},                   // the same place, and a name that comes first
+		{"2", 5, "Pantry", Applied},                // the same place, and a name that comes after
+		{"4", 5 + maxJump + 1, "Office", BadValue}, // a number from nowhere
+	} {
+		if got := r.receive(t, "Office", set("bass", c.value, c.n, c.origin)); got["bass"] != c.want {
+			t.Errorf("n %d from %s: %q, want %q", c.n, c.origin, got["bass"], c.want)
+		}
+	}
+	if r.bass.Get() != 2 {
+		t.Errorf("bass %v", r.bass.Get())
 	}
 }
 
 func TestAKeptSettingIsNotChanged(t *testing.T) {
 	r := newRig(t)
-	_ = config.Set().Share().Link("bass", []string{"Office"})
+	link(t, "bass", "Office")
 	_ = config.Set().Share().Keep("bass", true)
-	got := r.receive(t, "Office", message{Kind: "set", Items: []item{{ID: "bass", Value: "3", At: r.at}}})
-	if got["bass"] != Kept || r.bass.Get() != 0 {
-		t.Fatalf("a linked change: %v, bass %v", got, r.bass.Get())
-	}
-	got = r.receive(t, "Office", message{Kind: "copy", Items: []item{{ID: "bass", Value: "3", At: r.at}}})
-	if got["bass"] != Kept || r.bass.Get() != 0 {
-		t.Fatalf("a copy: %v, bass %v", got, r.bass.Get())
+	for _, kind := range []string{"set", "copy"} {
+		m := set("bass", "3", 1, "Office")
+		m.Kind = kind
+		if got := r.receive(t, "Office", m); got["bass"] != Kept || r.bass.Get() != 0 {
+			t.Fatalf("a %s: %v, bass %v", kind, got, r.bass.Get())
+		}
 	}
 }
 
-func TestACopyNeedsNoLink(t *testing.T) {
+// A copy needs no link, comes in as the latest change, and is passed on to the setting's links here.
+func TestACopy(t *testing.T) {
 	r := newRig(t)
+	link(t, "screen_theme", "Bedroom")
+	_ = config.Set().Share().Update(func(s *config.Share) {
+		s.From = map[string]config.ShareFrom{"screen_theme": {Device: "Bedroom", N: 40}}
+	})
 	got := r.receive(t, "Office", message{Kind: "copy", Items: []item{
-		{ID: "screen_theme", Value: "Light", At: r.at},
-		{ID: "lyrics", Value: "on", At: r.at},
+		{ID: "screen_theme", Value: "Light", N: 2, Origin: "Office"},
+		{ID: "slideshow_shuffle", Value: "on", N: 0, Origin: "Office"},
 	}})
-	if got["screen_theme"] != Applied || r.theme.Get() != "Light" || got["lyrics"] != Applied || !r.lyrics.Get() {
-		t.Fatalf("%v theme %q lyrics %v", got, r.theme.Get(), r.lyrics.Get())
+	if got["screen_theme"] != Applied || r.theme.Get() != "Light" || got["slideshow_shuffle"] != Applied || !r.shuffle.Get() {
+		t.Fatalf("%v theme %q shuffle %v", got, r.theme.Get(), r.shuffle.Get())
+	}
+	if from := config.Get().Share.From["screen_theme"]; from.N != 41 || from.Device != "Office" {
+		t.Errorf("a copy is not the latest change: %+v", from)
+	}
+	waitFor(t, func() bool { return len(r.sentTo("Bedroom")) == 1 })
+	if m := r.sentTo("Bedroom")[0]; m.Kind != "set" || m.Items[0].Value != "Light" || m.Items[0].N != 41 {
+		t.Errorf("passed on as %+v", m)
+	}
+}
+
+// A change taken from one link is passed on to the others, and not back.
+func TestAChangeIsPassedOn(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office", "Bedroom")
+	r.receive(t, "Office", set("bass", "3", 7, "Office"))
+	waitFor(t, func() bool { return len(r.sentTo("Bedroom")) == 1 })
+	m := r.sentTo("Bedroom")[0]
+	if it := m.Items[0]; it.N != 7 || it.Origin != "Office" || it.Value != "3" {
+		t.Fatalf("passed on as %+v", it)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if len(r.sentTo("Office")) != 0 {
+		t.Error("sent back to where it came from")
 	}
 }
 
@@ -152,11 +217,13 @@ func TestWhatIsNeverTaken(t *testing.T) {
 	r := newRig(t)
 	got := r.receive(t, "Office", message{Kind: "copy", Items: []item{
 		{ID: "sendspin", Value: "on"},          // opens a port: never on the list
+		{ID: "ring_volume", Value: "0"},        // how loud an alarm rings: never on the list
 		{ID: "screen_theme", Value: "Plaid"},   // no such option
 		{ID: "bass", Value: "99"},              // past its range
 		{ID: "screen_clock_style", Value: "x"}, // on the list, not on this device
 	}})
-	want := map[string]string{"sendspin": NotShared, "screen_theme": BadValue, "bass": BadValue, "screen_clock_style": NotHere}
+	want := map[string]string{"sendspin": NotShared, "ring_volume": NotShared, "screen_theme": BadValue,
+		"bass": BadValue, "screen_clock_style": NotHere}
 	for id, w := range want {
 		if got[id] != w {
 			t.Errorf("%s: %q, want %q", id, got[id], w)
@@ -180,73 +247,122 @@ func TestNothingIsTakenWithSharingOff(t *testing.T) {
 	if got["bass"] != NotTaking || r.bass.Get() != 0 {
 		t.Fatalf("%v bass %v", got, r.bass.Get())
 	}
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "request", ID: "bass"}); got["bass"] != NotTaking ||
+		len(config.Get().Share.Requests) != 0 {
+		t.Fatalf("a request with sharing off: %v", got)
+	}
 }
 
-// A change made here goes to the setting's group, once; one taken from another device is not sent back.
-func TestAChangeHereGoesToTheGroupAndIsNotEchoed(t *testing.T) {
+// A change made here goes to the devices linked, numbered one past the last, and one taken from another
+// device is not sent back.
+func TestAChangeHereGoesToTheLinksAndIsNotEchoed(t *testing.T) {
 	r := newRig(t)
-	_ = config.Set().Share().Link("bass", []string{"Office", "Bedroom"})
+	link(t, "bass", "Office", "Bedroom")
 	ctx := context.Background()
 	r.f.watch(ctx) // learns the value
 	r.bass.OnCommand(2)
-	r.tick(time.Second)
 	r.f.watch(ctx)
 	r.f.watch(ctx)
 	waitFor(t, func() bool { return len(r.sentTo("Office")) == 1 && len(r.sentTo("Bedroom")) == 1 })
-	m := r.sentTo("Office")[0]
-	if m.Kind != "set" || len(m.Items) != 1 || m.Items[0].ID != "bass" || m.Items[0].Value != "2" {
-		t.Fatalf("sent %+v", m)
+	it := r.sentTo("Office")[0].Items[0]
+	if it.ID != "bass" || it.Value != "2" || it.N != 1 || it.Origin != "Kitchen" {
+		t.Fatalf("sent %+v", it)
 	}
 
-	r.receive(t, "Office", message{Kind: "set", Items: []item{{ID: "bass", Value: "4", At: r.at.Add(time.Minute)}}})
+	r.receive(t, "Office", set("bass", "4", 2, "Office"))
+	waitFor(t, func() bool { return len(r.sentTo("Bedroom")) == 2 }) // passed on to Bedroom
 	r.f.watch(ctx)
 	time.Sleep(50 * time.Millisecond)
-	if n := len(r.sentTo("Office")) + len(r.sentTo("Bedroom")); n != 2 {
-		t.Fatalf("a change taken from another device was sent on: %d messages", n)
+	if n := len(r.sentTo("Office")); n != 1 {
+		t.Fatalf("a change taken from Office was sent back to it: %d messages", n)
 	}
 }
 
-// Linking from here tells the group, with this device's value, and tells a device taken out of it.
-func TestLinkTellsTheGroup(t *testing.T) {
+// Another device can ask, accept what was asked, or take itself out: never link this one by itself.
+func TestLinksNeedConsent(t *testing.T) {
+	r := newRig(t)
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "request", ID: "bass"}); got["bass"] != Asked {
+		t.Fatalf("a request: %v", got)
+	}
+	s := config.Get().Share
+	if s.LinkedWith("bass", "Office") || len(s.Requests) != 1 || s.Requests[0].Device != "Office" {
+		t.Fatalf("a request linked by itself, or was not kept: %+v", s)
+	}
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "accept", ID: "screen_theme"}); got["screen_theme"] != NotLinked ||
+		config.Get().Share.LinkedWith("screen_theme", "Office") {
+		t.Fatalf("an accept nobody asked for linked: %v", got)
+	}
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "request", ID: "sendspin"}); got["sendspin"] != NotShared {
+		t.Fatalf("%v", got)
+	}
+
+	// Accepted here: linked, and Office is told.
+	r.linkAnswer = Linked
+	if out, err := r.f.Accept(context.Background(), "bass", "Office"); err != nil || out != Linked {
+		t.Fatalf("%q %v", out, err)
+	}
+	s = config.Get().Share
+	if !s.LinkedWith("bass", "Office") || len(s.Requests) != 0 {
+		t.Fatalf("accepting: %+v", s)
+	}
+	if m := r.sentTo("Office"); len(m) != 1 || m[0].Link != "accept" {
+		t.Fatalf("Office was told %+v", m)
+	}
+
+	// Office takes itself out.
+	r.receive(t, "Office", message{Kind: "link", Link: "remove", ID: "bass"})
+	if config.Get().Share.LinkedWith("bass", "Office") {
+		t.Fatal("still linked")
+	}
+}
+
+// Asked here and accepted there: settled, and this device's value goes over.
+func TestAnAcceptedRequest(t *testing.T) {
 	r := newRig(t)
 	r.theme.Set("Light")
-	if _, err := r.f.Link(context.Background(), "screen_theme", []string{"Office", "Bedroom"}); err != nil {
-		t.Fatal(err)
-	}
-	m := r.sentTo("Bedroom")[0]
-	if m.Kind != "link" || len(m.Links) != 1 || len(m.Links[0].Group) != 3 || len(m.Items) != 1 || m.Items[0].Value != "Light" {
-		t.Fatalf("sent %+v", m)
-	}
 	if _, err := r.f.Link(context.Background(), "screen_theme", []string{"Office"}); err != nil {
 		t.Fatal(err)
 	}
-	out := r.sentTo("Bedroom")
-	if last := out[len(out)-1]; last.Kind != "link" || len(last.Links[0].Group) != 0 {
-		t.Fatalf("the device taken out was told %+v", last)
+	if m := r.sentTo("Office"); len(m) != 1 || m[0].Link != "request" {
+		t.Fatalf("asked %+v", m)
 	}
-	if got := config.Get().Share.Linked("screen_theme"); len(got) != 1 || got[0] != "Office" {
-		t.Fatalf("links here %v", got)
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "accept", ID: "screen_theme"}); got["screen_theme"] != Linked {
+		t.Fatalf("%v", got)
 	}
-	if _, err := r.f.Link(context.Background(), "sendspin", []string{"Office"}); err == nil {
-		t.Error("a setting not on the list was linked")
+	if config.Get().Share.WaitingFor("screen_theme", "Office") {
+		t.Fatal("still waiting")
+	}
+	waitFor(t, func() bool { return len(r.sentTo("Office")) == 2 })
+	if m := r.sentTo("Office")[1]; m.Kind != "set" || m.Items[0].Value != "Light" {
+		t.Fatalf("then sent %+v", m)
+	}
+
+	// Taken out here: unlinked, and told.
+	if _, err := r.f.Link(context.Background(), "screen_theme", nil); err != nil {
+		t.Fatal(err)
+	}
+	if m := r.sentTo("Office"); m[len(m)-1].Link != "remove" || config.Get().Share.LinkedWith("screen_theme", "Office") {
+		t.Fatalf("taking it out: %+v", m[len(m)-1])
 	}
 }
 
-// A group from another device links this one with the rest of it, and takes the sender's value with it.
-func TestALinkFromAnotherDevice(t *testing.T) {
+func TestLinkLimits(t *testing.T) {
 	r := newRig(t)
-	got := r.receive(t, "Office", message{Kind: "link",
-		Links: []link{{ID: "bass", Group: []string{"Office", "Kitchen", "Bedroom"}}},
-		Items: []item{{ID: "bass", Value: "2", At: r.at}}})
-	if got["bass"] != Applied || r.bass.Get() != 2 {
-		t.Fatalf("%v bass %v", got, r.bass.Get())
+	if _, err := r.f.Link(context.Background(), "sendspin", []string{"Office"}); err == nil {
+		t.Error("a setting not on the list was linked")
 	}
-	if l := config.Get().Share.Linked("bass"); len(l) != 2 {
-		t.Fatalf("linked with %v", l)
+	var many []string
+	for i := range config.MaxLinked + 1 {
+		many = append(many, fmt.Sprintf("Room %d", i))
 	}
-	r.receive(t, "Office", message{Kind: "link", Links: []link{{ID: "bass", Group: nil}}})
-	if l := config.Get().Share.Linked("bass"); len(l) != 0 {
-		t.Fatalf("still linked with %v", l)
+	if _, err := r.f.Link(context.Background(), "bass", many); err == nil {
+		t.Error("more devices than a setting may have")
+	}
+	for i := range config.MaxRequests + 5 {
+		r.receive(t, fmt.Sprintf("Room %d", i), message{Kind: "link", Link: "request", ID: "bass"})
+	}
+	if n := len(config.Get().Share.Requests); n != config.MaxRequests {
+		t.Errorf("%d requests kept", n)
 	}
 }
 

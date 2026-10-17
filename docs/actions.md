@@ -2373,7 +2373,8 @@ Copies this device's settings to other devices, once, with no link: the way to m
 device and send it to the others. Settings sharing has to be on, on this device and on each device
 that is to take them ([Sharing settings](setup.md#sharing-settings-with-the-other-devices)). A device
 that keeps a setting its own, has sharing off or has no such setting is left alone, and the log says
-which.
+which. A copy counts as the latest change where it lands, and is passed on to the setting's links
+there.
 
 ### settings (Required)
 

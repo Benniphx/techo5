@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
@@ -74,5 +75,38 @@ func TestSharingWithoutAHouseWordSaysSo(t *testing.T) {
 	f, c := in(t)
 	if body := get(f, "/setup?tab=general", c).Body.String(); !strings.Contains(body, "no house word set") {
 		t.Error("no word for the house, and the page does not say it cannot share")
+	}
+}
+
+func TestAnsweringALinkRequest(t *testing.T) {
+	f, c := in(t)
+	_ = config.Set().Share().On(true)
+	_ = config.Set().Share().Update(func(s *config.Share) {
+		config.AddRequest(s, "bass", "Office", time.Now())
+		config.AddRequest(s, "treble", "Office", time.Now())
+	})
+	if body := get(f, "/setup?tab=general", c).Body.String(); !strings.Contains(body, "Office asks to link") {
+		t.Error("the requests are not shown")
+	}
+
+	// Accepted: linked here, though Office cannot be reached to be told.
+	w := postTo(f, "/setup/share-request", c, url.Values{"token": {c.Value}, "id": {"bass"}, "device": {"Office"}, "op": {"accept"}})
+	if w.Code != http.StatusSeeOther {
+		t.Fatalf("%d", w.Code)
+	}
+	s := config.Get().Share
+	if !s.LinkedWith("bass", "Office") || len(s.Requests) != 1 {
+		t.Fatalf("accepting: %+v", s)
+	}
+
+	postTo(f, "/setup/share-request", c, url.Values{"token": {c.Value}, "id": {"treble"}, "device": {"Office"}, "op": {"decline"}})
+	if s := config.Get().Share; s.LinkedWith("treble", "Office") || len(s.Requests) != 0 {
+		t.Fatalf("declining: %+v", s)
+	}
+
+	// Nothing to answer that was not asked.
+	w = postTo(f, "/setup/share-request", c, url.Values{"token": {c.Value}, "id": {"screen_theme"}, "device": {"Office"}, "op": {"accept"}})
+	if !strings.Contains(w.Header().Get("Location"), "problem=") || config.Get().Share.LinkedWith("screen_theme", "Office") {
+		t.Fatal("a link nobody asked for was accepted")
 	}
 }

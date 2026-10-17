@@ -9,7 +9,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
@@ -24,6 +23,7 @@ import (
 func init() {
 	routes["/setup/share"] = (*Feature).saveShare
 	routes["/setup/share-copy"] = (*Feature).copyShare
+	routes["/setup/share-request"] = (*Feature).answerShare
 }
 
 // shareBody is the most a sharing form may say: a box for each setting and each device.
@@ -54,20 +54,36 @@ func shareDevices() []string {
 func shareSection(w http.ResponseWriter, token string) {
 	c := config.Get()
 	s := c.Share
-	fmt.Fprintf(w, `<fieldset><legend>Shared settings</legend>
-	 <form method="post" action="/setup/share"><input type="hidden" name="token" value="%s">
+	fmt.Fprint(w, `<fieldset><legend>Shared settings</legend>`)
+	devices := shareDevices()
+	// Requests first, each a form of its own, ahead of the settings' form.
+	if s.On && len(s.Requests) > 0 {
+		fmt.Fprint(w, `<h4>Asked to link</h4>`)
+		for _, rq := range s.Requests {
+			fmt.Fprintf(w, `<form method="post" action="/setup/share-request" class="btns">
+			 <input type="hidden" name="token" value="%s"><input type="hidden" name="id" value="%s">
+			 <input type="hidden" name="device" value="%s">
+			 <span>%s asks to link <strong>%s</strong></span>
+			 <button type="submit" name="op" value="accept">Accept</button>
+			 <button type="submit" name="op" value="decline">Decline</button></form>`,
+				html.EscapeString(token), html.EscapeString(rq.ID), html.EscapeString(rq.Device),
+				html.EscapeString(rq.Device), html.EscapeString(shareName(rq.ID)))
+		}
+	}
+	fmt.Fprintf(w, `<form method="post" action="/setup/share"><input type="hidden" name="token" value="%s">
 	 <label><input type="checkbox" name="on" value="1"%s> Share settings with the other devices</label>
 	 <p class="note">Off on every device until it is turned on here or with the Settings sharing switch in Home
-	  Assistant; a device with it off takes nothing. Link a setting to other devices and a change to it on any of
-	  them reaches the rest, the latest change winning. Keep mine: nothing another device sends changes it. What
-	  opens the device to the network, uses its microphones or camera, holds a password or says where its voice
-	  goes is never shared. Every device needs the same house word (Connections).</p>`,
+	  Assistant; a device with it off takes nothing. With it on, any device of the house can copy the settings
+	  listed here to this one, except those kept. Tick a device for a setting to ask it to link: once accepted
+	  there, a change to that setting on either reaches the other, the latest change winning; another device can
+	  ask, never link this one by itself. Keep mine: nothing another device sends changes it. What opens the
+	  device to the network, uses or shows the use of its microphones or camera, holds a password or says where
+	  its voice goes is never shared. Every device needs the same house word (Connections).</p>`,
 		html.EscapeString(token), checked(s.On))
 	if c.Home.HouseWord == "" {
 		fmt.Fprint(w, `<p class="note"><strong>This device has no house word set</strong>, so it can neither send nor take
 		 shared settings.</p>`)
 	}
-	devices := shareDevices()
 	if s.On {
 		if len(devices) == 0 {
 			fmt.Fprint(w, `<p class="note">No other device is on the network now.</p>`)
@@ -85,9 +101,13 @@ func shareSection(w http.ResponseWriter, token string) {
 					html.EscapeString(st.Name), html.EscapeString(st.ID), html.EscapeString(st.ID),
 					checked(s.Kept(st.ID)), html.EscapeString(st.Name))
 				for _, d := range devices {
-					fmt.Fprintf(w, `<td><input type="checkbox" name="link_%s" value="%s"%s aria-label="%s with %s"></td>`,
+					asked := ""
+					if s.WaitingFor(st.ID, d) {
+						asked = ` <small>asked</small>`
+					}
+					fmt.Fprintf(w, `<td><input type="checkbox" name="link_%s" value="%s"%s aria-label="%s with %s">%s</td>`,
 						html.EscapeString(st.ID), html.EscapeString(d), checked(s.LinkedWith(st.ID, d)),
-						html.EscapeString(st.Name), html.EscapeString(d))
+						html.EscapeString(st.Name), html.EscapeString(d), asked)
 				}
 				from := ""
 				if f, ok := s.From[st.ID]; ok {
@@ -164,8 +184,8 @@ func (f *Feature) saveShare(w http.ResponseWriter, r *http.Request) {
 	share.Get().Restore(config.Get())
 	var problems []string
 	if on {
-		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-		defer cancel()
+		// Each message has its own time to arrive (share's deliver), however many settings changed.
+		ctx := context.WithoutCancel(r.Context())
 		for _, id := range r.PostForm["id"] {
 			if !share.Shareable(id) {
 				continue
@@ -183,8 +203,10 @@ func (f *Feature) saveShare(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			for d, outcome := range results {
-				if outcome != share.Applied {
-					problems = append(problems, fmt.Sprintf("%s did not take the link for %s (%s)", d, id, orUnreachable(outcome)))
+				switch outcome {
+				case share.Applied, share.Linked, share.Asked:
+				default:
+					problems = append(problems, fmt.Sprintf("%s: %s (%s)", d, shareName(id), orUnreachable(outcome)))
 				}
 			}
 		}
@@ -231,9 +253,7 @@ func (f *Feature) copyShare(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, back("general", "problem", "tick the settings to copy and the devices to copy them to"), http.StatusSeeOther)
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	results := share.Get().Copy(ctx, ids, devices)
+	results := share.Get().Copy(context.WithoutCancel(r.Context()), ids, devices)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	head(w)
@@ -250,9 +270,50 @@ func (f *Feature) copyShare(w http.ResponseWriter, r *http.Request) {
 			if !share.Shareable(id) {
 				continue
 			}
-			fmt.Fprintf(w, `<li>%s: %s</li>`, html.EscapeString(id), html.EscapeString(orUnreachable(r[id])))
+			fmt.Fprintf(w, `<li>%s: %s</li>`, html.EscapeString(shareName(id)), html.EscapeString(orUnreachable(r[id])))
 		}
 		fmt.Fprint(w, `</ul>`)
 	}
 	fmt.Fprint(w, `<p><a href="/setup?tab=general">Back to the setup page</a></p></fieldset></div>`)
+}
+
+// shareName is a setting's name as the page shows it.
+func shareName(id string) string {
+	for _, sec := range share.Sections() {
+		for _, st := range sec.Settings {
+			if st.ID == id {
+				return st.Name
+			}
+		}
+	}
+	return id
+}
+
+// answerShare accepts or declines another device's request to link a setting.
+func (f *Feature) answerShare(w http.ResponseWriter, r *http.Request) {
+	if !f.shareForm(w, r) {
+		return
+	}
+	id, device := r.PostFormValue("id"), r.PostFormValue("device")
+	if !slices.ContainsFunc(config.Get().Share.Requests, func(q config.ShareRequest) bool {
+		return q.ID == id && strings.EqualFold(q.Device, device)
+	}) {
+		http.Redirect(w, r, back("general", "problem", "that request is not waiting any more"), http.StatusSeeOther)
+		return
+	}
+	ctx := context.WithoutCancel(r.Context())
+	to := back("general", "saved", "1")
+	switch r.PostFormValue("op") {
+	case "accept":
+		if outcome, err := share.Get().Accept(ctx, id, device); err != nil {
+			to = back("general", "problem", err.Error())
+		} else if outcome != share.Linked {
+			to = back("general", "problem", fmt.Sprintf("linked here; %s answered %s", device, orUnreachable(outcome)))
+		}
+	case "decline":
+		share.Get().Decline(ctx, id, device)
+	default:
+		to = back("general", "problem", "accept or decline")
+	}
+	http.Redirect(w, r, to, http.StatusSeeOther)
 }

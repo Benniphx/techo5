@@ -117,6 +117,10 @@ func shareSign(word, from, to string, body []byte, now time.Time) string {
 	return shareVersion + " " + ts + " " + nonce + " " + hex.EncodeToString(shareMAC(word, from, to, ts, nonce, body))
 }
 
+// ErrShareNotTaking is a device that answers but takes no shared settings: sharing is off there, or it
+// has no house word.
+var ErrShareNotTaking = errors.New("not taking shared settings")
+
 var (
 	errShareUnsigned = errors.New("not signed by this house")
 	errShareStale    = errors.New("signed at a time too far from this device's clock")
@@ -301,6 +305,9 @@ func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
 				slog.Info("share: signing by another device's clock", "device", p.Name, "off_by", off.Round(time.Second))
 				continue
 			}
+		}
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, ErrShareNotTaking
 		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("%s said %s", p.Name, resp.Status)

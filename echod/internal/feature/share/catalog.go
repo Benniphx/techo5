@@ -27,35 +27,38 @@ type group struct {
 	IDs  []string
 }
 
+// What is left off, beyond the rule above, and why: how readily and how long the microphones listen (wake
+// word thresholds, the confirming threshold, follow-ups, how long one listens, the room's sensitivity), as
+// the remote API holds them; the signs that the device is listening (wake tones, effects and the follow-up
+// tone), which another device must never be able to turn off; how loud an alarm rings, which another device
+// could turn down to nothing; do not disturb for the intercom, which blocks calls; which photos and
+// calendar events a screen shows (a shared room's screen showing one person's); and which outside service
+// is told where the house is or what is playing (the weather, the rain map, lyrics).
 var groups = []group{
 	{"Speaker", []string{"bass", "treble", "speaker_eq", "night_volume", "quiet_hours", "home_assistant_sounds",
 		"media_duck_level", "duck_on_near_miss"}},
-	{"Microphones", []string{"microphone_gain", "microphone_sensitivity", "microphone_cancel_echo",
-		"microphone_noise_reduction", "microphone_leveling", "microphone_end_of_speech", "mute_led_brightness"}},
-	// How readily the microphones open (wake word thresholds, the confirming threshold, how long one
-	// listens) is each device's, as the remote API holds it: not on the list.
-	{"Voice: first wake word", []string{"wake_tone_1", "wake_effect_1", "thinking_effect_1",
-		"replying_effect_1", "reply_delivery_1", "reply_buffer_1", "max_think_1", "follow_ups_1",
-		"follow_up_1", "follow_up_tone_1"}},
-	{"Voice: second wake word", []string{"wake_tone_2", "wake_effect_2", "thinking_effect_2",
-		"replying_effect_2", "reply_delivery_2", "reply_buffer_2", "max_think_2", "follow_ups_2",
-		"follow_up_2", "follow_up_tone_2"}},
+	{"Microphones", []string{"microphone_gain", "microphone_cancel_echo", "microphone_noise_reduction",
+		"microphone_leveling", "microphone_end_of_speech", "mute_led_brightness"}},
+	{"Voice: first wake word", []string{"thinking_effect_1", "replying_effect_1", "reply_delivery_1",
+		"reply_buffer_1", "max_think_1"}},
+	{"Voice: second wake word", []string{"thinking_effect_2", "replying_effect_2", "reply_delivery_2",
+		"reply_buffer_2", "max_think_2"}},
 	{"Voice", []string{"stop_word_sensitivity"}},
-	{"Alarms", []string{"alarm_sound", "alarm_snooze_length", "ring_volume"}},
+	{"Alarms", []string{"alarm_sound", "alarm_snooze_length"}},
 	{"Screen", []string{"screen_theme", "screen_font", "screen_language", "screen_clock_style", "screen_clock_format",
 		"screen_clock_position", "screen_date_color", "screen_clock_style_swipe", "screen_clock_tap",
 		"screen_turn_style", "screen_answer_time", "screen_camera_time", "screen_call_button", "screen_now_playing",
 		"screen_weather_animation", "screen_auto_brightness", "screen_auto_brightness_dimmest"}},
 	{"Night", []string{"screen_at_night", "screen_night_start", "screen_night_end", "screen_night_hours",
 		"screen_night_clock_style", "screen_night_light_level", "screen_night_tap_lifts"}},
-	{"Photos", []string{"slideshow_mode", "slideshow_interval", "slideshow_shuffle", "slideshow_subfolders",
-		"slideshow_whole_photo", "slideshow_pairs", "slideshow_caption", "slideshow_weather_art",
-		"slideshow_screensaver_idle", "slideshow_screensaver_overlay", "immich_favorites"}},
-	{"Weather and calendar", []string{"weather_source", "weather_alerts", "radar_source", "calendar_popups",
-		"calendar_popup_before", "calendar_popup_all_day", "calendar_popup_chime"}},
+	{"Photos", []string{"slideshow_interval", "slideshow_shuffle", "slideshow_subfolders", "slideshow_whole_photo",
+		"slideshow_pairs", "slideshow_caption", "slideshow_weather_art", "slideshow_screensaver_idle",
+		"slideshow_screensaver_overlay"}},
+	{"Weather and calendar", []string{"weather_alerts", "calendar_popup_before", "calendar_popup_all_day",
+		"calendar_popup_chime"}},
 	{"Dashboard", []string{"screen_dashboard_idle", "screen_dashboard_kiosk", "screen_dashboard_return",
 		"screen_dashboard_tiles"}},
-	{"Calls, cameras and music", []string{"phone_ring_sound", "intercom_do_not_disturb", "camera_sound", "lyrics"}},
+	{"Calls and cameras", []string{"phone_ring_sound", "camera_sound"}},
 }
 
 // shareable is every setting on the list.

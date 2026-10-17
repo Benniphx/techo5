@@ -897,23 +897,39 @@ to take part: **Settings sharing** in Home Assistant, or **Shared settings** und
 setup page. Every device needs the same house word (Connections), since what one device sends another
 is signed with it.
 
+What turning it on allows, plainly: any device of the house can then copy the settings listed below
+to this one, except those this one keeps, and can ask to link a setting with it. Nothing links this
+device by itself: a link is made here, by ticking a device, or by accepting another device's request
+here.
+
 - **Linked settings.** On the setup page, open a group (Speaker, Screen, Night and so on) and tick,
-  for a setting, the devices it is to be kept in step with. Save, and those devices are linked with
-  it and with each other, and take this device's value. From then on, a change to that setting on any
-  of them, from the screen, Home Assistant or the setup page, reaches the rest within a few seconds.
-  There is no main device: the latest change wins. **Last from** shows which device a value came from.
-  Untick a device to take it out of the link.
+  for a setting, the devices it is to be kept in step with, then save. Each device ticked is asked;
+  until it accepts, its box says *asked*. On that device, **Asked to link** lists the request with
+  **Accept** and **Decline**. Once accepted, the two take the asking device's value, and from then on
+  a change to that setting on either, from the screen, Home Assistant or the setup page, reaches the
+  other within a few seconds. A device linked with several passes a change on to the rest, so a
+  group stays in step. There is no main device: every change is numbered one past the last, and the
+  latest number wins, whatever any device's clock says. **Last from** shows which device a value came
+  from. Untick a device to take it out of the link; it is told, and unlinks too. A setting is linked
+  with 16 devices at most.
 - **Keep mine.** Ticked for a setting, nothing another device sends changes it here, linked or copied;
   the device that sent it is told it was kept.
 - **Copy once.** Under **Copy once**, tick the settings and the devices, and press **Copy**: this
   device's values go to them once, with no link, and the page shows what each device took. Home
-  Assistant can do the same with [`copy_settings`](actions.md#copy-settings-to-other-devices).
+  Assistant can do the same with [`copy_settings`](actions.md#copy-settings-to-other-devices). A copy
+  counts as the latest change on the device it lands on, so where that setting is linked there, it is
+  passed on to the rest of the link as a change made there would be.
 
-Only everyday settings can be shared: the speaker's sound, the microphones' tuning, how the device
-answers, alarms' sound, the screen, night, photos, weather, calendar pop-ups and the dashboard's
-behavior. Never what opens the device to the network or has it listen or watch (the same list a
-restore leaves alone, above), and never a password, a key, a server's address or the device's name.
-A device that has no such setting (a Dot has no screen) says so and is left alone.
+Only everyday settings can be shared: the speaker's sound, the microphones' echo, noise and leveling,
+how an answer is shown and spoken, alarms' sound and snooze, the screen, night, photos' timing and
+look, weather alerts and calendar pop-up timing, and the dashboard's behavior. Never what opens the
+device to the network or has it listen or watch (the same list a restore leaves alone, above), and
+never a password, a key, a server's address or the device's name. Also never: how readily and how
+long the microphones listen and the signs that they are listening (wake word thresholds and tones,
+listening effects, follow-ups), how loud an alarm rings, do not disturb for calls, which photos and
+calendar events a screen shows, and which outside services are told where the house is or what is
+playing (the weather and rain map sources, lyrics). A device that has no such setting (a Dot has no
+screen) says so and is left alone, and so does one with sharing off.
 
 ## 11. The remote API
 
