@@ -29,6 +29,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -81,6 +82,7 @@ const (
 	Linked      = "linked"        // a link in place both ways
 	Asked       = "asked"         // a link request waiting to be accepted there
 	Full        = "full"          // the setting is linked with as many devices as it may be
+	Declined    = "declined"      // a link request declined there
 )
 
 // message is what travels between two devices.
@@ -122,6 +124,11 @@ type Feature struct {
 	// one would only hold up sharing.
 	mu   sync.Mutex
 	last map[string]string // the linked settings' values as last seen or taken, so a change is seen once
+
+	// asks is how asking each device for a link went (askAgain), and asking whether askAgain is running.
+	askMu  sync.Mutex
+	asks   map[string]*askLater
+	asking atomic.Bool
 }
 
 var (
@@ -290,12 +297,25 @@ func (f *Feature) deliver(ctx context.Context, to string, m message) map[string]
 	if json.Unmarshal(raw, &r) != nil {
 		return nil
 	}
+	// Only what was sent is answered for: anything else in the reply is no answer to this message.
+	sent := map[string]bool{}
+	for _, it := range m.Items {
+		sent[it.ID] = true
+	}
+	if m.ID != "" {
+		sent[m.ID] = true
+	}
+	results := map[string]string{}
 	var behind []item
 	for id, outcome := range r.Results {
+		if !sent[id] {
+			continue
+		}
+		results[id] = outcome
 		switch outcome {
 		case Applied, Same, Linked, Asked:
 		case Older:
-			if cur, ok := r.Current[id]; ok && cur.ID == id {
+			if cur, ok := r.Current[id]; ok && cur.ID == id && ValidName(cur.Origin) && m.Kind != "link" {
 				behind = append(behind, cur)
 			}
 		default:
@@ -307,7 +327,7 @@ func (f *Feature) deliver(ctx context.Context, to string, m message) map[string]
 		got := f.take(to, behind, false)
 		slog.Info("share: caught up with a later change", "from", to, "results", got)
 	}
-	return r.Results
+	return results
 }
 
 // receive is a message from another device.
@@ -502,10 +522,12 @@ func (f *Feature) linkFrom(from, op, id string) string {
 	switch op {
 	case "request":
 		switch {
+		case c.WasDeclined(id, from) && !linked:
+			outcome = Declined // declined here before: not shown again
 		case linked:
 			outcome = Linked
 			if waiting {
-				change = func(s *config.Share) { config.SetWaiting(s, id, from, false) }
+				change = func(s *config.Share) { config.SetWaiting(s, id, from, false, time.Time{}) }
 			}
 		case requested:
 			outcome = Asked
@@ -518,7 +540,7 @@ func (f *Feature) linkFrom(from, op, id string) string {
 		switch {
 		case linked && waiting:
 			outcome = Linked
-			change = func(s *config.Share) { config.SetWaiting(s, id, from, false) }
+			change = func(s *config.Share) { config.SetWaiting(s, id, from, false, time.Time{}) }
 		case linked:
 			outcome = Linked
 		default:
@@ -590,10 +612,13 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		return nil, fmt.Errorf("a setting is linked with %d devices at most", config.MaxLinked)
 	}
 	c := config.Get().Share
-	var ask, removed []string
+	var add, again, removed []string
 	for _, d := range want {
-		if !c.LinkedWith(id, d) || c.WaitingFor(id, d) {
-			ask = append(ask, d)
+		switch {
+		case !c.LinkedWith(id, d):
+			add = append(add, d)
+		case c.WaitingFor(id, d):
+			again = append(again, d) // asked before, not accepted yet: asked again, with nothing to write
 		}
 	}
 	for _, d := range c.Linked(id) {
@@ -602,21 +627,23 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		}
 	}
 	results := map[string]string{}
-	if len(ask) > 0 || len(removed) > 0 {
+	if len(add) > 0 || len(removed) > 0 {
+		now := f.now()
 		if err := config.Set().Share().Update(func(s *config.Share) {
 			for _, d := range removed {
 				config.RemoveLink(s, id, d)
 			}
 			var asked []string
-			for _, d := range ask {
+			for _, d := range add {
+				config.Undecline(s, id, d) // asked from here: whatever was declined before is not held against it
 				if config.AddLink(s, id, d) {
-					config.SetWaiting(s, id, d, true)
+					config.SetWaiting(s, id, d, true, now)
 					asked = append(asked, d)
 				} else {
 					results[d] = Full
 				}
 			}
-			ask = asked
+			add = asked
 		}); err != nil {
 			return nil, err
 		}
@@ -626,17 +653,17 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 	var wg sync.WaitGroup
 	tell := func(d, op string) {
 		defer wg.Done()
-		outcome := f.deliver(ctx, d, message{Kind: "link", Link: op, ID: id})[id]
+		var outcome string
+		if op == "request" {
+			outcome = f.ask(ctx, id, d)
+		} else {
+			outcome = f.deliver(ctx, d, message{Kind: "link", Link: op, ID: id})[id]
+		}
 		mu.Lock()
 		results[d] = outcome
 		mu.Unlock()
-		if op == "request" && outcome == Linked {
-			// It had this device linked already: settled both ways, and the two settle on the later value.
-			_ = config.Set().Share().Update(func(s *config.Share) { config.SetWaiting(s, id, d, false) })
-			f.sendValue(ctx, id, d)
-		}
 	}
-	for _, d := range ask {
+	for _, d := range append(add, again...) {
 		wg.Add(1)
 		go tell(d, "request")
 	}
@@ -645,21 +672,107 @@ func (f *Feature) Link(ctx context.Context, id string, devices []string) (map[st
 		go tell(d, "remove")
 	}
 	wg.Wait()
-	if len(ask) > 0 || len(removed) > 0 {
-		slog.Info("share: links set here", "setting", id, "asked", ask, "removed", removed)
+	if len(add) > 0 || len(removed) > 0 {
+		slog.Info("share: links set here", "setting", id, "asked", add, "removed", removed)
 	}
 	return results, nil
 }
 
-// askAgain asks again every device a link is waiting on.
+// ask sends a link request to a device and acts on the answer: linked there already, the wait is over and
+// the two settle on the later value; declined there, the link here goes. Anything else changes nothing
+// here.
+func (f *Feature) ask(ctx context.Context, id, d string) string {
+	outcome := f.deliver(ctx, d, message{Kind: "link", Link: "request", ID: id})[id]
+	switch outcome {
+	case Linked:
+		_ = config.Set().Share().Update(func(s *config.Share) { config.SetWaiting(s, id, d, false, time.Time{}) })
+		f.sendValue(ctx, id, d)
+	case Declined:
+		_ = config.Set().Share().Update(func(s *config.Share) { config.RemoveLink(s, id, d) })
+		slog.Info("share: a link was declined", "setting", id, "by", d)
+	}
+	f.asked(id, d, outcome)
+	return outcome
+}
+
+// askLater is when a link request not delivered is tried again: soon at first, then less and less often,
+// up to once a day; after giveUpAfter from the first time it was asked, not at all, and the setup page
+// says there was no answer.
+type askLater struct {
+	next      time.Time
+	delay     time.Duration
+	delivered bool // it reached the device, which keeps it until somebody answers there
+}
+
+const (
+	askFirst    = askAgainEvery
+	askMost     = 24 * time.Hour
+	giveUpAfter = 7 * 24 * time.Hour
+)
+
+// asked notes how asking a device went, for askAgain.
+func (f *Feature) asked(id, d, outcome string) {
+	f.askMu.Lock()
+	defer f.askMu.Unlock()
+	if f.asks == nil {
+		f.asks = map[string]*askLater{}
+	}
+	k := config.AskKey(id, d)
+	a := f.asks[k]
+	if a == nil {
+		a = &askLater{}
+		f.asks[k] = a
+	}
+	switch outcome {
+	case Asked, Linked, Declined, NotShared, NotHere:
+		a.delivered = true // answered: nothing gained by asking again
+	default:
+		a.delay = min(max(2*a.delay, askFirst), askMost)
+		a.next = f.now().Add(a.delay)
+	}
+}
+
+// NoAnswer is whether a device asked to link a setting has not answered in giveUpAfter: it is not asked
+// again.
+func NoAnswer(s config.Share, id, d string, now time.Time) bool {
+	at, ok := s.AskedAt[config.AskKey(id, d)]
+	return ok && s.WaitingFor(id, d) && now.Sub(at) > giveUpAfter
+}
+
+// askAgain asks again, on its own goroutine, every device a link is waiting on whose request did not get
+// through, when its time comes. It writes nothing unless an answer changes something.
 func (f *Feature) askAgain(ctx context.Context) {
+	if !f.asking.CompareAndSwap(false, true) {
+		return
+	}
+	safe.Go("share ask again", func() {
+		defer f.asking.Store(false)
+		f.askDue(ctx)
+	})
+}
+
+// askDue is askAgain's work, here and now.
+func (f *Feature) askDue(ctx context.Context) {
 	c := config.Get().Share
 	if !c.On {
 		return
 	}
+	now := f.now()
 	for id, devices := range c.Waiting {
-		if Shareable(id) && len(devices) > 0 {
-			_, _ = f.Link(ctx, id, c.Linked(id))
+		if !Shareable(id) {
+			continue
+		}
+		for _, d := range devices {
+			if NoAnswer(c, id, d, now) {
+				continue
+			}
+			f.askMu.Lock()
+			a := f.asks[config.AskKey(id, d)]
+			due := a == nil || (!a.delivered && !now.Before(a.next))
+			f.askMu.Unlock()
+			if due {
+				f.ask(ctx, id, d)
+			}
 		}
 	}
 }
@@ -680,9 +793,10 @@ func (f *Feature) Accept(ctx context.Context, id, device string) (string, error)
 	return f.deliver(ctx, device, message{Kind: "link", Link: "accept", ID: id})[id], nil
 }
 
-// Decline declines another device's request to link a setting, and tells it.
+// Decline declines another device's request to link a setting, remembers it so the same request is
+// answered as declined rather than shown again, and tells the device.
 func (f *Feature) Decline(ctx context.Context, id, device string) {
-	_ = config.Set().Share().Update(func(s *config.Share) { config.RemoveLink(s, id, device) })
+	_ = config.Set().Share().Update(func(s *config.Share) { config.Decline(s, id, device, f.now()) })
 	f.deliver(ctx, device, message{Kind: "link", Link: "remove", ID: id})
 }
 

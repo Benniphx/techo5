@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
@@ -102,7 +103,10 @@ func shareSection(w http.ResponseWriter, token string) {
 					checked(s.Kept(st.ID)), html.EscapeString(st.Name))
 				for _, d := range devices {
 					asked := ""
-					if s.WaitingFor(st.ID, d) {
+					switch {
+					case share.NoAnswer(s, st.ID, d, time.Now()):
+						asked = ` <small>no answer</small>`
+					case s.WaitingFor(st.ID, d):
 						asked = ` <small>asked</small>`
 					}
 					fmt.Fprintf(w, `<td><input type="checkbox" name="link_%s" value="%s"%s aria-label="%s with %s">%s</td>`,

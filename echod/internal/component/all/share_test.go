@@ -42,7 +42,7 @@ func TestSharedSettingsTouchNothingOfTheDevicesOwn(t *testing.T) {
 		before := config.Get()
 
 		done := make(chan struct{})
-		go func() { defer close(done); change(e) }()
+		go func() { defer close(done); change(e, before) }()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -81,8 +81,10 @@ func TestSharedSettingsTouchNothingOfTheDevicesOwn(t *testing.T) {
 	}
 }
 
-// change sets an entity to a value other than the one it has, through its own command.
-func change(e esphome.Entity) {
+// change sets an entity to a value other than the one it has, through its own command. An entity can
+// still hold what an earlier run set it to while the settings are new, so a choice is tried option by
+// option until the settings differ from before.
+func change(e esphome.Entity, before config.Config) {
 	switch v := e.(type) {
 	case *esphome.Switch:
 		v.OnCommand(!v.Get())
@@ -94,8 +96,8 @@ func change(e esphome.Entity) {
 		v.OnCommand(float32(n))
 	case *esphome.Select:
 		for _, o := range v.Options {
-			if o != v.Get() {
-				v.OnCommand(o)
+			v.OnCommand(o)
+			if len(config.Changed(before, config.Get())) > 0 {
 				return
 			}
 		}
@@ -122,6 +124,7 @@ var neverShared = []string{
 	"follow_ups_1", "follow_ups_2", "follow_up_1", "follow_up_2", "follow_up_tone_1", "follow_up_tone_2",
 	"wake_tone_1", "wake_tone_2", "wake_effect_1", "wake_effect_2", "ring_volume", "intercom_do_not_disturb",
 	"slideshow_mode", "immich_favorites", "calendar_popups", "weather_source", "radar_source", "lyrics",
+	"quiet_hours", "weather_alerts",
 }
 
 func TestNeverSharedIsNotOnTheList(t *testing.T) {

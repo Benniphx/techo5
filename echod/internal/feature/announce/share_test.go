@@ -168,3 +168,34 @@ func TestSendShareToADeviceNotTaking(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// A reply is believed only signed for the message it answers: one from anything that answered for the
+// device without the house word, or signed for another message, is refused.
+func TestSendShareRefusesAnUnsignedReply(t *testing.T) {
+	shareRig(t)
+	for name, h := range map[string]http.HandlerFunc{
+		"no signature": func(w http.ResponseWriter, r *http.Request) {
+			_, _ = w.Write([]byte(`{"results":{"bass":"older"},"current":{"bass":{"id":"bass","value":"6","n":99}}}`))
+		},
+		"signed for another message": func(w http.ResponseWriter, r *http.Request) {
+			body := []byte(`{"results":{}}`)
+			w.Header().Set(shareReplyHeader, shareReplyMAC("pickled herring", "some other nonce", "Office", "Office", body))
+			_, _ = w.Write(body)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(h)
+			defer srv.Close()
+			host, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "http://"))
+			p, _ := strconv.Atoi(port)
+			peers.Lock()
+			was := peers.by
+			peers.by = map[string]known{"office": {Peer: Peer{Name: "Office", Address: host, Port: p}, at: time.Now()}}
+			peers.Unlock()
+			defer func() { peers.Lock(); peers.by = was; peers.Unlock() }()
+			if reply, err := SendShare(context.Background(), "Office", []byte(`{}`)); err == nil {
+				t.Fatalf("believed %q", reply)
+			}
+		})
+	}
+}

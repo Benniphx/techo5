@@ -34,10 +34,11 @@ import (
 // This file is the only hook: announce.go's own sending and receiving are untouched.
 
 const (
-	sharePath       = "/share"
-	shareAuthHeader = "X-Techo5-Share"
-	shareFromHeader = "X-Techo5-Share-From"
-	shareVersion    = "share-v1"
+	sharePath        = "/share"
+	shareAuthHeader  = "X-Techo5-Share"
+	shareReplyHeader = "X-Techo5-Share-Reply"
+	shareFromHeader  = "X-Techo5-Share-From"
+	shareVersion     = "share-v1"
 
 	// shareSalt and shareRounds are the slow keying; the salt is this protocol's own, so the key is no use
 	// to announcements, the intercom or nearest's claims.
@@ -111,10 +112,31 @@ func shareMAC(word, from, to, ts, nonce string, body []byte) []byte {
 
 // shareSign is the header for a message about to be sent.
 func shareSign(word, from, to string, body []byte, now time.Time) string {
+	header, _ := shareSignNonce(word, from, to, body, now)
+	return header
+}
+
+// shareSignNonce is shareSign, and the nonce in it, which the reply is signed over.
+func shareSignNonce(word, from, to string, body []byte, now time.Time) (header, nonce string) {
 	var n [12]byte
 	_, _ = rand.Read(n[:])
-	ts, nonce := strconv.FormatInt(now.Unix(), 10), hex.EncodeToString(n[:])
-	return shareVersion + " " + ts + " " + nonce + " " + hex.EncodeToString(shareMAC(word, from, to, ts, nonce, body))
+	ts := strconv.FormatInt(now.Unix(), 10)
+	nonce = hex.EncodeToString(n[:])
+	return shareVersion + " " + ts + " " + nonce + " " + hex.EncodeToString(shareMAC(word, from, to, ts, nonce, body)), nonce
+}
+
+// shareReplyMAC is the signature over a reply: to the message with that nonce, from the device that
+// answered to the one that asked. A reply is believed only with it, so nothing that answers for a device
+// without the house word can say what a device has.
+func shareReplyMAC(word, nonce, from, to string, body []byte) string {
+	sum := sha256.Sum256(body)
+	m := hmac.New(sha256.New, shareKey(word))
+	for _, part := range []string{shareVersion + " reply", nonce, strings.ToLower(from), strings.ToLower(to),
+		hex.EncodeToString(sum[:])} {
+		m.Write([]byte(part))
+		m.Write([]byte{'\n'})
+	}
+	return hex.EncodeToString(m.Sum(nil))
 }
 
 // ErrShareNotTaking is a device that answers but takes no shared settings: sharing is off there, or it
@@ -258,6 +280,7 @@ func receiveShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(shareReplyHeader, shareReplyMAC(word, nonce, me, from, reply))
 	_, _ = w.Write(reply)
 }
 
@@ -291,7 +314,8 @@ func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
 		}
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set(shareFromHeader, url.QueryEscape(me))
-		req.Header.Set(shareAuthHeader, shareSign(word, me, p.Name, body, time.Now().Add(offsetFor(addr))))
+		header, nonce := shareSignNonce(word, me, p.Name, body, time.Now().Add(offsetFor(addr)))
+		req.Header.Set(shareAuthHeader, header)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return nil, err
@@ -311,6 +335,10 @@ func SendShare(ctx context.Context, to string, body []byte) ([]byte, error) {
 		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("%s said %s", p.Name, resp.Status)
+		}
+		want := shareReplyMAC(word, nonce, p.Name, me, reply)
+		if !hmac.Equal([]byte(want), []byte(resp.Header.Get(shareReplyHeader))) {
+			return nil, fmt.Errorf("%s answered without the house's signature", p.Name)
 		}
 		return reply, nil
 	}

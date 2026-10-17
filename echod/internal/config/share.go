@@ -31,9 +31,18 @@ type Share struct {
 	// MaxRequests of them.
 	Requests []ShareRequest `json:"requests,omitempty"`
 
-	// Waiting is, by setting, the devices asked to link with this one that have not accepted yet.
-	Waiting map[string][]string `json:"waiting,omitempty"`
+	// Waiting is, by setting, the devices asked to link with this one that have not accepted yet, and
+	// AskedAt when each was first asked (by AskKey).
+	Waiting map[string][]string  `json:"waiting,omitempty"`
+	AskedAt map[string]time.Time `json:"asked_at,omitempty"`
+
+	// Declined is the requests declined here, at most MaxRequests: the same request again is answered as
+	// declined rather than shown again.
+	Declined []ShareRequest `json:"declined,omitempty"`
 }
+
+// AskKey is a setting and a device asked about it, as AskedAt is keyed.
+func AskKey(id, device string) string { return id + "/" + strings.ToLower(device) }
 
 const (
 	// MaxLinked is the most devices one setting is linked with.
@@ -65,7 +74,14 @@ func (s Share) clone() Share {
 	s.Keep = slices.Clone(s.Keep)
 	s.From = maps.Clone(s.From)
 	s.Requests = slices.Clone(s.Requests)
+	s.AskedAt = maps.Clone(s.AskedAt)
+	s.Declined = slices.Clone(s.Declined)
 	return s
+}
+
+// WasDeclined is whether a device's request to link a setting was declined here.
+func (s Share) WasDeclined(id, device string) bool {
+	return slices.ContainsFunc(s.Declined, func(r ShareRequest) bool { return r.ID == id && strings.EqualFold(r.Device, device) })
 }
 
 func cloneLists(m map[string][]string) map[string][]string {
@@ -148,17 +164,25 @@ func RemoveLink(s *Share, id, device string) {
 	} else {
 		delete(s.Links, id)
 	}
-	SetWaiting(s, id, device, false)
+	SetWaiting(s, id, device, false, time.Time{})
 	s.Requests = slices.DeleteFunc(s.Requests, func(r ShareRequest) bool {
 		return r.ID == id && strings.EqualFold(r.Device, device)
 	})
 }
 
 // SetWaiting marks a device asked to link a setting, or no longer waited on.
-func SetWaiting(s *Share, id, device string, waiting bool) {
+func SetWaiting(s *Share, id, device string, waiting bool, now time.Time) {
 	l := withoutName(s.Waiting[id], device)
 	if waiting {
 		l = append(l, device)
+		if _, ok := s.AskedAt[AskKey(id, device)]; !ok {
+			if s.AskedAt == nil {
+				s.AskedAt = map[string]time.Time{}
+			}
+			s.AskedAt[AskKey(id, device)] = now
+		}
+	} else {
+		delete(s.AskedAt, AskKey(id, device))
 	}
 	if len(l) > 0 {
 		if s.Waiting == nil {
@@ -179,4 +203,22 @@ func AddRequest(s *Share, id, device string, at time.Time) {
 	if n := len(s.Requests) - MaxRequests; n > 0 {
 		s.Requests = slices.Delete(s.Requests, 0, n)
 	}
+}
+
+// Decline forgets a device's request to link a setting, unlinks it, and remembers the decline, the
+// oldest going past MaxRequests.
+func Decline(s *Share, id, device string, at time.Time) {
+	RemoveLink(s, id, device)
+	if s.WasDeclined(id, device) {
+		return
+	}
+	s.Declined = append(s.Declined, ShareRequest{ID: id, Device: device, At: at})
+	if n := len(s.Declined) - MaxRequests; n > 0 {
+		s.Declined = slices.Delete(s.Declined, 0, n)
+	}
+}
+
+// Undecline forgets that a device's request to link a setting was declined: this device asks it itself.
+func Undecline(s *Share, id, device string) {
+	s.Declined = slices.DeleteFunc(s.Declined, func(r ShareRequest) bool { return r.ID == id && strings.EqualFold(r.Device, device) })
 }

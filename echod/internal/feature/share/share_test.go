@@ -26,6 +26,13 @@ type rig struct {
 	mu         sync.Mutex
 	sent       map[string][]message
 	linkAnswer string // what a device answers a link message
+	at         time.Time
+}
+
+func (r *rig) tick(d time.Duration) {
+	r.mu.Lock()
+	r.at = r.at.Add(d)
+	r.mu.Unlock()
 }
 
 func newRig(t *testing.T) *rig {
@@ -47,10 +54,10 @@ func newRig(t *testing.T) *rig {
 	entities = func(id string) (esphome.Entity, bool) { e, ok := own[id]; return e, ok }
 	t.Cleanup(func() { entities = was })
 
-	at := time.Unix(1_000_000, 0)
+	r.at = time.Unix(1_000_000, 0)
 	r.f = &Feature{
 		me:   func() string { return "Kitchen" },
-		now:  func() time.Time { return at },
+		now:  func() time.Time { r.mu.Lock(); defer r.mu.Unlock(); return r.at },
 		wake: make(chan struct{}, 1),
 		last: map[string]string{},
 	}
@@ -515,7 +522,8 @@ func TestAcceptingPastTheLimit(t *testing.T) {
 	}
 }
 
-// A device that could not be asked is asked again, now and then and on the next save.
+// A device that could not be asked is asked again: on the next save, and later, less and less often; one
+// the request reached is not asked again; after a week with no answer, nobody is asked.
 func TestALinkNotYetAcceptedIsAskedAgain(t *testing.T) {
 	r := newRig(t)
 	reach := false
@@ -530,19 +538,102 @@ func TestALinkNotYetAcceptedIsAskedAgain(t *testing.T) {
 		}
 		return json.Marshal(reply{Results: map[string]string{m.ID: Asked}})
 	}
+	ask := func() int { r.f.askDue(context.Background()); return len(r.sentTo("Office")) }
+
 	out, _ := r.f.Link(context.Background(), "bass", []string{"Office"})
 	if out["Office"] != Unreachable || !config.Get().Share.WaitingFor("bass", "Office") {
 		t.Fatalf("%v", out)
 	}
-	reach = true
-	r.f.askAgain(context.Background())
-	if m := r.sentTo("Office"); len(m) != 2 || m[1].Link != "request" {
-		t.Fatalf("asked %+v", m)
+	if n := ask(); n != 1 {
+		t.Fatalf("asked again at once: %d", n)
 	}
-	// A save with the same devices asks again too.
+	r.tick(askFirst)
+	if n := ask(); n != 2 {
+		t.Fatalf("not asked again after %v: %d", askFirst, n)
+	}
+	r.tick(askFirst) // the wait doubles
+	if n := ask(); n != 2 {
+		t.Fatalf("asked again before the wait doubled: %d", n)
+	}
+	reach = true
+	r.tick(askFirst)
+	if n := ask(); n != 3 {
+		t.Fatalf("not asked when due: %d", n)
+	}
+	r.tick(askMost)
+	if n := ask(); n != 3 {
+		t.Fatalf("asked again after it got through: %d", n)
+	}
+	// A save with the same devices asks again too, and writes nothing.
 	_, _ = r.f.Link(context.Background(), "bass", []string{"Office"})
-	if m := r.sentTo("Office"); len(m) != 3 {
-		t.Fatalf("asked %d times", len(m))
+	if n := len(r.sentTo("Office")); n != 4 {
+		t.Fatalf("a save: %d", n)
+	}
+
+	// A week on, still not accepted: no answer, and nobody is asked.
+	r.f.askMu.Lock()
+	r.f.asks = nil
+	r.f.askMu.Unlock()
+	r.tick(giveUpAfter)
+	if !NoAnswer(config.Get().Share, "bass", "Office", r.f.now()) {
+		t.Fatal("not said to have no answer")
+	}
+	if n := ask(); n != 4 {
+		t.Fatalf("asked after giving up: %d", n)
+	}
+}
+
+// A declined request is remembered: the same request again is answered as declined and not shown, and
+// the device that asked takes the link back. Asking from here undoes it.
+func TestADeclineIsRemembered(t *testing.T) {
+	r := newRig(t)
+	r.receive(t, "Office", message{Kind: "link", Link: "request", ID: "bass"})
+	r.f.Decline(context.Background(), "bass", "Office")
+	if s := config.Get().Share; len(s.Requests) != 0 || !s.WasDeclined("bass", "Office") {
+		t.Fatalf("%+v", s)
+	}
+	if got := r.receive(t, "Office", message{Kind: "link", Link: "request", ID: "bass"}); got["bass"] != Declined ||
+		len(config.Get().Share.Requests) != 0 {
+		t.Fatalf("asked again: %v %+v", got, config.Get().Share.Requests)
+	}
+	r.linkAnswer = Asked
+	if _, err := r.f.Link(context.Background(), "bass", []string{"Office"}); err != nil {
+		t.Fatal(err)
+	}
+	if config.Get().Share.WasDeclined("bass", "Office") {
+		t.Fatal("asking from here did not undo the decline")
+	}
+
+	// Declined there: the link here goes.
+	r.linkAnswer = Declined
+	if _, err := r.f.Link(context.Background(), "screen_theme", []string{"Bedroom"}); err != nil {
+		t.Fatal(err)
+	}
+	if config.Get().Share.LinkedWith("screen_theme", "Bedroom") {
+		t.Fatal("still linked with a device that declined")
+	}
+}
+
+// What a device is told back is taken only for what was sent to it.
+func TestAReplyIsOnlyForWhatWasSent(t *testing.T) {
+	r := newRig(t)
+	link(t, "bass", "Office")
+	link(t, "screen_theme", "Office")
+	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
+		return json.Marshal(reply{
+			Results: map[string]string{"bass": Older, "screen_theme": Older},
+			Current: map[string]item{
+				"bass":         {ID: "bass", Value: "6", N: 9, Origin: strings.Repeat("x", maxName+1)},
+				"screen_theme": {ID: "screen_theme", Value: "Light", N: 9, Origin: "Office"},
+			},
+		})
+	}
+	got := r.f.deliver(context.Background(), "Office", set("bass", "1", 1, "Kitchen"))
+	if _, ok := got["screen_theme"]; ok || r.theme.Get() != "Dark" {
+		t.Fatalf("an answer for a setting not sent was taken: %v, theme %q", got, r.theme.Get())
+	}
+	if r.bass.Get() != 0 {
+		t.Fatal("caught up with a change from a name past the limit")
 	}
 }
 
