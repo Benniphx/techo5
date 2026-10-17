@@ -210,9 +210,9 @@ ends instead, as the **Night mode** switch turned off does, so the screen is bac
 night hours next start. The light, and **Wake light brightness** with it, stays at full for 30
 minutes after the alarm's time, then goes off; **Stop alarm or timer**, the stop word, the action
 button or a tap on the light's page turns it off sooner. On a Dot there is no screen: the light ring
-comes up and stays, and that is all. It fires the `light_only` [alarm event](#alarm-events). Setting
-the same alarm again with `alarm_set` makes it ring again. **Light only** in an alarm's editor on the
-device, and on the setup page, does the same.
+comes up, holds for 30 minutes, and that is all. It fires the `light_only`
+[alarm event](#alarm-events). Setting the same alarm again with `alarm_set` makes it ring again.
+**Light only** in an alarm's editor on the device, and on the setup page, does the same.
 
 ```yaml
 action: esphome.office_alarm_set_light_only
