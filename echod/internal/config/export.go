@@ -347,6 +347,7 @@ func KeepOwn(c *Config, from Config) {
 	c.Wake.OnHA.Stream, c.Wake.OnHA.Confirm = from.Wake.OnHA.Stream, from.Wake.OnHA.Confirm
 	c.Wake.KeepClips = from.Wake.KeepClips
 	c.Presence.On, c.Presence.Gestures = from.Presence.On, from.Presence.Gestures
+	c.Presence.Person = from.Presence.Person
 	c.Streaming = from.Streaming
 	c.Video.On, c.Video.DLNA = from.Video.On, from.Video.DLNA
 	c.Video.Allowed = slices.Clone(from.Video.Allowed)
