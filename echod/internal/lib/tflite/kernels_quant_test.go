@@ -111,3 +111,17 @@ func TestConv2DRefusesTooMuchWork(t *testing.T) {
 		t.Fatal("taken")
 	}
 }
+
+// A filter with no width (a damaged file) is refused rather than looped over row by empty row.
+func TestEmptyFilterRefused(t *testing.T) {
+	x := tf([]int{1, 2, 2, 1}, 1, 2, 3, 4)
+	o := &OpDesc{conv: convParams{strideW: 1, strideH: 1, dilationW: 1, dilationH: 1}}
+	dw := &Tensor{Type: Float32, Shape: []int{1, 1 << 20, 0, 1}}
+	if err := kernels[OpDepthwiseConv](o, []*Tensor{x, dw, nil}, []*Tensor{out()}); err == nil {
+		t.Error("depthwise took an empty filter")
+	}
+	cw := &Tensor{Type: Float32, Shape: []int{1, 1 << 20, 0, 1}}
+	if err := kernels[OpConv2D](o, []*Tensor{x, cw, nil}, []*Tensor{out()}); err == nil {
+		t.Error("conv took an empty filter")
+	}
+}

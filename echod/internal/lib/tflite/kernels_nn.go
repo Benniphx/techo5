@@ -16,6 +16,9 @@ func conv2D(o *OpDesc, in, out []*Tensor) error {
 
 	batch, ih, iw, ic := x.Shape[0], x.Shape[1], x.Shape[2], x.Shape[3]
 	oc, kh, kw := w.Shape[0], w.Shape[1], w.Shape[2]
+	if kh < 1 || kw < 1 {
+		return fmt.Errorf("a %dx%d filter", kh, kw)
+	}
 	if w.Shape[3] != ic {
 		return fmt.Errorf("filter has %d input channels, input has %d", w.Shape[3], ic)
 	}
@@ -269,6 +272,9 @@ func depthwiseConv2D(o *OpDesc, in, out []*Tensor) error {
 	}
 	batch, ih, iw, ic := x.Shape[0], x.Shape[1], x.Shape[2], x.Shape[3]
 	kh, kw, oc := w.Shape[1], w.Shape[2], w.Shape[3]
+	if kh < 1 || kw < 1 {
+		return fmt.Errorf("a %dx%d filter", kh, kw)
+	}
 	if ic == 0 || oc%ic != 0 || (p.depthMul != 0 && oc != ic*p.depthMul) {
 		return fmt.Errorf("filter has %d channels for %d input channels, multiplier %d", oc, ic, p.depthMul)
 	}
