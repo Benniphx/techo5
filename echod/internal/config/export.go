@@ -108,7 +108,18 @@ func servers(c Config) []ServerChange {
 		{What: "Immich", New: c.Home.Immich.Server},
 		{What: "The doorbell recorder", New: c.Home.Reolink.Base},
 		{What: "OBS", New: c.Deck.OBS.Addr},
+		{What: "go2rtc", New: withoutLogin(c.Home.Go2RTC.Base)},
 	}
+}
+
+// withoutLogin is an address with any user and password taken out of it, for comparing and showing.
+func withoutLogin(addr string) string {
+	u, err := url.Parse(addr)
+	if err != nil || u.User == nil {
+		return addr
+	}
+	u.User = nil
+	return u.String()
 }
 
 // serverChanges is the server addresses that differ between a and b.
@@ -233,6 +244,8 @@ func ClearSecrets(c *Config) {
 	c.TalkBack = TalkBack{}
 	c.Security.LockPIN = ""
 	c.Deck.OBS.Password = ""
+	c.Remote.Secret = ""
+	c.CamStream.Pass = ""
 	for i := range c.Deck.Computers {
 		c.Deck.Computers[i].Key = ""
 	}
@@ -265,10 +278,19 @@ func KeepSecrets(c *Config, from Config) (reenter []string) {
 		c.Home.Reolink.Base == from.Home.Reolink.Base && c.Home.Reolink.User == from.Home.Reolink.User &&
 			c.Home.Reolink.Fingerprint == from.Home.Reolink.Fingerprint, "the doorbell recorder's password")
 	keep(&c.Deck.OBS.Password, from.Deck.OBS.Password, c.Deck.OBS.Addr == from.Deck.OBS.Addr, "OBS's password")
+	// go2rtc's login is in its address: the device's is kept only for the same server (scheme, host and
+	// port), and a file naming another server gets that server with no login.
+	if mine := from.Home.Go2RTC.Base; mine != "" && withoutLogin(mine) == withoutLogin(c.Home.Go2RTC.Base) {
+		c.Home.Go2RTC.Base = mine
+	} else if mine != withoutLogin(mine) {
+		reenter = append(reenter, "go2rtc's login")
+	}
 
 	// These have no server of their own to follow: the device's own, kept whole.
 	c.Home.HouseWord = from.Home.HouseWord
 	c.Security.LockPIN = from.Security.LockPIN
+	c.Remote.Secret = from.Remote.Secret
+	c.CamStream.Pass = from.CamStream.Pass
 	c.TalkBack = from.TalkBack
 	c.TalkBack.Cameras = maps.Clone(from.TalkBack.Cameras)
 	c.TalkBack.Pictures = maps.Clone(from.TalkBack.Pictures)
@@ -305,6 +327,14 @@ func KeepOwn(c *Config, from Config) {
 	// it was turned off would turn it back on.
 	c.Sendspin = from.Sendspin
 	c.Bluetooth = from.Bluetooth
+
+	// Measuring the room, listening for claps and serving the camera: new uses of the microphones and
+	// the camera, each this device's to turn on. The camera's login goes with it (its password is also
+	// a secret, kept by KeepSecrets). The remote API's switch too: a restore never opens a door.
+	c.Microphone.Noise = from.Microphone.Noise
+	c.Microphone.Claps = from.Microphone.Claps
+	c.CamStream = from.CamStream
+	c.Remote.On = from.Remote.On
 
 	// "No wake word" chosen on purpose is a device that is not to listen: a file with words in it does
 	// not start it listening.

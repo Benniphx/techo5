@@ -429,3 +429,56 @@ func TestManyAddressesAreQuick(t *testing.T) {
 		t.Errorf("a megabyte of addresses took %v", d)
 	}
 }
+
+// The release's new uses of the microphones and the camera, and the remote API, are the device's own,
+// with their secrets; go2rtc's login stays only with its own server.
+func TestARestoreKeepsTheNewSwitchesAndLogins(t *testing.T) {
+	from := Defaults()
+	from.Microphone.Noise, from.Microphone.Claps = true, true
+	from.CamStream = CamStream{On: true, User: "them", Pass: "their-password"}
+	from.Remote = Remote{On: true, Secret: "theirs"}
+	from.Home.Go2RTC.Base = "http://192.0.2.9:1984"
+
+	here := Defaults()
+	here.CamStream = CamStream{User: "camera", Pass: "my-password"}
+	here.Remote = Remote{Secret: "mine"}
+	here.Home.Go2RTC.Base = "http://admin:secret@192.0.2.9:1984"
+
+	file, err := Export(from, "", "v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, leak := range []string{"their-password", "theirs"} {
+		if strings.Contains(string(file), leak) {
+			t.Errorf("the file carries %q", leak)
+		}
+	}
+	got, err := Restored(here, file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := got.Config
+	if c.Microphone.Noise || c.Microphone.Claps || c.CamStream.On || c.Remote.On {
+		t.Errorf("a restore turned on what the device had off: %+v %+v %+v", c.Microphone, c.CamStream, c.Remote)
+	}
+	if c.CamStream.Pass != "my-password" || c.Remote.Secret != "mine" {
+		t.Errorf("the device's own logins were not kept: %+v %+v", c.CamStream, c.Remote)
+	}
+	if c.Home.Go2RTC.Base != "http://admin:secret@192.0.2.9:1984" {
+		t.Errorf("go2rtc %q: the login for the same server was not kept", c.Home.Go2RTC.Base)
+	}
+
+	other := from
+	other.Home.Go2RTC.Base = "http://192.0.2.77:1984"
+	file, err = Export(other, "", "v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err = Restored(here, file, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Config.Home.Go2RTC.Base != "http://192.0.2.77:1984" || !slices.Contains(got.Reenter, "go2rtc's login") {
+		t.Errorf("go2rtc %q, reenter %v: another server must not get this device's login", got.Config.Home.Go2RTC.Base, got.Reenter)
+	}
+}

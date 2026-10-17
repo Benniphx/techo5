@@ -73,10 +73,15 @@ func GridLayout(n int) (cols, rows int) {
 
 var errNoGridCameras = errors.New("no cameras to show: list them with home_cameras, or give the device a Home Assistant token")
 
-// gridCamera is whether entity can be in the grid: one of Home Assistant's cameras, or a Reolink recorder's.
+// gridCamera is whether entity can be in the grid: one of Home Assistant's cameras, a Reolink recorder's,
+// or a go2rtc stream.
 func gridCamera(entity string) bool {
-	return strings.HasPrefix(entity, "camera.") || isReolink(entity)
+	return strings.HasPrefix(entity, "camera.") || isReolink(entity) || isGo2RTC(entity)
 }
+
+// gridGo2RTC fetches a go2rtc stream's picture for a cell, from go2rtc itself rather than Home
+// Assistant, which has no such camera; a variable for the tests.
+var gridGo2RTC = go2rtcSnap
 
 // ShowGrid puts the grid up for d (at most MaxGridFor), with the cameras named (entity ids), or the first
 // of the list when none are. The device's own camera is not one of them: its sensor is the screen's, and
@@ -166,9 +171,12 @@ func (f *Feature) gridFrames(ctx context.Context, gen uint64, i int, entity stri
 func (f *Feature) gridSnapshot(ctx context.Context, entity string, w, h int) (*image.RGBA, error) {
 	var b []byte
 	var err error
-	if isReolink(entity) {
+	switch {
+	case isReolink(entity):
 		b, err = reolinkSnapAt(entity, w)
-	} else {
+	case isGo2RTC(entity):
+		b, err = gridGo2RTC(ctx, entity, w)
+	default:
 		b, err = fetchCamera(ctx, entity, w)
 	}
 	if err != nil {

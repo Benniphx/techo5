@@ -2,6 +2,7 @@ package home
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -90,5 +91,45 @@ func TestTheGridAsksForSmallPicturesAndLetsGo(t *testing.T) {
 	case <-given:
 	case <-time.After(2 * time.Second):
 		t.Error("a fetch went on after the grid was taken down")
+	}
+}
+
+// A go2rtc stream in the grid is fetched from go2rtc, never through Home Assistant's camera proxy.
+func TestAGo2RTCCameraInTheGridAsksGo2RTC(t *testing.T) {
+	f, _ := gridHouse(t, []config.Camera{{Entity: "go2rtc:porch", Name: "Porch"}, {Entity: "camera.quick", Name: "Quick"}})
+	picture := fetchCamera
+	var mu sync.Mutex
+	viaHA, viaGo2RTC := map[string]bool{}, map[string]bool{}
+	fetchCamera = func(ctx context.Context, entity string, w int) ([]byte, error) {
+		mu.Lock()
+		viaHA[entity] = true
+		mu.Unlock()
+		return picture(ctx, "camera.quick", w)
+	}
+	was := gridGo2RTC
+	gridGo2RTC = func(ctx context.Context, entity string, w int) ([]byte, error) {
+		mu.Lock()
+		viaGo2RTC[entity] = true
+		mu.Unlock()
+		return picture(ctx, "camera.quick", w)
+	}
+	t.Cleanup(func() { gridGo2RTC = was })
+	if err := f.ShowGrid(nil, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		done := viaGo2RTC["go2rtc:porch"] && viaHA["camera.quick"]
+		mu.Unlock()
+		if done {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !viaGo2RTC["go2rtc:porch"] || viaHA["go2rtc:porch"] {
+		t.Errorf("go2rtc %v, Home Assistant %v: the go2rtc stream should come from go2rtc alone", viaGo2RTC, viaHA)
 	}
 }

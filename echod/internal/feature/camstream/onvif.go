@@ -82,12 +82,15 @@ type envelope struct {
 func (f *Feature) onvif(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
-		http.Error(w, "ONVIF takes POST", http.StatusMethodNotAllowed)
+		web.Refuse(w, "ONVIF takes POST", http.StatusMethodNotAllowed)
 		return
 	}
 	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(readWithin))
 	b, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil || len(b) > maxBody {
+		// What is left of the body is not waited for (web.Refuse), so a slow sender holds nothing.
+		_ = http.NewResponseController(w).SetReadDeadline(time.Now())
+		w.Header().Set("Connection", "close")
 		fault(w, http.StatusBadRequest, "ter:InvalidArgs", "the request is too long or cut short")
 		return
 	}
