@@ -213,9 +213,10 @@ loops. Every command runs the same on Windows, Linux and macOS once the Dot is u
 
 The Echo 2nd gen (2017, `radar`) is built like the Dot inside: the same chip, sound card,
 microphones, light ring and buttons. The Dot build recognizes it when it starts and drives its
-speaker, which has an amplifier of its own. Support is still in progress: there is no installer for
-it yet, it plays without Amazon's sound tuning, and it doesn't use Amazon's beamformer. The volume
-curve is a first guess.
+speaker, which has an amplifier of its own. Support is still in progress: the Dot installer takes
+it from the next Dot release, with its own Bluetooth kernel, and install steps are coming. It plays
+without Amazon's sound tuning, and it doesn't use Amazon's beamformer. The volume curve is a first
+guess.
 
 ### Going back to TWRP or Fire OS
 
