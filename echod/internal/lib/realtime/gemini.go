@@ -117,8 +117,8 @@ func (g gemini) toolResult(callID, name, output string) []any {
 }
 
 // hear keeps a piece of what was heard. Gemini sends the words as they are made out, a few letters at a
-// time ("Ho", "w", " are"): they are said as one Heard when the answer starts (flush), so nothing takes
-// the first piece for the whole question.
+// time ("Ho", "w", " are"), and can go on after its answer has begun: they are said as one Heard at the
+// end of the turn (flush), so nothing takes a piece for the whole question.
 func (g gemini) hear(s string) {
 	if g.heard != nil {
 		g.heard.WriteString(s)
@@ -176,7 +176,6 @@ func (g gemini) read(msg []byte, emit func(Event)) {
 			g.hear(sc.InputTranscription.Text)
 		}
 		if sc.OutputTranscription != nil && sc.OutputTranscription.Text != "" {
-			g.flush(emit)
 			emit(Event{Kind: Saying, Text: sc.OutputTranscription.Text})
 		}
 		if sc.ModelTurn != nil {
@@ -185,7 +184,6 @@ func (g gemini) read(msg []byte, emit func(Event)) {
 					continue
 				}
 				if pcm := pcmFrom(p.InlineData.Data); len(pcm) > 0 {
-					g.flush(emit)
 					emit(Event{Kind: Audio, PCM: pcm, Rate: rateOf(p.InlineData.MimeType)})
 				}
 			}
@@ -200,7 +198,6 @@ func (g gemini) read(msg []byte, emit func(Event)) {
 		}
 	}
 	if tc := m.ToolCall; tc != nil {
-		g.flush(emit)
 		for _, f := range tc.FunctionCalls {
 			args := string(f.Args)
 			if args == "" || args == "null" {

@@ -512,7 +512,9 @@ func (c *conversation) turnEvent(e event) {
 	case evContinue:
 		// The pipeline asked a question. Its answer is owed after the reply has been spoken, so this
 		// only records the intent; evPlayed opens it.
-		if c.phase != phaseIdle {
+		// Never for realtime voice, whose next turn would not know the question (rtBackend.finish): a
+		// Home Assistant run's late question is not its.
+		if _, rt := c.be.(*rtBackend); c.phase != phaseIdle && !rt {
 			slog.Info("pipeline asked for an answer", "slot", c.slot+1)
 			c.pending = &nextTurn{slot: c.slot, followUp: true}
 		}
@@ -742,6 +744,14 @@ func (c *conversation) turnEvent(e event) {
 			return
 		}
 
+		// Realtime voice is answered by what it was sent, and nobody else ends its listening: at the
+		// limit, what was heard is the question, as when the device hears the speaker stop.
+		if _, rt := c.be.(*rtBackend); rt && c.phase == phaseListening {
+			slog.Info("listened to the limit; asking realtime voice to answer what it heard", "slot", c.slot+1)
+			c.think()
+			return
+		}
+
 		switch c.phase {
 		case phaseListening:
 			slog.Warn("gave up listening", "slot", c.slot+1, "after", wakeword.MaxListen(c.slot))
@@ -942,6 +952,18 @@ func (c *conversation) listenFor(n nextTurn) time.Duration {
 		}
 	}
 	return wakeword.MaxListen(n.slot)
+}
+
+// deviceEnds is whether the device hearing the speaker stop ends a turn on be: always where nobody else
+// would (the direct pipeline, and realtime voice, which is told when the speaker has finished), follow-ups
+// too, or a follow-up would run to its limit and be dropped as nothing said; for Home Assistant, only
+// after a wake word and with End of speech on the device on.
+func deviceEnds(be backend, followUp bool) bool {
+	switch be.(type) {
+	case *direct, *rtBackend:
+		return true
+	}
+	return !followUp && !config.Get().Microphone.PipelineEnds
 }
 
 // think stops sending audio. The same animation turned around says the device has stopped listening
@@ -1353,10 +1375,8 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 	// television's words to act on. There it is logged only, and the follow-up's own limit ends it.
 	// The same when the device has been told to leave it to Home Assistant.
 	//
-	// The direct pipeline has nobody else to decide, so there it acts every time, follow-ups too:
-	// without it a follow-up would run to its limit and then be dropped as nothing said.
-	_, isDirect := be.(*direct)
-	acts := isDirect || (!followUp && !config.Get().Microphone.PipelineEnds)
+	// The direct pipeline and realtime voice have nobody else to decide (deviceEnds).
+	acts := deviceEnds(be, followUp)
 	ep := endpoint.New(endpoint.Default)
 	var sent int
 	var endpointAt float64

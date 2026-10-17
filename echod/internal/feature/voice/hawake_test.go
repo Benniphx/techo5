@@ -483,3 +483,30 @@ func TestARealtimeTurnsEndIsNotTheOldRuns(t *testing.T) {
 		t.Error("the old run is still to close, and is not waited for any more")
 	}
 }
+
+// Realtime voice's listening is ended by the device whatever End of speech on the device says, a turn
+// that reaches its listening limit is answered rather than failed, and a Home Assistant question does
+// not open a follow-up on it.
+func TestARealtimeTurnAlwaysEndsListening(t *testing.T) {
+	w := newWatcher(t, config.OnHA{})
+	_ = config.Set().Microphone().DeviceEnds(false)
+	_ = config.Set().Wake(0).Realtime(true)
+	_ = config.Set().Realtime().Set("openai", "", "", "", 0)
+	_ = config.Set().Realtime().SetKey("sk-test")
+	w.realtime.dial = func(context.Context, realtime.Config) (rtSession, error) { return nil, errors.New("not here") }
+	if !deviceEnds(w.realtime, true) || !deviceEnds(w.direct, true) || deviceEnds(w.ha, false) {
+		t.Fatal("who ends listening")
+	}
+	w.handle(event{kind: evStart, slot: 0, woke: true, at: w.at})
+	if w.phase != phaseListening {
+		t.Fatalf("the realtime turn did not open: %s", w.phase)
+	}
+	w.handle(event{kind: evContinue})
+	if w.pending != nil {
+		t.Error("a follow-up was set for realtime voice")
+	}
+	w.handle(event{kind: evTimeout})
+	if w.phase != phaseThinking {
+		t.Fatalf("at the listening limit: %s, want thinking", w.phase)
+	}
+}

@@ -82,6 +82,12 @@ func TestRealtimeWriter(t *testing.T) {
 	if err := st.Set().Wake(n + 1).Realtime(true); err == nil || len(st.Get().Wake.Words) != n {
 		t.Fatalf("an empty slot was made: %v, %d words", err, len(st.Get().Wake.Words))
 	}
+	if err := st.Set().Wake(1).Threshold(0.5); err != nil { // a second slot, with no word yet
+		t.Fatal(err)
+	}
+	if err := st.Set().Wake(1).Realtime(true); err == nil {
+		t.Fatal("a slot with no word was chosen")
+	}
 	if err := st.Set().Wake(1).ID("hey_jarvis"); err != nil {
 		t.Fatal(err)
 	}

@@ -587,8 +587,9 @@ before realtime voice existed leaves the device's realtime voice as it is.
 
 Each turn has a session of its own, so the model does not remember the last turn, and the device
 does not listen again after a realtime answer, even with listening after an answer set for the wake
-word: say the wake word again for the next question. The device still decides when you have finished
-speaking, and the stop word, the action button and another wake word stop an answer as they stop any
+word: say the wake word again for the next question. The device decides when you have finished
+speaking, whatever **End of speech on the device** is set to, and at the wake word's listening limit
+what it heard so far is answered; the stop word, the action button and another wake word stop an answer as they stop any
 other. Its speech plays as any
 answer does, so an alarm, a ring or a call cuts it off. A turn ends after five minutes whatever
 happens. The minutes a day count all the time a session is open, not only speech, and once they are

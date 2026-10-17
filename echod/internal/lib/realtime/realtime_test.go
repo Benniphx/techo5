@@ -205,12 +205,14 @@ func TestGeminiTurn(t *testing.T) {
 	_ = s.Audio(make([]int16, 160))
 	_ = s.EndOfSpeech()
 	evs := collect(t, s, Call)
-	if kinds(evs) != "heard,call" || evs[1].Args != `{"zone":"local"}` {
+	if kinds(evs) != "call" || evs[0].Args != `{"zone":"local"}` {
 		t.Fatalf("%+v", evs)
 	}
 	_ = s.ToolResult("f1", "get_time", "12:00")
 	evs = collect(t, s, Done)
-	if kinds(evs) != "audio,saying,done" || len(evs[0].PCM) != 4 || evs[1].Text != "It is noon." {
+	// What was heard is said once, at the end of the turn.
+	if kinds(evs) != "audio,saying,heard,done" || len(evs[0].PCM) != 4 || evs[1].Text != "It is noon." ||
+		evs[2].Text != "what time is it" {
 		t.Fatalf("%+v", evs)
 	}
 	got := f.sent()
@@ -359,7 +361,8 @@ func TestOpenAINothingHeard(t *testing.T) {
 	}
 }
 
-// Gemini's words come a few letters at a time: they are said as one Heard when the answer starts.
+// Gemini's words come a few letters at a time, some after the answer has begun: they are said as one
+// Heard at the end of the turn.
 func TestGeminiHeardInPieces(t *testing.T) {
 	cd, _ := codecFor(Gemini)
 	var evs []Event
@@ -371,8 +374,9 @@ func TestGeminiHeardInPieces(t *testing.T) {
 		t.Fatalf("said before the answer: %+v", evs)
 	}
 	cd.read([]byte(`{"serverContent":{"modelTurn":{"parts":[{"inlineData":{"mimeType":"audio/pcm;rate=24000","data":"AAAAAA=="}}]}}}`), emit)
+	cd.read([]byte(`{"serverContent":{"inputTranscription":{"text":" Today"}}}`), emit)
 	cd.read([]byte(`{"serverContent":{"turnComplete":true}}`), emit)
-	if kinds(evs) != "heard,audio,done" || evs[0].Text != "How are you?" {
+	if kinds(evs) != "audio,heard,done" || evs[1].Text != "How are you? Today" {
 		t.Fatalf("%s %+v", kinds(evs), evs)
 	}
 	// Words heard and no answer: said at the end of the turn.

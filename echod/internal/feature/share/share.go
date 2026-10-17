@@ -141,6 +141,11 @@ type Feature struct {
 	// last look, only Run's.
 	peers func() []string
 	seen  map[string]bool
+
+	// catching is the devices being brought up to date now (lookForPeers), by lower-case name: one that
+	// comes and goes is not sent everything again while the last time is still under way.
+	catchMu  sync.Mutex
+	catching map[string]bool
 }
 
 var (
@@ -256,8 +261,27 @@ func (f *Feature) lookForPeers(ctx context.Context) {
 		}
 	}
 	f.seen = now
-	if len(back) > 0 && config.Get().Share.On {
-		safe.Go("share catch up", func() { f.catchUp(ctx, back, true) })
+	if !config.Get().Share.On {
+		return
+	}
+	for _, d := range back {
+		k := strings.ToLower(d)
+		f.catchMu.Lock()
+		busy := f.catching[k]
+		if !busy {
+			if f.catching == nil {
+				f.catching = map[string]bool{}
+			}
+			f.catching[k] = true
+		}
+		f.catchMu.Unlock()
+		if busy {
+			continue
+		}
+		safe.Go("share catch up", func() {
+			defer func() { f.catchMu.Lock(); delete(f.catching, k); f.catchMu.Unlock() }()
+			f.catchUp(ctx, []string{d}, true)
+		})
 	}
 }
 

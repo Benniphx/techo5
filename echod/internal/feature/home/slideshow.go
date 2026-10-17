@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -404,17 +405,32 @@ func (f *Feature) nameImmichAlbum(id string) {
 	f.Changed.Emit(struct{}{})
 }
 
-// nameImmichAlbumSoon is nameImmichAlbum at start, tried a few times while the network comes up.
+// nameAgainAfter is how much longer each try at naming an album at start waits than the last; a test
+// shortens it. naming is those tries under way, for a test to wait on.
+var (
+	nameAgainAfter = time.Minute
+	naming         sync.WaitGroup
+)
+
+// nameImmichAlbumSoon is nameImmichAlbum at start, tried a few times while the network comes up, and no
+// more once it is named.
 func (f *Feature) nameImmichAlbumSoon(id string) {
+	named := func() bool {
+		i := config.Get().Home.Immich
+		return i.AlbumID == id && i.Album != ""
+	}
 	for try := 0; try < 5; try++ {
-		time.Sleep(time.Duration(try) * time.Minute)
-		if i := config.Get().Home.Immich; i.AlbumID == id && i.Album != "" {
+		time.Sleep(time.Duration(try) * nameAgainAfter)
+		if named() {
 			return
 		}
 		if source, _, _ := f.SlideshowSettings(); source != ImmichAlbumPrefix+id {
 			return // since chosen otherwise
 		}
 		f.nameImmichAlbum(id)
+		if named() {
+			return
+		}
 	}
 }
 

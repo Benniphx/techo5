@@ -121,6 +121,9 @@ func TestGatheredForAnotherSourceIsDropped(t *testing.T) {
 // An album chosen before the album's id was kept with its name is named at start, from Immich.
 func TestAnAlbumIsNamedAtStart(t *testing.T) {
 	letLoopback(t)
+	was := nameAgainAfter
+	nameAgainAfter = 10 * time.Millisecond
+	t.Cleanup(func() { naming.Wait(); nameAgainAfter = was }) // nothing left running into the next test
 	srv, _ := fakeImmich(t)
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	if err := config.Set().Home().Immich(config.Immich{Server: srv.URL, Key: testKey, Album: "Old name"}); err != nil {

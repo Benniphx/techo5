@@ -435,7 +435,8 @@ func (f *Feature) Name() string { return "home" }
 func (f *Feature) Restore(c config.Config) {
 	if id, ok := strings.CutPrefix(c.Home.Slideshow.Source, ImmichAlbumPrefix); ok && c.Home.Immich.Set() && c.Home.Immich.AlbumID != id {
 		// Kept before the album's id was kept with its name: asked for once the network is up.
-		safe.Go("immich album name at start", func() { f.nameImmichAlbumSoon(id) })
+		naming.Add(1)
+		safe.Go("immich album name at start", func() { defer naming.Done(); f.nameImmichAlbumSoon(id) })
 	}
 	f.weatherOpts.Restore(weatherOptions(c.Home))
 	f.weatherSel.Set(chosenOption(c.Home))

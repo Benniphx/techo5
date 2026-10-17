@@ -792,3 +792,40 @@ func TestADeviceThatWasAwayIsBroughtUpToDate(t *testing.T) {
 		t.Fatalf("sent %d times", n)
 	}
 }
+
+// A device that comes and goes while it is being brought up to date is not sent everything again on top.
+func TestCatchingUpIsOneAtATime(t *testing.T) {
+	r := newRig(t)
+	link(t, "screen_theme", "Office")
+	hold := make(chan struct{})
+	var mu sync.Mutex
+	sends := 0
+	r.f.send = func(ctx context.Context, to string, body []byte) ([]byte, error) {
+		mu.Lock()
+		sends++
+		mu.Unlock()
+		<-hold
+		return nil, fmt.Errorf("%s is not on the network now", to)
+	}
+	var peers []string
+	r.f.peers = func() []string { mu.Lock(); defer mu.Unlock(); return append([]string(nil), peers...) }
+	for range 3 {
+		mu.Lock()
+		peers = []string{"Office"}
+		mu.Unlock()
+		r.f.lookForPeers(context.Background())
+		mu.Lock()
+		peers = nil
+		mu.Unlock()
+		r.f.lookForPeers(context.Background())
+	}
+	waitFor(t, func() bool { mu.Lock(); defer mu.Unlock(); return sends == 1 })
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	n := sends
+	mu.Unlock()
+	close(hold)
+	if n != 1 {
+		t.Fatalf("sent %d times at once", n)
+	}
+}

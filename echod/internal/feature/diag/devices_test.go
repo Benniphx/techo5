@@ -22,3 +22,15 @@ func TestOtherDevicesAreKnown(t *testing.T) {
 		}
 	}
 }
+
+// A device named with a common word is not taken out of the whole bundle.
+func TestCommonNamesAreLeft(t *testing.T) {
+	for _, n := range []string{"Show", "spot", "Den"} {
+		if !commonName(n) {
+			t.Errorf("%s would be taken out everywhere", n)
+		}
+	}
+	if commonName("Office") {
+		t.Error("Office left in")
+	}
+}

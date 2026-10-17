@@ -106,6 +106,8 @@ func (w WakeWriter) Realtime(on bool) error {
 	none := false
 	err := w.st.Update(func(c *Config) {
 		switch {
+		case w.slot > 0 && w.slot < len(c.Wake.Words) && on && c.Wake.Words[w.slot].ID == "":
+			none = true // a slot with no word in it: nothing would wake it
 		case w.slot < len(c.Wake.Words):
 			c.Wake.Words[w.slot].Realtime = on
 		case w.slot == 0:

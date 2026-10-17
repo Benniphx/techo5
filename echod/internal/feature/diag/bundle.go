@@ -54,7 +54,9 @@ func Redactor() *redact.Redactor {
 	// The other devices in the house, as the log names them (sharing settings, announcing): a device is
 	// often named for a room or for whoever has it.
 	for _, name := range otherDevices(c) {
-		r.Known("device", name)
+		if !commonName(name) {
+			r.Known("device", name)
+		}
 	}
 	r.Known("serial", serial())
 	for _, ssid := range wifi.Saved() {
@@ -79,6 +81,16 @@ func Redactor() *redact.Redactor {
 		r.Known("secret", s)
 	}
 	return r
+}
+
+// commonName is a device name too short, or too common a word, to take out wherever it appears: a
+// device named Show would take the word out of the whole bundle.
+func commonName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "show", "spot", "echo", "dot", "home", "house", "main", "speaker", "device", "screen", "radio":
+		return true
+	}
+	return len(strings.TrimSpace(name)) < 4
 }
 
 // otherDevices is the names of the other devices this one knows: those on the network now, and those
