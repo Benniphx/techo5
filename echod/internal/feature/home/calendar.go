@@ -41,6 +41,11 @@ const (
 	// is sorted, merged and laid out again each time the screen works out a view; a month a person keeps
 	// is a few hundred at the most.
 	monthEventsKept = 2000
+
+	// dayEventsKept is the most events a day keeps, the earliest, before the month is counted: a flood
+	// of them early in a month would otherwise fill all it keeps and leave the later days blank. A
+	// month's share for each of its days, so even a month flooded on every day keeps some on each.
+	dayEventsKept = monthEventsKept / 31
 )
 
 // calendarVersion counts the changes to the events kept, for a screen that works something out from
@@ -233,17 +238,43 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 // again every eventsEvery says so once.
 var cappedMonths sync.Map
 
-// capMonth keeps a month's events to monthEventsKept, the earliest, since events is sorted by start: the
-// days a month is looked at from are kept whole the longest. The log says how many, never what they are.
+// capMonth keeps a day's events to dayEventsKept and then the month's to monthEventsKept, the earliest
+// of each, since events is sorted by start: a flood on one day is cut there, and every other day keeps
+// what it has. A day is the one an event starts on, here. The log says how many, never what they are,
+// once a month.
 func capMonth(key string, events []hass.Event) []hass.Event {
-	if len(events) <= monthEventsKept {
+	if len(events) <= dayEventsKept {
+		return events
+	}
+	type date struct {
+		year  int
+		month time.Month
+		day   int
+	}
+	perDay := map[date]int{}
+	over := map[date]bool{}
+	out := make([]hass.Event, 0, min(len(events), monthEventsKept))
+	for _, e := range events {
+		s := e.Start.Local()
+		d := date{s.Year(), s.Month(), s.Day()}
+		if perDay[d] >= dayEventsKept {
+			over[d] = true
+			continue
+		}
+		if len(out) == monthEventsKept {
+			break
+		}
+		perDay[d]++
+		out = append(out, e)
+	}
+	if len(out) == len(events) {
 		return events
 	}
 	if _, told := cappedMonths.LoadOrStore(key, true); !told {
 		slog.Warn("calendar: a month has more events than are kept, the latest left out", "month", key,
-			"events", len(events), "kept", monthEventsKept)
+			"events", len(events), "kept", len(out), "days over", len(over))
 	}
-	return slices.Clip(events[:monthEventsKept])
+	return slices.Clip(out)
 }
 
 // mergeSame shows an event that is on more than one of the calendars once: the same name, start, end
