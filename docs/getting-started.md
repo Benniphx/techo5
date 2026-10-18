@@ -359,8 +359,11 @@ pipeline rather than the device: Home Assistant is replying in text only.
 5. **Home Assistant on HTTPS with its own certificate.** If Home Assistant's address is `https://` with
    a self-signed certificate, or one issued for a different name than the one the device is given,
    the device refuses the download and the log says `x509: certificate`. The fix that keeps checking
-   is to give Home Assistant a certificate for the name it is reached by (or set its internal URL,
-   Settings → System → Network, to the plain `http://` address on your network). Otherwise turn on
+   is to give Home Assistant a certificate for the name it is reached by. Where a proxy in front of
+   Home Assistant does the HTTPS and Home Assistant itself serves plain HTTP, setting its internal
+   URL (Settings → System → Network, **Local network**) to the plain `http://` address on your
+   network works too; where Home Assistant serves HTTPS itself, the internal URL has to be `https://`
+   as well, or radio streams and replies get no answer. Otherwise turn on
    **Skip certificate checks**, a diagnostic switch on the device in Home Assistant. It covers what
    the device downloads for Home Assistant and the screen (replies and announcements, wake word
    models, slideshow pictures), which is why it is off by default; the device's Settings screen shows
