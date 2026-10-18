@@ -77,6 +77,12 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🆕 **The Skylight Calendar 15** (v1.3.0). Not an Echo: the 15-inch wall calendar (150-CAL) runs
+  TECHO5 on its own 64-bit mainline Linux kernel. Touch, the calendar, photos, dashboards, music and
+  the radio, Bluetooth, the light sensor and the clock work. It has no microphone, so there's no wake
+  word or voice, and no phone calls or intercom. One command installs it over adb from its stock
+  firmware, after a full backup of the unit; it has been tried on one unit. Install:
+  [docs/install-skylight.md](docs/install-skylight.md)
 - 📷 **The Echo Show 8 2nd gen's camera works** (v1.2.24). Live on its own screen, a Home Assistant
   camera, and everything else the other Shows do with theirs (presence, person detection, gestures,
   your recorder). It's off while the device is muted or the shutter is closed. It comes with a new
@@ -89,12 +95,6 @@ The bigger changes of September and October 2026. Every release lists the rest.
   while they're watched. **If something reads those pages with no password today** (a Home Assistant
   Generic Camera, a recorder), set a camera password and give it to that with Digest authentication,
   or it stops getting pictures. [docs/setup.md](docs/setup.md#4-cameras)
-- 🆕 **The Skylight Calendar 15** (v1.2.24). Not an Echo: the 15-inch wall calendar (150-CAL) runs
-  TECHO5 on its own 64-bit mainline Linux kernel. Touch, the calendar, photos, dashboards, music and
-  the radio, Bluetooth, the light sensor and the clock work. It has no microphone, so there's no wake
-  word or voice, and no phone calls or intercom. One command installs it over adb from its stock
-  firmware, after a full backup of the unit; it has been tried on one unit. Install:
-  [docs/install-skylight.md](docs/install-skylight.md)
 - 📅 **A calendar for the wall** (v1.2.23). The calendar's new look: a day and a week on their hours,
   a cleaner month, Coming up with each day's weather, event icons, countdowns, a filter for which
   calendars a screen shows, and the next event at the foot of the clock, each with its own switch
