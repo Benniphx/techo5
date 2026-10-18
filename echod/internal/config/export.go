@@ -29,8 +29,8 @@ import (
 //     Connect, DLNA, video and the addresses allowed to send it), and what has its microphones or camera
 //     take in the room (drop-in calls, sending the room to Home Assistant's wake word engine, keeping
 //     wake word clips, presence and gestures), which are changed on purpose, one device at a time; the speaker it is paired with; the amplifier's gain, which is the hardware's; and what it
-//     is in the middle of (snoozes, timers, a held wake light, calendar pop-ups shown, the lock's count of
-//     wrong tries, the version it last ran).
+//     is in the middle of (snoozes, timers, a held wake light, calendar pop-ups shown, the calendars hidden
+//     on its calendar page, the lock's count of wrong tries, the version it last ran).
 //
 // Everything else is the settings, and a restore replaces them. Settings this build has no field for,
 // kept from the file on disk for a newer build (unknown.go), are left as they were.
@@ -416,6 +416,9 @@ func KeepOwn(c *Config, from Config) {
 	c.Alarms.HeldDark = from.Alarms.HeldDark
 	c.Timers.Local = slices.Clone(from.Timers.Local)
 	c.Calendar.PopupShown = slices.Clone(from.Calendar.PopupShown)
+	// The calendars hidden with the calendar page's chips are this screen's: a file from a screen in
+	// another room does not hide any here, and a restore keeps what was hidden.
+	c.Calendar.Hidden = slices.Clone(from.Calendar.Hidden)
 	c.Update.LastVersion = from.Update.LastVersion
 	// Which builds it takes, and whether it installs them by itself, are this device's: a file is not
 	// to move it to another channel or have it install on its own.
