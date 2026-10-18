@@ -382,6 +382,29 @@ ffmpeg and an ONVIF client library, not against a recorder on a device.
 These are on the Show under Settings → **Display**, and are entities in Home Assistant. Most are on
 the Spot too, in its settings.
 
+### The screen and the room's lights
+
+The screen is a light in Home Assistant (`light.<node>_screen`), in the device's area. Assist picks the
+lights a sentence like "lights off" or "turn off the kitchen lights" means by their domain and area,
+so a screen that is exposed to Assist goes out with the lamps, on every device in the room.
+
+**Screen ignores room light commands** (on at first; on the Show and the Spot under Settings →
+**Display** as **Ignore room light commands**, on the setup page's **Screen & Photos** tab, and in Home
+Assistant) keeps the screen apart from them:
+
+- The screen's light keeps its entity ID and does what it always did, so automations and dashboards that
+  use it carry on. Home Assistant shows it under the device's **Configuration**, and does not expose a
+  configuration entity to Assist when it first sees it.
+- **Screen power** (`switch.<node>_screen_power`) turns the screen off and on again at its brightness.
+  It is a switch, not a light, so "lights off" never reaches it, and it is the one to name by voice:
+  "turn off the kitchen echo screen power", or give it an alias like "kitchen screen" under its
+  **Voice assistants** settings in Home Assistant.
+
+A device Home Assistant already knows keeps the exposure Home Assistant chose for its screen before:
+Home Assistant does not look again when the entity changes. Untick the screen's light once under
+**Settings → Voice assistants → Expose** (or on the entity's **Voice assistants** settings), and keep
+Screen power exposed. With the setting off, the light is listed as it always was, among the controls.
+
 ### Night
 
 - **Night hours**: when the night starts and ends. **At night** picks what the night does: on a Show,

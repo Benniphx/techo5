@@ -300,6 +300,9 @@ func (a *API) Run(ctx context.Context) error {
 		// Between serving and listening again is the only moment what the device says it is can change:
 		// a client is told once, when it connects. The key likewise, on a server of its own.
 		a.info.BluetoothFeatures = bluetooth.Get().Features()
+		// Serve waits for its connections to end, so nothing is reading the entities now: what they say
+		// about themselves may change here (component.Between).
+		component.Between.Emit(struct{}{})
 		a.srv.Store(a.nextServer())
 		slog.Info("serving again", "bluetooth", a.info.BluetoothFeatures)
 	}

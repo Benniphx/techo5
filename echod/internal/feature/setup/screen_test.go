@@ -149,6 +149,34 @@ func TestTheSwipeSettingOnTheSetupPage(t *testing.T) {
 	}
 }
 
+// Screen ignores room light commands on the setup page (#179): ticked on a new device, saved unticked,
+// and not offered by a screen that has not handed in the way to set it.
+func TestTheRoomLightsSettingOnTheSetupPage(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	var got []bool
+	SetScreen(&ScreenChoices{Styles: []string{"Classic"}, Current: func() int { return 0 }, Choose: func(int) {},
+		IgnoreRoomLights: func(on bool) { got = append(got, on); _ = config.Set().Screen().RoomLights(!on) }})
+	t.Cleanup(func() { SetScreen(nil) })
+	w := httptest.NewRecorder()
+	screenSection(w, "tok")
+	if !strings.Contains(w.Body.String(), `name="roomlights" value="yes" style="width:auto" checked`) {
+		t.Error("not ticked on a new device")
+	}
+	if p := saveScreen(form(screenForm("0", "", false))); p != "" {
+		t.Fatal(p)
+	}
+	if len(got) != 1 || got[0] || !config.Get().Screen.RoomLights {
+		t.Errorf("unticking it: set %v, room lights %v; want it set off once", got, config.Get().Screen.RoomLights)
+	}
+
+	SetScreen(&ScreenChoices{Styles: []string{"Classic"}, Current: func() int { return 0 }, Choose: func(int) {}})
+	w = httptest.NewRecorder()
+	screenSection(w, "tok")
+	if strings.Contains(w.Body.String(), `name="roomlights"`) {
+		t.Error("offered without a way to set it")
+	}
+}
+
 // The note tying swiping to Tap on the clock shows only where there is a Tap on the clock (the Show,
 // not the Spot).
 func TestTheSwipeNoteOnlyWithATapOnTheClock(t *testing.T) {

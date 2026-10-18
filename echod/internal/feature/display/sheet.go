@@ -94,6 +94,9 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			rows = append(rows, settingRow{id: "dimmest", label: "Dimmest", sub: "How dark auto-brightness goes in a dark room",
 				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
 		}
+		// Beside the light's own rows: it is about who else may put the screen out (screen_room.go).
+		rows = append(rows, settingRow{id: "roomlights", label: "Ignore room light commands",
+			sub: "\"Lights off\" said to Assist leaves the screen alone", kind: ctlToggle, on: roomLightsIgnored()})
 		rows = append(rows, settingRow{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)})
 		if nightCanHappen(st.night) {
 			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: atNightSub,
@@ -964,6 +967,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		safe.Go("lyrics from the screen", func() { home.Get().SetLyricsOn(!home.LyricsOn()) })
 	case "nighttap":
 		d.setNightTapLifts(!config.Get().Screen.NightTapLifts)
+	case "roomlights":
+		d.setRoomLightsIgnored(!roomLightsIgnored())
 	case "weatherfx":
 		setWeatherAnimationSaved(d.weatherFx, !weatherAnimation.Load())
 	case "dnd":

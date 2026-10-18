@@ -52,6 +52,10 @@ type ScreenChoices struct {
 
 	// Swipe sets Swipe between clock styles, telling Home Assistant.
 	Swipe func(bool)
+
+	// IgnoreRoomLights sets Screen ignores room light commands, telling Home Assistant (#179); nil
+	// leaves the box off the page.
+	IgnoreRoomLights func(bool)
 }
 
 // maxWorldPlaces is how many World places the page takes: the most any screen shows.
@@ -122,6 +126,17 @@ func screenSection(w http.ResponseWriter, token string) {
 			fmt.Fprintf(w, `<option value="%d"%s>%s</option>`, i, selected(i == now), html.EscapeString(l))
 		}
 		fmt.Fprint(w, `</select>`)
+	}
+	if s.IgnoreRoomLights != nil {
+		room := ""
+		if !config.Get().Screen.RoomLights {
+			room = " checked"
+		}
+		fmt.Fprintf(w, `<p><label><input type="checkbox" name="roomlights" value="yes" style="width:auto"%s> Screen ignores
+	 room light commands: "lights off" said to Assist in this room leaves the screen alone</label></p>
+	 <p class="note">The screen's light is then a configuration entity in Home Assistant, and Screen power, a
+	  switch, is the one to name by voice. A screen Home Assistant already gave to Assist stays with it until
+	  it is unticked under Settings, Voice assistants, Expose.</p>`, room)
 	}
 	fmt.Fprint(w, `<label for="slideshow">Slideshow</label><select id="slideshow" name="slideshow">`)
 	mode := home.Get().SlideshowMode()
@@ -194,6 +209,11 @@ func saveScreen(r *http.Request) string {
 			s.Swipe(on)
 		} else if err := config.Set().Screen().NoStyleSwipe(!on); err != nil {
 			return "the swipe setting could not be saved"
+		}
+	}
+	if s.IgnoreRoomLights != nil {
+		if on := r.PostFormValue("roomlights") == "yes"; on == config.Get().Screen.RoomLights {
+			s.IgnoreRoomLights(on)
 		}
 	}
 	if has && !slices.Equal(places, config.Get().Screen.WorldClocks) {

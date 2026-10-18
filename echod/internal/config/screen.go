@@ -32,6 +32,12 @@ type Screen struct {
 	// does, until the room has been quiet a while. Off, a tap on the night light does nothing.
 	NightTapLifts bool `json:"night_tap_lifts,omitempty"`
 
+	// RoomLights has the screen's light in Home Assistant stand with the room's lights, as it always did
+	// before this setting: shown with the device's controls, and handed to Assist by default, so "lights
+	// off" said in its area puts the screen out too. Off, the usual, the light is a configuration entity,
+	// and the Screen power switch is what a voice names (feature/display, screen_room.go). (#179)
+	RoomLights bool `json:"room_lights,omitempty"`
+
 	// NightClockStyle is how the red clock looks: empty for the ordinary clock face, "led" for an LED
 	// clock's seven segments, "flip" for a flip clock's cards.
 	NightClockStyle string `json:"night_clock_style,omitempty"`
@@ -180,6 +186,10 @@ func (w ScreenWriter) NightLight(v bool) error {
 
 func (w ScreenWriter) NightTapLifts(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightTapLifts = v })
+}
+
+func (w ScreenWriter) RoomLights(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.RoomLights = v })
 }
 
 func (w ScreenWriter) NightClockStyle(v string) error {
