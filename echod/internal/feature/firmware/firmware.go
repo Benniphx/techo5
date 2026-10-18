@@ -471,5 +471,9 @@ func (u *Firmware) state(found update.Manifest) esphome.UpdateState {
 func (u *Firmware) Name() string { return "firmware" }
 
 func (u *Firmware) Entities() []esphome.Entity {
+	if !update.Published() {
+		// A panel follows no channel of its own (its app updates it): no Stable or Dev to choose.
+		return []esphome.Entity{u.entity, u.look, u.status, u.events, u.auto}
+	}
 	return []esphome.Entity{u.entity, u.channel, u.look, u.status, u.events, u.auto}
 }

@@ -312,6 +312,10 @@ func generalRows(sv sheetView) []settingRow {
 	case fw.Offered() != "":
 		updates.sub, updates.button = fw.Offered()+" is ready · this is "+st.version, "Install"
 	}
+	if !update.Published() {
+		// A panel's app updates it from one place: no channel to choose, only the button.
+		updates.kind, updates.value = ctlButton, ""
+	}
 	restart := settingRow{id: "restart", label: "Restart", sub: "Back in about a minute", kind: ctlDanger, button: "Restart"}
 	if !st.restartArm.IsZero() && st.now.Sub(st.restartArm) < restartWindow {
 		restart.sub, restart.button = "Tap again to restart now", "Confirm"
@@ -1121,7 +1125,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		d.rowTap("updates", partExtra, opt)
 	case "updates":
 		switch {
-		case p != partExtra:
+		case p != partExtra && update.Published():
 			d.openPicker(id)
 		case firmware.Get().Offered() != "":
 			safe.Go("update install from the screen", func() { firmware.Get().Install(context.Background()) })

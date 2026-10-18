@@ -8,8 +8,9 @@ import "github.com/HuskerMinion/techo5/echod/internal/lib/panelscreen"
 // restore of every setting (panelscreen.DialWait), which took this package past its ten minutes.
 func init() { panelscreen.DialWait = 0 }
 
-// notOnPanel is what a TECHO5 Panel leaves out of the Show's list. Nothing yet.
-var notOnPanel []string
+// notOnPanel is what a TECHO5 Panel leaves out of the Show's list: the app updates itself, so there is
+// no channel to follow.
+var notOnPanel = []string{"update_channel"}
 
 // onlyOnPanel is what a panel adds: Android can silence a tablet's microphone under the app.
 var onlyOnPanel = []string{"microphone_silent"}
