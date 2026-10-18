@@ -485,17 +485,22 @@ Assistant.
   swipe for the day before or after. Off shows the day as a list.
 - **Coming up, one line each**: one line per event, each day with its weather.
 - **Month details**: *Full* shows start times, icons and the coming week's weather on the month.
-  *Simple* shows the bars only. It starts at Full on the Show 8 and bigger, Simple on the Show 5.
+  *Simple* shows events of several days as spanning bars, the past days dimmed and today's number
+  in a pill, and the rest as bars. It starts at Full on the Show 8 and bigger, Simple on the Show 5.
 - **Event icons**: a small picture before a title like "Birthday", "Trash day" or "Dentist".
 - **Countdowns**: "in 25 min" on today's events.
 - **Week view**: seven days on their hours, and a Day, Week and Month switch over the month. It
   starts on for the Show 8 and bigger, off for the Show 5.
-- **Next up on the clock**: the next event at the foot of the clock, with its countdown. A tap
-  opens its day.
+- **Next up on the clock**: the next event at the foot of the clock, with its countdown, when the
+  glance strip has nothing else to show. A tap opens its day.
 - **Weather in the calendar**: the forecast on the days.
 
-With more than one calendar, the chips over the month turn a calendar off or on for this screen.
-That choice stays on the device: it isn't shared or saved in a settings file.
+Sharing Week view or Month details from a big screen sets that value on a linked Show 5 too, as if
+it had been chosen there.
+
+With more than one calendar, the chips over the month turn a calendar off or on for this screen:
+its events leave every view, the clock and its event pop-ups. With many calendars, "+N" opens a list
+of them all. That choice stays on the device: it isn't shared or saved in a settings file.
 
 ### Fonts of your own
 
