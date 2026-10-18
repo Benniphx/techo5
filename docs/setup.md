@@ -649,6 +649,13 @@ alarms; the usual volume and night volume still work. Higher gain can distort or
 especially at high volume or with raised bass or treble. Start low and reduce the boost if
 that happens; +6 dB is a setting limit, not a guarantee of clean output on every track.
 
+On the **Echo Dot (2nd gen) and the Echo (2nd gen)** the same setting raises the speaker driver
+in the audio chip, in Home Assistant's **Playback** configuration and on the setup page (the Dot
+has no screen). It is off (0 dB) by default. +3 to +6 dB is louder at the top of the volume
+range. It applies to the speaker only: the headphone jack and Bluetooth speakers are not changed.
+High settings can distort, and they make the wake word harder to catch over loud music, since
+the music reaching the microphones is louder too.
+
 Under Settings → **Sound**, or on the device's Assist satellite in Home Assistant:
 
 - **Wake word**: Okay Nabu, Hey Jarvis, Alexa and others. Choosing none is fine if you only want

@@ -4,7 +4,9 @@ package config
 // driver's tuning is applied.
 type Speaker struct {
 	Volume int `json:"volume"`
-	// GainDB is an optional TAS5805M amplifier boost in dB; zero is the vendor's gain.
+	// GainDB is an optional boost in dB over the vendor's gain, zero being the vendor's: the TAS5805M
+	// amplifier's on a Show 5 that has one, the codec's speaker driver on the Echo Dot and Echo 2nd gen.
+	// The same 1 dB a step on each, and this device's own (KeepOwn, not shared).
 	GainDB     int        `json:"gain_db,omitempty"`
 	Resampling Resampling `json:"resampling"`
 	ASP        bool       `json:"asp"`

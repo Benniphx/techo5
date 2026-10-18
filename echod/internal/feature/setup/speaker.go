@@ -35,7 +35,7 @@ func speakerSection(w http.ResponseWriter, token string) {
 		gain := p.SpeakerGain()
 		fmt.Fprintf(w, `<label for="gain">Speaker gain, dB (0 is normal)</label>
 	 <input id="gain" name="gain" type="number" min="0" max="%d" step="1" value="%d"><input type="hidden" name="was_gain" value="%d">
-	 <p>Boosts can distort, especially at high volume or with raised bass or treble. Set 0 dB to restore normal gain.</p>`,
+	 <p>Boosts can distort, especially at high volume or with raised bass or treble, and make the wake word harder to catch over loud music. Set 0 dB to restore normal gain.</p>`,
 			config.SpeakerGainMax, gain, gain)
 	}
 

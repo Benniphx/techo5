@@ -386,7 +386,18 @@ func (p *Player) route() {
 	if p.out == OutputSpeaker {
 		p.apply(headphoneOff)
 	}
-	p.apply(pathSequence[p.out])
+	p.apply(p.path(p.out))
+}
+
+// path is out's sequence, with the Speaker gain in it where the board writes that with the path
+// (gainOnPath). Every place that writes a path takes it from here, so a gain chosen once holds through
+// a start, a route change, the jack coming and going, and a path written again (Reopen). Called with
+// pathMu held, which is what guards gainDB where gainOnPath is set (setPathGain).
+func (p *Player) path(out Output) []kctl {
+	if !gainOnPath {
+		return pathSequence[out]
+	}
+	return withSpeakerGain(pathSequence[out], out, p.gainDB)
 }
 
 // amp switches the speaker amplifier, where the device has a switch that is safe to touch: see
@@ -503,7 +514,7 @@ func (p *Player) setOutput(out Output) {
 	if out == OutputSpeaker {
 		p.apply(headphoneOff)
 	}
-	p.apply(pathSequence[out])
+	p.apply(p.path(out))
 	p.pathMu.Unlock()
 
 	p.SetVolume(int(p.step.Load()))
@@ -556,7 +567,7 @@ func (p *Player) Reopen() {
 	}
 	p.apply(initSequence)
 	p.apply(headphoneOff)
-	p.apply(pathSequence[OutputSpeaker])
+	p.apply(p.path(OutputSpeaker))
 	p.pathMu.Unlock()
 
 	p.SetVolume(int(p.step.Load()))
@@ -648,8 +659,9 @@ func (p *Player) Run(ctx context.Context) error {
 	// Written on every start, even at 0 dB: 110 (0 dB) is the TAS5805M driver's own default (probe
 	// sets its vol to 110, and every unmute writes that cached vol to the chip), so at 0 dB this
 	// writes what is already there. But the driver keeps the last level written across a restart of
-	// this service, so the saved gain, 0 dB included (settings reset, say), is written over it.
-	if gainOn(p.heldMixer()) {
+	// this service, so the saved gain, 0 dB included (settings reset, say), is written over it. Where
+	// the gain goes with the path (gainOnPath), route has just written it.
+	if !gainOnPath && gainOn(p.heldMixer()) {
 		if err := p.applySpeakerGain(); err != nil {
 			slog.Error("restoring speaker gain failed, continuing playback", "err", err)
 		}
