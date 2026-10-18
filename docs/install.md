@@ -364,8 +364,10 @@ Home Assistant.
 script that plays one, wire them up with the `esphome.<device>_home_radio` action (all of it in
 [Wire up the radio page](actions.md#wire-up-the-radio-page)). The device calls the script over its
 ESPHome connection, which needs **Allow the device to perform Home Assistant actions** turned on in
-its ESPHome entry (Configure); without it, picking a favorite does nothing. Every argument has to be
-in the call, even the ones with a default: send `""` for those, or Home Assistant refuses the call
+its ESPHome entry (Configure); without it, picking a favorite does nothing. Home Assistant refuses
+the call without telling the device, so when nothing of the station shows up within a few seconds,
+the screen says so: "Home Assistant didn't start the stream", asking about that setting, and the log
+says `Home Assistant did not start the station`. Every argument has to be in the call, even the ones with a default: send `""` for those, or Home Assistant refuses the call
 with `required key not provided`.
 
 | Argument | What it is |
@@ -462,8 +464,8 @@ star saves:
 **The star on the player.** Tapping the star while a station plays saves it to your favorites. The
 device does that by calling a script named exactly `script.radio_favorite_add_station`, with one
 field, `station` (the station's name), using the Home Assistant token. Nothing creates the script;
-without it the star does nothing on screen, and the log says `saving to favorites failed` with a
-`400`. This one adds the station to the favorites `input_select`:
+without it the screen says "Couldn't save the station" and names the script, and the log says
+`saving to favorites failed` with a `400`. This one adds the station to the favorites `input_select`:
 
 ```yaml
 radio_favorite_add_station:
@@ -516,6 +518,7 @@ address then gets no answer.
 | The screen shows "hacked fastboot" | A leftover `reboot bootloader` request: `fastboot -s <serial> continue`. |
 | No SSH after the switch to the slot | SSH is off unless step 5 was done: turn on the SSH switch in Home Assistant and send a key with the `ssh_keys` action, or use the USB serial console. |
 | The radio says playing and stays quiet | The stream never arrived. See "If it says playing and nothing comes out" at the end of [Radio](#radio). |
+| Picking a favorite station shows "Home Assistant didn't start the stream" | Home Assistant refused the device's call to the radio script. Turn on **Allow the device to perform Home Assistant actions** in the device's ESPHome entry (Configure), then pick the station again. See [Radio](#radio). |
 | The unit sits in rescue | The screen says so: **RESCUE**, with the reason on the last line. No bootable slot. `slotctl status` shows why; the daemon still runs from a slot in rescue, so Home Assistant keeps working while you look. |
 
 To go back to LineageOS: boot TWRP from `recovery`, flash the LineageOS zip (which rewrites `system`)

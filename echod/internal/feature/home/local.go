@@ -252,6 +252,7 @@ const listedFor = time.Minute
 // station while the first is still looking the player up, and the first then reaches Home Assistant after
 // the second and starts the station the finger has moved off. Only the station still chosen is asked for.
 func (f *Feature) callFavorite(h config.Radio, station string) {
+	wait := startWaitFor(h.Service)
 	safe.Go("radio: playing a favorite", func() {
 		speaker := speakerEntity()
 		f.mu.Lock()
@@ -264,6 +265,10 @@ func (f *Feature) callFavorite(h config.Radio, station string) {
 			Service: h.Service,
 			Data:    map[string]string{h.Field: askFor(station), h.SpeakerField: speaker},
 		})
+		// The call has no answer: Home Assistant that refuses it says so only in its own log. So what
+		// comes of it is watched for instead (hint.go), from now rather than from the tap, since naming
+		// the player can take seconds of its own.
+		f.watchStart(h.Service, station, wait)
 	})
 }
 
