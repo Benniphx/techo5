@@ -21,7 +21,7 @@ import (
 
 // dump records what is heard while files/dump-echo exists: echo-mic.raw holds 16 kHz S16LE pairs,
 // the microphone then the reference as the canceller got it, and echo-mic.txt the loopback index of
-// the first pair's reference and the measured lag.
+// the first pair's reference and the measured lag. A debug build only (lib/loopback's Dump).
 var dump = loopback.Dump{FlagPath: layout.StateDir + "/dump-echo"}
 
 // micSocket is the abstract socket the app serves the microphone on. The app reads it from Android

@@ -16,7 +16,7 @@ import (
 
 // dump records what is played while files/dump-echo exists: echo-played.raw holds the 48 kHz stereo
 // S16LE stream, and echo-played.txt the loopback index its first frame became (every three frames
-// are one loopback sample).
+// are one loopback sample). A debug build only (lib/loopback's Dump).
 var dump = loopback.Dump{FlagPath: layout.StateDir + "/dump-echo"}
 
 // speakerSocket is the abstract socket the app plays from: 48 kHz stereo S16LE, written to an
