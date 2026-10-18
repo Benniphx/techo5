@@ -10,7 +10,9 @@ import (
 	"math/rand/v2"
 	"net/url"
 	"path"
+	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -109,7 +111,13 @@ type slideshowState struct {
 	image *image.RGBA
 	prev  *image.RGBA // what was showing before image, faded out while at is within slideshowFade
 	at    time.Time   // when image took over, for both slideshowEvery and the fade
-	shown string      // image's id, to draw it again when Show whole photo is turned on or off
+	shown []string    // image's ids, two for a pair, to draw it again when Show whole photo is turned on or off
+
+	// ahead is photos to show before the list moves on: ones looked at for a pair's second half and
+	// found wide, shown in their own turn rather than skipped.
+	ahead []string
+	// captions are when and where the photos up were taken, for the screen to write over them.
+	captions []PhotoCaption
 
 	// trouble is why there is no photo, for the screen to show; empty while all is well. fails
 	// counts the looks that came back with nothing in a row, and waitUntil holds the next look off
@@ -117,6 +125,15 @@ type slideshowState struct {
 	trouble   string
 	fails     int
 	waitUntil time.Time
+}
+
+// PhotoCaption is when and where a photo on the screen was taken (Slideshow.Caption), for the screen to
+// write over it: a photo alone, or one half of a pair. Either of When and Place may be missing.
+type PhotoCaption struct {
+	When  time.Time
+	Place string
+	// Right is the right-hand photo of a pair; Pair is whether there is a pair at all.
+	Right, Pair bool
 }
 
 func (f *Feature) buildSlideshowSelect() {
@@ -194,6 +211,58 @@ func (f *Feature) buildSlideshowSelect() {
 		},
 		OnCommand: func(on bool) { f.SetSlideshowSubfolders(on) },
 	}
+	f.slideshowPairsSw = &esphome.Switch{
+		Base: esphome.Base{
+			ObjectID: "slideshow_pairs",
+			Name:     "Slideshow photo pairs",
+			Icon:     "mdi:view-split-vertical",
+			Category: esphome.CategoryConfig,
+		},
+		OnCommand: func(on bool) { f.SetSlideshowPairs(on) },
+	}
+	f.slideshowCaptionSw = &esphome.Switch{
+		Base: esphome.Base{
+			ObjectID: "slideshow_caption",
+			Name:     "Slideshow date and place",
+			Icon:     "mdi:map-marker-outline",
+			Category: esphome.CategoryConfig,
+		},
+		OnCommand: func(on bool) { f.SetSlideshowCaption(on) },
+	}
+	f.immichFavoritesSw = &esphome.Switch{
+		Base: esphome.Base{
+			ObjectID: "immich_favorites",
+			Name:     "Immich favorites only",
+			Icon:     "mdi:heart-outline",
+			Category: esphome.CategoryConfig,
+		},
+		OnCommand: func(on bool) { f.SetImmichFavorites(on) },
+	}
+	f.immichPersonTxt = &esphome.Text{
+		Base: esphome.Base{
+			ObjectID: "immich_person",
+			Name:     "Immich person",
+			Icon:     "mdi:account-outline",
+			Category: esphome.CategoryConfig,
+		},
+		MaxLength: immichNameMax,
+		OnCommand: func(v string) { f.SetImmichPerson(v) },
+	}
+	day := func(id, name string, set func(string) error) *esphome.Text {
+		t := &esphome.Text{
+			Base:      esphome.Base{ObjectID: id, Name: name, Icon: "mdi:calendar-range", Category: esphome.CategoryConfig},
+			MaxLength: uint32(len(config.PhotoDay)),
+			Pattern:   `^(\d{4}-\d{2}-\d{2})?$`,
+		}
+		t.OnCommand = func(v string) {
+			if err := set(v); err != nil {
+				slog.Warn("home: an Immich day not kept", "err", err)
+			}
+		}
+		return t
+	}
+	f.immichFromTxt = day("immich_from", "Immich first day", func(v string) error { return f.SetImmichDays(v, config.Get().Home.Slideshow.ImmichTo) })
+	f.immichToTxt = day("immich_to", "Immich last day", func(v string) error { return f.SetImmichDays(config.Get().Home.Slideshow.ImmichFrom, v) })
 	f.slideshowEveryNum = &esphome.Number{
 		Base: esphome.Base{
 			ObjectID: "slideshow_interval",
@@ -336,17 +405,32 @@ func (f *Feature) nameImmichAlbum(id string) {
 	f.Changed.Emit(struct{}{})
 }
 
-// nameImmichAlbumSoon is nameImmichAlbum at start, tried a few times while the network comes up.
+// nameAgainAfter is how much longer each try at naming an album at start waits than the last; a test
+// shortens it. naming is those tries under way, for a test to wait on.
+var (
+	nameAgainAfter = time.Minute
+	naming         sync.WaitGroup
+)
+
+// nameImmichAlbumSoon is nameImmichAlbum at start, tried a few times while the network comes up, and no
+// more once it is named.
 func (f *Feature) nameImmichAlbumSoon(id string) {
+	named := func() bool {
+		i := config.Get().Home.Immich
+		return i.AlbumID == id && i.Album != ""
+	}
 	for try := 0; try < 5; try++ {
-		time.Sleep(time.Duration(try) * time.Minute)
-		if i := config.Get().Home.Immich; i.AlbumID == id && i.Album != "" {
+		time.Sleep(time.Duration(try) * nameAgainAfter)
+		if named() {
 			return
 		}
 		if source, _, _ := f.SlideshowSettings(); source != ImmichAlbumPrefix+id {
 			return // since chosen otherwise
 		}
 		f.nameImmichAlbum(id)
+		if named() {
+			return
+		}
 	}
 }
 
@@ -360,7 +444,7 @@ func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media) b
 	if f.slideshowGen != gen || config.Get().Home.Slideshow.Source != source {
 		return false
 	}
-	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = photos, time.Now(), 0
+	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx, f.slideshow.ahead = photos, time.Now(), 0, nil
 	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
 	return true
 }
@@ -371,7 +455,7 @@ func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media) b
 func (f *Feature) ResetImmich() {
 	f.mu.Lock()
 	f.slideshowGen++
-	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx = nil, time.Time{}, 0
+	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx, f.slideshow.ahead = nil, time.Time{}, 0, nil
 	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
 	f.mu.Unlock()
 	if source, _, _ := f.SlideshowSettings(); strings.HasPrefix(source, ImmichAlbumPrefix) {
@@ -422,19 +506,19 @@ func (f *Feature) SetSlideshowWholePhoto(on bool) {
 		return
 	}
 	f.mu.Lock()
-	id := f.slideshow.shown
+	ids := f.slideshow.shown
 	f.mu.Unlock()
-	if id == "" || f.SlideshowMode() == "" || s.Art {
+	if len(ids) == 0 || f.SlideshowMode() == "" || s.Art {
 		return // nothing up to draw again; the next photo is fetched the new way
 	}
 	go func() {
-		img, err := fetchSlideshowImage(id, on)
+		img, err := fetchShown(ids, on)
 		if err != nil {
-			slog.Warn("home: slideshow photo", "id", id, "err", err)
+			slog.Warn("home: slideshow photo", "id", ids[0], "err", err)
 			return
 		}
 		f.mu.Lock()
-		if f.slideshow.shown != id || config.Get().Home.Slideshow.WholePhoto != on {
+		if !slices.Equal(f.slideshow.shown, ids) || config.Get().Home.Slideshow.WholePhoto != on {
 			f.mu.Unlock()
 			return // moved on, or changed back, while this one was fetched
 		}
@@ -447,6 +531,89 @@ func (f *Feature) SetSlideshowWholePhoto(on bool) {
 
 // SlideshowWholePhoto is whether photos are shown whole rather than cropped to fill the screen.
 func (f *Feature) SlideshowWholePhoto() bool { return config.Get().Home.Slideshow.WholePhoto }
+
+// PairsHere is whether this screen can show two photos side by side: not the Spot's round one.
+func PairsHere() bool { return !roundPanel }
+
+// SetSlideshowPairs shows two tall photos side by side, or each alone. The next photo is put up the
+// new way.
+func (f *Feature) SetSlideshowPairs(on bool) {
+	f.changeSlideshow(func(s *config.Slideshow) { s.Pairs = on && PairsHere() })
+	f.slideshowPairsSw.Set(config.Get().Home.Slideshow.Pairs)
+}
+
+// SlideshowPairs is whether tall photos are shown two at a time.
+func (f *Feature) SlideshowPairs() bool { return config.Get().Home.Slideshow.Pairs && PairsHere() }
+
+// SetSlideshowCaption writes when and where each Immich photo was taken over it, or not.
+func (f *Feature) SetSlideshowCaption(on bool) {
+	f.changeSlideshow(func(s *config.Slideshow) { s.Caption = on })
+	f.slideshowCaptionSw.Set(on)
+}
+
+// SlideshowCaption is whether Immich photos say when and where they were taken.
+func (f *Feature) SlideshowCaption() bool { return config.Get().Home.Slideshow.Caption }
+
+// SetImmichFavorites shows only Immich's favorites, or every photo the source has.
+func (f *Feature) SetImmichFavorites(on bool) {
+	f.changeSlideshow(func(s *config.Slideshow) { s.ImmichFavorites = on })
+	f.immichFavoritesSw.Set(on)
+}
+
+// ImmichFavorites is whether only Immich's favorites are shown.
+func (f *Feature) ImmichFavorites() bool { return config.Get().Home.Slideshow.ImmichFavorites }
+
+// immichNameMax bounds a person's name as the filter takes it.
+const immichNameMax = 100
+
+// SetImmichPerson shows only the photos of the person Immich knows by that name, or everybody's for
+// an empty one.
+func (f *Feature) SetImmichPerson(name string) {
+	name = strings.TrimSpace(name)
+	if len(name) > immichNameMax {
+		name = name[:immichNameMax]
+	}
+	f.changeSlideshow(func(s *config.Slideshow) { s.ImmichPerson = name })
+	f.immichPersonTxt.Set(name)
+}
+
+// SetImmichDays shows only the photos taken from the day from through the day to (config.PhotoDay);
+// either empty leaves that end open. A day that is not one, or a last day before the first, is
+// refused, and what was set stays.
+func (f *Feature) SetImmichDays(from, to string) error {
+	from, to = strings.TrimSpace(from), strings.TrimSpace(to)
+	cur := config.Get().Home.Slideshow
+	refuse := func(why string) error {
+		f.immichFromTxt.Set(cur.ImmichFrom)
+		f.immichToTxt.Set(cur.ImmichTo)
+		return errors.New(why)
+	}
+	var a, b time.Time
+	var err error
+	if from != "" {
+		if a, err = time.Parse(config.PhotoDay, from); err != nil {
+			return refuse("the first day is not a date like 2024-06-30")
+		}
+	}
+	if to != "" {
+		if b, err = time.Parse(config.PhotoDay, to); err != nil {
+			return refuse("the last day is not a date like 2024-06-30")
+		}
+	}
+	if from != "" && to != "" && b.Before(a) {
+		return refuse("the last day is before the first")
+	}
+	f.changeSlideshow(func(s *config.Slideshow) { s.ImmichFrom, s.ImmichTo = from, to })
+	f.immichFromTxt.Set(from)
+	f.immichToTxt.Set(to)
+	return nil
+}
+
+// ImmichFilters is what narrows an Immich source: favorites only, the first and last day, a person.
+func (f *Feature) ImmichFilters() (favorites bool, from, to, person string) {
+	s := config.Get().Home.Slideshow
+	return s.ImmichFavorites, s.ImmichFrom, s.ImmichTo, s.ImmichPerson
+}
 
 // changeSlideshow saves a change to what the slideshow shows and has the photos gathered again.
 func (f *Feature) changeSlideshow(change func(*config.Slideshow)) {
@@ -465,8 +632,8 @@ func (f *Feature) changeSlideshow(change func(*config.Slideshow)) {
 	if next.Source == "" {
 		f.slideshow = slideshowState{} // nothing to show: the last photo goes too
 	} else {
-		img, id := f.slideshow.image, f.slideshow.shown
-		f.slideshow = slideshowState{image: img, prev: img, shown: id, at: time.Now().Add(-slideshowEveryMax)} // due now
+		img, ids, caps := f.slideshow.image, f.slideshow.shown, f.slideshow.captions
+		f.slideshow = slideshowState{image: img, prev: img, shown: ids, captions: caps, at: time.Now().Add(-slideshowEveryMax)} // due now
 	}
 	f.mu.Unlock()
 	f.slideshowFolderTxt.Set(slideshowFolderName(next.Source))
@@ -549,16 +716,24 @@ func (f *Feature) advanceSlideshow() {
 		if !ok {
 			return // nothing to show, or the source failed to browse
 		}
-		// Show whole photo turned on or off while the photo was fetched: fetched again the new way,
-		// or it would stay up the old way for its whole time.
+		src, err := fetchSlideshowSource(id)
+		if err != nil {
+			slog.Warn("home: slideshow photo", "id", id, "err", err)
+			last = err
+			continue
+		}
+		ids, srcs := []string{id}, []image.Image{src}
+		if h.Pairs && PairsHere() && tall(src) {
+			if id2, src2, ok := f.partner(h); ok {
+				ids, srcs = append(ids, id2), append(srcs, src2)
+			}
+		}
+		caps := slideshowCaptions(h, ids)
+		// Show whole photo turned on or off while the photo was fetched: drawn again the new way, or it
+		// would stay up the old way for its whole time.
 		whole := h.WholePhoto
 		for redo := 0; ; redo++ {
-			img, err := fetchSlideshowImage(id, whole)
-			if err != nil {
-				slog.Warn("home: slideshow photo", "id", id, "err", err)
-				last = err
-				break
-			}
+			img := fitShown(srcs, whole)
 			f.mu.Lock()
 			if now := config.Get().Home.Slideshow.WholePhoto; now != whole && redo < 2 {
 				f.mu.Unlock()
@@ -566,7 +741,7 @@ func (f *Feature) advanceSlideshow() {
 				continue
 			}
 			f.slideshow.prev, f.slideshow.image, f.slideshow.at = f.slideshow.image, img, time.Now()
-			f.slideshow.shown = id
+			f.slideshow.shown, f.slideshow.captions = ids, caps
 			f.slideshow.fails, f.slideshow.trouble = 0, ""
 			f.mu.Unlock()
 			f.Changed.Emit(struct{}{})
@@ -582,6 +757,82 @@ func (f *Feature) advanceSlideshow() {
 		f.mu.Unlock()
 		f.slideshowNothing(slideshowUnreadable)
 	}
+}
+
+// pairLooks is how many photos are looked at for a tall photo's partner before it is shown alone.
+const pairLooks = 3
+
+// partner is a second tall photo to show beside one: the next in the list that is. Wide ones looked
+// at on the way are kept to show next (ahead), so pairing skips none.
+func (f *Feature) partner(h config.Slideshow) (string, image.Image, bool) {
+	var wide []string
+	defer func() {
+		if len(wide) > 0 {
+			f.mu.Lock()
+			f.slideshow.ahead = append(wide, f.slideshow.ahead...)
+			f.mu.Unlock()
+		}
+	}()
+	for look := 0; look < pairLooks; look++ {
+		id, ok := f.nextSlideshowChild(h)
+		if !ok {
+			return "", nil, false
+		}
+		src, err := fetchSlideshowSource(id)
+		if err != nil {
+			slog.Warn("home: slideshow photo", "id", id, "err", err)
+			continue // a broken one is let go, as it would be in its own turn
+		}
+		if tall(src) {
+			return id, src, true
+		}
+		wide = append(wide, id)
+	}
+	return "", nil, false
+}
+
+// tall is whether a photo is taller than it is wide: one of a pair.
+func tall(img image.Image) bool {
+	b := img.Bounds()
+	return b.Dy() > b.Dx()
+}
+
+// slideshowCaptions asks Immich when and where each photo up was taken, when captions are on and there
+// is a screensaver to show them. A photo it cannot say for has none; the other of a pair still does.
+func slideshowCaptions(h config.Slideshow, ids []string) []PhotoCaption {
+	if !h.Caption || h.Mode != config.SlideshowScreensaver {
+		return nil
+	}
+	var out []PhotoCaption
+	for i, id := range ids {
+		if !strings.HasPrefix(id, immichAssetPrefix) {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		t, err := immichAbout(ctx, config.Get().Home.Immich, id)
+		cancel()
+		if err != nil {
+			slog.Debug("home: when and where a photo was taken", "err", err)
+			continue
+		}
+		if t.When.IsZero() && t.Place == "" {
+			continue
+		}
+		out = append(out, PhotoCaption{When: t.When, Place: t.Place, Right: i == 1, Pair: len(ids) == 2})
+	}
+	return out
+}
+
+// SlideshowCaptions is when and where the photos up were taken, for Screensaver mode to write over
+// them; none in any other mode, or with captions off.
+func (f *Feature) SlideshowCaptions() []PhotoCaption {
+	h := config.Get().Home.Slideshow
+	if h.Mode != config.SlideshowScreensaver || h.Art || !h.Caption {
+		return nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.slideshow.captions)
 }
 
 // fetchCounts is whether a look whose photos all failed, the last with err, says the source is in
@@ -624,6 +875,11 @@ func (f *Feature) nextSlideshowChild(h config.Slideshow) (string, bool) {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.slideshow.ahead) > 0 {
+		id := f.slideshow.ahead[0]
+		f.slideshow.ahead = f.slideshow.ahead[1:]
+		return id, true
+	}
 	n := len(f.slideshow.children)
 	if n == 0 {
 		return "", false
@@ -705,7 +961,7 @@ func gatherSlideshow(h config.Slideshow) ([]hass.Media, error) {
 		if !srv.Set() {
 			return nil, errors.New("immich: not set up")
 		}
-		return immichPhotos(ctx, srv, h.Source, slideshowMaxPhotos)
+		return immichPhotos(ctx, srv, h.Source, immichFilterOf(h), slideshowMaxPhotos)
 	}
 	folders := slideshowMaxFolders
 	if h.TopOnly {
@@ -745,9 +1001,52 @@ func isPhoto(m hass.Media) bool {
 	return false
 }
 
+// fetchShown fetches and fits the photos ids again: one alone, or a pair side by side.
+func fetchShown(ids []string, whole bool) (*image.RGBA, error) {
+	var srcs []image.Image
+	for _, id := range ids {
+		src, err := fetchSlideshowSource(id)
+		if err != nil {
+			return nil, err
+		}
+		srcs = append(srcs, src)
+	}
+	return fitShown(srcs, whole), nil
+}
+
+// pairGap is the dark line between the two photos of a pair, in pixels.
+const pairGap = 6
+
+// fitShown fits one photo to the panel, cropped to fill it or whole with blurred sides; or two side
+// by side, each the same way in its half.
+func fitShown(srcs []image.Image, whole bool) *image.RGBA {
+	fit := cropToFill
+	if whole {
+		fit = fitWhole
+	}
+	if len(srcs) < 2 {
+		return fit(srcs[0], slideshowW, slideshowH)
+	}
+	out := image.NewRGBA(image.Rect(0, 0, slideshowW, slideshowH))
+	draw.Draw(out, out.Rect, image.Black, image.Point{}, draw.Src)
+	half := (slideshowW - pairGap) / 2
+	draw.Draw(out, image.Rect(0, 0, half, slideshowH), fit(srcs[0], half, slideshowH), image.Point{}, draw.Src)
+	draw.Draw(out, image.Rect(slideshowW-half, 0, slideshowW, slideshowH), fit(srcs[1], half, slideshowH), image.Point{}, draw.Src)
+	return out
+}
+
 // fetchSlideshowImage resolves, fetches and fits one photo to the panel: cropped to fill it, or whole
 // with blurred sides.
 func fetchSlideshowImage(id string, whole bool) (*image.RGBA, error) {
+	src, err := fetchSlideshowSource(id)
+	if err != nil {
+		return nil, err
+	}
+	return fitShown([]image.Image{src}, whole), nil
+}
+
+// fetchSlideshowSource resolves, fetches and decodes one photo, upright.
+func fetchSlideshowSource(id string) (image.Image, error) {
 	var b []byte
 	var err error
 	switch {
@@ -771,11 +1070,7 @@ func fetchSlideshowImage(id string, whole bool) (*image.RGBA, error) {
 	if err != nil {
 		return nil, err
 	}
-	src = upright(src, exifOrientation(b))
-	if whole {
-		return fitWhole(src, slideshowW, slideshowH), nil
-	}
-	return cropToFill(src, slideshowW, slideshowH), nil
+	return upright(src, exifOrientation(b)), nil
 }
 
 // wholeShade is how much of the blurred sides' brightness is kept, out of 256: dark enough that the

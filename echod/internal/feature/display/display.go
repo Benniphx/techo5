@@ -36,6 +36,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/assistant"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/camstream"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/deck"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/doorbell"
@@ -191,8 +192,10 @@ type Display struct {
 	dashAdjust    dashAdjusting
 	dashColor     *dashboard.LightColor // the color sheet, while it is up
 	dashMedia     *mediaSheet           // the media sheet, while it is up
+	dashClimate   *climateSheet         // the thermostat sheet, while it is up
 	sheetSent     sliderSent            // what a sheet's slider last sent, while a finger moves it
 	dashHolds     bool                  // the drawn dashboard is up, and wants a finger held still reported
+	clockHolds    bool                  // the plain clock is up and Hold on the clock is on (gesture_hold.go)
 
 	poke chan struct{}
 
@@ -475,6 +478,10 @@ func build() *Display {
 	btaudio.Get().Changed.Listen(func(btaudio.State) { d.wake() })
 	phone.Get().Changed.Listen(func(phone.State) { d.wake() })
 	doorbell.Get().Changed.Listen(func(struct{}) { d.wake() })
+	camstream.Get().Changed.Listen(func(struct{}) {
+		d.relight(true) // a dark panel keeps a little light while the camera is watched (watchedLight)
+		d.wake()
+	})
 	security.Get().Changed.Listen(func(struct{}) { d.wake() })
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	alarm.Get().Changed.Listen(func(struct{}) { d.wake() })
@@ -625,6 +632,7 @@ func (d *Display) relight(jump bool) {
 	if p := d.wakeLight(time.Now()); p > 0 && d.on {
 		target = float64(d.ceiling) * screen.BacklightMax / 100 * sunriseLevel(p)
 	}
+	target = watchedLight(target, d.on, camstream.Watching(), float64(glowSteps[0]))
 	if jump || d.level == 0 {
 		d.level = target
 	} else {
@@ -836,8 +844,9 @@ func (d *Display) volumeMoved(step int) {
 // toggleTalk and toggleSound are what the camera page's Talk and sound controls do; variables only so
 // that a test can see a tap reach them.
 var (
-	toggleTalk  = func(entity string) { talkback.Get().Toggle(entity) }
-	toggleSound = func() { home.Get().ToggleCameraSound() }
+	toggleTalk      = func(entity string) { talkback.Get().Toggle(entity) }
+	toggleSound     = func() { home.Get().ToggleCameraSound() }
+	showCameraAlone = func(entity string) { home.Get().ShowCamera(entity, cameraScreenTime()) }
 )
 
 // cameraTap is a tap on the camera page for view v: it takes the view down, unless it lands on the
@@ -845,6 +854,15 @@ var (
 // use of it at a doorbell — or on Talk, which starts or ends talking through the camera. By day and on
 // the night light both come here, so a hand reaching for Talk in the dark does not lose the view.
 func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
+	if len(v.Grid) > 0 {
+		// The grid: a camera tapped goes up on its own, live where it can be; the strips close it.
+		if i := d.gridCellAt(image.Pt(g.X, g.Y), len(v.Grid)); i >= 0 {
+			go showCameraAlone(v.Grid[i].Entity)
+		} else {
+			go closeCamera(v)
+		}
+		return
+	}
 	if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
 		go toggleTalk(v.Entity)
 	} else if d.r != nil && d.r.cameraSoundTapped(image.Pt(g.X, g.Y)) {
@@ -1228,6 +1246,8 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 	switch g.Kind {
+	case touch.Hold:
+		d.clockHeld()
 	case touch.Tap:
 		d.mu.Lock()
 		weatherUp := time.Now().Before(d.weatherUntil)
@@ -2322,11 +2342,27 @@ func (d *Display) frame() time.Duration {
 	if !on && !video.Get().State().Active() {
 		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
-	if !on && video.Get().State().Frames {
+	playing := !on && video.Get().State().Frames
+	if playing {
 		// A dark panel with a video playing: its frames are still taken as they fall due, so its sound
 		// goes on (the decoder makes both), and nothing is drawn.
 		video.Get().Covered(false)
 		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
+	}
+	if !on && camstream.Watching() {
+		// Dark, with the camera watched over the network: the dot that says so, alone on black (not a
+		// video's last frame), at the panel's lowest light (relight), so the room can tell. Looked at
+		// again until the watching ends.
+		d.r.watchedDark()
+		if err := d.dev.Present(); err != nil {
+			slog.Warn("presenting the frame failed", "err", err)
+		}
+		if playing {
+			return videoRecheck
+		}
+		return 5 * time.Second
+	}
+	if playing {
 		return videoRecheck
 	}
 	if !on {
@@ -2462,6 +2498,7 @@ func (d *Display) frame() time.Duration {
 		}
 		d.mu.Unlock()
 	}
+	s.streaming = camstream.Watching()
 	s.camera, s.showCamera = home.Get().Camera()
 	s.camera, s.showCamera = d.gateCamera(s.camera, s.showCamera, nightNow(now))
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
@@ -2546,7 +2583,6 @@ func (d *Display) frame() time.Duration {
 	if s.showVideo {
 		boring = false
 	}
-
 	// The announcement state is read every frame like the setup page's, for the same reason: the
 	// drawer's button, the page an arriving one puts up and the line that says this microphone is
 	// open all have to be right wherever the screen happens to be.
@@ -2595,7 +2631,13 @@ func (d *Display) frame() time.Duration {
 			}
 		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
+		if s.slideshowScreensaver != nil && !home.Get().SlideshowArt() {
+			s.slideshowCaptions = home.Get().SlideshowCaptions()
+		}
 	}
+	// Holds go to Home Assistant only on the plain clock: not over the screensaver, the light before an
+	// alarm, the night clock, a card, an answer, an announcement or any page of its own.
+	d.clockHoldScene(plainClock(&s, boring) && !d.overDashboard(&s) && !d.answerUp(now) && d.wakeLight(now) == 0)
 
 	// The Call button is on the clock itself and only there: on any other page a tap where it would be
 	// still does what that page does.

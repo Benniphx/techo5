@@ -1,7 +1,6 @@
 package timer
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -190,7 +189,7 @@ func TestWhatIsCountingDownIsNamedSoonestFirstByWhenItFinishes(t *testing.T) {
 
 	// The screen's own setting decides the form a time is written in, twelve hour or twenty-four, so a
 	// timer read in Home Assistant is written the way the panel would write it.
-	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	useTestState(t)
 	if err := config.Set().Screen().Clock24(true); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +215,7 @@ func TestWhatIsCountingDownIsNamedSoonestFirstByWhenItFinishes(t *testing.T) {
 }
 func TestAnUnnamedTimerStillHasSomethingToCallIt(t *testing.T) {
 	now := time.Date(2026, 9, 30, 18, 38, 0, 0, time.Local)
-	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	useTestState(t)
 	if err := config.Set().Screen().Clock24(true); err != nil {
 		t.Fatal(err)
 	}

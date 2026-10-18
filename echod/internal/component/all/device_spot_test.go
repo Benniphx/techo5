@@ -4,7 +4,7 @@ package all
 
 // notOnThisDevice: what the Echo Spot build leaves out of the shared list: the LED ring's entities, as
 // on the Show, and the Show's own screen settings.
-var notOnThisDevice = append(ringOnly, "calendar_popup_all_day", "calendar_popup_before", "calendar_popup_chime", "calendar_popups", "screen_now_playing", "screen_theme", "screen_auto_brightness_dimmest", "screen_date_color", "screen_clock_tap", "screen_dashboard_tiles", "lyrics", "screen_night_tap_lifts")
+var notOnThisDevice = append(ringOnly, "calendar_popup_all_day", "calendar_popup_before", "calendar_popup_chime", "calendar_popups", "screen_now_playing", "screen_theme", "screen_auto_brightness_dimmest", "screen_date_color", "screen_clock_tap", "screen_dashboard_tiles", "lyrics", "screen_night_tap_lifts", "slideshow_pairs")
 
 // deviceSpecific: the audio output, and the subtle muted ring, since only the Spot draws its mute on
 // the screen; and the video player (feature/video), which the Show has too and the Dot does not.

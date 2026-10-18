@@ -63,8 +63,8 @@ data:
 In YAML, refer to this action as `esphome.<node>_leave_home_assistant`.
 
 For a device you're giving to someone else. The device forgets the URL and token set with
-`home_assistant`, replaces the encryption key Home Assistant connects with by a new random one, and
-restarts. Your Home Assistant can't connect to it again, and the device no longer calls your Home
+`home_assistant`, and realtime voice's key and Home Assistant token, replaces the encryption key Home
+Assistant connects with by a new random one, and restarts. Your Home Assistant can't connect to it again, and the device no longer calls your Home
 Assistant. Alarms, radio stations, Wi-Fi and its other settings stay.
 
 Afterward, delete the device from **Settings → Devices & services → ESPHome** in your Home Assistant.
@@ -895,6 +895,61 @@ data:
   id: "{{ started.id }}"
 ```
 
+## Pause or resume a timer
+
+In YAML, refer to these actions as `esphome.<node>_timer_pause` and `esphome.<node>_timer_resume`.
+
+Pause stops one of the device's own timers where it is; resume sets it counting again from there. A
+paused timer is listed as `running: false` in `alarms_list`, shows in the device's **Timers** sensor
+as `Bread paused (4:05 left)` after the running ones (as do Assist's timers paused by voice), and
+stays paused across a restart. A timer that has just run out is left to ring rather than paused.
+Pausing a paused timer, or resuming a running one, changes nothing. Timers set by voice through Home
+Assistant's Assist are paused and resumed by voice, and these actions refuse them. So far it has been tried off the device only, not on a device.
+
+### id (Required)
+
+*string*
+
+A timer's `id`, from `timer_start`'s answer or `alarms_list`'s `timers`, or `all` for every timer of
+the device's own.
+
+```yaml
+# Pause the kitchen's timers while the doorbell camera is up.
+action: esphome.kitchen_timer_pause
+data:
+  id: all
+```
+
+## Add or take time off a timer
+
+In YAML, refer to these actions as `esphome.<node>_timer_add` and `esphome.<node>_timer_remove`.
+
+Gives one of the device's own timers more time, or less, whether it is running or paused. Taking off
+more than the timer has left is refused (cancel it instead), as is going past 24 hours or changing a
+timer that has just run out, which is left to ring. Assist's timers are changed by voice, as above.
+So far it has been tried off the device only, not on a device.
+
+### id (Required)
+
+*string*
+
+A timer's `id`, from `timer_start`'s answer or `alarms_list`'s `timers`. These take one timer, not
+`all`.
+
+### duration (Required)
+
+*string*
+
+How much, written the way `timer_start` takes it: `5 minutes`, `1h30m`, `00:05:00` or a bare number
+of minutes.
+
+```yaml
+action: esphome.office_timer_add
+data:
+  id: "{{ started.id }}"
+  duration: 5 minutes
+```
+
 ## Follow Home Assistant helpers as alarms
 
 In YAML, refer to this action as `esphome.<node>_alarms_follow`.
@@ -926,6 +981,30 @@ Here the alarm only rings while `input_boolean.wake_armed` is anything other tha
 action: esphome.office_alarms_follow
 data:
   entities: input_datetime.wake=input_boolean.wake_armed,input_datetime.weekend_wake
+```
+
+## Cameras from go2rtc
+
+In YAML, refer to this action as `esphome.<node>_home_go2rtc`.
+
+Reads the streams of a go2rtc server into the device's camera list, as cameras of their own named as
+go2rtc names them (`go2rtc:porch`), and answers how many there are. Called again, it reads the list
+again; with an empty address, it takes them away. See [Setting it up](setup.md#cameras-from-go2rtc).
+
+### address (Required)
+
+*string*
+
+The go2rtc server, as a host, host:port (go2rtc's own port, 1984, when none is given) or URL, with a
+user and password in it if go2rtc has them; empty to take the cameras away. Home Assistant's logbook
+and traces can keep an action's arguments, so give go2rtc a user of its own that can only view, or
+pass the address from a secret.
+
+```yaml
+action: esphome.kitchen_home_go2rtc
+data:
+  address: 192.168.x.y:1984
+response_variable: go2rtc
 ```
 
 ## Choose which cameras the device shows
@@ -993,6 +1072,39 @@ How long to show it for. `0` means the default, 30 seconds.
 action: esphome.office_home_show_camera
 data:
   entity: camera.front_door
+  seconds: 60
+```
+
+## Show several cameras at once
+
+In YAML, refer to this action as `esphome.<node>_home_show_cameras`. On the Echo Show only.
+
+Puts up to six cameras on the screen at once, two or three across, each refreshed from its snapshot
+about once a second, or as often as fetching the others allows. A tap on one puts that camera up on
+its own, live where Live camera video is on; a tap on the strip at the top or the foot closes the
+grid. The cameras' own sound is not played in the grid. The same grid is the **All cameras** row at
+the top of the Cameras drawer, when there are two cameras or more. So far it has been tried off the device only, not on a device.
+
+### cameras (Required)
+
+*string*
+
+The cameras' entity ids, comma separated, in the order they go in: left to right, then down. Empty for
+the first six of the device's list (`home_cameras`, or every camera Home Assistant has). The device's
+own camera is not shown in the grid, and only cameras are: Home Assistant's (`camera.`), a Reolink
+recorder's, and go2rtc's streams (`go2rtc:name`).
+
+### seconds (Required)
+
+*int*
+
+How long the grid stays up, an hour at most; 0 for 30 seconds.
+
+```yaml
+# Somebody at the door after dark: the door, the drive and the yard together.
+action: esphome.kitchen_home_show_cameras
+data:
+  cameras: camera.front_door, camera.driveway, camera.yard
   seconds: 60
 ```
 
@@ -2226,9 +2338,10 @@ and silence.
 > action is a way to start one rather than a route the audio takes. They keep working with Home
 > Assistant switched off; this action is simply not available then.
 >
-> Every device needs the same **house word** set on its setup page. A device with no word set
-> neither sends announcements nor takes them, and this action will say so in the log rather than
-> failing.
+> Every device needs the same **house word** set on its setup page, capitals included: the word is
+> case-sensitive. A device with no word set neither sends announcements nor takes them, and this
+> action will say so in the log rather than failing. A device that refuses announcements for having
+> a different word is named on the sender's setup page, next to the house word.
 >
 > Quiet hours are respected: inside them an announcement is shown and not sounded. Alarms, timers
 > and calls are not announcements and are not affected.
@@ -2250,4 +2363,35 @@ data:
 action: esphome.office_announce_house
 data:
   text: ""
+```
+
+## Copy settings to other devices
+
+In YAML, refer to this action as `esphome.<node>_copy_settings`.
+
+Copies this device's settings to other devices, once, with no link: the way to make a change on one
+device and send it to the others. Settings sharing has to be on, on this device and on each device
+that is to take them ([Sharing settings](setup.md#sharing-settings-with-the-other-devices)). A device
+that keeps a setting its own, has sharing off or has no such setting is left alone, and the log says
+which. A copy counts as the latest change where it lands, and is passed on to the setting's links
+there.
+
+### settings (Required)
+
+*string*
+
+The settings, by their entities' object IDs (`screen_theme` for `select.office_screen_theme`),
+separated by commas, or `all` for every setting that can be shared.
+
+### devices (Required)
+
+*string*
+
+The devices, by name, separated by commas, or `all` for every other device on the network now.
+
+```yaml
+action: esphome.office_copy_settings
+data:
+  settings: screen_theme, screen_clock_style, night_volume
+  devices: Kitchen, Bedroom
 ```

@@ -44,6 +44,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/assistant"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/camstream"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/doorbell"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/hastate"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
@@ -370,6 +371,10 @@ func build() *Display {
 	// An announcement arriving lights a face the night put out (frame).
 	announce.Get().Changed.Listen(func(struct{}) { d.wake() })
 	doorbell.Get().Changed.Listen(func(struct{}) { d.wake() })
+	camstream.Get().Changed.Listen(func(struct{}) {
+		d.relight(true) // a dark face keeps a little light while the camera is watched (watchedLight)
+		d.wake()
+	})
 	d.watchRoom()
 	talkback.Get().Changed.Listen(func(struct{}) { d.wake() })
 	onMissed(d.wake)
@@ -525,6 +530,7 @@ func (d *Display) relight(jump bool) {
 		full := backlightMin + (screen.BacklightMax-backlightMin)*float64(min(max(d.ceiling, 0), 100))/100
 		target = backlightMin + (full-backlightMin)*sunriseLevel(p)
 	}
+	target = watchedLight(target, d.on, camstream.Watching(), backlightMin)
 	if jump || d.level == 0 {
 		d.level = target
 	} else {
@@ -1404,10 +1410,26 @@ func (d *Display) frame() time.Duration {
 	if !on && !video.Get().State().Active() {
 		d.vp.drop() // a video that ended while the panel was dark: its frame goes with it
 	}
-	if !on && vs.Frames {
+	playing := !on && vs.Frames
+	if playing {
 		// Dark with a video playing: its frames are taken as they fall due so its sound goes on.
 		video.Get().Covered(false)
 		d.videoPainting, d.vp.dark, d.videoOver = true, true, image.Rectangle{}
+	}
+	if !on && camstream.Watching() {
+		// Dark, with the camera watched over the network: its mark, alone on black (not a video's last
+		// frame), at the dimmest light (relight), so the room can tell. Looked at again until the
+		// watching ends.
+		d.r.watchedDark()
+		if err := d.dev.Present(); err != nil {
+			slog.Warn("presenting the frame failed", "err", err)
+		}
+		if playing {
+			return videoRecheck
+		}
+		return 5 * time.Second
+	}
+	if playing {
 		return videoRecheck
 	}
 	if !on {
@@ -1569,6 +1591,9 @@ func (d *Display) frame() time.Duration {
 			}
 		}
 		s.slideshowOverlay = home.Get().SlideshowOverlay()
+		if s.slideshowScreensaver != nil && !home.Get().SlideshowArt() {
+			s.slideshowCaptions = home.Get().SlideshowCaptions()
+		}
 	}
 
 	d.dashSceneSpot(&s)

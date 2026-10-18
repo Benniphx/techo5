@@ -51,7 +51,7 @@ func duePopups(events []hass.Event, now time.Time, c config.Calendar, shown map[
 	lead := time.Duration(c.PopupLead()) * time.Minute
 	var out []hass.Event
 	for _, e := range events {
-		if len(c.PopupCalendars) > 0 && !slices.Contains(c.PopupCalendars, e.Calendar) {
+		if len(c.PopupCalendars) > 0 && !slices.ContainsFunc(c.PopupCalendars, func(cal string) bool { return home.OnCalendar(e, cal) }) {
 			continue
 		}
 		if shown[popupKey(e)] {
@@ -158,7 +158,7 @@ func (d *Display) popupTick(now time.Time) {
 	shown[popupKey(e)] = true
 	keepPopupShown(shown, now)
 
-	slog.Info("calendar: pop-up", "event", e.Summary, "starts", e.Start.Format(time.Kitchen), "night", night)
+	slog.Info("calendar: pop-up", "summary", e.Summary, "starts", e.Start.Format(time.Kitchen), "night", night)
 	component.Fire.Emit(component.Event{Name: CalendarEvent, Data: map[string]string{
 		"event": "popup", "summary": e.Summary, "calendar": e.Calendar,
 		"start": e.Start.Format(time.RFC3339), "device": config.Get().Device.Name,

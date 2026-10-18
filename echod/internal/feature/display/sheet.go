@@ -8,6 +8,7 @@ import (
 	"image"
 	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/remote"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/sendspin"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
@@ -244,6 +246,11 @@ func securityRows(sv sheetView) []settingRow {
 	rows = append(rows, settingRow{id: "settingslock", label: "Settings lock", sub: lockSub, kind: ctlToggle, on: security.LockSet()})
 	rows = append(rows, settingRow{id: "dropin", label: "Allow Drop In", sub: "Intercom calls connect by themselves, after a chime",
 		kind: ctlToggle, on: config.Get().Home.DropIn})
+	remoteSub := "Scripts signed with this device's key"
+	if !remote.HasKey() {
+		remoteSub = "Make a key on the setup page first"
+	}
+	rows = append(rows, settingRow{id: "remoteapi", label: "Remote API", sub: remoteSub, kind: ctlToggle, on: config.Get().Remote.On})
 	rows = append(rows, settingRow{id: "callring", label: "Call ring", sub: "How a call rings here",
 		kind: ctlChoice, value: phone.RingSounds[phone.RingSoundIndex()]})
 	link := settingRow{label: "Home Assistant link", sub: "Encrypted with this device's key", kind: ctlValue, value: "Encrypted"}
@@ -465,6 +472,10 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 				p.cur = i
 			}
 		}
+		return p, true
+	case "alarmwords":
+		says := config.AlarmSays()
+		p := pickerView{title: "Said as it rings", opts: config.Labels(says), cur: slices.Index(says, alarm.Get().Say())}
 		return p, true
 	case "e.repeat":
 		p := pickerView{title: "Repeat", opts: repeatNames, cur: -1}
@@ -790,6 +801,10 @@ func (d *Display) choose(id string, i int) {
 		if names := speaker.AlarmSounds(); i < len(names) {
 			alarm.Get().SetSound(names[i], true)
 		}
+	case "alarmwords":
+		if says := config.AlarmSays(); i >= 0 && i < len(says) {
+			alarm.Get().SetSay(says[i])
+		}
 	case "e.repeat":
 		if i < len(repeats) {
 			d.editDraft(func(dr *alarmDraft) { dr.alarm.Days = repeats[i] })
@@ -1022,6 +1037,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		sp.SetEnabled(!sp.Enabled())
 	case "ssh":
 		security.Get().SetSSH(!config.Get().Security.SSH)
+	case "remoteapi":
+		remote.Get().SetOn(!config.Get().Remote.On)
 	case "camweb":
 		security.Get().SetCamera(!config.Get().Security.Camera)
 	case "screenweb":
@@ -1120,6 +1137,12 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowSubfolders(!subfolders)
 	case "wholephoto":
 		home.Get().SetSlideshowWholePhoto(!home.Get().SlideshowWholePhoto())
+	case "photopairs":
+		home.Get().SetSlideshowPairs(!home.Get().SlideshowPairs())
+	case "photocaption":
+		home.Get().SetSlideshowCaption(!home.Get().SlideshowCaption())
+	case "immichfav":
+		home.Get().SetImmichFavorites(!home.Get().ImmichFavorites())
 	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "clockpos", "datecolor", "camtime", "answertime", "callring", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap":
 		d.openPicker(id)

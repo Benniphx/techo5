@@ -28,7 +28,8 @@ setup page's **Screen & Photos** tab has the same settings, except which dashboa
 - **Dashboard to show**: which dashboard, from a list of yours and their views. The list updates by
   itself within five minutes of a dashboard being added, renamed or removed. *Automatic* is the Rooms
   dashboard when drawn, and your default dashboard when streamed. Home Assistant's built-in pages are
-  at the end, marked *(streamed only)*.
+  at the end, marked *(streamed only)*, and after them the web pages your dashcast server lists, as
+  *Web: name* ([Web pages](#web-pages)).
 - **Dashboard when idle**: shows the dashboard instead of the clock whenever nothing else is on the
   screen.
 - **Dashboard returns to the clock after**: how long a dashboard you opened stays up untouched before
@@ -78,6 +79,13 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
   players play or pause, scenes and scripts run, a card's own tap action does what it is set to.
 - **Slide** a finger along a light, cover, thermostat or media player to set its brightness,
   position, temperature or volume. The tile fills as you slide, and it is set when you let go.
+- **Tap a thermostat** whose card sets no tap of its own:
+  - on the Show (a long press too), for a sheet over the page: the temperature where it is, the one
+    it is set to with a step down and up (the low and the high of a range in heat/cool), its modes,
+    and **Done**.
+  - on the Spot, which has no room for a sheet, a tap on the left third of its tile sets it a step
+    cooler, and on the right third a step warmer; the middle does nothing. A thermostat that is off
+    or keeps a range has no one temperature to step.
 - **Long press** (Show only; on the Spot a long press is the ring menu):
   - on a light that has whites or colors, for a sheet of them. The light follows your finger.
   - on a media player, for a sheet with its controls, its volume, the speakers it can be grouped
@@ -140,3 +148,20 @@ Then tell the device where it is, either:
 
 The streamed page is your real dashboard, with everything on it. The device's demo mode for
 screenshots does not cover it.
+
+### Web pages
+
+dashcast can also show web pages that aren't Home Assistant's: a status page, a photo site, an art
+feed, a page of your own. Whoever runs dashcast lists them by name in `DASHCAST_PAGES`
+([`dashcast/README.md`](../dashcast/README.md#web-pages)), and each appears in **Dashboard to show**
+as *Web: name*. Choose one with **Dashboard** set to *Streamed*:
+
+- **As the screensaver:** turn on **Dashboard when idle**, and the page shows in place of the clock
+  whenever nothing else is on the screen.
+- **As a page of your own:** open it the way you open a dashboard. Touches go to the page, except at
+  the screen's edges, which take it away as they do a dashboard.
+
+A device asks for a page by its name only, and dashcast opens it apart from Home Assistant, with no
+sign-in in it, and keeps it on its own site. A web page can't be drawn on the device: it needs
+*Streamed*. If the screen says a page's address "goes on to" another site, list that address in
+`DASHCAST_PAGES` instead.

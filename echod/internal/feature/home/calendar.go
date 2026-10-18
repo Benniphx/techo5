@@ -166,6 +166,7 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 		events, ok = append(events, ev...), true
 	}
 	slices.SortStableFunc(events, func(a, b hass.Event) int { return a.Start.Compare(b.Start) })
+	events = mergeSame(events)
 
 	calendar.Lock()
 	m := calendar.months[key]
@@ -182,6 +183,34 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 	m.events, m.sources, m.at = events, joined, time.Now()
 	calendar.Unlock()
 	f.Changed.Emit(struct{}{})
+}
+
+// mergeSame shows an event that is on more than one of the calendars once: the same name, start, end
+// and all-day-ness, on another calendar, is the same event (a family dinner on both parents'
+// calendars). The first calendar's copy is kept, in the order the calendars were chosen, with the
+// others named in Also. An event differing in any of those, even a little, is a different one and is
+// left as it is, and so are two copies on one calendar. events is sorted by start.
+func mergeSame(events []hass.Event) []hass.Event {
+	out := make([]hass.Event, 0, len(events))
+	kept := map[string]int{} // same() key -> index in out
+	for _, e := range events {
+		k := strings.TrimSpace(e.Summary) + "\x00" + e.Start.UTC().Format(time.RFC3339Nano) + "\x00" +
+			e.End.UTC().Format(time.RFC3339Nano) + "\x00" + strconv.FormatBool(e.AllDay)
+		if i, ok := kept[k]; ok && out[i].Calendar != e.Calendar && !slices.Contains(out[i].Also, e.Calendar) {
+			out[i].Also = append(out[i].Also, e.Calendar)
+			continue
+		}
+		if _, ok := kept[k]; !ok {
+			kept[k] = len(out)
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
+// OnCalendar is whether an event is on calendar, as its own or one it was merged with (mergeSame).
+func OnCalendar(e hass.Event, calendar string) bool {
+	return e.Calendar == calendar || slices.Contains(e.Also, calendar)
 }
 
 // forgetOldMonths keeps no more than monthsKept months, dropping those furthest from keep. Wants the lock.

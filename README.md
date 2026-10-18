@@ -90,12 +90,13 @@ It started on the Show 5, which is where the name comes from.
 
 | Device | Model | Repository | Status |
 |---|---|---|---|
-| **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N82 | this one | In daily use |
-| **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
-| **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
-| **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
-| **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
-| **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
+| <img src="docs/images/badges/cronos.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N8S | this one | In daily use |
+| <img src="docs/images/badges/checkers.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
+| <img src="docs/images/badges/crown.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
+| <img src="docs/images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units, the newest port |
+| <img src="docs/images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
+| <img src="docs/images/badges/biscuit.png" alt="" width="36" align="absmiddle"> **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
+| <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
@@ -113,6 +114,33 @@ Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a 
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🔗 **Settings that follow you, a realtime voice, and a camera that knows a person** (v1.2.22).
+  Pick a setting on the setup page and tick the other devices that should keep it in step: each one
+  agrees first, and a device that was off catches up when it's back. A wake word can be answered by a
+  speech-to-speech model at OpenAI, xAI or Gemini (it sends your voice to them, and they bill for it;
+  off until you choose it, with a daily limit). With presence detection on, a Show or Spot can tell a
+  person from anything else that moves, on the device. All three are new and not yet tried on a device.
+- 🎥 **Your Echo as a camera for your recorder, and cameras by the grid** (v1.2.21). A Show or Spot can
+  serve its own camera to Frigate or any NVR over RTSP and ONVIF, with a login and a green dot on the
+  screen while it's watched; the Show shows up to six cameras at once, and go2rtc's streams join the
+  list. Off until you turn them on.
+- 🗣️ **The nearest Echo answers, and more you can run from home** (v1.2.21). With several devices in
+  earshot, only the one that heard you best answers. Thermostats open their controls in Drawn mode
+  ([#170](https://github.com/HuskerMinion/techo5/issues/170)); settings save to a file and restore;
+  a signed remote API and live logs; timers pause and take extra time from Home Assistant; and an
+  event on two calendars shows once. Thanks to [@remylpat](https://github.com/remylpat), and to
+  [@wonderslug](https://github.com/wonderslug) for the Echo 2nd gen's own speaker tuning
+  ([#169](https://github.com/HuskerMinion/techo5/pull/169)).
+- 🔊 **The Echo 2nd gen** (dot-v1.0.19). The 2017 Echo (`radar`) runs TECHO5 Dot: the same release,
+  installer and daemon as the Dot, with its own amplifier, the speaker filters from the unit itself and
+  its own Bluetooth kernel. Its USB is only inside the case:
+  [install steps](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen).
+- 🌄 **Light only alarms, and a night that's easier to live with** (v1.2.20). An alarm can be a
+  wake-up light with no sound ([#164](https://github.com/HuskerMinion/techo5/issues/164)), a tap can
+  lift the night light on the Show ([#163](https://github.com/HuskerMinion/techo5/issues/163)), and the
+  Spot's night clock comes sooner and goes dimmer
+  ([techo5-spot#7](https://github.com/HuskerMinion/techo5-spot/issues/7)). Thanks to
+  [@kevin909867](https://github.com/kevin909867) and [@paolofaz](https://github.com/paolofaz).
 - ⚡ **The Show 8 2nd gen at full speed** (v1.2.19). Its kernel now scales the CPUs up to 1.99 GHz
   instead of leaving them at the bootloader's 1.1 to 1.2 GHz: about 55% faster on one core and 60% on
   all eight, ahead of a Raspberry Pi 5 on all cores, with temperature control. The kernel comes over
@@ -465,7 +493,7 @@ supported on that kernel so far, and the installer checks yours. Every step:
 ## Sister projects
 
 **[TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot)** does the same for the Echo Dot 2nd
-generation: Linux in place of Fire OS, all seven microphones, Bluetooth speaker mode, signed
+generation and the Echo 2nd generation: Linux in place of Fire OS, all seven microphones, Bluetooth speaker mode, signed
 updates. **[TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot)** does it for the Echo Spot
 (1st gen), on its round screen. All three run the same daemon source, built per device.
 **[TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena)** tells the story of the 2nd gen
@@ -473,7 +501,9 @@ Echo Show 8 port, which lives here in this repository.
 
 ## Made possible by
 
-TECHO5 exists because of these projects and the people behind them.
+TECHO5 exists because of these projects and the people behind them. The codename badges in the device
+table are photos from Wikimedia Commons; who took each one, and its license, is in
+[docs/images/badges/CREDITS.md](docs/images/badges/CREDITS.md).
 
 **The path here**
 - [EchoLocal](https://github.com/ygelfand/echolocal) (MIT, Yuri Gelfand): the daemon TECHO5 is built

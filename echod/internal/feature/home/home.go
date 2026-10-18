@@ -223,7 +223,17 @@ type Feature struct {
 	slideshowSubfoldersSw *esphome.Switch
 	// slideshowWholeSw shows photos whole, with blurred sides, instead of cropped to fill.
 	slideshowWholeSw *esphome.Switch
-	slideshow        slideshowState
+	// slideshowPairsSw puts two tall photos side by side; slideshowCaptionSw writes when and where an
+	// Immich photo was taken over it.
+	slideshowPairsSw   *esphome.Switch
+	slideshowCaptionSw *esphome.Switch
+	// immichFavoritesSw, immichPersonTxt, immichFromTxt and immichToTxt narrow an Immich source.
+	immichFavoritesSw *esphome.Switch
+	immichPersonTxt   *esphome.Text
+	immichFromTxt     *esphome.Text
+	immichToTxt       *esphome.Text
+
+	slideshow slideshowState
 	// slideshowGen counts the slideshow's changes of source (changeSlideshow, ResetImmich), so a list
 	// gathered for the source before is not kept for the one after.
 	slideshowGen uint64
@@ -425,7 +435,8 @@ func (f *Feature) Name() string { return "home" }
 func (f *Feature) Restore(c config.Config) {
 	if id, ok := strings.CutPrefix(c.Home.Slideshow.Source, ImmichAlbumPrefix); ok && c.Home.Immich.Set() && c.Home.Immich.AlbumID != id {
 		// Kept before the album's id was kept with its name: asked for once the network is up.
-		safe.Go("immich album name at start", func() { f.nameImmichAlbumSoon(id) })
+		naming.Add(1)
+		safe.Go("immich album name at start", func() { defer naming.Done(); f.nameImmichAlbumSoon(id) })
 	}
 	f.weatherOpts.Restore(weatherOptions(c.Home))
 	f.weatherSel.Set(chosenOption(c.Home))
@@ -457,6 +468,12 @@ func (f *Feature) Restore(c config.Config) {
 		f.slideshowArtSw.Set(c.Home.Slideshow.Art)
 		f.slideshowSubfoldersSw.Set(!c.Home.Slideshow.TopOnly)
 		f.slideshowWholeSw.Set(c.Home.Slideshow.WholePhoto)
+		f.slideshowPairsSw.Set(c.Home.Slideshow.Pairs && PairsHere())
+		f.slideshowCaptionSw.Set(c.Home.Slideshow.Caption)
+		f.immichFavoritesSw.Set(c.Home.Slideshow.ImmichFavorites)
+		f.immichPersonTxt.Set(c.Home.Slideshow.ImmichPerson)
+		f.immichFromTxt.Set(c.Home.Slideshow.ImmichFrom)
+		f.immichToTxt.Set(c.Home.Slideshow.ImmichTo)
 	}
 	f.want(c.Home)
 }
@@ -523,7 +540,7 @@ func (f *Feature) locationAction() *esphome.Action {
 // Actions are how Home Assistant configures this: which weather entity to show, and how the
 // radio page is wired. Both persist and take effect at the next connection.
 func (f *Feature) Actions() []*esphome.Action {
-	actions := append(f.cameraActions(), f.accessAction())
+	actions := append(append(f.cameraActions(), f.gridActions()...), f.accessAction(), f.go2rtcAction())
 	if hasScreen {
 		actions = append(actions, f.slideshowAction(), f.calendarAction(), f.locationAction())
 	}
@@ -603,8 +620,16 @@ func (f *Feature) accessAction() *esphome.Action {
 		Name: "home_assistant",
 		Args: []esphome.Arg{{Name: "url", Type: esphome.ArgString}, {Name: "token", Type: esphome.ArgString}},
 		Run: func(c esphome.Call) (any, error) {
+			was := hass.Get().Address()
 			if err := hass.Get().Set(c.String("url"), c.String("token")); err != nil {
 				return nil, err
+			}
+			// Realtime voice's token is for the Home Assistant it was given for: another address does
+			// not get it. The first address, at setup, does: a token typed in before it is for it, and
+			// a device that left its last Home Assistant cleared the token then (api's leave).
+			if now := hass.Get().Address(); was != "" && now != was && config.Get().Realtime.MCPToken != "" {
+				_ = config.Set().Realtime().SetMCPToken("")
+				slog.Warn("home: Home Assistant's address changed; realtime voice's token for it was cleared")
 			}
 			slog.Info("home: home assistant access stored")
 			f.wake()
