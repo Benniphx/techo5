@@ -150,6 +150,9 @@ func TestCalendarLookPreviews(t *testing.T) {
 			vr.set()
 			for _, panel := range showPanels() {
 				scenes := calendarScenes()
+				if vr.name == "-week-on" {
+					scenes["calendar-week-edges"] = reviewScenes()["calendar-week-edges"]
+				}
 				if vr.name == "" {
 					for name, s := range reviewScenes() {
 						scenes[name] = s
@@ -190,7 +193,8 @@ func reviewScenes() map[string]scene {
 	many := lookView()
 	many.order, many.names = nil, map[string]string{}
 	for i, n := range []string{"Family", "Work", "School", "Soccer", "Piano", "Book club", "Grandma",
-		"Neighborhood", "Holidays", "Trash pickup", "Birthdays", "Garden"} {
+		"Neighborhood", "Holidays", "Trash pickup", "Birthdays", "Garden", "Swim team", "Church choir",
+		"Volunteer shifts"} {
 		id := fmt.Sprintf("calendar.c%d", i)
 		many.order, many.names[id] = append(many.order, id), n
 	}
@@ -202,7 +206,12 @@ func reviewScenes() map[string]scene {
 	week.events = append(week.events,
 		hass.Event{Summary: "Night shift", Calendar: calWork, Start: oct(20, 20, 0), End: oct(21, 4, 0)},
 		hass.Event{Summary: "Call", Calendar: calWork, Start: oct(22, 12, 0), End: oct(22, 12, 5)},
-		hass.Event{Summary: "Meteor shower", Calendar: calFamily, Start: oct(24, 23, 30), End: oct(24, 23, 59)})
+		hass.Event{Summary: "Meteor shower", Calendar: calFamily, Start: oct(24, 23, 30), End: oct(24, 23, 59)},
+		hass.Event{Summary: "Flight to Denver", Calendar: calWork, Start: oct(19, 4, 30), End: oct(19, 5, 0)},
+		hass.Event{Summary: "Gym", Calendar: calFamily, Start: oct(19, 6, 0), End: oct(19, 7, 0)},
+		hass.Event{Summary: "Sync", Calendar: calWork, Start: oct(22, 9, 0), End: oct(22, 9, 30)},
+		hass.Event{Summary: "Review", Calendar: calWork, Start: oct(22, 9, 30), End: oct(22, 10, 0)},
+		hass.Event{Summary: "Plan", Calendar: calWork, Start: oct(22, 10, 0), End: oct(22, 10, 30)})
 	page := func(v calendarView) scene { return scene{now: lookNow, phase: "idle", showCalendar: true, cal: v} }
 	return map[string]scene{
 		"calendar-month-many":      page(many),

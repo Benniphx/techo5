@@ -56,7 +56,7 @@ func TestHiddenCalendarsKeepToThoseShown(t *testing.T) {
 // Many calendars: the chips wrap onto a second row and then end in "+N", every chip on the screen, and
 // "+N" opens the list of all of them, where each can be turned over, a hidden one too.
 func TestManyCalendarsChips(t *testing.T) {
-	for _, n := range []int{6, 12} {
+	for _, n := range []int{6, 12, 15} {
 		d, _ := calTestDisplay(t)
 		v := lookView()
 		v.order, v.names = nil, map[string]string{}
@@ -108,6 +108,21 @@ func TestManyCalendarsChips(t *testing.T) {
 		}
 		if listed < n || hiddenChip == (image.Point{}) {
 			t.Fatalf("%d calendars: the list has %d chips on the screen, the hidden one at %v", n, listed, hiddenChip)
+		}
+		// The list's chips, drawn after its window, each clear of the others.
+		inside := slices.IndexFunc(d.r.calHits, func(h calHit) bool { return h.kind == calInside })
+		var inList []image.Rectangle
+		for _, h := range d.r.calHits[inside:] {
+			if h.kind == calChip {
+				inList = append(inList, h.r)
+			}
+		}
+		for i := range inList {
+			for j := i + 1; j < len(inList); j++ {
+				if inList[i].Overlaps(inList[j]) {
+					t.Errorf("%d calendars: chips in the list at %v and %v overlap", n, inList[i], inList[j])
+				}
+			}
 		}
 		d.calendarGesture(touch.Gesture{Kind: touch.Tap, X: hiddenChip.X, Y: hiddenChip.Y})
 		if h := config.Get().Calendar.Hidden; len(h) != 0 || !d.calChips {
@@ -350,5 +365,109 @@ func TestNextUpOnTheNightLight(t *testing.T) {
 	r.draw(scene{now: lookNow, phase: "idle", nextUp: lookCard(), nightDim: true, redClock: true})
 	if _, ok := r.nextCardTapped(image.Pt(r.w/2, r.h-r.s(60))); ok {
 		t.Error("a card on the red night clock")
+	}
+}
+
+// The week's markers are in bands of their own, above and under the hours, and cover no event's box:
+// a 4:30 AM flight's marker is not over a 6:00 AM workout.
+func TestWeekMarkersCoverNothing(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	_ = config.Set().Calendar().Week(true)
+	events := []hass.Event{
+		{Summary: "Flight to Denver", Calendar: calWork, Start: oct(20, 4, 30), End: oct(20, 5, 0)},
+		{Summary: "Gym", Calendar: calFamily, Start: oct(20, 6, 0), End: oct(20, 7, 0)},
+		{Summary: "Stargazing", Calendar: calFamily, Start: oct(20, 23, 0), End: oct(20, 23, 45)},
+		{Summary: "Late call", Calendar: calWork, Start: oct(20, 21, 0), End: oct(20, 22, 0)},
+	}
+	for _, size := range []image.Point{{showWide, showHigh}, {show8Wide, show8High}} {
+		r := newRenderer(image.NewRGBA(image.Rect(0, 0, size.X, size.Y)))
+		v := lookView()
+		v.events, v.day, v.week = events, octDay(18), true
+		r.draw(scene{now: lookNow, phase: "idle", showCalendar: true, cal: v})
+		var markers, boxes []image.Rectangle
+		for _, h := range r.calHits {
+			switch {
+			case h.kind == calDay && h.r.Dy() == r.s(minBlockPx):
+				markers = append(markers, h.r)
+			case h.kind == calEvent:
+				boxes = append(boxes, h.r)
+			}
+		}
+		if len(markers) != 2 {
+			t.Fatalf("%v: %d markers, want the flight's and the stargazing's", size, len(markers))
+		}
+		for _, m := range markers {
+			for _, b := range boxes {
+				if m.Overlaps(b) {
+					t.Errorf("%v: a marker at %v covers a box at %v", size, m, b)
+				}
+			}
+		}
+	}
+}
+
+// Short events one after the other, drawn taller than they last, stand side by side in the week rather
+// than one over the other, each with a tap area of its own.
+func TestWeekShortEventsDoNotOverlap(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	_ = config.Set().Calendar().Week(true)
+	var events []hass.Event
+	for i, name := range []string{"Standup", "Sync", "Review"} {
+		events = append(events, hass.Event{Summary: name, Calendar: calWork,
+			Start: oct(21, 9, 30*i), End: oct(21, 9, 30*i).Add(30 * time.Minute)})
+	}
+	for _, size := range []image.Point{{showWide, showHigh}, {show8Wide, show8High}} {
+		r := newRenderer(image.NewRGBA(image.Rect(0, 0, size.X, size.Y)))
+		v := lookView()
+		v.events, v.day, v.week = events, octDay(18), true
+		r.draw(scene{now: lookNow, phase: "idle", showCalendar: true, cal: v})
+		var boxes []image.Rectangle
+		for _, h := range r.calHits {
+			if h.kind == calEvent {
+				boxes = append(boxes, h.r)
+				if h.r.Dy() < r.s(minBlockPx) {
+					t.Errorf("%v: %q is %v, under a line", size, h.ev.Summary, h.r)
+				}
+			}
+		}
+		if len(boxes) != 3 {
+			t.Fatalf("%v: %d boxes", size, len(boxes))
+		}
+		for i := range boxes {
+			for j := i + 1; j < len(boxes); j++ {
+				if boxes[i].Overlaps(boxes[j]) {
+					t.Errorf("%v: %v and %v overlap", size, boxes[i], boxes[j])
+				}
+			}
+		}
+	}
+	// The day's layout gives them columns too, at the least height they are drawn.
+	for _, p := range layoutDay(events, octDay(21), 0.6) {
+		if p.cols < 2 {
+			t.Errorf("%q alone in its row at a least of 0.6 h", p.ev.Summary)
+		}
+	}
+}
+
+// On the day the clocks go back, an event across the repeated hour is laid out as it is drawn, so one
+// starting after it on the clock stands beside it, not under it.
+func TestFallBackLayoutAsDrawn(t *testing.T) {
+	chi, err := time.LoadLocation("America/Chicago")
+	if err != nil {
+		t.Skip("no time zone database:", err)
+	}
+	at := func(h, m int) time.Time { return time.Date(2026, 11, 1, h, m, 0, 0, time.UTC).In(chi) }
+	long := hass.Event{Summary: "Night shift end", Start: at(6, 0), End: at(7, 30)} // 1:00 CDT to 1:30 CST
+	next := hass.Event{Summary: "Handover", Start: at(8, 0), End: at(9, 0)}         // 2:00 to 3:00 CST
+	day := time.Date(2026, 11, 1, 0, 0, 0, 0, chi)
+	ps := layoutDay([]hass.Event{long, next}, day, 0)
+	if len(ps) != 2 {
+		t.Fatalf("%d placed", len(ps))
+	}
+	if ps[0].s1 <= ps[1].s0 {
+		t.Fatalf("drawn %v-%v and %v-%v, which do not overlap, so this tests nothing", ps[0].s0, ps[0].s1, ps[1].s0, ps[1].s1)
+	}
+	if ps[0].col == ps[1].col {
+		t.Errorf("drawn %v-%v and %v-%v in the same column", ps[0].s0, ps[0].s1, ps[1].s0, ps[1].s1)
 	}
 }

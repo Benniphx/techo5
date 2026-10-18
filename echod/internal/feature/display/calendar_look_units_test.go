@@ -98,7 +98,7 @@ func TestLayoutDayOverlaps(t *testing.T) {
 		ev("e", 13, 0, 13, 0), // no length: drawn half an hour long, beside d
 		{Summary: "late", Start: oct(21, 23, 0), End: oct(22, 2, 0)},
 		{Summary: "all day", Start: octDay(21), End: octDay(22), AllDay: true},
-	}, octDay(21)) {
+	}, octDay(21), 0) {
 		got[p.ev.Summary] = [2]int{p.col, p.cols}
 		if p.ev.Summary == "late" && !p.till.Equal(octDay(22)) {
 			t.Errorf("an event past midnight ends at %v, not the day's end", p.till)

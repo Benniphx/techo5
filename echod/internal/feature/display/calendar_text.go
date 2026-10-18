@@ -161,11 +161,12 @@ func lastDay(e hass.Event) time.Time {
 }
 
 // placed is a timed event on a day's hours: in which of how many columns it stands, those it overlaps
-// side by side, and the part of it within the day.
+// side by side, the part of it within the day, and the hours it is drawn from and to (blockHours).
 type placed struct {
 	ev         hass.Event
 	col, cols  int
 	from, till time.Time // the event's start and end, kept to the day
+	s0, s1     float64
 }
 
 // minBlock is the shortest an event is drawn on the hours, so one with no length still has a place.
@@ -174,9 +175,12 @@ const minBlock = 30 * time.Minute
 // layoutDay places a day's timed events on its hours: earliest first, the longer of two starting
 // together first, each in the first column free when it starts. Events that overlap, directly or
 // through one between them, make a group sharing its columns, each as wide as the group's widest
-// row allows; an event alone has the whole width.
-func layoutDay(events []hass.Event, day time.Time) []placed {
-	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, time.Local)
+// row allows; an event alone has the whole width. They are placed as they are drawn: from and to the
+// hours blockHours gives them (an hour the clocks went back over is as long as it lasts), and at least
+// least hours long, the shortest a box is drawn, so two short events one after the other, drawn
+// taller than they last, stand side by side rather than one over the other.
+func layoutDay(events []hass.Event, day time.Time, least float64) []placed {
+	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, day.Location())
 	end := start.AddDate(0, 0, 1)
 	var out []placed
 	for _, e := range events {
@@ -188,17 +192,20 @@ func layoutDay(events []hass.Event, day time.Time) []placed {
 			till = minTime(from.Add(minBlock), end)
 			from = minTime(from, till.Add(-minBlock))
 		}
-		out = append(out, placed{ev: e, from: from, till: till})
+		p := placed{ev: e, from: from, till: till}
+		p.s0, p.s1 = blockHours(p, day)
+		out = append(out, p)
 	}
 	slices.SortStableFunc(out, func(a, b placed) int {
-		if c := a.from.Compare(b.from); c != 0 {
-			return c
+		if a.s0 != b.s0 {
+			return cmpFloat(a.s0, b.s0)
 		}
-		return b.till.Compare(a.till)
+		return cmpFloat(b.s1, a.s1)
 	})
-	var group []int      // the indexes of the group being placed
-	var ends []time.Time // when each of its columns is next free
-	var groupEnd time.Time
+	drawnTill := func(p placed) float64 { return math.Max(p.s1, p.s0+least) }
+	var group []int    // the indexes of the group being placed
+	var ends []float64 // when each of its columns is next free
+	var groupEnd float64
 	finish := func() {
 		for _, i := range group {
 			out[i].cols = len(ends)
@@ -206,24 +213,35 @@ func layoutDay(events []hass.Event, day time.Time) []placed {
 		group, ends = group[:0], ends[:0]
 	}
 	for i := range out {
-		if len(group) > 0 && !out[i].from.Before(groupEnd) {
+		if len(group) > 0 && out[i].s0 >= groupEnd {
 			finish()
 		}
-		col := slices.IndexFunc(ends, func(t time.Time) bool { return !t.After(out[i].from) })
+		till := drawnTill(out[i])
+		col := slices.IndexFunc(ends, func(t float64) bool { return t <= out[i].s0 })
 		if col < 0 {
 			col = len(ends)
-			ends = append(ends, out[i].till)
+			ends = append(ends, till)
 		} else {
-			ends[col] = out[i].till
+			ends[col] = till
 		}
 		out[i].col = col
 		group = append(group, i)
-		if len(group) == 1 || out[i].till.After(groupEnd) {
-			groupEnd = out[i].till
+		if len(group) == 1 || till > groupEnd {
+			groupEnd = till
 		}
 	}
 	finish()
 	return out
+}
+
+func cmpFloat(a, b float64) int {
+	switch {
+	case a < b:
+		return -1
+	case a > b:
+		return 1
+	}
+	return 0
 }
 
 func maxTime(a, b time.Time) time.Time {

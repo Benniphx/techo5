@@ -73,12 +73,6 @@ func duePopups(events []hass.Event, now time.Time, c config.Calendar, shown map[
 // popupTick looks, now and then, for events to pop up, and takes one down that has been up long
 // enough. Events due while another is up wait their turn; a timed event puts an all-day one away, since
 // the all-day one has been seen. Called from every frame, so it keeps its own pace.
-// popupCandidates is the events that may pop up: not those of a calendar hidden on this screen's
-// calendar page, which are hidden here everywhere, pop-ups as well.
-func popupCandidates(events []hass.Event, c config.Calendar) []hass.Event {
-	return visibleEvents(events, hiddenHere(c))
-}
-
 func (d *Display) popupTick(now time.Time) {
 	d.mu.Lock()
 	if now.Before(d.popupNext) {
@@ -214,4 +208,10 @@ func (d *Display) popupUp() *hass.Event {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.popup
+}
+
+// popupCandidates is the events that may pop up: not those of a calendar hidden on this screen's
+// calendar page, which are hidden here everywhere, pop-ups as well.
+func popupCandidates(events []hass.Event, c config.Calendar) []hass.Event {
+	return visibleEvents(events, hiddenHere(c))
 }

@@ -49,8 +49,8 @@ func autoStart(evs []hass.Event, day, now time.Time) float64 {
 	if sameDay(day, now) {
 		return math.Max(float64(now.Hour()-1), 0)
 	}
-	for _, p := range layoutDay(evs, day) {
-		return math.Max(math.Floor(hoursOf(p.from))-1, 0)
+	for _, p := range layoutDay(evs, day, 0) {
+		return math.Max(math.Floor(p.s0)-1, 0)
 	}
 	return 8
 }
@@ -160,8 +160,10 @@ func (r *renderer) calendarTimeline(v calendarView, l calLook) {
 
 	var later []placed
 	inner := right - r.s(14) - (gx + r.s(6))
-	for _, p := range layoutDay(evs, v.day) {
-		s0, s1 := blockHours(p, v.day)
+	// Laid out as drawn: a box is at least a line tall, with a little room under it.
+	least := float64(r.s(minBlockPx)+r.s(3)) / float64(hourH)
+	for _, p := range layoutDay(evs, v.day, least) {
+		s0, s1 := p.s0, p.s1
 		if s0 >= end {
 			later = append(later, p)
 			continue
@@ -236,10 +238,9 @@ func weekHours(events []hass.Event, first time.Time) (startH, endH int) {
 	startH, endH = 7, 21
 	for i := range 7 {
 		day := first.AddDate(0, 0, i)
-		for _, p := range layoutDay(events, day) {
-			s0, s1 := blockHours(p, day)
-			startH = min(startH, max(int(math.Floor(s0)), 6))
-			endH = max(endH, min(int(math.Ceil(s1)), 22))
+		for _, p := range layoutDay(events, day, 0) {
+			startH = min(startH, max(int(math.Floor(p.s0)), 6))
+			endH = max(endH, min(int(math.Ceil(p.s1)), 22))
 		}
 	}
 	return startH, endH
@@ -445,8 +446,21 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 	// them, and no wider, so an hour stays tall enough to read; an event further out is a marker at the
 	// top or the foot of its day, which opens that day.
 	startH, endH := weekHours(v.events, first)
-	hourH := float64(bottom-top) / float64(endH-startH)
-	ytime := func(h float64) int { return top + int(math.Round((h-float64(startH))*hourH)) }
+	// The markers have bands of their own, above the hours and under them, so none covers an event's box.
+	band := r.s(minBlockPx) + r.s(4)
+	hoursTop, hoursBottom := top, bottom
+	for i := range 7 {
+		for _, p := range layoutDay(v.events, first.AddDate(0, 0, i), 0) {
+			if p.s1 <= float64(startH) && hoursTop == top {
+				hoursTop += band
+			}
+			if p.s0 >= float64(endH) && hoursBottom == bottom {
+				hoursBottom -= band
+			}
+		}
+	}
+	hourH := float64(hoursBottom-hoursTop) / float64(endH-startH)
+	ytime := func(h float64) int { return hoursTop + int(math.Round((h-float64(startH))*hourH)) }
 
 	bold := r.textFace(true, 26)
 	for i := range 7 {
@@ -498,8 +512,11 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 			yh := ytime(float64(h) + 0.5)
 			r.fillRect(image.Rect(gx, yh, right, yh+line), half)
 		}
-		lab := hourLabel(h)
-		r.text(r.micro, lab, gx-r.s(8)-r.width(r.micro, lab), y+r.s(6), dim)
+		// Every hour's name where an hour is taller than a line of them, else every other hour's.
+		if hourH >= float64(r.s(22)) || (h-startH)%2 == 0 {
+			lab := hourLabel(h)
+			r.text(r.micro, lab, gx-r.s(8)-r.width(r.micro, lab), y+r.s(6), dim)
+		}
 	}
 	for i := range 8 {
 		xx := gx + i*colW
@@ -538,8 +555,9 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 		day := first.AddDate(0, 0, i)
 		cx0 := gx + i*colW
 		var earlier, later []hass.Event
-		for _, p := range layoutDay(v.events, day) {
-			s0, s1 := blockHours(p, day)
+		least := float64(r.s(minBlockPx)+r.s(3)) / hourH
+		for _, p := range layoutDay(v.events, day, least) {
+			s0, s1 := p.s0, p.s1
 			switch {
 			case s1 <= float64(startH):
 				earlier = append(earlier, p.ev)
@@ -550,11 +568,11 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 			}
 			inner := colW - r.s(8)
 			w := inner / p.cols
-			b := image.Rect(cx0+r.s(4)+p.col*w, max(ytime(s0)+r.s(1), top), cx0+r.s(4)+(p.col+1)*w, min(ytime(s1)-r.s(2), bottom))
+			b := image.Rect(cx0+r.s(4)+p.col*w, max(ytime(s0)+r.s(1), hoursTop), cx0+r.s(4)+(p.col+1)*w, min(ytime(s1)-r.s(2), hoursBottom))
 			if p.cols > 1 && p.col < p.cols-1 {
 				b.Max.X -= r.s(2)
 			}
-			r.timeBlock(v, l, p.ev, minBlockRect(b, r.s(minBlockPx), top, bottom), true)
+			r.timeBlock(v, l, p.ev, minBlockRect(b, r.s(minBlockPx), hoursTop, hoursBottom), true)
 		}
 		r.weekMarker(earlier, day, image.Rect(cx0+r.s(4), top+r.s(1), cx0+colW-r.s(4), top+r.s(1)+r.s(minBlockPx)), "▲")
 		r.weekMarker(later, day, image.Rect(cx0+r.s(4), bottom-r.s(1)-r.s(minBlockPx), cx0+colW-r.s(4), bottom-r.s(1)), "▼")

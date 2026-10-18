@@ -157,8 +157,9 @@ screen. The Spot keeps its own Today and Next.
   next. A tap opens that day. Only when the glance strip has nothing of its own to show: a strip with
   chips (a door, the temperature) stays as it is, with no card. An event on since an earlier day only
   has the card when nothing else is coming up, and then says "until" its end. Not with the Dashboard
-  or Agenda styles, or with Clock position set to a bottom corner. On the night light the countdown
-  is drawn dim, not in the accent.
+  or Agenda styles; not with the Classic clock at any bottom position, nor with another style that
+  Clock position puts in a bottom corner. On the night light the countdown is drawn dim, not in the
+  accent.
 - **Weather in the calendar** (on): the device's own forecast on the days. Nothing without one.
 
 A default that goes by the screen's size is not saved until somebody chooses, so a later change to it

@@ -117,19 +117,28 @@ func (r *renderer) chipFace(inLine bool) (font.Face, int) {
 	return r.tiny, r.s(38)
 }
 
-// chipName is a calendar's name on its chip, cut short when it is long, so one chip never takes a row.
-func (r *renderer) chipName(v calendarView, cal string, inLine bool) string {
+// chipNameMost is how wide a name on a chip is at most, in the Show 5's pixels: a long one is cut
+// short, so one chip never takes a row.
+const chipNameMost = 200
+
+// chipName is a calendar's name on its chip, cut short to most wide.
+func (r *renderer) chipName(v calendarView, cal string, inLine bool, most int) string {
 	f, _ := r.chipFace(inLine)
-	return clipText(r, f, v.name(cal), r.s(200))
+	return clipText(r, f, v.name(cal), most)
 }
 
-// chipWidth is how wide one calendar's chip is.
-func (r *renderer) chipWidth(v calendarView, cal string, inLine bool) int {
-	f, _ := r.chipFace(inLine)
+// chipPad is what a chip adds around its name: the dot or the eye, and the room at its ends.
+func (r *renderer) chipPad(inLine bool) int {
 	if inLine {
-		return r.width(f, r.chipName(v, cal, inLine)) + r.s(42)
+		return r.s(42)
 	}
-	return r.width(f, r.chipName(v, cal, inLine)) + r.s(60)
+	return r.s(60)
+}
+
+// chipWidth is how wide one calendar's chip is, its name at most most wide.
+func (r *renderer) chipWidth(v calendarView, cal string, inLine bool, most int) int {
+	f, _ := r.chipFace(inLine)
+	return r.width(f, r.chipName(v, cal, inLine, most)) + r.chipPad(inLine)
 }
 
 // chipsWidth is how wide the chips of cals are together.
@@ -139,7 +148,7 @@ func (r *renderer) chipsWidth(v calendarView, cals []string, inLine bool) int {
 		if i > 0 {
 			w += r.chipGap(inLine)
 		}
-		w += r.chipWidth(v, c, inLine)
+		w += r.chipWidth(v, c, inLine, r.s(chipNameMost))
 	}
 	return w
 }
@@ -161,7 +170,7 @@ func (r *renderer) chipRows(v calendarView, room int) (rows [][]string, more int
 		rows := [][]string{nil}
 		x := 0
 		for i, cal := range v.order {
-			w := r.chipWidth(v, cal, false)
+			w := r.chipWidth(v, cal, false, r.s(chipNameMost))
 			if len(rows[len(rows)-1]) > 0 {
 				w += r.chipGap(false)
 			}
@@ -174,7 +183,7 @@ func (r *renderer) chipRows(v calendarView, room int) (rows [][]string, more int
 					return rows, len(v.order) - i
 				}
 				rows, x = append(rows, nil), 0
-				w = r.chipWidth(v, cal, false)
+				w = r.chipWidth(v, cal, false, r.s(chipNameMost))
 			}
 			rows[len(rows)-1] = append(rows[len(rows)-1], cal)
 			x += w
@@ -233,16 +242,17 @@ func (r *renderer) calWrap(f font.Face, s string, w int) []string {
 }
 
 // calChips draws a chip for each of cals from x, around cy: in its color while it is shown, an outline
-// with a crossed-out eye while it is hidden. A tap on one turns it over. It says where it ended.
-func (r *renderer) calChips(v calendarView, cals []string, x, cy int, inLine bool) int {
+// with a crossed-out eye while it is hidden, each name at most most wide. A tap on one turns it over.
+// It says where it ended.
+func (r *renderer) calChips(v calendarView, cals []string, x, cy int, inLine bool, most int) int {
 	f, h := r.chipFace(inLine)
 	dot, eye, gap := r.s(6), 16, r.s(30)
 	if !inLine {
 		dot, eye, gap = r.s(8), 20, r.s(36)
 	}
 	for _, cal := range cals {
-		name := r.chipName(v, cal, inLine)
-		w := r.chipWidth(v, cal, inLine)
+		name := r.chipName(v, cal, inLine, most)
+		w := r.chipWidth(v, cal, inLine, most)
 		b := image.Rect(x, cy-h/2, x+w, cy-h/2+h)
 		base := cy + capHeight(f)/2
 		if slices.Contains(v.hidden, cal) {
@@ -294,14 +304,27 @@ func (r *renderer) calChipsList(v calendarView) {
 	r.roundRect(done, done.Dy()/2, calWash(30))
 	r.text(r.small, "Done", done.Min.X+(done.Dx()-r.width(r.small, "Done"))/2, done.Min.Y+r.s(36), cream)
 	r.calHitAdd(calHit{r: done.Inset(-r.s(6)), kind: calChipsDone})
-	top, rowH := card.Min.Y+r.s(84), r.s(48)
+	// As many columns as the calendars need, each as wide as the widest chip with a gap after it; where
+	// that is more than the card has room for, the names are cut to the columns that fit, so no chip
+	// or its tap area runs into the next.
+	top, rowH, gap := card.Min.Y+r.s(84), r.s(48), r.s(16)
+	room := card.Dx() - r.s(56)
 	perCol := max((card.Max.Y-r.s(16)-top)/rowH, 1)
 	cols := (len(v.order) + perCol - 1) / perCol
-	colW := (card.Dx() - r.s(40)) / max(cols, 1)
+	widest := 0
+	for _, cal := range v.order {
+		widest = max(widest, r.chipWidth(v, cal, false, r.s(chipNameMost)))
+	}
+	colW := widest + gap
+	most := r.s(chipNameMost)
+	if cols*colW-gap > room {
+		colW = (room + gap) / cols
+		most = max(colW-gap-r.chipPad(false), r.s(40))
+	}
 	for i, cal := range v.order {
 		x := card.Min.X + r.s(28) + (i/perCol)*colW
 		cy := top + (i%perCol)*rowH + rowH/2
-		r.calChips(v, []string{cal}, x, cy, false)
+		r.calChips(v, []string{cal}, x, cy, false, most)
 	}
 }
 
