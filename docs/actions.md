@@ -2013,6 +2013,26 @@ data:
   source: "media-source://media_source/local/Photos"
 ```
 
+The source that is already showing, given again, reads it again: the device gathers its photos afresh
+(subfolders too, unless **Include subfolders** is off) and shows the next photo from the new list
+within half a minute, without clearing the source first. The photo up stays on the screen until the
+next one is ready, so the screen does not go dark in between. This works the same for a Home
+Assistant folder, an Immich album or library, and the device's own photos. Use it after something
+outside fills or changes the folder; on its own the device reads the list again every hour.
+
+An automation that reads the folder again once a script has put new photos in it and said so over
+MQTT:
+
+```yaml
+triggers:
+  - trigger: mqtt
+    topic: photos/ready
+actions:
+  - action: esphome.office_home_slideshow
+    data:
+      source: "media-source://media_source/local/Photos"
+```
+
 ## List saved voice recordings
 
 In YAML, refer to this action as `esphome.<node>_recordings`.

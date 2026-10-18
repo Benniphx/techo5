@@ -84,7 +84,9 @@ The slideshow shows photos from Home Assistant's media library. Nothing is store
    - With an Immich source, **Date and place** and **Favorites only** are here too.
 
 The same settings are entities in Home Assistant, and the folder can be set with the
-[`home_slideshow` action](actions.md#set-the-slideshows-photo-source).
+[`home_slideshow` action](actions.md#set-the-slideshows-photo-source). Given the folder that is
+already showing, the action reads it again, for photos added since; the photo up stays until the
+next one from the new list is ready. Otherwise the device reads the list again every hour.
 
 ## 3. Weather
 
