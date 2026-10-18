@@ -280,8 +280,19 @@ func (w HomeWriter) Weather(entity string) error {
 	return w.st.Update(func(c *Config) { c.Home.Weather = entity })
 }
 
+// Radio wires the radio page. The device's own stations are kept whatever r says: they are typed on
+// the setup page and written only with OwnStations, so wiring the favorites (home_radio) cannot
+// take them away.
 func (w HomeWriter) Radio(r Radio) error {
-	return w.st.Update(func(c *Config) { c.Home.Radio = r })
+	return w.st.Update(func(c *Config) {
+		r.Own = c.Home.Radio.Own
+		c.Home.Radio = r
+	})
+}
+
+// OwnStations replaces the device's own stations and nothing else of the radio's wiring.
+func (w HomeWriter) OwnStations(list []Station) error {
+	return w.st.Update(func(c *Config) { c.Home.Radio.Own = list })
 }
 
 func (w HomeWriter) HouseWord(v string) error {
