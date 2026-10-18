@@ -32,11 +32,13 @@ type Screen struct {
 	// does, until the room has been quiet a while. Off, a tap on the night light does nothing.
 	NightTapLifts bool `json:"night_tap_lifts,omitempty"`
 
-	// RoomLights has the screen's light in Home Assistant stand with the room's lights, as it always did
-	// before this setting: shown with the device's controls, and handed to Assist by default, so "lights
-	// off" said in its area puts the screen out too. Off, the usual, the light is a configuration entity,
-	// and the Screen power switch is what a voice names (feature/display, screen_room.go). (#179)
-	RoomLights bool `json:"room_lights,omitempty"`
+	// IgnoreRoomLights has the screen's light in Home Assistant described as a configuration entity, so
+	// it stands apart from the room's lights, and the Screen power switch is what a voice names
+	// (feature/display, screen_room.go). Off, the usual, the light stands with the room's lights as it
+	// always did: shown with the device's controls, and handed to Assist, so "lights off" said in its
+	// area puts the screen out too. Off is its zero value, so a device that never saved it is as it was
+	// before the setting. (#179)
+	IgnoreRoomLights bool `json:"ignore_room_lights,omitempty"`
 
 	// NightClockStyle is how the red clock looks: empty for the ordinary clock face, "led" for an LED
 	// clock's seven segments, "flip" for a flip clock's cards.
@@ -188,8 +190,10 @@ func (w ScreenWriter) NightTapLifts(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightTapLifts = v })
 }
 
-func (w ScreenWriter) RoomLights(v bool) error {
-	return w.st.Update(func(c *Config) { c.Screen.RoomLights = v })
+// IgnoreRoomLights is taken back when it could not be saved, since a change to it asks for a reconnect
+// that a change not kept must not get, nor carry to the next one saved.
+func (w ScreenWriter) IgnoreRoomLights(v bool) error {
+	return w.st.UpdateOrUndo(func(c *Config) { c.Screen.IgnoreRoomLights = v })
 }
 
 func (w ScreenWriter) NightClockStyle(v string) error {

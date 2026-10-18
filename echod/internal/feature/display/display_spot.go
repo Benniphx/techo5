@@ -427,7 +427,7 @@ func (d *Display) Entities() []esphome.Entity {
 // Restore lights the panel the way it was left.
 func (d *Display) Restore(c config.Config) {
 	setClock24(d.clock, c.Screen.Clock24)
-	d.roomSw.Set(!c.Screen.RoomLights)
+	d.roomSw.Set(c.Screen.IgnoreRoomLights)
 	d.describeScreen()
 	d.clockStyleSel.Set(clockStyles[clockStyleIndex()].label)
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)

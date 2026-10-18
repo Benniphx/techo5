@@ -94,9 +94,12 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			rows = append(rows, settingRow{id: "dimmest", label: "Dimmest", sub: "How dark auto-brightness goes in a dark room",
 				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
 		}
-		// Beside the light's own rows: it is about who else may put the screen out (screen_room.go).
-		rows = append(rows, settingRow{id: "roomlights", label: "Ignore room light commands",
-			sub: "\"Lights off\" said to Assist leaves the screen alone", kind: ctlToggle, on: roomLightsIgnored()})
+		// Beside the light's own rows: it is about who else may put the screen out (screen_room.go). The
+		// label is Screen ignores room light commands cut to what fits on the Spot, and the line under it
+		// says only what the setting does, which is true whether or not Home Assistant already exposed
+		// the light to Assist (that one is unticked in Home Assistant, docs/setup.md).
+		rows = append(rows, settingRow{id: "roomlights", label: "Ignore room lights",
+			sub: "Out of area targets in Home Assistant", kind: ctlToggle, on: roomLightsIgnored()})
 		rows = append(rows, settingRow{id: "night", label: nightRowLabel, kind: ctlChoice, value: nightRowValue(st.night)})
 		if nightCanHappen(st.night) {
 			rows = append(rows, settingRow{id: "atnight", label: "At night", sub: atNightSub,

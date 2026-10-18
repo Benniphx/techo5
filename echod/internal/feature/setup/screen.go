@@ -142,14 +142,17 @@ func screenSection(w http.ResponseWriter, token string) {
 	}
 	if s.IgnoreRoomLights != nil {
 		room := ""
-		if !config.Get().Screen.RoomLights {
+		if config.Get().Screen.IgnoreRoomLights {
 			room = " checked"
 		}
 		fmt.Fprintf(w, `<p><label><input type="checkbox" name="roomlights" value="yes" style="width:auto"%s> Screen ignores
-	 room light commands: "lights off" said to Assist in this room leaves the screen alone</label></p>
-	 <p class="note">The screen's light is then a configuration entity in Home Assistant, and Screen power, a
-	  switch, is the one to name by voice. A screen Home Assistant already gave to Assist stays with it until
-	  it is unticked under Settings, Voice assistants, Expose.</p>`, room)
+	 room light commands (off at first): the screen's light is then a configuration entity in Home Assistant,
+	 apart from the room's lights</label></p>
+	 <p class="note">Home Assistant leaves a configuration entity out of area, device and label targets and
+	  out of the dashboards it makes itself; an automation that names the light by its entity ID still reaches
+	  it, and Screen power, a switch, is the one to name by voice. A screen Home Assistant already gave to
+	  Assist stays with it until it is unticked under Settings, Voice assistants, Expose, which on its own keeps
+	  "lights off" said to Assist away from the screen too.</p>`, room)
 	}
 	fmt.Fprint(w, `<label for="slideshow">Slideshow</label><select id="slideshow" name="slideshow">`)
 	mode := home.Get().SlideshowMode()
@@ -225,7 +228,7 @@ func saveScreen(r *http.Request) string {
 		}
 	}
 	if s.IgnoreRoomLights != nil {
-		if on := r.PostFormValue("roomlights") == "yes"; on == config.Get().Screen.RoomLights {
+		if on := r.PostFormValue("roomlights") == "yes"; on != config.Get().Screen.IgnoreRoomLights {
 			s.IgnoreRoomLights(on)
 		}
 	}

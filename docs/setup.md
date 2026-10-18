@@ -390,22 +390,29 @@ The screen is a light in Home Assistant (`light.<node>_screen`), in the device's
 lights a sentence like "lights off" or "turn off the kitchen lights" means by their domain and area,
 so a screen that is exposed to Assist goes out with the lamps, on every device in the room.
 
-**Screen ignores room light commands** (on at first; on the Show and the Spot under Settings →
-**Display** as **Ignore room light commands**, on the setup page's **Screen & Photos** tab, and in Home
-Assistant) keeps the screen apart from them:
+There are two ways to keep the screen out of them:
 
-- The screen's light keeps its entity ID and does what it always did, so automations and dashboards that
-  use it carry on. Home Assistant shows it under the device's **Configuration**, and does not expose a
-  configuration entity to Assist when it first sees it.
-- **Screen power** (`switch.<node>_screen_power`) turns the screen off and on again at its brightness.
-  It is a switch, not a light, so "lights off" never reaches it, and it is the one to name by voice:
-  "turn off the kitchen echo screen power", or give it an alias like "kitchen screen" under its
-  **Voice assistants** settings in Home Assistant.
+- **Untick the screen's light** under **Settings → Voice assistants → Expose** in Home Assistant (or on
+  the entity's own **Voice assistants** settings). Assist then leaves the screen alone, and nothing
+  else about the light changes.
+- **Turn on Screen ignores room light commands** (off at first; on the Show and the Spot under
+  Settings → **Display** as **Ignore room lights**, on the setup page's **Screen & Photos** tab, and in
+  Home Assistant). The screen's light keeps its entity ID and does what it always did, but Home
+  Assistant shows it under the device's **Configuration**, and does not expose a configuration entity
+  to Assist when it first sees it. Home Assistant also leaves a configuration entity out of what an
+  area, a device or a label targets, and out of the dashboards it makes itself: an automation that
+  turns off a room's lights no longer turns off the screen, while one that names `light.<node>_screen`
+  by its entity ID still does. Use **Screen power**, or the light's entity ID, where the screen should
+  still go out with the room. The device reconnects to Home Assistant to tell it, once it is idle.
 
 A device Home Assistant already knows keeps the exposure Home Assistant chose for its screen before:
-Home Assistant does not look again when the entity changes. Untick the screen's light once under
-**Settings → Voice assistants → Expose** (or on the entity's **Voice assistants** settings), and keep
-Screen power exposed. With the setting off, the light is listed as it always was, among the controls.
+it does not look again when the entity changes. So with the setting on, untick the screen's light
+once under **Settings → Voice assistants → Expose** as well, and keep Screen power exposed.
+
+**Screen power** (`switch.<node>_screen_power`) is there whichever way the setting is. It turns the
+screen off and on again at its brightness. It is a switch, not a light, so "lights off" never reaches
+it, and it is the one to name by voice: "turn off the kitchen echo screen power", or give it an alias
+like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 
 ### Night
 
