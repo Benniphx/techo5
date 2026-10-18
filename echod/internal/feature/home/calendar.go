@@ -271,7 +271,7 @@ func capMonth(key string, events []hass.Event) []hass.Event {
 		return events
 	}
 	if _, told := cappedMonths.LoadOrStore(key, true); !told {
-		slog.Warn("calendar: a month has more events than are kept, the latest left out", "month", key,
+		slog.Warn("calendar: more events than are kept, a day's or the month's latest left out", "month", key,
 			"events", len(events), "kept", len(out), "days over", len(over))
 	}
 	return slices.Clip(out)
