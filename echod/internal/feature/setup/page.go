@@ -613,8 +613,6 @@ func stationsSection(w http.ResponseWriter, token string) {
 	 <p><button type="submit">Save stations</button></p></form></fieldset>`)
 }
 
-// saveStations takes the rows the form posted, in the order they were in. Names and addresses come
-// back as two lists of the same length, one row each.
 // playRow plays the row whose Play button was pressed, with the name and address as they stand in
 // the form. A row with nothing in it is a press on the spare row at the bottom, which is somebody
 // asking for nothing.
@@ -640,6 +638,9 @@ func playRow(r *http.Request) string {
 	return ""
 }
 
+// saveStations takes the rows the form posted, in the order they were in. Names and addresses come
+// back as two lists of the same length, one row each. A row with no name is left out, whatever its
+// address: that is how the note under the form says a station is taken out.
 func saveStations(r *http.Request) string {
 	names, urls := r.PostForm["name"], r.PostForm["url"]
 	if len(names) != len(urls) {
@@ -649,10 +650,8 @@ func saveStations(r *http.Request) string {
 	for i := range names {
 		name, u := strings.TrimSpace(names[i]), strings.TrimSpace(urls[i])
 		switch {
-		case name == "" && u == "":
-			continue // an empty row is one that was never filled in, or one being taken out
 		case name == "":
-			return "a station needs a name as well as an address"
+			continue // a row never filled in, or one being taken out
 		case u == "":
 			return name + " has no stream address"
 		case !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://"):
