@@ -243,6 +243,11 @@ func TestShowScenesDraw(t *testing.T) {
 		}
 	}
 
+	// The calendar's views and the clock's next-up card, on a made-up week (calendar_look_test.go).
+	for name, s := range calendarScenes() {
+		scenes[name] = s
+	}
+
 	dir := os.Getenv("SHOW_PREVIEW")
 	// Both panels this build draws on. The Show 8 is not a second layout: it is this one scaled, and
 	// the point of drawing it here is that the scaling can be looked at without a device.

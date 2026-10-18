@@ -133,6 +133,9 @@ type scene struct {
 	// popup is an event popped up over the screen (calendar_popup.go).
 	popup *hass.Event
 
+	// nextUp is the clock's next event, when one is coming up and the switch is on (render_nextup.go).
+	nextUp *nextUpCard
+
 	// showCalendar is the calendar page, cal what it shows (render_calendar.go).
 	showCalendar bool
 
@@ -332,7 +335,12 @@ type renderer struct {
 	// calHits are the calendar page's buttons, days and events as last drawn (render_calendar.go).
 	calMu        sync.Mutex
 	calHits      []calHit
-	calAgendaMax int // how far the agenda could scroll, in rows
+	calAgendaMax int      // how far the agenda could scroll, in rows
+	calTimeline  timeline // the day's hours, as they could be moved (render_calendar_time.go)
+	// nextCardAt is the clock's next-up card, the same way as dateAt, and nextCardDay its event's day,
+	// which a tap there opens (render_nextup.go).
+	nextCardAt  image.Rectangle
+	nextCardDay time.Time
 
 	// weatherKept is the forecast page as last drawn, and weatherKey what it showed: while the sky
 	// moves the page is drawn twelve times a second, and the page itself changes once a minute.
@@ -463,6 +471,7 @@ func (r *renderer) draw(s scene) {
 	r.setTempAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
 	r.setNextAt(image.Rectangle{})
+	r.setNextCard(image.Rectangle{}, time.Time{})
 	// The camera page's controls are tappable only in a frame that draws them, from when it is done.
 	r.drawnSound, r.drawnTalk = image.Rectangle{}, image.Rectangle{}
 	defer r.publishCameraTaps()
@@ -770,6 +779,14 @@ func (r *renderer) bigClock(s scene) {
 	// The glance strip takes the foot too, when there is news and nothing else is using it: a running
 	// timer is news enough on its own, and the music strip is where the hand already is.
 	glance := len(s.glance) > 0 && !timers && !s.strip
+	// The next-up card takes the strip's place when an event is coming up, the clock centered: the clock
+	// and the date move up clear of it.
+	card := s.nextUp != nil && !timers && !s.strip && !foot
+	if card {
+		glance = false
+		box, _ := r.nextUpRect(s)
+		base = min(base, box.Min.Y-r.s(102))
+	}
 	if glance {
 		base -= r.s(30)
 		if foot {
@@ -793,6 +810,9 @@ func (r *renderer) bigClock(s scene) {
 	}
 	if glance {
 		r.glanceStrip(s.glance, s.callButton)
+	}
+	if card {
+		r.drawNextUp(s)
 	}
 
 	r.weatherCorner(s)

@@ -54,3 +54,22 @@ func eventsOn(events []hass.Event, day time.Time) []hass.Event {
 	})
 	return out
 }
+
+// visibleEvents is events without those of the calendars hidden on this screen. An event on several
+// calendars (mergeSame) stays while any of them is shown.
+func visibleEvents(events []hass.Event, hidden []string) []hass.Event {
+	if len(hidden) == 0 {
+		return events
+	}
+	out := make([]hass.Event, 0, len(events))
+	for _, e := range events {
+		shown := !slices.Contains(hidden, e.Calendar)
+		for _, c := range e.Also {
+			shown = shown || !slices.Contains(hidden, c)
+		}
+		if shown {
+			out = append(out, e)
+		}
+	}
+	return out
+}

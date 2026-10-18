@@ -251,6 +251,14 @@ var registered = []string{
 	"screen_clock_style_swipe",
 	"screen_dashboard_return",
 	"screen_dashboard_tiles",
+	"calendar_day_timeline",
+	"calendar_coming_up_refined",
+	"calendar_month_details",
+	"calendar_event_icons",
+	"calendar_countdowns",
+	"calendar_week_view",
+	"calendar_next_up",
+	"calendar_weather",
 }
 
 func TestEveryComponentStillRegisters(t *testing.T) {
