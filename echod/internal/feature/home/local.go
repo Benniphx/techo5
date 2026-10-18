@@ -265,6 +265,9 @@ func (f *Feature) callFavorite(h config.Radio, station string, watch bool) {
 			return
 		}
 		unheard := false
+		// The watch counts from just before the call: a script Home Assistant turns on at once can say
+		// so before Emit has even returned, and a sign from before the watch began would not count.
+		asked := time.Now()
 		component.CallService.Emit(component.Call{
 			Service: h.Service,
 			Data:    map[string]string{h.Field: askFor(station), h.SpeakerField: speaker},
@@ -287,9 +290,9 @@ func (f *Feature) callFavorite(h config.Radio, station string, watch bool) {
 			return
 		}
 		// The call has no answer: Home Assistant that refuses it says so only in its own log. So what
-		// comes of it is watched for instead (hint.go), from now rather than from the tap, since naming
-		// the player can take seconds of its own.
-		f.watchStart(h.Service, station, wait)
+		// comes of it is watched for instead (hint.go), from the call rather than from the tap, since
+		// naming the player can take seconds of its own.
+		f.watchStart(h.Service, station, wait, asked)
 	})
 }
 

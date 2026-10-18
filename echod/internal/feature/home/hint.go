@@ -65,10 +65,10 @@ func startWaitFor(service string) time.Duration {
 
 // watchStart is a station just asked of Home Assistant through service: if nothing has come of it by the
 // time it has had (wait, startWaitFor), it is said so (noStart).
-func (f *Feature) watchStart(service, station string, wait time.Duration) {
+func (f *Feature) watchStart(service, station string, wait time.Duration, at time.Time) {
 	f.mu.Lock()
 	f.startSeq++
-	seq, at := f.startSeq, time.Now()
+	seq := f.startSeq
 	f.mu.Unlock()
 	time.AfterFunc(wait, func() { f.noStart(service, station, seq, at, wait) })
 }
