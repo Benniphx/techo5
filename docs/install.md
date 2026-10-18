@@ -348,8 +348,8 @@ come from, and what plays a station, depends on the Home Assistant token:
   location set in Home Assistant, so set that if the list looks like somebody else's country.
 - **Without it**, the device asks radio-browser.info itself, for stations near the place set on its
   setup page, and plays the stream itself, with no Home Assistant in the path. Only MP3 stations are
-  listed then, the kind the device plays on its own, unless a Music Assistant is set up on the
-  device to play the rest.
+  listed then, the kind the device plays on its own, unless the device's Music Assistant connection
+  is set up and reachable to play the rest.
 
 **2. Stations kept on the device (needs nothing at all).** Open the setup page (Settings, Privacy,
 Setup page) and add a station as a name and the address of its stream. The device plays these
@@ -481,7 +481,9 @@ radio_favorite_add_station:
 ```
 
 The play script then has to know how to play the new name: the Music Assistant fallback above plays
-any station by name.
+any station by name. Options set with `input_select.set_options` last only until Home Assistant
+restarts, when the helper's own list comes back; add a station you want to keep to the helper's
+options too (Settings → Devices & services → Helpers).
 
 **Nothing to set up for the audio itself.** Home Assistant transcodes a stream for the device
 through its own ESPHome proxy, which is part of that integration: the URLs in the log with

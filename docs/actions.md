@@ -33,7 +33,7 @@ whatever paired the device, and isn't something you call from an automation afte
 >
 > Several other actions depend on this being set first: `home_show_camera` and
 > `home_show_camera_sound`, `home_weather`, `home_cameras`' automatic camera list (when called with
-> no `cameras`), `home_slideshow`, Home Assistant's Radio Browser lists on the Radio page, and the
+> `cameras` empty), `home_slideshow`, Home Assistant's Radio Browser lists on the Radio page, and the
 > player's star. They all fetch in the background, so the action itself succeeds either way. Without
 > the token they show or offer nothing, and the camera actions open the view with
 > `hass: no access configured` on it in place of the picture. The radio lists are the exception: the
@@ -391,7 +391,7 @@ of day instead.
 
 *string*
 
-Same as `alarm_set`'s `days`. Leave it out, or use `once`, for a time from now. For a one-off on a particular day, give the day instead: `today`, `tomorrow`, or a date written
+Same as `alarm_set`'s `days`. Leave it empty, or use `once`, for a time from now. For a one-off on a particular day, give the day instead: `today`, `tomorrow`, or a date written
 `2026-09-29`. A day whose time has already gone by is refused.
 
 ### label (Required)
@@ -1029,7 +1029,7 @@ camera.front_door=Front door,camera.deck=Deck
 ```
 
 The `=Display Name` half can be left off, in which case the entity ID is used with its `camera.`
-prefix stripped. Left out entirely, the device instead lists every camera entity Home Assistant
+prefix stripped. Left empty (`""`), the device instead lists every camera entity Home Assistant
 has, refreshed every 10 minutes — this needs `home_assistant` to be set up first.
 
 ```yaml
@@ -2367,7 +2367,7 @@ and silence.
 
 *string*
 
-What to say. Leave it out, or pass an empty string, to record instead.
+What to say. Pass an empty string to record instead.
 
 ```yaml
 action: esphome.office_announce_house
