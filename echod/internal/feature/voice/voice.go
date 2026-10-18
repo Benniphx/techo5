@@ -263,7 +263,8 @@ func (v *Voice) CanAnswer(slot int) bool {
 	if micTaken() {
 		return false
 	}
-	if w := config.Get().Wake.Words; slot >= 0 && slot < len(w) && w[slot].Realtime {
+	// The existing native mode owns dispatch before the upstream per-slot backend.
+	if w := config.Get().Wake.Words; !realtimeChosen() && slot >= 0 && slot < len(w) && w[slot].Realtime {
 		return v.turn != nil && v.turn.realtime.Ready()
 	}
 	if !v.Ready() {
