@@ -97,6 +97,10 @@ func Checkers() bool { return false }
 
 func Crown() bool { return false }
 
+// Show8 is false: a panel's canvas is whatever size the app asked for (hardware/screen), and camera
+// frames and photos are fetched at the Show 5's size and scaled to it.
+func Show8() bool { return false }
+
 func getprop(name, fallback string) string {
 	out, err := exec.Command("/system/bin/getprop", name).Output()
 	if v := strings.TrimSpace(string(out)); err == nil && v != "" {

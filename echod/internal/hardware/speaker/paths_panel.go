@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/asp"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/panelctl"
 )
 
@@ -116,3 +117,24 @@ var (
 // firstCurves is empty on a panel: Android plays the sound, with no Amazon tuning to put the volume
 // in front of (paths_cronos.go).
 var firstCurves = map[string][VolumeSteps + 1]float64{}
+
+// MuteSwitch is a mute on the amplifier besides AmpSwitch: none, Android owns the amplifier.
+const MuteSwitch = ""
+
+// mayHaveTAS5805M is false: there is no amplifier of the daemon's own to find (GainAvailable), so
+// the speaker gain control never shows on a panel.
+const mayHaveTAS5805M = false
+
+// tuningSet is nil: there is no vendor tuning to load (DriverTuning).
+var tuningSet *asp.Set
+
+// softRef is off: a panel keeps its own reference of what it sent the app (playback_panel.go,
+// lib/loopback), which the microphone's canceller reads.
+const softRef = false
+
+// hwRate is Rate and nothing is trimmed after the volume: the app takes the stream as it comes and
+// Android resamples it for the hardware.
+const (
+	hwRate   = Rate
+	hwTrimDB = 0.0
+)

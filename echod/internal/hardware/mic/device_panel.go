@@ -2,6 +2,8 @@
 
 package mic
 
+import "github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
+
 // TECHO5 Panel: the app records the tablet's microphone through Android and streams it to the daemon
 // (capture_panel.go). Frames are laid out as the Echos' are, so everything downstream is unchanged:
 // 16 kHz, S24_3LE, 2 channels, ch0 the microphone and ch1 the playback reference. The reference is
@@ -34,3 +36,10 @@ const MediaService = ""
 const VendorBeamformer = false
 
 func resetsOnMute() bool { return false }
+
+// vendorBeamformerSkipped is false: a panel was never offered the vendor beamformer, so there is
+// nothing to say.
+const vendorBeamformerSkipped = false
+
+// setBoardGain is false and touches nothing: Android sets the microphone's gain for the app.
+func setBoardGain(*alsa.Mixer, int) bool { return false }
