@@ -294,7 +294,11 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
 3. **Pick a wake word** on the device's Assist satellite: Okay Nabu, Hey Jarvis, Hey Mycroft, Alexa,
    and eight more (Computer, Jarvis, Home Assistant and others), the same on every device.
 4. **Updates** from then on come from Home Assistant's update card: signed releases install into the
-   spare slot and roll back on their own if they don't come up healthy.
+   spare slot and roll back on their own if they don't come up healthy. **Update channel** in Home
+   Assistant is *stable* unless you change it; *dev* follows test builds, for a device being worked
+   on. **Install updates automatically** (in Home Assistant, or on the setup page's General tab,
+   under Updates) installs a new release by itself between 2 and 5 AM, while nothing is playing. It
+   is off until you turn it on.
 5. **Optional:**
    - [phone calls](phone.md) through your own SIP provider;
    - SSH (keys only) through the `ssh_keys` action and the SSH switch;

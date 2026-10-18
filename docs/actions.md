@@ -909,7 +909,7 @@ paused timer is listed as `running: false` in `alarms_list`, shows in the device
 as `Bread paused (4:05 left)` after the running ones (as do Assist's timers paused by voice), and
 stays paused across a restart. A timer that has just run out is left to ring rather than paused.
 Pausing a paused timer, or resuming a running one, changes nothing. Timers set by voice through Home
-Assistant's Assist are paused and resumed by voice, and these actions refuse them. So far it has been tried off the device only, not on a device.
+Assistant's Assist are paused and resumed by voice, and these actions refuse them.
 
 ### id (Required)
 
@@ -932,7 +932,6 @@ In YAML, refer to these actions as `esphome.<node>_timer_add` and `esphome.<node
 Gives one of the device's own timers more time, or less, whether it is running or paused. Taking off
 more than the timer has left is refused (cancel it instead), as is going past 24 hours or changing a
 timer that has just run out, which is left to ring. Assist's timers are changed by voice, as above.
-So far it has been tried off the device only, not on a device.
 
 ### id (Required)
 
@@ -1088,7 +1087,7 @@ Puts up to six cameras on the screen at once, two or three across, each refreshe
 about once a second, or as often as fetching the others allows. A tap on one puts that camera up on
 its own, live where Live camera video is on; a tap on the strip at the top or the foot closes the
 grid. The cameras' own sound is not played in the grid. The same grid is the **All cameras** row at
-the top of the Cameras drawer, when there are two cameras or more. So far it has been tried off the device only, not on a device.
+the top of the Cameras drawer, when there are two cameras or more.
 
 ### cameras (Required)
 
