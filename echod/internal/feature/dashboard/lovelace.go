@@ -820,9 +820,10 @@ func (g galleryNode) blocks(l look) []Block {
 
 // cond is one of Home Assistant's conditions, as a conditional card and a card's visibility use
 // them: an entity's state or number, the screen's width, or several of those together. A user
-// condition is always met: the device is not signed in as anybody.
+// condition is always met: the device is not signed in as anybody. A state condition that names no
+// entity is never met, so a card hidden by one stays hidden rather than showing by mistake.
 type cond struct {
-	kind       string // state, numeric_state, screen, and, or, not, always
+	kind       string // state, numeric_state, screen, and, or, not, always, never
 	entity     string
 	state, not []string
 	above      *float64
@@ -848,14 +849,16 @@ func (c *compiler) conditions(v any) []cond {
 		cd := cond{kind: kind}
 		switch kind {
 		case "state":
-			cd.entity, cd.state, cd.not = str(m, "entity"), listOf(m["state"]), listOf(m["state_not"])
+			cd.entity, cd.state, cd.not = condEntity(m), listOf(m["state"]), listOf(m["state_not"])
 			if cd.entity == "" {
+				out = append(out, cond{kind: "never"})
 				continue
 			}
 			c.follow(cd.entity)
 		case "numeric_state":
-			cd.entity = str(m, "entity")
+			cd.entity = condEntity(m)
 			if cd.entity == "" {
+				out = append(out, cond{kind: "never"})
 				continue
 			}
 			c.follow(cd.entity)
@@ -875,6 +878,19 @@ func (c *compiler) conditions(v any) []cond {
 		out = append(out, cd)
 	}
 	return out
+}
+
+// condEntity is the entity a state or numeric_state condition is about. Home Assistant's own
+// frontend reads entity_id (the form automations write) ahead of entity, so this does too; an
+// entity_id that lists more than one entity names none this can hold a card against.
+func condEntity(m raw) string {
+	if v, ok := m["entity_id"]; ok {
+		if ids := listOf(v); len(ids) == 1 {
+			return ids[0]
+		}
+		return ""
+	}
+	return str(m, "entity")
 }
 
 func number64(v any) (float64, bool) {
@@ -939,6 +955,8 @@ func (cd cond) met(l look) bool {
 			}
 		}
 		return true
+	case "never":
+		return false
 	}
 	return true
 }

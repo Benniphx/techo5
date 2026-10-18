@@ -177,6 +177,51 @@ func TestVisibility(t *testing.T) {
 	}
 }
 
+// A state condition may name its entity as entity_id, the way automations write it and Home
+// Assistant's own frontend reads it. One that names no entity at all is never met: the card stays
+// hidden, rather than showing as though the condition were not there.
+func TestVisibilityByEntityIDAndWithNoEntity(t *testing.T) {
+	var cards []any
+	if err := json.Unmarshal([]byte(`[
+	  {"type": "tile", "entity": "switch.by_id", "visibility": [{"condition": "state", "entity_id": "light.a", "state": "on"}]},
+	  {"type": "tile", "entity": "switch.by_number", "visibility": [{"condition": "numeric_state", "entity_id": ["sensor.t"], "above": 70}]},
+	  {"type": "tile", "entity": "switch.no_entity", "visibility": [{"condition": "state", "state": "on"}]},
+	  {"type": "tile", "entity": "switch.no_number", "visibility": [{"condition": "numeric_state", "above": 70}]},
+	  {"type": "tile", "entity": "switch.two", "visibility": [{"condition": "state", "entity_id": ["light.a", "sensor.t"], "state": "on"}]},
+	  {"type": "conditional", "conditions": [{"state": "on"}], "card": {"type": "tile", "entity": "switch.legacy"}}
+	]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	l := &lovelaceSource{sects: [][]node{c.cards(cards)}}
+	if !c.seen["light.a"] || !c.seen["sensor.t"] {
+		t.Errorf("the entities named by entity_id are not followed: %v", c.need.entities)
+	}
+	lk := look{states: map[string]hass.LiveEntity{
+		"light.a":  {ID: "light.a", State: "off", Attrs: map[string]any{}},
+		"sensor.t": {ID: "sensor.t", State: "60", Attrs: map[string]any{}},
+	}, width: 960}
+	names := func() []string {
+		var out []string
+		for _, s := range l.sections(lk) {
+			for _, b := range s.Blocks {
+				for _, t := range b.Tiles {
+					out = append(out, t.Name)
+				}
+			}
+		}
+		return out
+	}
+	if got := names(); len(got) != 0 {
+		t.Errorf("light off, 60 degrees: %v, want nothing shown", got)
+	}
+	lk.states["light.a"] = hass.LiveEntity{ID: "light.a", State: "on", Attrs: map[string]any{}}
+	lk.states["sensor.t"] = hass.LiveEntity{ID: "sensor.t", State: "72", Attrs: map[string]any{}}
+	if got := names(); len(got) != 2 || got[0] != "switch.by_id" || got[1] != "switch.by_number" {
+		t.Errorf("light on, 72 degrees: %v, want only the two named by entity_id", got)
+	}
+}
+
 // A grid of nothing but pictures, with columns, is a gallery: abreast, each picture a tap of its own.
 // A picture without a tap_action, or with "none", stays something to look at, and a grid with
 // anything else in it stays its cards in turn.
