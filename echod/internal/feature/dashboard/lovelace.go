@@ -83,7 +83,7 @@ func (l *lovelaceSource) load(ctx context.Context, live *hass.Live) (needs, erro
 				if len(nodes) == 0 {
 					continue
 				}
-				if vis := c.conditions(sm["visibility"]); len(vis) > 0 {
+				if vis := c.conditions(sm["visibility"], ""); len(vis) > 0 {
 					nodes = []node{condNode{conds: vis, child: group(nodes)}}
 				}
 				sects = append(sects, nodes)
@@ -244,7 +244,9 @@ func (c *compiler) card(card raw) node {
 	if n == nil {
 		return nil
 	}
-	if vis := c.conditions(card["visibility"]); len(vis) > 0 {
+	// A condition naming no entity is about the card's own, when it names one as a string: Home
+	// Assistant's getConfigEntityId reads nothing else.
+	if vis := c.conditions(card["visibility"], str(card, "entity")); len(vis) > 0 {
 		return condNode{conds: vis, child: n}
 	}
 	return n
@@ -402,7 +404,7 @@ func (c *compiler) cardItself(card raw) node {
 		if n.child == nil {
 			return nil
 		}
-		n.conds = c.conditions(card["conditions"])
+		n.conds = c.conditions(card["conditions"], "")
 		return n
 	}
 	if kind == "" {
@@ -821,7 +823,8 @@ func (g galleryNode) blocks(l look) []Block {
 // cond is one of Home Assistant's conditions, as a conditional card and a card's visibility use
 // them: an entity's state or number, the screen's width, or several of those together. A user
 // condition is always met: the device is not signed in as anybody. A state condition that names no
-// entity is never met, so a card hidden by one stays hidden rather than showing by mistake.
+// entity is about the card's own entity, as in Home Assistant; where the card has none (a section, a
+// conditional card) it is never met, so what it hides stays hidden rather than showing by mistake.
 type cond struct {
 	kind       string // state, numeric_state, screen, and, or, not, always, never
 	entity     string
@@ -833,8 +836,9 @@ type cond struct {
 }
 
 // conditions reads a list of conditions, in either of the forms Home Assistant writes them: a
-// conditional card's old {entity, state} or the {condition: ...} everything else uses.
-func (c *compiler) conditions(v any) []cond {
+// conditional card's old {entity, state} or the {condition: ...} everything else uses. host is the
+// entity of the card they belong to, for a condition that names none; "" where there is no card's own.
+func (c *compiler) conditions(v any, host string) []cond {
 	list, _ := v.([]any)
 	var out []cond
 	for _, x := range list {
@@ -849,14 +853,14 @@ func (c *compiler) conditions(v any) []cond {
 		cd := cond{kind: kind}
 		switch kind {
 		case "state":
-			cd.entity, cd.state, cd.not = condEntity(m), listOf(m["state"]), listOf(m["state_not"])
+			cd.entity, cd.state, cd.not = condEntity(m, host), listOf(m["state"]), listOf(m["state_not"])
 			if cd.entity == "" {
 				out = append(out, cond{kind: "never"})
 				continue
 			}
 			c.follow(cd.entity)
 		case "numeric_state":
-			cd.entity = condEntity(m)
+			cd.entity = condEntity(m, host)
 			if cd.entity == "" {
 				out = append(out, cond{kind: "never"})
 				continue
@@ -871,7 +875,7 @@ func (c *compiler) conditions(v any) []cond {
 		case "screen":
 			cd.minW, cd.maxW = widths(str(m, "media_query"))
 		case "and", "or", "not":
-			cd.subs = c.conditions(m["conditions"])
+			cd.subs = c.conditions(m["conditions"], host)
 		default:
 			cd.kind = "always" // user, location and the like: nothing here to hold against
 		}
@@ -881,16 +885,21 @@ func (c *compiler) conditions(v any) []cond {
 }
 
 // condEntity is the entity a state or numeric_state condition is about. Home Assistant's own
-// frontend reads entity_id (the form automations write) ahead of entity, so this does too; an
-// entity_id that lists more than one entity names none this can hold a card against.
-func condEntity(m raw) string {
-	if v, ok := m["entity_id"]; ok {
-		if ids := listOf(v); len(ids) == 1 {
-			return ids[0]
-		}
+// frontend reads entity_id (the form automations write) ahead of entity, and with neither takes the
+// card's own entity (host), so this does too. An entity_id that lists more than one entity names
+// none this can hold a card against.
+func condEntity(m raw, host string) string {
+	ids := listOf(m["entity_id"])
+	if len(ids) > 1 {
 		return ""
 	}
-	return str(m, "entity")
+	if len(ids) == 1 && ids[0] != "" {
+		return ids[0]
+	}
+	if e := str(m, "entity"); e != "" {
+		return e
+	}
+	return host
 }
 
 func number64(v any) (float64, bool) {

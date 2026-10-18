@@ -178,17 +178,15 @@ func TestVisibility(t *testing.T) {
 }
 
 // A state condition may name its entity as entity_id, the way automations write it and Home
-// Assistant's own frontend reads it. One that names no entity at all is never met: the card stays
-// hidden, rather than showing as though the condition were not there.
-func TestVisibilityByEntityIDAndWithNoEntity(t *testing.T) {
+// Assistant's own frontend reads it; an empty entity_id falls back to entity. One whose entity_id
+// lists two entities names none to hold the card against, and is never met.
+func TestVisibilityByEntityID(t *testing.T) {
 	var cards []any
 	if err := json.Unmarshal([]byte(`[
 	  {"type": "tile", "entity": "switch.by_id", "visibility": [{"condition": "state", "entity_id": "light.a", "state": "on"}]},
 	  {"type": "tile", "entity": "switch.by_number", "visibility": [{"condition": "numeric_state", "entity_id": ["sensor.t"], "above": 70}]},
-	  {"type": "tile", "entity": "switch.no_entity", "visibility": [{"condition": "state", "state": "on"}]},
-	  {"type": "tile", "entity": "switch.no_number", "visibility": [{"condition": "numeric_state", "above": 70}]},
-	  {"type": "tile", "entity": "switch.two", "visibility": [{"condition": "state", "entity_id": ["light.a", "sensor.t"], "state": "on"}]},
-	  {"type": "conditional", "conditions": [{"state": "on"}], "card": {"type": "tile", "entity": "switch.legacy"}}
+	  {"type": "tile", "entity": "switch.empty_id", "visibility": [{"condition": "state", "entity_id": "", "entity": "light.a", "state": "on"}]},
+	  {"type": "tile", "entity": "switch.two", "visibility": [{"condition": "state", "entity_id": ["light.a", "sensor.t"], "state": "on"}]}
 	]`), &cards); err != nil {
 		t.Fatal(err)
 	}
@@ -201,25 +199,74 @@ func TestVisibilityByEntityIDAndWithNoEntity(t *testing.T) {
 		"light.a":  {ID: "light.a", State: "off", Attrs: map[string]any{}},
 		"sensor.t": {ID: "sensor.t", State: "60", Attrs: map[string]any{}},
 	}, width: 960}
-	names := func() []string {
-		var out []string
-		for _, s := range l.sections(lk) {
-			for _, b := range s.Blocks {
-				for _, t := range b.Tiles {
-					out = append(out, t.Name)
-				}
-			}
-		}
-		return out
-	}
-	if got := names(); len(got) != 0 {
+	if got := tileNames(l, lk); len(got) != 0 {
 		t.Errorf("light off, 60 degrees: %v, want nothing shown", got)
 	}
 	lk.states["light.a"] = hass.LiveEntity{ID: "light.a", State: "on", Attrs: map[string]any{}}
 	lk.states["sensor.t"] = hass.LiveEntity{ID: "sensor.t", State: "72", Attrs: map[string]any{}}
-	if got := names(); len(got) != 2 || got[0] != "switch.by_id" || got[1] != "switch.by_number" {
-		t.Errorf("light on, 72 degrees: %v, want only the two named by entity_id", got)
+	if got := tileNames(l, lk); len(got) != 3 || got[0] != "switch.by_id" || got[1] != "switch.by_number" || got[2] != "switch.empty_id" {
+		t.Errorf("light on, 72 degrees: %v, want all but the one naming two entities", got)
 	}
+}
+
+// A visibility condition that names no entity is about the card's own, as in Home Assistant, inside
+// and/or/not too. A card with no entity of its own, a conditional card and a section have nothing to
+// fall back to: their condition is never met, and what it hides stays hidden.
+func TestVisibilityWithNoEntityIsTheCardsOwn(t *testing.T) {
+	var cards []any
+	if err := json.Unmarshal([]byte(`[
+	  {"type": "tile", "entity": "switch.self", "visibility": [{"condition": "state", "state": "on"}]},
+	  {"type": "tile", "entity": "sensor.self", "visibility": [{"condition": "numeric_state", "above": 70}]},
+	  {"type": "tile", "entity": "switch.nested", "visibility": [{"condition": "and", "conditions": [{"condition": "state", "state": "on"}]}]},
+	  {"type": "vertical-stack", "visibility": [{"condition": "state", "state": "on"}], "cards": [{"type": "tile", "entity": "switch.inner"}]},
+	  {"type": "conditional", "conditions": [{"state": "on"}], "card": {"type": "tile", "entity": "switch.legacy"}}
+	]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	l := &lovelaceSource{sects: [][]node{c.cards(cards)}}
+	if !c.seen["switch.self"] || !c.seen["sensor.self"] || !c.seen["switch.nested"] {
+		t.Errorf("the cards' own entities are not followed: %v", c.need.entities)
+	}
+	on := func(id, state string) hass.LiveEntity {
+		return hass.LiveEntity{ID: id, State: state, Attrs: map[string]any{}}
+	}
+	lk := look{states: map[string]hass.LiveEntity{
+		"switch.self": on("switch.self", "off"), "sensor.self": on("sensor.self", "60"), "switch.nested": on("switch.nested", "off"),
+		"switch.inner": on("switch.inner", "on"), "switch.legacy": on("switch.legacy", "on"),
+	}, width: 960}
+	if got := tileNames(l, lk); len(got) != 0 {
+		t.Errorf("own entities off: %v, want nothing shown", got)
+	}
+	lk.states["switch.self"] = on("switch.self", "on")
+	lk.states["sensor.self"] = on("sensor.self", "72")
+	lk.states["switch.nested"] = on("switch.nested", "on")
+	if got := tileNames(l, lk); len(got) != 3 || got[0] != "switch.self" || got[1] != "sensor.self" || got[2] != "switch.nested" {
+		t.Errorf("own entities on: %v, want the three with an entity of their own", got)
+	}
+	// A section's visibility has no card's entity to fall back to.
+	var vis []any
+	if err := json.Unmarshal([]byte(`[{"condition": "state", "state": "on"}, {"condition": "numeric_state", "above": 1}]`), &vis); err != nil {
+		t.Fatal(err)
+	}
+	for _, cd := range c.conditions(vis, "") {
+		if cd.kind != "never" {
+			t.Errorf("a section's condition with no entity is %q, want never", cd.kind)
+		}
+	}
+}
+
+// tileNames is the tiles a compiled dashboard shows as things stand, by name.
+func tileNames(l *lovelaceSource, lk look) []string {
+	var out []string
+	for _, s := range l.sections(lk) {
+		for _, b := range s.Blocks {
+			for _, t := range b.Tiles {
+				out = append(out, t.Name)
+			}
+		}
+	}
+	return out
 }
 
 // A state condition with neither state nor state_not says nothing to hold the entity against.
