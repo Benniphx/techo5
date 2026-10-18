@@ -14,34 +14,41 @@ that project's docs. It doesn't mean they can't do it.
 
 | | TECHO5 | EchoLocal | EchoMuse | Kiosk Satellite | View Assist (with VACA) |
 |---|---|---|---|---|---|
-| **What it is** | Replacement firmware for Echos | Replacement firmware for Echos | Replacement firmware for the Echo Dot, plus a controller | Android kiosk app with a built-in voice satellite | Home Assistant integration, views and blueprints, plus an Android companion app |
-| **Devices** | Echo Show 5 1st and 2nd gen, Echo Show 8 1st and 2nd gen, Echo Spot 1st gen, Echo Dot 2nd gen, Echo 2nd gen | Echo Dot 2nd gen, Echo Show 5 1st and 2nd gen, Echo Show 8 1st gen | Echo Dot 2nd gen. Echo Dot 3, Echo 2 and Echo Show 8 ports "in progress" | Android 7.0 or newer. Guides for Fire tablets, Echo Dot 2nd gen (on LineageOS 14.1), Meta Portal and Raspberry Pi 4. Its docs mention Echo Shows | Android 8 or newer for VACA. Tested on Lenovo ThinkSmart View and smart displays; community reports Fire tablets and Echo Show 5 and 8 on LineageOS. Views also work with ESPHome satellites |
+| **What it is** | Replacement firmware for Echos | Replacement firmware for Echos | Replacement firmware for the Echo Dot, plus a controller | Android kiosk app for Home Assistant displays, with a built-in voice satellite. Also runs with no screen on an Echo Dot | Home Assistant integration, views and blueprints, plus an Android companion app |
+| **Devices** | Echo Show 5 1st and 2nd gen, Echo Show 8 1st and 2nd gen, Echo Spot 1st gen, Echo Dot 2nd gen, Echo 2nd gen | Echo Dot 2nd gen, Echo Show 5 1st and 2nd gen, Echo Show 8 1st gen | Echo Dot 2nd gen. Echo Dot 3, Echo 2 and Echo Show 8 ports "in progress" | Anything with Android 7.0 or newer. Guides for Fire tablets, Meta Portals, the Raspberry Pi 4 and the Echo Dot 2nd gen (on its own LineageOS image). Its docs also name the Echo Show 5 and Show 8 on LineageOS, and tablets like the Galaxy Tab and Lenovo Tab. No Echo Spot or Echo 2nd gen listed | Android 8 or newer for VACA. Tested on Lenovo ThinkSmart View and smart displays; community reports Fire tablets and Echo Show 5 and 8 on LineageOS. Views also work with ESPHome satellites |
 | **What runs on the device** | Alpine Linux and one Go daemon (`echod`). No Android | One Go daemon (`echod`) in place of Amazon's software | emOS (its own small Linux userspace on the Dot's kernel), or rooted Fire OS 5 | Android app | Android app (VACA) and a browser showing the views |
-| **Install route** | Unlock (amonet, or saiyaku-athena for the Show 8 2nd gen), then one Python install script over USB, on Windows, Linux or macOS. Nothing to build | Unlock to TWRP, then the `echolocal` installer over USB | Unlock with firebreak (amonet-biscuit), then a setup wizard in Chrome or Edge over USB | Install the APK. On an Echo it needs an unlocked device running LineageOS | Install the APK and the HACS integration. On an Echo Show it needs LineageOS |
-| **Wake word on the device** | Yes, microWakeWord: twelve words plus your own models; two wake words at once, each with its own assistant. A "stop" word with no wake word. Can also hand the room to Home Assistant's wake word engine (openWakeWord, say), or ask it to confirm | Yes, microWakeWord and openWakeWord, two assistants with their own wake word | Yes by default, or on the controller per Dot. Custom words trained with oww_forge | Yes, vsWakeWord, microWakeWord and openWakeWord, works with the screen off | Yes in VACA, six built-in words plus your own |
-| **Voice without Home Assistant** | Yes, if you want it: speech to text and text to speech on your own Wyoming servers, and any OpenAI-style chat model (llama.cpp, Ollama), with timers, alarms, the radio and web search | Not listed | No (it needs Home Assistant) | Not listed | No (it's a Home Assistant integration) |
-| **Home Assistant link** | ESPHome API, encrypted | ESPHome API, optional HACS integration | ESPHome API (through the controller) | ESPHome API, plus a long-lived token | Custom integration; VACA uses the Wyoming protocol |
-| **Radio** | Yes, Radio Browser lists and favorites, with song and cover | Not listed (media player and Sendspin) | Yes, as a Home Assistant media player | Not listed | Yes, a blueprint plays TuneIn through Music Assistant |
-| **Music Assistant** | Yes, Sendspin, in sync as a group | Yes, Sendspin | Yes, Sendspin (v2.18.0) | Yes, Sendspin, synchronized | Yes, through blueprints |
-| **AirPlay / Spotify Connect** | Both, on the Show and the Dot (not the Spot). Off until you turn them on | Not listed. Has a Chromecast receiver (audio only on the Dot) | Not listed | AirPlay yes, Spotify Connect not listed | Not listed |
-| **Bluetooth** | Audio out to earbuds or a speaker, a phone playing in (Show, Spot and Dot), Home Assistant proxy that scans (no active connections yet), iBeacon on the Dot | Bluetooth speaker on the Shows, proxy with iBeacon | Proxy, and up to three Bluetooth connections for Home Assistant | Proxy | Not listed |
-| **Other media** | DLNA speaker, video from `play_video` and DLNA, follow another player, lyrics, sleep sounds made on the device (white, pink and brown noise, rain, ocean, fire and more, in two layers), bass and treble, a sleep timer | Chromecast receiver for YouTube, Prime Video and more on the Shows, white noise | Ducks music under replies | DLNA, follow a Home Assistant or Sonos player, lyrics | Sound machine blueprint |
-| **Clock and weather** | Yes, 12 clock styles, 13 themes, in seven languages, forecast, rain radar, U.S. weather alerts | Yes, eight clock faces, weather | No screen | Clock and weather screensavers | Clock and weather views |
-| **Dashboards** | Drawn on the device (with a Rooms dashboard from your areas), or streamed exactly by dashcast, a server next to Home Assistant, which also shows web pages | Native dashboard, Tessera dashboards | No screen | Any Home Assistant dashboard, in its browser | Any Home Assistant dashboard and View Assist's own views |
-| **Cameras** | Home Assistant and go2rtc cameras live, with sound, up to six at once. Talk through a doorbell's speaker. Reolink doorbell chime with no Home Assistant. Its own camera to Home Assistant, or to an NVR over RTSP and ONVIF (not yet on the Show 8 2nd gen) | RTSP camera with ONVIF, snapshot camera | No camera | Up to twelve live feeds; its own camera over RTSP | Camera view |
-| **Photos** | Slideshow from anything Home Assistant's media library can browse (its media folder, network shares, Immich and other media sources), from Immich directly (favorites, dates and a person), or photos kept on the device from the setup page. Behind the clock or as a screensaver, whole photo with blurred sides, two tall photos side by side, date and place captions | Immich screensaver | No screen | Immich and local photos | Not found in their docs |
+| **Install route** | Unlock (amonet, or saiyaku-athena for the Show 8 2nd gen), then one Python install script over USB, on Windows, Linux or macOS. Nothing to build | Unlock to TWRP, then the `echolocal` installer over USB | Unlock with firebreak (amonet-biscuit), then a setup wizard in Chrome or Edge over USB | Install the APK and follow its setup wizard, on the device or from a browser. On an Echo it needs an unlocked device running LineageOS | Install the APK and the HACS integration. On an Echo Show it needs LineageOS |
+| **Wake word on the device** | Yes, microWakeWord: twelve words plus your own models; two wake words at once, each with its own assistant. A "stop" word with no wake word. Can also hand the room to Home Assistant's wake word engine (openWakeWord, say), or ask it to confirm | Yes, microWakeWord and openWakeWord, two assistants with their own wake word | Yes by default, or on the controller per Dot. Custom words trained with oww_forge | Yes, vsWakeWord, microWakeWord and openWakeWord, with your own models for all three. Two wake words, each with its own assistant. A "stop" word. Works with the screen off or another app in front | Yes in VACA, six built-in words plus your own |
+| **Voice without Home Assistant** | Yes, if you want it: speech to text and text to speech on your own Wyoming servers, and any OpenAI-style chat model (llama.cpp, Ollama), with timers, alarms, the radio and web search | Not listed | No (it needs Home Assistant) | Partly: a realtime conversation goes straight to OpenAI, xAI or Gemini (or a relay on your network). The app itself expects Home Assistant | No (it's a Home Assistant integration) |
+| **Home Assistant link** | ESPHome API, encrypted | ESPHome API, optional HACS integration | ESPHome API (through the controller) | ESPHome API, encrypted, plus a long-lived token | Custom integration; VACA uses the Wyoming protocol |
+| **Radio** | Yes, Radio Browser lists and favorites, with song and cover | Not listed (media player and Sendspin) | Yes, as a Home Assistant media player | Through Music Assistant | Yes, a blueprint plays TuneIn through Music Assistant |
+| **Music Assistant** | Yes, Sendspin, in sync as a group | Yes, Sendspin | Yes, Sendspin (v2.18.0) | Yes, Sendspin, in sync, with group volume, queue and speaker groups | Yes, through blueprints |
+| **AirPlay / Spotify Connect** | Both, on the Show and the Dot (not the Spot). Off until you turn them on | Not listed. Has a Chromecast receiver (audio only on the Dot) | Not listed | AirPlay yes (since 2026.10.29). Spotify Connect not built in, but it shows and controls a Spotify app playing on the device | Not listed |
+| **Bluetooth** | Audio out to earbuds or a speaker, a phone playing in (Show, Spot and Dot), Home Assistant proxy that scans (no active connections yet), iBeacon on the Dot | Bluetooth speaker on the Shows, proxy with iBeacon | Proxy, and up to three Bluetooth connections for Home Assistant | Proxy with active connections (locks, buttons, blinds), two or three at once | Not listed |
+| **Other media** | DLNA speaker, video from `play_video` and DLNA, follow another player, lyrics, sleep sounds made on the device (white, pink and brown noise, rain, ocean, fire and more, in two layers), bass and treble, a sleep timer | Chromecast receiver for YouTube, Prime Video and more on the Shows, white noise | Ducks music under replies | DLNA for pictures, video and audio; follow a Home Assistant, Music Assistant or Sonos player, or another app on the device; lyrics; audio quality | Sound machine blueprint |
+| **Clock and weather** | Yes, 12 clock styles, 13 themes, in seven languages, forecast, rain radar, U.S. weather alerts | Yes, eight clock faces, weather | No screen | Digital, flip and roller clocks with a night mode, an animated weather screensaver, weather and entity widgets | Clock and weather views |
+| **Dashboards** | Drawn on the device (with a Rooms dashboard from your areas), or streamed exactly by dashcast, a server next to Home Assistant, which also shows web pages | Native dashboard, Tessera dashboards | No screen | Any Home Assistant dashboard, in its browser, with view rotation. Also your own HTML pages, and dashboard buttons that open its features or other apps | Any Home Assistant dashboard and View Assist's own views |
+| **Screensaver and night** | Night hours (dark, a faint glow or a red night clock), photos behind the clock or as a screensaver, brightness that follows the room's light | Immich screensaver | No screen | Eleven screensaver modes (clock, weather, photos, cameras, a web page, a dashboard and more), a schedule by time of day, screen off after a while, brightness from its own or a Home Assistant light sensor | Not listed |
+| **Cameras** | Home Assistant and go2rtc cameras live, with sound, up to six at once. Talk through a doorbell's speaker. Reolink doorbell chime with no Home Assistant. Its own camera to Home Assistant, or to an NVR over RTSP and ONVIF (not yet on the Show 8 2nd gen) | RTSP camera with ONVIF, snapshot camera | No camera | Up to twelve live feeds per view, imported from Home Assistant or go2rtc, with sound and pinch zoom. Its own camera to Home Assistant, or over RTSP and ONVIF | Camera view |
+| **Photos** | Slideshow from anything Home Assistant's media library can browse (its media folder, network shares, Immich and other media sources), from Immich directly (favorites, dates and a person), or photos kept on the device from the setup page. Behind the clock or as a screensaver, whole photo with blurred sides, two tall photos side by side, date and place captions | Immich screensaver | No screen | Immich (albums, people, tags, dates, short videos), Home Assistant's media library and photos on the device. Two photos side by side, photo details | Not found in their docs |
 | **Calendar** | Yes: day and week on their hours, month, Coming up, icons, countdowns, the next event on the clock, event pop-ups. Home Assistant calendars or a calendar's own link (iCal) | Not listed | No screen | Not listed | Yes, "View Calendar" blueprint |
-| **Alarms and timers** | Timers from Home Assistant (pause, add time); alarms that ring with Home Assistant down, sunrise light, light-only alarms, reminders by voice that go off on the devices you pick | Timers and alerts | Timers from Home Assistant | Timers; alarms that ring with no network, sunrise light | Alarms, reminders and timers blueprint and view |
-| **Intercom** | Yes: call one device from another, from the screen or Home Assistant. Works with Home Assistant down. Optional Drop In | Yes, audio on the Dot, audio and video on the Shows | Not listed | Yes, call one kiosk or broadcast to all | Broadcast messages to other satellites |
+| **Alarms and timers** | Timers from Home Assistant (pause, add time); alarms that ring with Home Assistant down, sunrise light, light-only alarms, reminders by voice that go off on the devices you pick | Timers and alerts | Timers from Home Assistant | Timers on screen (pause, add time, from Home Assistant too); alarms that ring with no network, sunrise light, a spoken line, set by voice through an AI agent | Alarms, reminders and timers blueprint and view |
+| **Intercom** | Yes: call one device from another, from the screen or Home Assistant. Works with Home Assistant down. Optional Drop In | Yes, audio on the Dot, audio and video on the Shows | Not listed | Yes, audio: call one kiosk or announce to all, push to talk or hands free, from the screen, Home Assistant or by voice | Broadcast messages to other satellites |
 | **Nearest device answers** | Yes, off by default (v1.2.21) | Not listed | Yes | Yes, wake word arbitration | Not listed |
 | **Announcements** | Yes, from Home Assistant, or device to device with no Home Assistant at all: typed words or your own voice in every room | Yes | Yes | Yes | Yes |
+| **Notifications on the screen** | Yes, from Home Assistant: a card with an icon, a chime, a picture or a live camera, said aloud if you want | Not listed | No screen | Yes, from Home Assistant: up to four cards at once, with an icon, a chime and a picture | Not listed |
 | **Phone calls** | Through your own SIP provider, off until signed in | Not listed | Not listed (no calling) | Not listed | Not listed |
-| **Realtime voice** | Yes, OpenAI, xAI or Gemini with your own key (v1.2.22) | Not listed | Not listed | Yes, OpenAI, xAI or Gemini | Not listed |
+| **Realtime voice** | Yes, OpenAI, xAI or Gemini with your own key (v1.2.22) | Not listed | Not listed | Yes, OpenAI, xAI or Gemini, with Home Assistant's tools and web search | Not listed |
 | **Stream deck** | Yes, TECHO5 Deck on the Shows: OBS scenes, stream, record and mute, plus shortcuts, apps and scripts on your computer | Not listed | No screen | Not listed | Not listed |
-| **Presence and gestures** | Presence from the camera (screen off when nobody's near), person detection, a palm over the camera, a double clap, a hold on the clock. Room loudness and light sensors. All off by default (camera ones not yet on the Show 8 2nd gen) | Not listed | Not listed | Finger-count and clap gestures | Not listed |
-| **Settings across devices** | Link any everyday setting with the devices you pick, copy once, or save to a file and restore. No main device | Config sync | The controller | Fleet profiles | Set in Home Assistant |
-| **Remote API** | Signed, off by default, can't touch privacy settings | Not listed | Not listed | Yes (Remote API) | Not listed |
-| **Updates** | Signed, A/B with fallback, from Home Assistant's update card; stable or dev channel; automatic between 2 and 5 AM if you want | From Home Assistant, stable or development channel | Over Wi-Fi from its dashboard, with automatic rollback | From GitHub, with a Home Assistant update entity | Integration through HACS |
+| **Presence** | Presence from the camera (the screen goes out when nobody's near), person detection. Off by default (not yet on the Show 8 2nd gen) | Not listed | Not listed | Camera motion and face detection, a proximity sensor, the Portal's person sensor, or a Home Assistant motion sensor in the camera's place. Each can wake the screen or hold off the screensaver | Not listed |
+| **Gestures** | A palm over the camera, a double clap, a hold on the clock. Off by default | Not listed | Not listed | Corner taps and holds, two and three finger taps, a knock code, claps, fingers held up to the camera. Each runs an action you pick | Not listed |
+| **Sensors for Home Assistant** | Presence, person, room loudness, what's playing, ringing alarms and timers | Not listed | Not listed | Battery, charging, CPU, memory, storage, light, room loudness, motion, person, GPS, network, the app in front, a screenshot | Not listed |
+| **Kiosk lockdown** | A settings lock: a PIN before settings change, while alarms, volume and brightness stay open | Not listed | No screen | Kiosk mode (exit gesture and PIN, status bar, home and volume keys blocked), a lockdown mode for cleaning or guests, home launcher, device owner mode | Not listed |
+| **Settings across devices** | Link any everyday setting with the devices you pick, copy once, or save to a file and restore. No main device | Config sync | The controller | Fleet management: a leader sends profiles, plugins and updates to the others. Backup and restore | Set in Home Assistant |
+| **Setup in a browser** | A setup page for every setting; a screenshot of the screen when you allow it | Not listed | Setup wizard and dashboard | Remote admin for every setting, with live screenshots, logs, a file manager and backups | Not listed |
+| **Remote API** | Signed, off by default, can't touch privacy settings | Not listed | Not listed | Yes: REST and WebSocket, a JavaScript API for pages, Android broadcasts | Not listed |
+| **Plugins** | No | Not listed | Not listed | Yes, a plugin manager and a plugin kit | Not listed |
+| **Updates** | Signed, A/B with fallback, from Home Assistant's update card; stable or dev channel; automatic between 2 and 5 AM if you want | From Home Assistant, stable or development channel | Over Wi-Fi from its dashboard, with automatic rollback | From GitHub, with a Home Assistant update entity; for a whole fleet at once | Integration through HACS |
 | **License** | MIT | MIT | MIT | CC BY-NC-ND 4.0 (free for personal, non-commercial use) | View Assist: CC BY-NC 4.0. Integration repo: no license file found. VACA: Apache 2.0 |
 | **Latest release** | v1.2.23, October 18, 2026 | 0.0.9, October 15, 2026 | v2.18.1, October 15, 2026 | 2026.10.29, October 18, 2026 | VACA v0.13.5, October 10, 2026; integration 2026.7.0, July 8, 2026 |
 
@@ -57,16 +64,35 @@ A few related projects, for context:
 
 Being honest about this matters more to me than the table.
 
-- **Any Android device.** Kiosk Satellite runs on anything with Android 7, and View Assist works with
-  any satellite, ESPHome ones like Voice PE included. TECHO5 only runs on Echos, and needs the unlock
-  first. The apps on an Echo Show need the same unlock plus LineageOS.
+- **Any Android device.** Kiosk Satellite runs on anything with Android 7: tablets, Fire tablets,
+  Meta Portals, a Raspberry Pi 4, and Echo Shows on LineageOS. It even runs with no screen on an
+  Echo Dot 2nd gen. View Assist works with any satellite, ESPHome ones like Voice PE included.
+  TECHO5 only runs on Echos, and needs the unlock first. The apps on an Echo Show need the same
+  unlock plus LineageOS.
 - **Any dashboard, as is.** The Android apps run a real browser, so custom cards just work.
   TECHO5 draws dashboards itself, which is fast but covers the common cards, or streams them
   exactly through dashcast, which needs a small server next to Home Assistant.
-- **Kiosk Satellite** and TECHO5 now cover nearly the same ground. What Kiosk Satellite still has:
-  a plugin manager (TECHO5 leaves third-party code out on purpose), finger-count gestures, short
-  Immich videos in the slideshow and twelve camera feeds at once (TECHO5 shows six). As an Android
-  app it also has Android things like a lockdown mode. And it moves fast: a new release most days.
+- **Kiosk Satellite** has a lot TECHO5 doesn't:
+  - Fleet management: one kiosk leads and sends profiles, plugins and updates to the rest. TECHO5
+    links settings one at a time, with no profiles.
+  - A plugin manager with a kit for writing plugins. TECHO5 leaves third-party code out on purpose.
+  - Kiosk and lockdown modes, a home launcher and a URL filter. TECHO5 has a settings lock.
+  - A remote admin in the browser with live screenshots, logs, a file manager and backups, plus
+    REST, WebSocket and JavaScript APIs and Android broadcasts.
+  - A Bluetooth proxy that holds connections to locks and buttons. TECHO5's proxy only scans.
+  - Many more gestures: corner taps, a knock code, fingers held up to the camera, each running any
+    action. And presence from a face, a proximity sensor, or a Home Assistant motion sensor.
+  - Eleven screensaver modes on a schedule, including an animated weather sky, a web page and a
+    dashboard.
+  - Twelve camera feeds at once (TECHO5 shows six), short Immich videos in the slideshow, and
+    following a Sonos or another app's music directly.
+  - More sensors for Home Assistant: battery, CPU, memory, storage and GPS.
+  - Alarms and intercom calls by voice through an AI agent, and fourteen looks for the voice
+    overlay.
+
+  TECHO5 also has the nearest device answering, two wake words, realtime voice, AirPlay, Sendspin,
+  DLNA, sunrise alarms, the intercom, notifications, camera presence and a room loudness sensor.
+  And Kiosk Satellite moves fast: a new release most days.
 - **View Assist** has a big library of ready-made voice blueprints: lists, sports scores, travel
   times, Wikipedia, where a person is, and more. TECHO5 has a handful of ready-made automations in
   [docs/actions.md](https://github.com/HuskerMinion/techo5/blob/main/docs/actions.md).
@@ -98,11 +124,14 @@ What TECHO5 does that I didn't find elsewhere:
 
 ## Choosing
 
-- **You have an Android tablet, a Portal or a Lenovo display**: Kiosk Satellite, or View Assist
-  with VACA. No unlock. Both keep your dashboards exactly as they are.
+- **You have an Android tablet, a Fire tablet, a Portal, a Lenovo display or a Raspberry Pi**:
+  Kiosk Satellite, or View Assist with VACA. No unlock. Both keep your dashboards exactly as they
+  are.
+- **You run several displays and want them managed as one, or locked down for guests**: Kiosk
+  Satellite.
 - **You want lots of voice skills on any satellite you own**: View Assist's blueprints.
 - **You have Echo Dot 2nd gens and want a voice satellite with a controller**: EchoMuse, or
-  EchoLocal, or TECHO5 Dot. All three are worth a look.
+  EchoLocal, or TECHO5 Dot. All three are worth a look. Kiosk Satellite runs on the Dot too.
 - **You have an Echo Show or Spot and are fine with the unlock**: TECHO5 or EchoLocal turn it into
   a Linux device with no Android left. Want Chromecast? EchoLocal. Want a calendar, radio, AirPlay
   and Spotify Connect, phone calls, an OBS deck, voice without Home Assistant, or the Show 8 2nd gen?
@@ -136,9 +165,32 @@ All checked October 18, 2026.
 - Kiosk Satellite: [README](https://github.com/jxlarrea/kiosk-satellite),
   [docs](https://kiosksatellite.com/docs/),
   [Voice Satellite](https://kiosksatellite.com/docs/voice-satellite/),
+  [Custom wake words](https://kiosksatellite.com/docs/custom-wake-words/),
+  [ESPHome](https://kiosksatellite.com/docs/esphome/),
+  [Events](https://kiosksatellite.com/docs/events/),
+  [Android broadcasts](https://kiosksatellite.com/docs/android-broadcasts/),
+  [Custom pages](https://kiosksatellite.com/docs/custom-pages/),
+  [Dashboard links](https://kiosksatellite.com/docs/dashboard-links/),
+  [Screen](https://kiosksatellite.com/docs/screen/),
+  [Screensavers](https://kiosksatellite.com/docs/screensavers/),
+  [Immich](https://kiosksatellite.com/docs/immich/),
+  [Media player](https://kiosksatellite.com/docs/sendspin/),
+  [DLNA](https://kiosksatellite.com/docs/dlna/),
   [Intercom](https://kiosksatellite.com/docs/intercom/),
   [Camera streams](https://kiosksatellite.com/docs/cameras/),
+  [Device camera](https://kiosksatellite.com/docs/camera/),
+  [Kiosk and lockdown](https://kiosksatellite.com/docs/kiosk/),
+  [Home launcher](https://kiosksatellite.com/docs/home-launcher/),
+  [Gestures](https://kiosksatellite.com/docs/gestures/),
+  [Alarms](https://kiosksatellite.com/docs/alarms/),
+  [Fleet management](https://kiosksatellite.com/docs/fleet/),
   [Updates](https://kiosksatellite.com/docs/updates/),
+  [Remote API](https://kiosksatellite.com/docs/remote-api/),
+  [JavaScript API](https://kiosksatellite.com/docs/js-api/),
+  [Plugins](https://kiosksatellite.com/docs/plugins/),
+  [Fire tablets](https://kiosksatellite.com/docs/fire/),
+  [Meta Portal](https://kiosksatellite.com/docs/portal/),
+  [Raspberry Pi 4](https://kiosksatellite.com/docs/raspberry-pi/),
   [Echo Dot guide](https://kiosksatellite.com/docs/echo-dot/),
   [releases](https://github.com/jxlarrea/kiosk-satellite/releases)
 - View Assist: [README](https://github.com/dinki/View-Assist),
