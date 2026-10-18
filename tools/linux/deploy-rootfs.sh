@@ -36,9 +36,11 @@ WSL_DISTRO=${WSL_DISTRO:-Ubuntu}
 BUILD_TAGS=${BUILD_TAGS:-}
 VENDOR_TGZ=${VENDOR_TGZ:-}
 DEVICE_OVERLAY=${DEVICE_OVERLAY:-}
-# KERNEL_IMAGE (athena): the released boot image (tools/linux/athena/kernel/build.sh's boot-athena.img, its
-# amp tuning slot empty) to carry in the rootfs; once the slot is good it goes to the boot partition with the
-# unit's own tuning (echod/internal/update/kernel). Without it the rootfs leaves the unit's kernel as it is.
+# KERNEL_IMAGE (athena, Skylight): the released boot image to carry in the rootfs; once the slot is good it
+# goes to the kernel's partition (echod/internal/update/kernel). athena's is tools/linux/athena/kernel/build.sh's
+# boot-athena.img, its amp tuning slot empty, and goes to the boot partition with the unit's own tuning; the
+# Skylight's is tools/linux/skylight/kernel/build.sh's boot-skylight.img, and goes to recovery as it is.
+# Without it the rootfs leaves the unit's kernel as it is.
 KERNEL_IMAGE=${KERNEL_IMAGE:-}
 INSTALL=; REBOOT=; ONDEVICE=; KEEP=
 while [ $# -gt 0 ]; do
@@ -135,15 +137,18 @@ fi
 
 # The kernel goes in after the line endings are fixed too, and is checked as a whole released image.
 if [ -n "$KERNEL_IMAGE" ]; then
-	grep -q '^T5_BOARD=athena' "$STAGE/overlay/etc/techo5/device.conf" 2>/dev/null \
-		|| { echo "KERNEL_IMAGE is for athena: DEVICE_OVERLAY=tools/linux/athena/overlay" >&2; exit 1; }
+	kboard=$(sed -n 's/^T5_BOARD=//p' "$STAGE/overlay/etc/techo5/device.conf" 2>/dev/null | tail -1)
+	case "$kboard" in
+	athena|skylight) ;;
+	*) echo "KERNEL_IMAGE is for athena or the Skylight: DEVICE_OVERLAY=tools/linux/athena/overlay or tools/linux/skylight/overlay" >&2; exit 1;;
+	esac
 	PY=$(command -v python3 || command -v python) || { echo "KERNEL_IMAGE needs python to check the image" >&2; exit 1; }
-	"$PY" "$ROOT/tools/linux/athena/kernel/check-boot.py" "$KERNEL_IMAGE" || { echo "KERNEL_IMAGE is not a released athena boot image" >&2; exit 1; }
+	"$PY" "$ROOT/tools/linux/$kboard/kernel/check-boot.py" "$KERNEL_IMAGE" || { echo "KERNEL_IMAGE is not a released $kboard boot image" >&2; exit 1; }
 	mkdir -p "$STAGE/overlay/usr/share/techo5/kernel"
-	cp "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img"
-	cmp -s "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img" || { echo "kernel copy differs" >&2; exit 1; }
+	cp "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-$kboard.img"
+	cmp -s "$KERNEL_IMAGE" "$STAGE/overlay/usr/share/techo5/kernel/boot-$kboard.img" || { echo "kernel copy differs" >&2; exit 1; }
 	sum=$(sha256sum "$KERNEL_IMAGE" | cut -d' ' -f1)
-	echo "$sum  boot-athena.img" > "$STAGE/overlay/usr/share/techo5/kernel/boot-athena.img.sha256"
+	echo "$sum  boot-$kboard.img" > "$STAGE/overlay/usr/share/techo5/kernel/boot-$kboard.img.sha256"
 	echo "== kernel: sha256 $sum"
 fi
 

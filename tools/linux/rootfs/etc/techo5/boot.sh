@@ -286,9 +286,10 @@ TRIAL_TIMEOUT=${TRIAL_TIMEOUT:-900}
 	done
 ) &
 
-# --- Kernel (KERNEL_UPDATE, device.conf: athena on mainline). The slot carries the kernel it was
-# tested with, and once the slot is good that kernel goes to the boot partition with the unit's own
-# amp tuning (`techo5 tools kernel`, echod/internal/update/kernel). A new kernel is on trial as a new
+# --- Kernel (KERNEL_UPDATE, device.conf: athena on mainline, the Skylight). The slot carries the
+# kernel it was tested with, and once the slot is good that kernel goes to the kernel's partition:
+# athena's boot, with the unit's own amp tuning; the Skylight's recovery, as it is (`techo5 tools
+# kernel`, echod/internal/update/kernel). A new kernel is on trial as a new
 # slot is: every boot takes a try, a daemon that settles commits it, and one that never settles
 # reboots at TRIAL_TIMEOUT to use up a try; out of tries, the previous kernel is put back.
 # Settled means more for a kernel than for a slot: Wi-Fi, the sound card and the backlight are the
