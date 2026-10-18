@@ -14,6 +14,9 @@ U-Boot cannot pick one of its own) and the boot logo. `uname -r` says `6.18.56-s
 - `pack-sky.py`: the boot image. Its header ID is checked against the stock image's algorithm.
 - `mklogo.py`: the kernel's boot logo and U-Boot's `logo.bmp`, from `logo/TECHO5_logo.png`.
 - `bench/`: the bench initramfs (a root shell on USB serial, `BENCH=1`).
+- `installer/`: the installer image's `/init` (`INSTALLER=1`): it runs `../install/install.sh` on the
+  set `tools/install-skylight.py` stages on `/cache`, then restarts into TECHO5, or into Android when
+  it stopped before writing anything.
 
 Things learned on the unit:
 

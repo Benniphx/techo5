@@ -15,6 +15,10 @@
 #   JOBS       parallel make jobs (default: nproc)
 #   BENCH      also pack boot-skylight-bench.img: the same kernel with a bench initramfs (a root
 #              shell on USB serial; bench/init), which needs BUSYBOX (a static arm64 busybox)
+#   INSTALLER  also pack boot-skylight-installer.img: the same kernel with the installer initramfs
+#              (installer/init, ../install/install.sh and an empty techo5-data image), which
+#              tools/install-skylight.py writes into recovery for the one boot that installs; needs
+#              BUSYBOX and mke2fs (e2fsprogs)
 #   CROSS_COMPILE  default aarch64-linux-gnu- (built and tested with Ubuntu 24.04's GCC 13.3)
 #
 # Needs: curl, sha256sum, tar, xz, make, gcc, bison, flex, bc, perl, python3 with Pillow, cpio, gzip,
@@ -130,5 +134,26 @@ if [ -n "${BENCH:-}" ]; then
 		--ramdisk "$OUT/bench.cpio.gz" --logo "$OUT/logo.bmp" --cmdline "$CMDLINE rdinit=/init" \
 		--out "$OUT/boot-skylight-bench.img"
 	(cd "$OUT" && sha256sum boot-skylight-bench.img > boot-skylight-bench.img.sha256)
+fi
+# 7. The installer image, on request: the same kernel with install.sh in its initramfs, run by
+#    installer/init on the set install-skylight.py stages on /cache
+if [ -n "${INSTALLER:-}" ]; then
+	[ -x "${BUSYBOX:-}" ] || { echo "INSTALLER needs BUSYBOX, a static arm64 busybox" >&2; exit 1; }
+	command -v mke2fs >/dev/null || { echo "INSTALLER needs mke2fs (e2fsprogs)" >&2; exit 1; }
+	I=$WORK/installer
+	rm -rf "$I" && mkdir -p "$I/bin" "$I/dev" "$I/proc" "$I/sys" "$I/tmp" "$I/cache" "$I/installer"
+	cp "$BUSYBOX" "$I/bin/busybox"
+	sed 's/$//' "$HERE/installer/init" > "$I/init" && chmod 755 "$I/init"
+	sed 's/$//' "$HERE/../install/install.sh" > "$I/installer/install.sh" && chmod 755 "$I/installer/install.sh"
+	${CROSS_COMPILE}gcc -static -O2 -o "$I/bin/reboot-normal" "$HERE/bench/reboot-normal.c"
+	# techo5-data as the first boot finds it: an empty ext4 of 64 MiB, which the store's /init grows
+	# online to fill its partition. Fixed UUID, hash seed and time, so the image is reproducible.
+	rm -f "$WORK/data.img"
+	E2FSPROGS_FAKE_TIME=$(date -u -d "${KBUILD_BUILD_TIMESTAMP% UTC}" +%s) mke2fs -q -t ext4 -b 4096 -m 0 		-L techo5-data -U 5ec0da7a-7ec5-4d5a-9a7a-000000000001 		-E root_owner=0:0,hash_seed=5ec0da7a-7ec5-4d5a-9a7a-000000000002 "$WORK/data.img" 64M
+	echo "$(stat -c %s "$WORK/data.img") $(sha256sum "$WORK/data.img" | cut -d' ' -f1)" > "$I/installer/data.img.info"
+	gzip -9 -n -c "$WORK/data.img" > "$I/installer/data.img.gz"
+	(cd "$I" && find . | sort | cpio -o -H newc --quiet --owner=0:0 | gzip -9 -n) > "$OUT/installer.cpio.gz"
+	python3 "$HERE/pack-sky.py" --kernel "$OUT/Image" --dtb "$OUT/rk3566-skylight-cal150.dtb" 		--ramdisk "$OUT/installer.cpio.gz" --logo "$OUT/logo.bmp" 		--cmdline "$CMDLINE rdinit=/init techo5.installer=1" --out "$OUT/boot-skylight-installer.img"
+	(cd "$OUT" && sha256sum boot-skylight-installer.img > boot-skylight-installer.img.sha256)
 fi
 cat "$OUT"/*.sha256
