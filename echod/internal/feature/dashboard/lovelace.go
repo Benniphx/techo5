@@ -923,6 +923,9 @@ func widths(q string) (lo, hi int) {
 func (cd cond) met(l look) bool {
 	switch cd.kind {
 	case "state":
+		if len(cd.state) == 0 && len(cd.not) == 0 {
+			return false // a condition with no state to hold against, which Home Assistant does not meet
+		}
 		s := l.states[cd.entity].State
 		if len(cd.state) > 0 && !contains(cd.state, s) {
 			return false

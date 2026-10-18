@@ -222,6 +222,34 @@ func TestVisibilityByEntityIDAndWithNoEntity(t *testing.T) {
 	}
 }
 
+// A state condition with neither state nor state_not says nothing to hold the entity against.
+// Home Assistant's frontend does not meet it, so the card stays hidden here too.
+func TestVisibilityWithNoStateToMatch(t *testing.T) {
+	var cards []any
+	if err := json.Unmarshal([]byte(`[
+	  {"type": "tile", "entity": "switch.no_state", "visibility": [{"condition": "state", "entity": "light.a"}]},
+	  {"type": "tile", "entity": "switch.not_off", "visibility": [{"condition": "state", "entity": "light.a", "state_not": "off"}]}
+	]`), &cards); err != nil {
+		t.Fatal(err)
+	}
+	c := &compiler{seen: map[string]bool{}, need: needs{graphs: map[string]int{}}}
+	l := &lovelaceSource{sects: [][]node{c.cards(cards)}}
+	lk := look{states: map[string]hass.LiveEntity{
+		"light.a": {ID: "light.a", State: "on", Attrs: map[string]any{}},
+	}, width: 960}
+	var got []string
+	for _, s := range l.sections(lk) {
+		for _, b := range s.Blocks {
+			for _, t := range b.Tiles {
+				got = append(got, t.Name)
+			}
+		}
+	}
+	if len(got) != 1 || got[0] != "switch.not_off" {
+		t.Errorf("light on: %v, want only the card with state_not", got)
+	}
+}
+
 // A grid of nothing but pictures, with columns, is a gallery: abreast, each picture a tap of its own.
 // A picture without a tap_action, or with "none", stays something to look at, and a grid with
 // anything else in it stays its cards in turn.
