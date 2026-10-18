@@ -82,10 +82,20 @@ func (r *renderer) nextUpRect(s scene) (box image.Rectangle, twoLines bool) {
 }
 
 // drawNextUp draws the card.
+//
+// Over a slideshow photo the card is drawn as on the plain ground, outside the photo's care for its
+// words (readable.go): it is a box of its own, opaque, so the words on it read without help. Through
+// that care they did not: the first pass laid a dark patch under each of its lines, which spilled past
+// the card's rounded corners onto the photo, and the second turned every small word photoGold, so the
+// filled countdown chip read gold on amber and "Next:", the title and the time lost their colors.
 func (r *renderer) drawNextUp(s scene) {
 	c := s.nextUp
-	if c == nil {
+	if c == nil || r.over.record {
 		return
+	}
+	if photo := r.over.photo; photo != nil {
+		r.over.photo = nil
+		defer func() { r.over.photo = photo }()
 	}
 	box, two := r.nextUpRect(s)
 	r.roundRect(box, r.s(18), calWash(16))

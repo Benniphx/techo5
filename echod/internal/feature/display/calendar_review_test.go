@@ -5,6 +5,9 @@ package display
 import (
 	"fmt"
 	"image"
+	"image/draw"
+	"image/png"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -517,5 +520,67 @@ func TestTheMonthsEventsAreJoinedOnce(t *testing.T) {
 	}
 	if took := time.Since(start); took > 2*time.Second {
 		t.Errorf("joining took %v", took)
+	}
+}
+
+// The next-up card over a slideshow photo is the card as it is on the plain ground (drawNextUp): inside
+// its rounded corners not a pixel differs, so the filled chip is still walnut on amber and its words
+// keep their colors, and round it the photo is as it is with no card, with no patch spilling past its
+// corners. A white photo and a gradient, on the usual theme and on Paper, which a photo turns dark
+// (onPhoto). With SHOW_PREVIEW set, each is written there to look at.
+func TestTheNextUpCardOverAPhotoIsTheCard(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	keepPalette(t)
+	dir := os.Getenv("SHOW_PREVIEW")
+	white := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+	draw.Draw(white, white.Rect, image.White, image.Point{}, draw.Src)
+	photos := map[string]*image.RGBA{"white": white, "gradient": gradientPair(showWide, showHigh)}
+	for _, theme := range []string{"", "Paper"} {
+		if theme != "" {
+			applyTheme(themes[themeIndex(theme)])
+		}
+		frame := func(s scene) (*image.RGBA, *renderer) {
+			img := image.NewRGBA(image.Rect(0, 0, showWide, showHigh))
+			r := newRenderer(img)
+			r.draw(s)
+			return img, r
+		}
+		var plain *image.RGBA
+		var r *renderer
+		onPhoto(func() { plain, r = frame(scene{now: lookNow, phase: "idle", nextUp: lookCard()}) })
+		box, _ := r.nextUpRect(scene{nextUp: lookCard()})
+		inside := box.Inset(r.s(18))
+		for name, photo := range photos {
+			with, _ := frame(scene{now: lookNow, phase: "idle", nextUp: lookCard(), slideshow: photo})
+			without, _ := frame(scene{now: lookNow, phase: "idle", slideshow: photo})
+			what := name + " " + theme
+			for y := inside.Min.Y; y < inside.Max.Y; y++ {
+				for x := inside.Min.X; x < inside.Max.X; x++ {
+					if with.RGBAAt(x, y) != plain.RGBAAt(x, y) {
+						t.Fatalf("%s: the card over the photo differs at %d,%d: %v, on the plain ground %v", what, x, y, with.RGBAAt(x, y), plain.RGBAAt(x, y))
+					}
+				}
+			}
+			// The corners and the ends: above the card's middle is the date's own patch, which sits a little
+			// higher with a card under it.
+			ring := box.Inset(-r.s(4))
+			for _, p := range []image.Point{ring.Min, {ring.Max.X - 1, ring.Min.Y}, {ring.Min.X, ring.Max.Y - 1}, {ring.Max.X - 1, ring.Max.Y - 1},
+				{ring.Min.X, box.Min.Y + box.Dy()/2}, {ring.Max.X - 1, box.Min.Y + box.Dy()/2}} {
+				if with.RGBAAt(p.X, p.Y) != without.RGBAAt(p.X, p.Y) {
+					t.Errorf("%s: by the card at %v the photo is %v, with no card %v", what, p, with.RGBAAt(p.X, p.Y), without.RGBAAt(p.X, p.Y))
+				}
+			}
+			if dir == "" {
+				continue
+			}
+			f, err := os.Create(filepath.Join(dir, "next-up-over-"+name+map[string]string{"": "", "Paper": "-paper"}[theme]+".png"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := png.Encode(f, with); err != nil {
+				t.Fatal(err)
+			}
+			f.Close()
+		}
 	}
 }
