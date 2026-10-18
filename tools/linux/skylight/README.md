@@ -44,37 +44,51 @@ and the rest of Android are left as they were.
   which makes `boot-skylight.img`; `BENCH=1` also makes a bench image whose initramfs is a root shell
   on USB serial.
 - `init`, `mkstore.sh`, `rescue-profile.sh`, `overlay/`: the store and the board's `device.conf`.
-- `install/`: `mkgpt.py` (the new GPT, made from the unit's own) and `install.sh` (the writes).
+- `install/`: `mkgpt.py` (the new GPT, made from the unit's own table and size) and `install.sh`
+  (the writes, each read back), which `tools/install-skylight.py` stages and the installer image runs.
+- `kernel/installer/`: the installer image's `/init` (`INSTALLER=1` in `kernel/build.sh`).
 
 ## The unit's own firmware
 
 The Wi-Fi and Bluetooth firmware are the vendor's, from the unit's stock vendor partition
 (`/vendor/etc/firmware`: `fw_bcm43456c5_ag.bin`, `nvram_ap6256.txt`, `BCM4345C5.hcd`). They are
-never published: `mkstore.sh -F <dir>` puts a unit's own files into its store image, which is then
-for that unit only.
+never published. `tools/install-skylight.py` copies them from the unit into its backup folder and,
+during the install, back into that unit's store (`install.sh`), so the store image stays the same for
+everyone (`mkstore.sh -k none`, no `-F`). For bench work, `mkstore.sh -F <dir>` puts a unit's own
+files into its store image, which is then for that unit only.
 
-## Installing (bench)
+## Installing
 
-On the unit read so far, stock Android is a userdebug build with ADB open and `adb root` working,
-which is what this relies on. Every step but the last reads only.
+`tools/install-skylight.py` does it in one command, over adb from stock Android, on the firmware
+and hardware it knows (D156.V1.3; see [docs/install-skylight.md](../../../docs/install-skylight.md)):
 
-1. Keep a full copy of the eMMC first (`adb root`, then `dd` of the whole block device over
-   `adb exec-out`), and check its hashes against the device's own. It is the only way back.
-2. Copy the vendor firmware out (`adb pull /vendor/etc/firmware/...`).
-3. Build the kernel (`kernel/build.sh`, with `BENCH=1`), the rootfs
-   (`tools/linux/deploy-rootfs.sh --out` with `DEVICE_OVERLAY=tools/linux/skylight/overlay
-   EXTRA_PACKAGES=busybox-extras`) and the store (`mkstore.sh -F <firmware>`).
-4. Make the GPT from the unit's own first 32 MiB (`install/mkgpt.py`) and check it with `sgdisk -v`
-   on a sparse image of the eMMC's size.
-5. Put the set on `/cache` (the GPT halves, `store.img`, a small ext4 `data.img`, the boot image,
-   `install.sh` and its `SHA256SUMS`), write the bench image into `recovery` and `adb reboot
-   recovery`. Note: Android's `reboot recovery` also writes `boot-recovery` into `misc`; the bench
-   init clears it so that the next reboot is Android again.
-6. From the bench shell (USB serial), mount `/cache` read-only and run `install.sh`, which writes and
-   reads back each part, and finally sets `misc` so that every boot is TECHO5.
-7. On TECHO5, grow `techo5-data` to fill its partition (`resize2fs`, online).
+1. Checks: the firmware's fingerprint, `adb root`, the board, the eMMC's size, the stock partition
+   table (both copies), the vendor firmware, room on `/cache`.
+2. A full copy of the eMMC (`dd` of the whole block device over `adb exec-out`), checked against the
+   unit's own sha256 of every partition Android does not have mounted read-write. Nothing is written
+   without it.
+3. The vendor firmware into the backup folder (`adb pull`), never into a release or the repository.
+4. The new GPT from the unit's own (`install/mkgpt.py`): every LBA from its table and size.
+5. After the confirm: the set on `/cache/techo5-install` (`install.conf` with the unit's geometry, the
+   GPT halves, `store.img.gz`, the boot image, the firmware, the settings, `SHA256SUMS`), the
+   installer image into `recovery`, `adb reboot recovery`. Android's `reboot recovery` writes
+   `boot-recovery` into `misc`; the installer's `/init` clears it first, so that anything that stops
+   before the end restarts into Android.
+6. The installer image's `/init` copies the set into RAM, unmounts `/cache` and runs `install.sh`,
+   which writes and reads back each part: the GPT, `techo5-store`, `techo5-data` (an empty 64 MiB
+   ext4 from the installer image), the firmware into the store's `/lib/firmware/brcm`, the settings
+   into `techo5-data`, the boot image into `recovery` and, last, `boot-recovery` into `misc`. Then it
+   restarts into TECHO5.
+7. TECHO5's `/init` grows `techo5-data` to fill its partition (`resize2fs`, online) on every boot;
+   once it does, there is nothing to do.
+
+For bench work, `kernel/build.sh` with `BENCH=1` makes the bench image (a root shell on USB serial
+that goes back to Android by itself); `install.sh SETDIR` can be run from it by hand on a set made
+the same way.
 
 ## Back to Android
 
-Write the first 2048 bytes of `misc` back to zeros: the next boot is stock Android, which finds no
-userdata and starts fresh. For the unit as it came, write back the eMMC copy from step 1.
+The backup, written back in Loader mode with `rkdeveloptool` (the installer writes the steps, with
+the unit's own numbers, into the backup's `restore/RESTORE.txt`). Writing the first 2048 bytes of
+`misc` back to zeros is meant to start stock Android again with a fresh setup, but has not been
+tried: in TECHO5's table there is no `userdata` partition for Android to find.
