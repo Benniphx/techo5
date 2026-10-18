@@ -16,6 +16,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/micsilent"
 )
 
 // dump records what is heard while files/dump-echo exists: echo-mic.raw holds 16 kHz S16LE pairs,
@@ -73,6 +74,9 @@ type socketCapture struct {
 	from  int64 // the microphone sample env starts at
 
 	dumpFile *os.File
+
+	// flat notices Android handing over nothing but silence (flat_panel.go).
+	flat flatWatch
 }
 
 // openDevice dials the app's microphone socket: on a panel the capture is the app's stream, not ALSA.
@@ -82,6 +86,8 @@ func openDevice() (capture, error) {
 		conn, err := net.Dial("unix", micSocket)
 		if err == nil {
 			c := &socketCapture{conn: conn, lag: savedLag()}
+			// Silent as the last connection left it, so sound on this one clears it (flat_panel.go).
+			c.flat.seed(micsilent.Silent())
 			if c.lag > 0 {
 				slog.Info("echo reference delay remembered", "delay_ms", c.lag*1000/Rate)
 			}
@@ -112,6 +118,14 @@ func (c *socketCapture) Read(p []byte) (int, error) {
 	in := c.in[:frames*2]
 	if _, err := io.ReadFull(c.conn, in); err != nil {
 		return 0, err
+	}
+	if silent, changed := c.flat.add(in); changed {
+		if silent {
+			slog.Error("the microphone has been silent for a while: Android may have taken it away (its microphone switch, or another app); the wake word cannot be heard", "seconds", flatAfter)
+		} else {
+			slog.Info("the microphone hears again")
+		}
+		micsilent.Set(silent)
 	}
 
 	c.lineUp()
