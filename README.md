@@ -84,7 +84,7 @@ The bigger changes of September and October 2026. Every release lists the rest.
   word or voice, and no phone calls or intercom. One command installs it over adb from its stock
   firmware, after a full backup of the unit; it has been tried on one unit. Install:
   [docs/install-skylight.md](docs/install-skylight.md)
-- 📱 **TECHO5 on a tablet, no unlock** (v1.2.24). TECHO5 Panel is an Android app with the same daemon
+- 📱 **TECHO5 on a tablet, no unlock** (v1.3.0). TECHO5 Panel is an Android app with the same daemon
   inside: Home Assistant adds it like an Echo, with the same wake words, screens, timers, alarms,
   intercom and announcements. No unlock and no root, on tablets and the Meta Portal. Tested on a Fire
   HD 8 (10th gen), a Galaxy Tab S6 Lite and a Meta Portal (2nd gen); other Android 7.1+ tablets may
