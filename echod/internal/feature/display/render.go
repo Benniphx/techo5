@@ -633,23 +633,34 @@ func (r *renderer) draw(s scene) {
 			// a screen filled with warm color is worth more than the backlight on its own.
 			r.sunrisePage(s, s.sunrise, s.sunriseFace)
 		} else if s.slideshowScreensaver != nil {
-			r.slideshowScreensaverPage(s)
+			// Over a photo, captions and all, a light theme draws as a dark one would (onPhoto).
+			onPhoto(func() { r.slideshowScreensaverPage(s) })
 		} else if s.nowPlaying {
 			r.nowPlaying(s)
 		} else {
+			// walnut is read inside, so the patches are made of the palette onPhoto puts in force.
+			page := func() { r.readableOver(behind, walnut, slideshowWash, func() { r.bigClock(s) }) }
 			if s.slideshow != nil {
-				r.slideshowBackground(s.slideshow)
-				r.artWeather(s)
 				behind = s.slideshow
+				onPhoto(func() {
+					r.slideshowBackground(s.slideshow)
+					r.artWeather(s)
+					page()
+				})
+			} else {
+				page()
 			}
-			r.readableOver(behind, walnut, slideshowWash, func() { r.bigClock(s) })
 			if s.callButton {
 				r.callButtonDraw()
 			}
 		}
 	}
 	// The footer's words sit on the photo too, when there is one.
-	r.readableOver(behind, walnut, slideshowWash, func() { r.footer(s) })
+	if behind != nil {
+		onPhoto(func() { r.readableOver(behind, walnut, slideshowWash, func() { r.footer(s) }) })
+	} else {
+		r.footer(s)
+	}
 	if s.strip && s.phase == "idle" && s.sunrise == 0 {
 		r.musicStrip(s)
 	}

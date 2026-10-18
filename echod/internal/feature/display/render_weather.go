@@ -51,7 +51,13 @@ func (r *renderer) weatherPage(s scene) {
 		big = fmt.Sprintf("%.0f°", days[0].High)
 	}
 	r.text(r.big, big, r.margin+r.s(170), r.s(225), cream)
-	r.text(r.body, conditionWords(cond), r.margin, r.s(300), sunPale)
+	// The condition in the sun's pale gold, which a light theme's ground all but swallows: a deeper
+	// gold there.
+	words := sunPale
+	if !dark() {
+		words = sunDeep
+	}
+	r.text(r.body, conditionWords(cond), r.margin, r.s(300), words)
 	if len(days) > 0 {
 		r.text(r.small, fmt.Sprintf("High %.0f°   Low %.0f°", days[0].High, days[0].Low), r.margin, r.s(345), dim)
 		if days[0].Rain >= 0 {
