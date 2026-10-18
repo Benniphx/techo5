@@ -523,6 +523,29 @@ func TestTheMonthsEventsAreJoinedOnce(t *testing.T) {
 	}
 }
 
+// Two events with the same calendar, title and start that mergeSame keeps apart, a different end or
+// one all day, are kept apart across the months too; two alike in one month are as that month has
+// them; and a date past 2262 is told apart by its time as any other.
+func TestTheMonthsJoinTellApartWhatAMonthDoes(t *testing.T) {
+	at := func(y, d, h int) time.Time { return time.Date(y, 10, d, h, 0, 0, 0, time.Local) }
+	short := hass.Event{Calendar: calFamily, Summary: "Trip", Start: at(2026, 30, 9), End: at(2026, 30, 12)}
+	long := short
+	long.End = at(2026, 30, 9).AddDate(0, 0, 4)
+	allDay := short
+	allDay.AllDay = true
+	oct := []hass.Event{short, long, allDay, short}
+	nov := []hass.Event{short, long, allDay}
+	if got := joinMonths([][]hass.Event{oct, nov}); len(got) != 4 {
+		t.Errorf("%d events; want 4: the three kept apart, and the month's own two alike", len(got))
+	}
+	far := hass.Event{Calendar: calFamily, Summary: "Far", Start: at(2400, 1, 9), End: at(2400, 1, 10)}
+	later := far
+	later.Start, later.End = at(2400, 1, 11), at(2400, 1, 12)
+	if got := joinMonths([][]hass.Event{{far}, {far, later}}); len(got) != 2 {
+		t.Errorf("%d events past 2262; want 2", len(got))
+	}
+}
+
 // The next-up card over a slideshow photo is the card as it is on the plain ground (drawNextUp): inside
 // its rounded corners not a pixel differs, so the filled chip is still walnut on amber and its words
 // keep their colors, and round it the photo is as it is with no card, with no patch spilling past its

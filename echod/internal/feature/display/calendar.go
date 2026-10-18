@@ -70,22 +70,34 @@ func monthsEvents(from, to time.Time) ([]hass.Event, bool) {
 }
 
 // joinMonths is the months' events one after another, an event in more than one of them (one running
-// across the turn of a month) kept the first time: the same calendar, title and start. Looked up in a
-// map, where a search of those kept was thousands of comparisons for each of thousands of events.
+// across the turn of a month) kept the first time: the same calendar, title, start, end and
+// all-day-ness, as mergeSame tells events apart, so two it keeps apart in a month stay apart here. Only
+// against the months before: two alike in one month are as that month has them. Looked up in a map,
+// where a search of those kept was thousands of comparisons for each of thousands of events. A time
+// is its seconds and nanoseconds, which hold any date, where UnixNano holds none past 2262.
 func joinMonths(months [][]hass.Event) []hass.Event {
 	type same struct {
-		calendar, summary string
-		start             int64
+		calendar, summary  string
+		start, end         int64
+		startNano, endNano int
+		allDay             bool
+	}
+	key := func(e hass.Event) same {
+		return same{e.Calendar, e.Summary, e.Start.Unix(), e.End.Unix(), e.Start.Nanosecond(), e.End.Nanosecond(), e.AllDay}
 	}
 	var events []hass.Event
 	seen := map[same]bool{}
 	for _, more := range months {
+		var added []same
 		for _, e := range more {
-			k := same{e.Calendar, e.Summary, e.Start.UnixNano()}
+			k := key(e)
 			if !seen[k] {
-				seen[k] = true
+				added = append(added, k)
 				events = append(events, e)
 			}
+		}
+		for _, k := range added {
+			seen[k] = true
 		}
 	}
 	return events
