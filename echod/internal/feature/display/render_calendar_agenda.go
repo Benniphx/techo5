@@ -45,8 +45,15 @@ func (r *renderer) calendarAgendaRefined(v calendarView, l calLook) {
 	timeW := max(r.width(r.tiny, clockText(atHour(v.now, 10))), r.width(r.tiny, "All day")) + r.s(14)
 	first := min(max(v.scroll, 0), most)
 	filled := true // the first countdown is the next event's, in the accent
-	y := top
+	y, shown := top, 0
+	defer func() {
+		// A swipe moves a page of these rows less one, however many the page held.
+		r.calMu.Lock()
+		r.calAgendaStep = max(shown-1, 1)
+		r.calMu.Unlock()
+	}()
 	for i := first; i < len(rows) && y+height(rows[i]) <= bottom; i++ {
+		shown++
 		row := rows[i]
 		h := height(row)
 		if row.ev == nil {

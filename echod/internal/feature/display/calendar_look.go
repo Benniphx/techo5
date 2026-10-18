@@ -228,7 +228,7 @@ func (d *Display) lookChoices() []setup.CalendarChoice {
 // toggleHidden hides a calendar's events on this screen, or shows them again: a chip on the calendar
 // page.
 func toggleHidden(cal string) {
-	hidden := slices.Clone(config.Get().Calendar.Hidden)
+	hidden := hiddenHere(config.Get().Calendar) // those no longer shown go when the list is next saved
 	if i := slices.Index(hidden, cal); i >= 0 {
 		hidden = slices.Delete(hidden, i, i+1)
 	} else {

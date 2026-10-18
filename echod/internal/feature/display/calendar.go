@@ -41,7 +41,7 @@ func (d *Display) openCalendar(agenda bool) bool {
 	now := time.Now()
 	d.mu.Lock()
 	d.calUntil, d.calMonth, d.calDay, d.calDetail = now.Add(calendarShow), firstOfMonth(now), time.Time{}, nil
-	d.calAgenda, d.calScroll, d.calKept, d.calWeek, d.calFromWeek = agenda, 0, 0, false, false
+	d.calAgenda, d.calScroll, d.calKept, d.calWeek, d.calFromWeek, d.calChips = agenda, 0, 0, false, false, false
 	d.closeAlert()
 	d.weatherUntil, d.sheet, d.dash, d.drawer = time.Time{}, false, false, false
 	d.mu.Unlock()
@@ -91,7 +91,7 @@ func (d *Display) calendarUp() bool {
 func (d *Display) calendarScene(s *scene, now time.Time) {
 	d.mu.Lock()
 	up := now.Before(d.calUntil) && (s.phase == "idle" || s.phase == "lingering")
-	month, day, agenda, detail, scroll, week := d.calMonth, d.calDay, d.calAgenda, d.calDetail, d.calScroll, d.calWeek
+	month, day, agenda, detail, scroll, week, chips := d.calMonth, d.calDay, d.calAgenda, d.calDetail, d.calScroll, d.calWeek, d.calChips
 	d.mu.Unlock()
 	if !up {
 		return
@@ -115,7 +115,7 @@ func (d *Display) calendarScene(s *scene, now time.Time) {
 	c := config.Get().Calendar
 	s.showCalendar = true
 	s.cal = calendarView{month: month, day: day, week: week, agenda: agenda, detail: detail, scroll: scroll, events: events,
-		loaded: loaded, names: names, order: h.CalendarSources(), hidden: c.Hidden, now: now}
+		loaded: loaded, names: names, order: h.CalendarSources(), hidden: hiddenHere(c), chipsOpen: chips, now: now}
 	if !c.NoWeather {
 		s.cal.forecast = h.Forecast()
 	}
@@ -182,10 +182,10 @@ func (d *Display) calendarGesture(g touch.Gesture) {
 				step = -step
 			}
 			events, _ := home.Get().EventsOn(d.calDay)
-			events = visibleEvents(events, config.Get().Calendar.Hidden)
+			events = visibleEvents(events, hiddenHere(config.Get().Calendar))
 			d.calScroll = min(max(d.calScroll+step, 0), max(len(events)-d.r.calendarDayRows(), 0))
 		case agenda:
-			step := max(d.r.calendarDayRows()-1, 1)
+			step := d.r.calendarAgendaStep()
 			if g.Kind == touch.SwipeDown {
 				step = -step
 			}
@@ -273,6 +273,10 @@ func (d *Display) calendarGesture(g touch.Gesture) {
 		d.calDetail = &ev
 	case calChip:
 		hide = hit.cal
+	case calChipsMore:
+		d.calChips = true
+	case calChipsDone:
+		d.calChips = false
 	case calLater:
 		d.r.calMu.Lock()
 		tl := d.r.calTimeline

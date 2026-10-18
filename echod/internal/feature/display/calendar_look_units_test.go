@@ -22,11 +22,14 @@ import (
 func TestKeywordIcons(t *testing.T) {
 	for title, want := range map[string]string{
 		"Alex's birthday": "cake-variant", "Birthdays at school": "cake-variant", "Trash day": "trash-can",
-		"Recycling pickup": "trash-can", "Flight to Denver": "airplane", "Fly home": "airplane",
-		"Dentist appointment": "tooth", "Doctor": "stethoscope", "Eye appointment": "stethoscope",
-		"Soccer practice": "soccer", "Piano practice": "soccer", "Picture day": "school",
+		"Recycling pickup": "trash-can", "Flight to Denver": "airplane", "Fly to Denver": "airplane",
+		"Dentist appointment": "tooth", "Doctor": "stethoscope", "Dr. Lee": "stethoscope",
+		"Annual physical": "stethoscope", "Soccer practice": "soccer", "Picture day": "school",
 		"Parent-teacher night": "school", "Vacation": "beach", "Holiday party": "beach",
 		"Team standup": "", "Butterfly garden": "", "Book club": "",
+		// Whole words only, and no word that means too many things alone.
+		"Flynn's party": "", "Flyers game": "", "Trashy movie night": "", "Piano practice": "",
+		"Hair appointment": "", "Eye appointment": "", "Picture framing": "", "Fly home": "",
 	} {
 		if got := keywordIcon(title); got != want {
 			t.Errorf("%q: %q, want %q", title, got, want)
@@ -258,6 +261,7 @@ func TestCalendarFilter(t *testing.T) {
 	}
 
 	d, _ := calTestDisplay(t)
+	_ = config.Set().Calendar().Sources(lookOrder)
 	v := lookView()
 	draw := func() {
 		v.hidden = config.Get().Calendar.Hidden

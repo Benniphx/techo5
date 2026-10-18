@@ -151,6 +151,9 @@ func TestCalendarLookPreviews(t *testing.T) {
 			for _, panel := range showPanels() {
 				scenes := calendarScenes()
 				if vr.name == "" {
+					for name, s := range reviewScenes() {
+						scenes[name] = s
+					}
 					// The switches, under Settings, Display, Calendar.
 					for _, at := range []int{1200, 1500} {
 						scenes[fmt.Sprintf("settings-display-calendar-%d", at)] = scene{now: lookNow, phase: "idle", showSheet: true,
@@ -178,5 +181,33 @@ func TestCalendarLookPreviews(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// reviewScenes are the edges the calendar's look had to be fixed for: a dozen calendars' chips and their
+// list, a week with an event past midnight and one too short to see, and the card on the night light.
+func reviewScenes() map[string]scene {
+	many := lookView()
+	many.order, many.names = nil, map[string]string{}
+	for i, n := range []string{"Family", "Work", "School", "Soccer", "Piano", "Book club", "Grandma",
+		"Neighborhood", "Holidays", "Trash pickup", "Birthdays", "Garden"} {
+		id := fmt.Sprintf("calendar.c%d", i)
+		many.order, many.names[id] = append(many.order, id), n
+	}
+	many.hidden = []string{"calendar.c11"}
+	list := many
+	list.chipsOpen = true
+	week := lookView()
+	week.day, week.week = octDay(18), true
+	week.events = append(week.events,
+		hass.Event{Summary: "Night shift", Calendar: calWork, Start: oct(20, 20, 0), End: oct(21, 4, 0)},
+		hass.Event{Summary: "Call", Calendar: calWork, Start: oct(22, 12, 0), End: oct(22, 12, 5)},
+		hass.Event{Summary: "Meteor shower", Calendar: calFamily, Start: oct(24, 23, 30), End: oct(24, 23, 59)})
+	page := func(v calendarView) scene { return scene{now: lookNow, phase: "idle", showCalendar: true, cal: v} }
+	return map[string]scene{
+		"calendar-month-many":      page(many),
+		"calendar-month-many-list": page(list),
+		"calendar-week-edges":      page(week),
+		"clock-next-up-night":      {now: lookNow, phase: "idle", weather: hassSunny(), nextUp: lookCard(), nightDim: true},
 	}
 }

@@ -296,9 +296,14 @@ type Display struct {
 	// calWeek is the week view, of the week holding calDay; calFromWeek is a day opened from it, which its
 	// Done goes back to.
 	calWeek, calFromWeek bool
+	// calChips is the list of every calendar open over the month, from its chips' "+N".
+	calChips bool
 
 	// lookEnts are the calendar's look in Home Assistant (calendar_look.go), in lookSwitches' order.
 	lookEnts []esphome.Entity
+
+	// nextUp is the clock's next-up card as last worked out (render_nextup.go), by the frame loop alone.
+	nextUp nextUpKept
 
 	// The deck page (deck.go): up while deckUp, on deckPage, with deckPress the press being shown.
 	deckUp    bool
@@ -2494,6 +2499,7 @@ func (d *Display) frame() time.Duration {
 	// A page Home Assistant asked for at night is shown on the night light, not under the red clock.
 	s.redClock = d.nightGlow && config.Get().Screen.NightRed && !d.askedUp(now)
 	s.redStyle = config.Get().Screen.NightClockStyle
+	s.nightDim = d.nightGlow
 	d.mu.Unlock()
 	if s.showDrawer && s.drawerTab == drawerCameras {
 		s.cameras = home.Get().Cameras()
@@ -2525,7 +2531,6 @@ func (d *Display) frame() time.Duration {
 	s.weather = home.Get().Weather()
 	s.style = styleFactsFor(clockStyle(), now)
 	s.style.named = d.styleName(now)
-	s.nextUp = nextUpFor(s.style.style(), now)
 	d.calendarScene(&s, now)
 	d.alertScene(&s, now)
 	d.mu.Lock()
@@ -2602,6 +2607,10 @@ func (d *Display) frame() time.Duration {
 	}
 	idleSince := d.slideshowIdleSince
 	d.mu.Unlock()
+	// The clock's next-up card, only for a frame that draws the clock with an empty glance strip.
+	if boring && s.sunrise == 0 && !s.redClock && len(s.glance) == 0 {
+		s.nextUp = d.nextUp.card(s.style.style(), now)
+	}
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
 		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {

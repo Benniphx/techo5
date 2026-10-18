@@ -5,7 +5,9 @@ package display
 import (
 	"image"
 	"image/color"
+	"image/draw"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,25 +117,74 @@ func (r *renderer) chipFace(inLine bool) (font.Face, int) {
 	return r.tiny, r.s(38)
 }
 
-// chipWidth is how wide one calendar's chip is.
-func (r *renderer) chipWidth(name string, inLine bool) int {
+// chipName is a calendar's name on its chip, cut short when it is long, so one chip never takes a row.
+func (r *renderer) chipName(v calendarView, cal string, inLine bool) string {
 	f, _ := r.chipFace(inLine)
-	if inLine {
-		return r.width(f, name) + r.s(42)
-	}
-	return r.width(f, name) + r.s(60)
+	return clipText(r, f, v.name(cal), r.s(200))
 }
 
-// chipsWidth is how wide all the calendars' chips are together.
-func (r *renderer) chipsWidth(v calendarView, inLine bool) int {
+// chipWidth is how wide one calendar's chip is.
+func (r *renderer) chipWidth(v calendarView, cal string, inLine bool) int {
+	f, _ := r.chipFace(inLine)
+	if inLine {
+		return r.width(f, r.chipName(v, cal, inLine)) + r.s(42)
+	}
+	return r.width(f, r.chipName(v, cal, inLine)) + r.s(60)
+}
+
+// chipsWidth is how wide the chips of cals are together.
+func (r *renderer) chipsWidth(v calendarView, cals []string, inLine bool) int {
 	w := 0
-	for i, c := range v.order {
+	for i, c := range cals {
 		if i > 0 {
 			w += r.chipGap(inLine)
 		}
-		w += r.chipWidth(v.name(c), inLine)
+		w += r.chipWidth(v, c, inLine)
 	}
 	return w
+}
+
+// chipRowsMost is how many rows of chips the month gives up to them.
+const chipRowsMost = 2
+
+// moreChipWidth is how wide the "+N" chip is.
+func (r *renderer) moreChipWidth(n int) int {
+	f, _ := r.chipFace(false)
+	return r.width(f, "+"+strconv.Itoa(n)) + r.s(36)
+}
+
+// chipRows lays the calendars' chips out in rows no wider than room, at most chipRowsMost of them, and
+// says how many are left over for a "+N" chip at the end of the last, which opens the list of them all.
+// Where they do not all fit, the last row keeps room for that chip.
+func (r *renderer) chipRows(v calendarView, room int) (rows [][]string, more int) {
+	lay := func(reserve int) ([][]string, int) {
+		rows := [][]string{nil}
+		x := 0
+		for i, cal := range v.order {
+			w := r.chipWidth(v, cal, false)
+			if len(rows[len(rows)-1]) > 0 {
+				w += r.chipGap(false)
+			}
+			end := room
+			if len(rows) == chipRowsMost {
+				end -= reserve
+			}
+			if x+w > end && len(rows[len(rows)-1]) > 0 {
+				if len(rows) == chipRowsMost {
+					return rows, len(v.order) - i
+				}
+				rows, x = append(rows, nil), 0
+				w = r.chipWidth(v, cal, false)
+			}
+			rows[len(rows)-1] = append(rows[len(rows)-1], cal)
+			x += w
+		}
+		return rows, 0
+	}
+	if rows, more := lay(0); more == 0 {
+		return rows, 0
+	}
+	return lay(r.chipGap(false) + r.moreChipWidth(len(v.order)))
 }
 
 // chipGap is the room between two chips.
@@ -181,17 +232,17 @@ func (r *renderer) calWrap(f font.Face, s string, w int) []string {
 	return lines
 }
 
-// calChips draws a chip for each calendar from x, around cy: in its color while it is shown, an outline
-// with a crossed-out eye while it is hidden. A tap on one turns it over.
-func (r *renderer) calChips(v calendarView, x, cy int, inLine bool) {
+// calChips draws a chip for each of cals from x, around cy: in its color while it is shown, an outline
+// with a crossed-out eye while it is hidden. A tap on one turns it over. It says where it ended.
+func (r *renderer) calChips(v calendarView, cals []string, x, cy int, inLine bool) int {
 	f, h := r.chipFace(inLine)
 	dot, eye, gap := r.s(6), 16, r.s(30)
 	if !inLine {
 		dot, eye, gap = r.s(8), 20, r.s(36)
 	}
-	for _, cal := range v.order {
-		name := v.name(cal)
-		w := r.chipWidth(name, inLine)
+	for _, cal := range cals {
+		name := r.chipName(v, cal, inLine)
+		w := r.chipWidth(v, cal, inLine)
 		b := image.Rect(x, cy-h/2, x+w, cy-h/2+h)
 		base := cy + capHeight(f)/2
 		if slices.Contains(v.hidden, cal) {
@@ -210,6 +261,47 @@ func (r *renderer) calChips(v calendarView, x, cy int, inLine bool) {
 		}
 		r.calHitAdd(calHit{r: b.Inset(-r.s(3)), kind: calChip, cal: cal})
 		x += w + r.chipGap(inLine)
+	}
+	return x
+}
+
+// moreChip is the "+N" chip after the chips that fit, for the calendars that did not: a tap opens the
+// list of every calendar, where each can be turned off or on, so a hidden one is never out of reach.
+func (r *renderer) moreChip(n, x, cy int) {
+	f, h := r.chipFace(false)
+	b := image.Rect(x, cy-h/2, x+r.moreChipWidth(n), cy-h/2+h)
+	r.roundRect(b, h/2, calWash(30))
+	r.text(f, "+"+strconv.Itoa(n), b.Min.X+r.s(18), cy+capHeight(f)/2, cream)
+	r.calHitAdd(calHit{r: b.Inset(-r.s(3)), kind: calChipsMore})
+}
+
+// calChipsList is the list of every calendar over the page, from the "+N" chip: a chip each, in as many
+// columns as they need, and Done. A tap on a chip turns it over and leaves the list up; Done, or a tap
+// outside it, puts it away.
+func (r *renderer) calChipsList(v calendarView) {
+	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(color.NRGBA{0, 0, 0, 150}), image.Point{}, draw.Over)
+	r.calHitAdd(calHit{r: r.dst.Rect, kind: calChipsDone})
+	w, h := r.w*80/100, r.h*84/100
+	card := image.Rect((r.w-w)/2, (r.h-h)/2, (r.w+w)/2, (r.h+h)/2)
+	fill := color.RGBA{walnut.R/2 + 20, walnut.G/2 + 20, walnut.B/2 + 20, 255}
+	if !dark() {
+		fill = shift(walnut, -10)
+	}
+	r.roundRect(card, r.s(18), fill)
+	r.calHitAdd(calHit{r: card, kind: calInside})
+	r.text(r.small, "Calendars", card.Min.X+r.s(28), card.Min.Y+r.s(48), cream)
+	done := image.Rect(card.Max.X-r.s(130), card.Min.Y+r.s(14), card.Max.X-r.s(22), card.Min.Y+r.s(62))
+	r.roundRect(done, done.Dy()/2, calWash(30))
+	r.text(r.small, "Done", done.Min.X+(done.Dx()-r.width(r.small, "Done"))/2, done.Min.Y+r.s(36), cream)
+	r.calHitAdd(calHit{r: done.Inset(-r.s(6)), kind: calChipsDone})
+	top, rowH := card.Min.Y+r.s(84), r.s(48)
+	perCol := max((card.Max.Y-r.s(16)-top)/rowH, 1)
+	cols := (len(v.order) + perCol - 1) / perCol
+	colW := (card.Dx() - r.s(40)) / max(cols, 1)
+	for i, cal := range v.order {
+		x := card.Min.X + r.s(28) + (i/perCol)*colW
+		cy := top + (i%perCol)*rowH + rowH/2
+		r.calChips(v, []string{cal}, x, cy, false)
 	}
 }
 

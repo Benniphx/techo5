@@ -3,17 +3,39 @@
 package display
 
 import (
+	"fmt"
 	"image"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 )
 
 // The clock's next-up card: while an event is on, or one comes up today or within the next twelve
-// hours, the foot of the clock carries it in place of the glance strip, its time and how long until it,
-// and under it the days to a long event coming up ("Vacation in 11 days") and what comes after it. A
-// tap opens the calendar on its day. Not with the Dashboard and Agenda styles, which list the coming
-// events already, nor with the clock in a bottom corner, where the card would sit on it.
+// hours, the foot of the clock carries it, its time and how long until it, and under it the days to a
+// long event coming up ("Vacation in 11 days") and what comes after it. A tap opens the calendar on its
+// day. Only where the glance strip would have nothing to show: a strip with chips of its own (a door
+// open, the temperature) stays as it is, and there is no card. Not with the Dashboard and Agenda
+// styles, which list the coming events already, nor with the clock at a bottom position (Clock
+// position), where the card would sit on it.
+
+// nextUpKept is the card worked out for a minute, the events as they were, and the settings that
+// change it: a frame drawn in the same minute with nothing changed takes it as it is, rather than
+// reading two months' events and choosing again, which the clock would do every frame.
+type nextUpKept struct {
+	key  string
+	kept *nextUpCard
+}
+
+// card is nextUpFor, worked out again only when its key has changed.
+func (k *nextUpKept) card(style string, now time.Time) *nextUpCard {
+	c := config.Get().Calendar
+	key := fmt.Sprint(style, now.Unix()/60, home.Get().CalendarVersion(), c.NoNextUp, c.NoCountdowns, c.Sources, c.Hidden)
+	if key != k.key {
+		k.key, k.kept = key, nextUpFor(style, now)
+	}
+	return k.kept
+}
 
 // nextUpFor is the card for now in the clock style shown, or nil for none.
 func nextUpFor(style string, now time.Time) *nextUpCard {
@@ -22,7 +44,7 @@ func nextUpFor(style string, now time.Time) *nextUpCard {
 		return nil
 	}
 	events, _ := agendaEvents(now)
-	card, ok := pickNextUp(visibleEvents(events, c.Hidden), now)
+	card, ok := pickNextUp(visibleEvents(events, hiddenHere(c)), now)
 	if !ok {
 		return nil
 	}
@@ -68,6 +90,10 @@ func (r *renderer) drawNextUp(s scene) {
 	box, two := r.nextUpRect(s)
 	r.roundRect(box, r.s(18), calWash(16))
 	col := c.color
+	if s.nightDim {
+		// The night light: no filled accent or bright calendar color to light the room.
+		col = calFade(col, 0.4)
+	}
 	stripeTop, base := box.Min.Y+r.s(15), box.Min.Y+r.s(44)
 	if two {
 		stripeTop, base = box.Min.Y+r.s(18), box.Min.Y+r.s(47)
@@ -77,13 +103,13 @@ func (r *renderer) drawNextUp(s scene) {
 	right := box.Max.X - r.s(20)
 	if !config.Get().Calendar.NoCountdowns {
 		if t := countdownText(s.now, c.ev.Start, c.ev.End); t != "" {
-			right = r.countChip(t, right, base-r.s(11), true, r.tiny) - r.s(16)
+			right = r.countChip(t, right, base-r.s(11), !s.nightDim, r.tiny) - r.s(16)
 		}
 	}
 	x := box.Min.X + r.s(40)
 	r.text(r.small, "Next:", x, base, amber)
 	x += r.width(r.small, "Next:") + r.s(12)
-	when := "  ·  " + clockText(c.ev.Start)
+	when := "  ·  " + nextWhen(c.ev, s.now)
 	title := clipText(r, r.small, c.ev.Summary, right-x-r.width(r.small, when))
 	r.text(r.small, title, x, base, cream)
 	x += r.width(r.small, title)
@@ -96,7 +122,7 @@ func (r *renderer) drawNextUp(s scene) {
 		half := box.Min.X + box.Dx()/2
 		thenX := box.Max.X - r.s(20)
 		if c.then != nil {
-			t := "Then: " + c.then.Summary + " · " + clockText(c.then.Start)
+			t := "Then: " + c.then.Summary + " · " + nextWhen(*c.then, s.now)
 			room := thenX - half
 			if c.big == nil {
 				room = thenX - box.Min.X - r.s(40)

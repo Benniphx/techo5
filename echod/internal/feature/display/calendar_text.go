@@ -19,31 +19,43 @@ import (
 // event, which events stand side by side on a day's hours, which run as one bar across a week, the
 // day's forecast, and the clock's next event. None of it draws, so all of it can be tested by itself.
 
-// keywordIcons are the small pictures put before an event's title, by a word in it: the first entry
-// with a word the title has wins, so "Dentist appointment" is the tooth and not the stethoscope. A word
-// matches the start of one of the title's words ("birthday" is in "Birthdays"), and a phrase matches
-// those words in a row. English words only, as the rest of the calendar is; one more is a line here.
+// keywordIcons are the small pictures put before an event's title, by words in it: the first entry
+// with one of its words or phrases in the title wins, so "Dentist appointment" is the tooth. Each is
+// matched as whole words, so "Flyers game" is no flight and "Trashy movie night" no trash day, and a
+// word that means too many things alone ("practice", "appointment", "picture") only counts in the
+// phrase that pins it down. English only, as the rest of the calendar is; one more is a line here.
 var keywordIcons = []struct {
 	words []string
 	icon  string // a Material Design Icons name (lib/mdi)
 }{
-	{[]string{"birthday", "bday"}, "cake-variant"},
-	{[]string{"trash", "garbage", "recycling", "recycle"}, "trash-can"},
-	{[]string{"flight", "fly", "airport"}, "airplane"},
-	{[]string{"dentist", "orthodontist"}, "tooth"},
-	{[]string{"doctor", "appointment", "checkup", "check-up"}, "stethoscope"},
-	{[]string{"soccer", "practice"}, "soccer"},
-	{[]string{"school", "picture", "parent-teacher"}, "school"},
-	{[]string{"vacation", "holiday"}, "beach"},
+	{[]string{"birthday", "birthdays", "bday", "b-day"}, "cake-variant"},
+	{[]string{"trash", "trash day", "garbage", "recycling", "recycle"}, "trash-can"},
+	{[]string{"flight", "flights", "fly to", "flying", "airport"}, "airplane"},
+	{[]string{"dentist", "orthodontist", "dental"}, "tooth"},
+	{[]string{"doctor", "doctors", "dr", "checkup", "check-up", "physical", "pediatrician"}, "stethoscope"},
+	{[]string{"soccer", "soccer practice", "soccer game"}, "soccer"},
+	{[]string{"school", "picture day", "parent-teacher", "parent teacher"}, "school"},
+	{[]string{"vacation", "holiday", "holidays"}, "beach"},
 }
+
+// keywordPlain is keywordIcons' words as plainWords makes them, each between spaces, worked out once.
+var keywordPlain = func() [][]string {
+	out := make([][]string, len(keywordIcons))
+	for i, k := range keywordIcons {
+		for _, w := range k.words {
+			out[i] = append(out[i], " "+plainWords(w)+" ")
+		}
+	}
+	return out
+}()
 
 // keywordIcon is the picture for a title, or "" when none of its words has one.
 func keywordIcon(title string) string {
-	words := " " + plainWords(title)
-	for _, k := range keywordIcons {
-		for _, w := range k.words {
-			if strings.Contains(words, " "+plainWords(w)) {
-				return k.icon
+	words := " " + plainWords(title) + " "
+	for i, k := range keywordPlain {
+		for _, w := range k {
+			if strings.Contains(words, w) {
+				return keywordIcons[i].icon
 			}
 		}
 	}
@@ -359,13 +371,16 @@ const (
 )
 
 // pickNextUp is the card for now, from the events of the coming days, and whether there is one: only
-// while a timed event is on, or starts today or within the next nextAhead.
+// while a timed event is on, or starts today or within the next nextAhead. One that starts today or
+// later comes first; one on since an earlier day (a conference, a night shift) only has the card while
+// nothing else does, so it cannot keep it all day.
 func pickNextUp(events []hass.Event, now time.Time) (nextUpCard, bool) {
-	limit := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.Local)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	limit := today.AddDate(0, 0, 1)
 	if l := now.Add(nextAhead); l.After(limit) {
 		limit = l
 	}
-	var timed []hass.Event
+	var timed, since []hass.Event // since: on since before today
 	var c nextUpCard
 	for _, e := range events {
 		switch {
@@ -375,16 +390,39 @@ func pickNextUp(events []hass.Event, now time.Time) (nextUpCard, bool) {
 				c.big, c.days = &e, days
 			}
 		case e.Start.Before(limit) && (e.End.After(now) || !e.End.After(e.Start) && !e.Start.Before(now)):
-			timed = append(timed, e)
+			if e.Start.Before(today) {
+				since = append(since, e)
+			} else {
+				timed = append(timed, e)
+			}
 		}
 	}
+	byStart := func(a, b hass.Event) int { return a.Start.Compare(b.Start) }
+	slices.SortStableFunc(timed, byStart)
+	slices.SortStableFunc(since, byStart)
+	timed = append(timed, since...)
 	if len(timed) == 0 {
 		return nextUpCard{}, false
 	}
-	slices.SortStableFunc(timed, func(a, b hass.Event) int { return a.Start.Compare(b.Start) })
 	c.ev = timed[0]
 	if len(timed) > 1 {
 		c.then = &timed[1]
 	}
 	return c, true
+}
+
+// nextWhen is when the card says an event is: its start, with its weekday when that is not today, or
+// for one on since an earlier day, "until" its end, with the weekday when that is not today either.
+func nextWhen(e hass.Event, now time.Time) string {
+	at := func(t time.Time) string {
+		if sameDay(t, now) {
+			return clockText(t)
+		}
+		return t.Format("Mon") + " " + clockText(t)
+	}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	if e.Start.Before(today) && e.End.After(now) {
+		return "until " + at(e.End)
+	}
+	return at(e.Start)
 }

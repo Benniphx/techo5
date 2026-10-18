@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
 
@@ -73,3 +74,23 @@ func visibleEvents(events []hass.Event, hidden []string) []hass.Event {
 	}
 	return out
 }
+
+// hiddenAmong is the calendars of hidden that are still among those shown, in order: one hidden and
+// then taken off the device is not left hidden for good, to come back hidden if it is chosen again
+// some other day, and with a single calendar shown none is hidden, since there are no chips to show it
+// again.
+func hiddenAmong(hidden, shown []string) []string {
+	if len(shown) <= 1 || len(hidden) == 0 {
+		return nil
+	}
+	var out []string
+	for _, h := range hidden {
+		if slices.Contains(shown, h) && !slices.Contains(out, h) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// hiddenHere is the calendars hidden on this screen, as hiddenAmong keeps them.
+func hiddenHere(c config.Calendar) []string { return hiddenAmong(c.Hidden, c.Sources) }

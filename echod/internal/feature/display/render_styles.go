@@ -63,7 +63,7 @@ func (r *renderer) styledClock(s scene, style string) {
 	// The next-up card, in place of the glance strip, unless the style lists the events itself or the clock
 	// is in a bottom corner where the card would be.
 	_, foot := clockAlign()
-	card := s.nextUp != nil && !timers && !s.strip && !(foot && cornerStyle(style))
+	card := s.nextUp != nil && len(s.glance) == 0 && !timers && !s.strip && !(foot && cornerStyle(style))
 	glance := len(s.glance) > 0 && !timers && !s.strip && !card
 	bottom := r.h - r.s(50) // clear of the footer's words
 	switch {

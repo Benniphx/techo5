@@ -38,12 +38,20 @@ func (r *renderer) calendarMonth(v calendarView, l calLook) {
 	top := r.margin + r.s(58)
 	if len(v.order) > 1 {
 		// The calendars' chips: on the header line where they fit beside the title, else a row of their own.
+		// Too many for a row wrap onto a second, and those left after two rows are a "+N" chip.
 		at := r.margin + r.width(r.title, title) + r.s(22)
-		if at+r.chipsWidth(v, true) <= x+r.s(6) {
-			r.calChips(v, at, r.margin+r.s(17), true)
+		if at+r.chipsWidth(v, v.order, true) <= x+r.s(6) {
+			r.calChips(v, v.order, at, r.margin+r.s(17), true)
 		} else {
-			r.calChips(v, r.margin, r.margin+r.s(80), false)
-			top += r.s(50)
+			rows, more := r.chipRows(v, r.w-2*r.margin)
+			end := 0
+			for i, row := range rows {
+				end = r.calChips(v, row, r.margin, r.margin+r.s(80)+i*r.s(46), false)
+			}
+			if more > 0 {
+				r.moreChip(more, end, r.margin+r.s(80)+(len(rows)-1)*r.s(46))
+			}
+			top += r.s(50) + (len(rows)-1)*r.s(46)
 		}
 	}
 

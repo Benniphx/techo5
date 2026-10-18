@@ -38,7 +38,9 @@ type calendarView struct {
 	names  map[string]string
 	order  []string // the calendars shown, in order, which picks their colors
 	hidden []string // the calendars hidden here, whose events are left out
-	now    time.Time
+	// chipsOpen is the list of every calendar up over the page, from the chips' "+N".
+	chipsOpen bool
+	now       time.Time
 	// forecast is the coming days' weather, for the days' headings; none with the weather switch off.
 	forecast []hass.Day
 }
@@ -72,6 +74,8 @@ const (
 	calViewWeek             // its Week
 	calChip                 // a calendar's chip: hides its events here, or shows them again
 	calLater                // the day's "Later" pill: its hours scrolled to the event
+	calChipsMore            // the chips' "+N": the list of every calendar
+	calChipsDone            // that list's Done, or a tap outside it
 )
 
 type calHit struct {
@@ -106,6 +110,7 @@ func (r *renderer) calendarPage(s scene) {
 	r.calHits = r.calHits[:0]
 	r.calMu.Unlock()
 	v := s.cal
+	v.hidden = hiddenAmong(v.hidden, v.order)
 	v.events = visibleEvents(v.events, v.hidden)
 	l := r.look()
 	if !l.weather {
@@ -124,6 +129,9 @@ func (r *renderer) calendarPage(s scene) {
 		r.calendarAgenda(v)
 	default:
 		r.calendarMonth(v, l)
+	}
+	if v.chipsOpen && len(v.order) > 1 {
+		r.calChipsList(v)
 	}
 	if v.detail != nil {
 		r.calendarDetail(v, *v.detail)
@@ -253,6 +261,7 @@ func (r *renderer) calendarAgenda(v calendarView) {
 	}
 	r.calMu.Lock()
 	r.calAgendaMax = most
+	r.calAgendaStep = max(r.calendarDayRows()-1, 1)
 	r.calMu.Unlock()
 	if len(rows) == 0 {
 		msg := "Nothing in the next two weeks"
@@ -294,6 +303,13 @@ func (r *renderer) calendarAgenda(v calendarView) {
 		label := "▼ more"
 		r.text(r.tiny, label, r.w-r.margin-r.width(r.tiny, label), r.h-r.s(4), amber)
 	}
+}
+
+// calendarAgendaStep is how many rows a swipe moves the agenda, as last drawn: a page less one.
+func (r *renderer) calendarAgendaStep() int {
+	r.calMu.Lock()
+	defer r.calMu.Unlock()
+	return max(r.calAgendaStep, 1)
 }
 
 // calendarAgendaMax is how far the agenda could scroll, in rows, as last drawn.

@@ -135,6 +135,8 @@ type scene struct {
 
 	// nextUp is the clock's next event, when one is coming up and the switch is on (render_nextup.go).
 	nextUp *nextUpCard
+	// nightDim is the screen turned down to the night light: the card drops its filled accent.
+	nightDim bool
 
 	// showCalendar is the calendar page, cal what it shows (render_calendar.go).
 	showCalendar bool
@@ -333,10 +335,11 @@ type renderer struct {
 	popupAt  image.Rectangle // an event's pop-up, the same way: a tap on it takes it down
 
 	// calHits are the calendar page's buttons, days and events as last drawn (render_calendar.go).
-	calMu        sync.Mutex
-	calHits      []calHit
-	calAgendaMax int      // how far the agenda could scroll, in rows
-	calTimeline  timeline // the day's hours, as they could be moved (render_calendar_time.go)
+	calMu         sync.Mutex
+	calHits       []calHit
+	calAgendaMax  int      // how far the agenda could scroll, in rows
+	calTimeline   timeline // the day's hours, as they could be moved (render_calendar_time.go)
+	calAgendaStep int      // how many rows a swipe moves the agenda, as last drawn
 	// nextCardAt is the clock's next-up card, the same way as dateAt, and nextCardDay its event's day,
 	// which a tap there opens (render_nextup.go).
 	nextCardAt  image.Rectangle
@@ -781,7 +784,7 @@ func (r *renderer) bigClock(s scene) {
 	glance := len(s.glance) > 0 && !timers && !s.strip
 	// The next-up card takes the strip's place when an event is coming up, the clock centered: the clock
 	// and the date move up clear of it.
-	card := s.nextUp != nil && !timers && !s.strip && !foot
+	card := s.nextUp != nil && len(s.glance) == 0 && !timers && !s.strip && !foot
 	if card {
 		glance = false
 		box, _ := r.nextUpRect(s)

@@ -56,10 +56,13 @@ func autoStart(evs []hass.Event, day, now time.Time) float64 {
 }
 
 // timelineFor is the hours a page of shown hours shows, opened at auto and moved by scroll, kept within
-// the day, and how far it can move.
+// the day, and how far it can move. The opening hour is first kept to the latest a page can start at,
+// so late in the evening the page opens on the day's last hours and a swipe moves it a full step: the
+// limits are worked out from where the page really is.
 func timelineFor(auto, shown float64, scroll int) (start float64, t timeline) {
-	t = timeline{auto: auto, shown: max(int(shown), 1)}
 	most := math.Max(24-shown, 0)
+	auto = math.Min(math.Max(auto, 0), most)
+	t = timeline{auto: auto, shown: max(int(shown), 1)}
 	t.low, t.high = -int(math.Ceil(auto)), int(math.Ceil(most-auto))
 	t.high = max(t.high, t.low)
 	start = math.Min(math.Max(auto+float64(min(max(scroll, t.low), t.high)), 0), most)
@@ -158,10 +161,7 @@ func (r *renderer) calendarTimeline(v calendarView, l calLook) {
 	var later []placed
 	inner := right - r.s(14) - (gx + r.s(6))
 	for _, p := range layoutDay(evs, v.day) {
-		s0, s1 := hoursOf(p.from), hoursOf(p.till)
-		if p.till.Sub(p.from) >= 24*time.Hour || !sameDay(p.till, v.day) {
-			s1 = 24
-		}
+		s0, s1 := blockHours(p, v.day)
 		if s0 >= end {
 			later = append(later, p)
 			continue
@@ -174,7 +174,7 @@ func (r *renderer) calendarTimeline(v calendarView, l calLook) {
 		if p.cols > 1 && p.col < p.cols-1 {
 			b.Max.X -= r.s(4)
 		}
-		r.timeBlock(v, l, p.ev, b, false)
+		r.timeBlock(v, l, p.ev, minBlockRect(b, r.s(minBlockPx), top, bottom), false)
 	}
 
 	if today && nowH >= start && nowH <= end {
@@ -201,16 +201,77 @@ func (r *renderer) calendarTimeline(v calendarView, l calLook) {
 	}
 }
 
+// minBlockPx is the least an event is drawn on the hours, in the Show 5's pixels: a line's height, so
+// a short event, or one in a week of many hours, is still there to read and to tap.
+const minBlockPx = 18
+
+// minBlockRect is b at least least tall, kept between top and bottom.
+func minBlockRect(b image.Rectangle, least, top, bottom int) image.Rectangle {
+	if b.Dy() >= least {
+		return b
+	}
+	b.Max.Y = b.Min.Y + least
+	if b.Max.Y > bottom {
+		b.Min.Y, b.Max.Y = max(bottom-least, top), bottom
+	}
+	return b
+}
+
+// blockHours is where an event's part of a day starts and ends on its hours. By the clock, except that
+// one running to the day's end ends at 24, and one the clocks going back made shorter on the clock than
+// it lasts (1:30 to 1:30 again, an hour later) is as long as it lasts.
+func blockHours(p placed, day time.Time) (s0, s1 float64) {
+	s0, s1 = hoursOf(p.from), hoursOf(p.till)
+	if !sameDay(p.till, day) {
+		s1 = 24
+	}
+	if lasts := p.till.Sub(p.from).Hours(); s1-s0 < lasts {
+		s1 = math.Min(s0+lasts, 24)
+	}
+	return s0, s1
+}
+
+// weekHours is the week's hours: 7 AM to 9 PM, and an hour more either way when an event needs it.
+func weekHours(events []hass.Event, first time.Time) (startH, endH int) {
+	startH, endH = 7, 21
+	for i := range 7 {
+		day := first.AddDate(0, 0, i)
+		for _, p := range layoutDay(events, day) {
+			s0, s1 := blockHours(p, day)
+			startH = min(startH, max(int(math.Floor(s0)), 6))
+			endH = max(endH, min(int(math.Ceil(s1)), 22))
+		}
+	}
+	return startH, endH
+}
+
+// weekMarker is a day's events before or after the week's hours, at the top or the foot of its column:
+// the one's title, or how many; a tap opens the day, which has all its hours.
+func (r *renderer) weekMarker(evs []hass.Event, day time.Time, b image.Rectangle, arrow string) {
+	if len(evs) == 0 {
+		return
+	}
+	text := evs[0].Summary
+	if len(evs) > 1 {
+		text = strconv.Itoa(len(evs)) + " more"
+	}
+	lead := arrow + " "
+	room := b.Dx() - r.s(12) - r.width(r.micro, lead)
+	r.roundRect(b, b.Dy()/2, calWash(40))
+	r.text(r.micro, lead+clipText(r, r.micro, text, room), b.Min.X+r.s(6), b.Max.Y-r.s(4), amber)
+	r.calHitAdd(calHit{r: b, kind: calDay, day: day})
+}
+
 // laterScroll is the scroll that shows an event on the day's hours as last drawn: its hour a little
 // below the top.
 func (t timeline) laterScroll(e hass.Event) int {
-	return min(max(int(math.Floor(hoursOf(e.Start)))-1-int(t.auto), t.low), t.high)
+	return min(max(int(math.Floor(math.Floor(hoursOf(e.Start))-1-t.auto)), t.low), t.high)
 }
 
 // timeBlock draws an event's box on the hours: its title and, where there is room, when and where. week
 // says it is in the week's narrow columns, where the title wraps rather than sharing its line.
 func (r *renderer) timeBlock(v calendarView, l calLook, e hass.Event, b image.Rectangle, week bool) {
-	if b.Dy() < r.s(6) || b.Dx() < r.s(12) {
+	if b.Dx() < r.s(12) {
 		return
 	}
 	c := v.color(e.Calendar)
@@ -360,7 +421,15 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 	hdrH := r.s(58)
 	allTop := hy + hdrH + r.s(4)
 	allH := r.s(28)
-	spans := weekSpans(v.events, first, 7)
+	// The strip has the all-day events; a timed one running past midnight is on the hours of each of
+	// its days, as the day's timeline has it, and not in the strip as well.
+	var allDay []hass.Event
+	for _, e := range v.events {
+		if e.AllDay {
+			allDay = append(allDay, e)
+		}
+	}
+	spans := weekSpans(allDay, first, 7)
 	lanes, most := 0, 2
 	if l.wide {
 		most = 3
@@ -372,18 +441,10 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 	top := allTop + strip*allH + r.s(10)
 	bottom := r.h - r.s(10)
 
-	// The hours: seven in the morning to nine at night, or wider for an event outside them.
-	startH, endH := 7, 21
-	for i := range 7 {
-		for _, p := range layoutDay(v.events, first.AddDate(0, 0, i)) {
-			startH = min(startH, int(math.Floor(hoursOf(p.from))))
-			till := hoursOf(p.till)
-			if !sameDay(p.till, p.from) || p.till.Sub(p.from) >= 24*time.Hour {
-				till = 24
-			}
-			endH = max(endH, int(math.Ceil(till)))
-		}
-	}
+	// The hours: seven in the morning to nine at night, an hour wider either way for an event outside
+	// them, and no wider, so an hour stays tall enough to read; an event further out is a marker at the
+	// top or the foot of its day, which opens that day.
+	startH, endH := weekHours(v.events, first)
 	hourH := float64(bottom-top) / float64(endH-startH)
 	ytime := func(h float64) int { return top + int(math.Round((h-float64(startH))*hourH)) }
 
@@ -476,19 +537,27 @@ func (r *renderer) calendarWeek(v calendarView, l calLook) {
 	for i := range 7 {
 		day := first.AddDate(0, 0, i)
 		cx0 := gx + i*colW
+		var earlier, later []hass.Event
 		for _, p := range layoutDay(v.events, day) {
-			s0, s1 := hoursOf(p.from), hoursOf(p.till)
-			if !sameDay(p.till, p.from) || p.till.Sub(p.from) >= 24*time.Hour {
-				s1 = 24
+			s0, s1 := blockHours(p, day)
+			switch {
+			case s1 <= float64(startH):
+				earlier = append(earlier, p.ev)
+				continue
+			case s0 >= float64(endH):
+				later = append(later, p.ev)
+				continue
 			}
 			inner := colW - r.s(8)
 			w := inner / p.cols
-			b := image.Rect(cx0+r.s(4)+p.col*w, ytime(s0)+r.s(1), cx0+r.s(4)+(p.col+1)*w, ytime(s1)-r.s(2))
+			b := image.Rect(cx0+r.s(4)+p.col*w, max(ytime(s0)+r.s(1), top), cx0+r.s(4)+(p.col+1)*w, min(ytime(s1)-r.s(2), bottom))
 			if p.cols > 1 && p.col < p.cols-1 {
 				b.Max.X -= r.s(2)
 			}
-			r.timeBlock(v, l, p.ev, b, true)
+			r.timeBlock(v, l, p.ev, minBlockRect(b, r.s(minBlockPx), top, bottom), true)
 		}
+		r.weekMarker(earlier, day, image.Rect(cx0+r.s(4), top+r.s(1), cx0+colW-r.s(4), top+r.s(1)+r.s(minBlockPx)), "▲")
+		r.weekMarker(later, day, image.Rect(cx0+r.s(4), bottom-r.s(1)-r.s(minBlockPx), cx0+colW-r.s(4), bottom-r.s(1)), "▼")
 	}
 
 	// The now line: faint across the week, strong across today.
