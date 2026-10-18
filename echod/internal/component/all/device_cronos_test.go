@@ -3,6 +3,7 @@
 package all
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
@@ -15,7 +16,9 @@ var notOnThisDevice = append(append([]string(nil), ringOnly...), notOnPanel...)
 
 // deviceSpecific is what the Show has beyond the shared list: AirPlay and Spotify Connect, which the
 // Spot does not offer, and the video player (feature/video), which neither the Spot nor the Dot has.
-var deviceSpecific = append([]string{"airplay", "spotify_connect", "video", "dlna_video", "video_state", "video_title", "video_error", "clock_hold_gesture"}, onlyOnPanel...)
+// A panel's list goes without what notOnPanel names and has onlyOnPanel's besides.
+var deviceSpecific = append(slices.DeleteFunc([]string{"airplay", "spotify_connect", "video", "dlna_video", "video_state", "video_title", "video_error", "clock_hold_gesture"},
+	func(id string) bool { return slices.Contains(notOnPanel, id) }), onlyOnPanel...)
 
 // The Show plays videos from Home Assistant: the actions an automation calls are there.
 func TestTheShowHasTheVideoActions(t *testing.T) {
