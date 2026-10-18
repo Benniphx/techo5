@@ -304,6 +304,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveCalendarLink(r)
 	case "calendar-remove":
 		problem = removeCalendarLink(r)
+	case "calendar-look":
+		problem = saveCalendarLook(r)
 	case "adopt":
 		if _, err := api.Get().OpenAdoption(); err != nil {
 			problem = "could not open the device to a Home Assistant: " + err.Error()
@@ -436,6 +438,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	case "weather":
 		placeSection(w, token)
 		calendarLinksSection(w, token)
+		calendarLookSection(w, token)
 	case "privacy":
 		lockSection(w, token)
 		camStreamSection(w, token)

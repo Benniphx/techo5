@@ -56,6 +56,19 @@ type ScreenChoices struct {
 	// IgnoreRoomLights sets Screen ignores room light commands, telling Home Assistant (#179); nil
 	// leaves the box off the page.
 	IgnoreRoomLights func(bool)
+	// Calendar is how the calendar page looks, where the screen has one of its own (the Show): on the
+	// Weather & Calendar tab, under the calendars.
+	Calendar []CalendarChoice
+}
+
+// CalendarChoice is one of the calendar's look switches (display/calendar_look.go): its name and what it
+// does, its options (On and Off for a switch), the one in force and how to choose one, which saves it
+// and tells Home Assistant.
+type CalendarChoice struct {
+	Key, Label, Note string
+	Options          []string
+	Now              func() int
+	Choose           func(int)
 }
 
 // maxWorldPlaces is how many World places the page takes: the most any screen shows.
