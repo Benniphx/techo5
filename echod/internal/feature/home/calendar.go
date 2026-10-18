@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -28,7 +29,39 @@ const (
 
 	// monthsKept is how many months' events are kept at once: this one, the next, and a few looked at.
 	monthsKept = 6
+
+	// titleRunes and descriptionRunes are the most of an event's title (and its place) and of its
+	// description that are kept. The words come from whoever can write to the calendar, and a title of
+	// thousands of letters is measured and cut on every frame that draws it.
+	titleRunes       = 200
+	descriptionRunes = 2000
 )
+
+// calendarVersion counts the changes to the events kept, for a screen that works something out from
+// them to know when to work it out again (CalendarVersion).
+var calendarVersion atomic.Uint64
+
+// CalendarVersion is a number that changes whenever the events kept change.
+func (f *Feature) CalendarVersion() uint64 { return calendarVersion.Load() }
+
+// capRunes is s cut to at most n runes.
+func capRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
+// capEvent keeps an event's words to a size the screen can draw at once.
+func capEvent(e hass.Event) hass.Event {
+	e.Summary = capRunes(e.Summary, titleRunes)
+	e.Location = capRunes(e.Location, titleRunes)
+	e.Description = capRunes(e.Description, descriptionRunes)
+	return e
+}
 
 var calendar struct {
 	sync.Mutex
@@ -106,6 +139,7 @@ func (f *Feature) SetCalendarSources(ids []string) error {
 	calendar.Lock()
 	calendar.months = nil // read for the old choice
 	calendar.Unlock()
+	calendarVersion.Add(1)
 	slog.Info("calendar: sources set", "count", len(clean))
 	f.Changed.Emit(struct{}{})
 	return nil
@@ -163,7 +197,10 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 			slog.Warn("calendar: reading events failed", "calendar", src, "month", key, "err", err)
 			continue
 		}
-		events, ok = append(events, ev...), true
+		for _, e := range ev {
+			events = append(events, capEvent(e))
+		}
+		ok = true
 	}
 	slices.SortStableFunc(events, func(a, b hass.Event) int { return a.Start.Compare(b.Start) })
 	events = mergeSame(events)
@@ -182,6 +219,7 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 	}
 	m.events, m.sources, m.at = events, joined, time.Now()
 	calendar.Unlock()
+	calendarVersion.Add(1)
 	f.Changed.Emit(struct{}{})
 }
 
