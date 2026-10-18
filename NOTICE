@@ -33,6 +33,51 @@ echod
   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
   SOFTWARE.
 
+echod: the exact microWakeWord feature front end (echod/internal/lib/mwwfront)
+  Ported to Go from mww_features.c in echo-dot-assist, https://github.com/Gamer92000/echo-dot-assist
+  (commit b9ed1848), MIT License:
+
+  Copyright (c) 2026 Julian Imhof
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+  That code is in turn derived from two others, whose licenses apply to it too:
+  - TensorFlow Lite Micro's audio front end (tensorflow/lite/experimental/microfrontend/lib),
+    https://github.com/tensorflow/tflite-micro, Copyright 2018 The TensorFlow Authors. All Rights
+    Reserved. Licensed under the Apache License, Version 2.0
+    (https://www.apache.org/licenses/LICENSE-2.0). Changes: rewritten in Go with microWakeWord's
+    settings fixed in place of the configurable ones.
+  - KISS FFT's fixed point real FFT, https://github.com/mborgerding/kissfft, Copyright (c) 2003-2010
+    Mark Borgerding. All rights reserved. BSD 3-Clause License: redistribution and use in source and
+    binary forms, with or without modification, are permitted provided that the following conditions
+    are met: redistributions of source code must retain the above copyright notice, this list of
+    conditions and the following disclaimer; redistributions in binary form must reproduce the above
+    copyright notice, this list of conditions and the following disclaimer in the documentation
+    and/or other materials provided with the distribution; neither the author nor the names of any
+    contributors may be used to endorse or promote products derived from this software without
+    specific prior written permission. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+    CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO
+    EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+    SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+    EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 echod (dependency)
   github.com/emiago/diago — Mozilla Public License 2.0
   SIP calls and their media (feature/phone). Used unmodified; its source is at
@@ -134,6 +179,11 @@ Wake word models (in the root filesystem, /usr/share/techo5/models)
   8bcd2f20bb7b76c351b2eff871fa1ce873fe9be2. The repository is MIT-licensed as a whole. It is a
   community collection: it records no separate license, author or training data for each model, so
   MIT from the repository is all that can be said about them here.
+
+Test audio, echod/internal/lib/mwwfront/testdata (not shipped in any release)
+  hey_jarvis.wav and hey_jarvis_features.bin, from github.com/zserge/microwakeword's testdata
+  (MIT License, Copyright (c) 2025 Serge Zaitsev): a spoken "Hey Jarvis" and microWakeWord's own
+  features of it, which the front end is checked against. Unchanged.
 
 Linux kernel, https://git.kernel.org (GPL-2.0)
   Releases ship a kernel inside the boot images techo5-boot-<version>.img (Echo Show 5 2nd gen,
