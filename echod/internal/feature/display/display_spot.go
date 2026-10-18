@@ -236,6 +236,10 @@ type Display struct {
 	// glowUntil is the end of a step of the night clock's brightness showing on the backlight, from
 	// the settings sheet at night (stepGlow).
 	glowUntil time.Time
+	// glowTimer relights the face once a step's glowPreview is over: one timer, put off by each step,
+	// so a run of steps ends in one relight rather than one for each, and something that holds the
+	// face (a test, here) can stop it. Under mu.
+	glowTimer *time.Timer
 
 	// The night's settings in Home Assistant, as on the Show (night_select.go): its hours, their two
 	// ends to the quarter hour, what it does to the face, the red clock's look and brightness.
