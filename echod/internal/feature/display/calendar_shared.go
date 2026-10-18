@@ -57,7 +57,10 @@ func eventsOn(events []hass.Event, day time.Time) []hass.Event {
 }
 
 // visibleEvents is events without those of the calendars hidden on this screen. An event on several
-// calendars (mergeSame) stays while any of them is shown.
+// calendars (mergeSame) stays while any of them is shown, and is drawn as that one's: kept under the
+// first calendar of them still shown, in the order the calendars were chosen, so it has that one's color
+// and not the hidden one's, whose chip says it is not on the screen. The hidden one goes among the others
+// it is on, so the event is still on it (home.OnCalendar) for what asks, such as which calendars pop up.
 func visibleEvents(events []hass.Event, hidden []string) []hass.Event {
 	if len(hidden) == 0 {
 		return events
@@ -68,9 +71,15 @@ func visibleEvents(events []hass.Event, hidden []string) []hass.Event {
 		for _, c := range e.Also {
 			shown = shown || !slices.Contains(hidden, c)
 		}
-		if shown {
-			out = append(out, e)
+		if !shown {
+			continue
 		}
+		if slices.Contains(hidden, e.Calendar) {
+			i := slices.IndexFunc(e.Also, func(c string) bool { return !slices.Contains(hidden, c) })
+			also := append([]string{e.Calendar}, slices.Delete(slices.Clone(e.Also), i, i+1)...)
+			e.Calendar, e.Also = e.Also[i], also
+		}
+		out = append(out, e)
 	}
 	return out
 }

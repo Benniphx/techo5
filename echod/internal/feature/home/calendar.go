@@ -35,6 +35,12 @@ const (
 	// thousands of letters is measured and cut on every frame that draws it.
 	titleRunes       = 200
 	descriptionRunes = 2000
+
+	// monthEventsKept is the most events a month keeps, from all its calendars together. Whoever can
+	// write to a calendar can fill a month with thousands (a repeat every minute), and every one of them
+	// is sorted, merged and laid out again each time the screen works out a view; a month a person keeps
+	// is a few hundred at the most.
+	monthEventsKept = 2000
 )
 
 // calendarVersion counts the changes to the events kept, for a screen that works something out from
@@ -203,7 +209,7 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 		ok = true
 	}
 	slices.SortStableFunc(events, func(a, b hass.Event) int { return a.Start.Compare(b.Start) })
-	events = mergeSame(events)
+	events = capMonth(key, mergeSame(events))
 
 	calendar.Lock()
 	m := calendar.months[key]
@@ -221,6 +227,23 @@ func (f *Feature) readMonth(key string, first time.Time, sources []string, joine
 	calendar.Unlock()
 	calendarVersion.Add(1)
 	f.Changed.Emit(struct{}{})
+}
+
+// cappedMonths is the months already logged as having more events than are kept, so a month read
+// again every eventsEvery says so once.
+var cappedMonths sync.Map
+
+// capMonth keeps a month's events to monthEventsKept, the earliest, since events is sorted by start: the
+// days a month is looked at from are kept whole the longest. The log says how many, never what they are.
+func capMonth(key string, events []hass.Event) []hass.Event {
+	if len(events) <= monthEventsKept {
+		return events
+	}
+	if _, told := cappedMonths.LoadOrStore(key, true); !told {
+		slog.Warn("calendar: a month has more events than are kept, the latest left out", "month", key,
+			"events", len(events), "kept", monthEventsKept)
+	}
+	return slices.Clip(events[:monthEventsKept])
 }
 
 // mergeSame shows an event that is on more than one of the calendars once: the same name, start, end

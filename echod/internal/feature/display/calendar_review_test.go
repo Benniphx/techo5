@@ -471,3 +471,51 @@ func TestFallBackLayoutAsDrawn(t *testing.T) {
 		t.Errorf("drawn %v-%v and %v-%v in the same column", ps[0].s0, ps[0].s1, ps[1].s0, ps[1].s1)
 	}
 }
+
+// An event on a hidden calendar and on others shown is drawn as the first of those shown, in the order
+// the calendars were chosen: that one's color, not the hidden one's. It is still on the hidden one, for
+// what asks which calendars an event is on.
+func TestAnEventSharedWithAHiddenCalendarTakesAShownOnesColor(t *testing.T) {
+	order := []string{calWork, calFamily, calSchool}
+	dinner := hass.Event{Summary: "Dinner", Calendar: calWork, Also: []string{calFamily, calSchool}}
+	got := visibleEvents([]hass.Event{dinner}, []string{calWork})
+	if len(got) != 1 {
+		t.Fatalf("visible: %+v", got)
+	}
+	e := got[0]
+	if e.Calendar != calFamily || calendarColor(order, e.Calendar) != calendarColor(order, calFamily) {
+		t.Errorf("drawn as %s's; want the first calendar shown, %s", e.Calendar, calFamily)
+	}
+	for _, c := range order {
+		if !home.OnCalendar(e, c) {
+			t.Errorf("no longer on %s", c)
+		}
+	}
+	if dinner.Calendar != calWork || !slices.Equal(dinner.Also, []string{calFamily, calSchool}) {
+		t.Errorf("the event kept was changed: %+v", dinner)
+	}
+	if got := visibleEvents([]hass.Event{dinner}, []string{calWork, calFamily}); len(got) != 1 || got[0].Calendar != calSchool {
+		t.Errorf("with two of its calendars hidden: %+v", got)
+	}
+}
+
+// The months' events are put together with an event in two of them (across the turn of a month) kept
+// once, and two events that only look alike kept apart; a few thousand take no time.
+func TestTheMonthsEventsAreJoinedOnce(t *testing.T) {
+	at := func(d, h int) time.Time { return time.Date(2026, 10, d, h, 0, 0, 0, time.Local) }
+	trip := hass.Event{Calendar: calFamily, Summary: "Trip", Start: at(30, 9), End: at(30, 9).AddDate(0, 0, 4)}
+	var oct, nov []hass.Event
+	for i := range 3000 {
+		oct = append(oct, hass.Event{Calendar: calWork, Summary: fmt.Sprint("Shift ", i), Start: at(1, 0).Add(time.Duration(i) * time.Minute)})
+	}
+	oct = append(oct, trip)
+	nov = append(nov, trip, hass.Event{Calendar: calSchool, Summary: "Trip", Start: trip.Start})
+	start := time.Now()
+	got := joinMonths([][]hass.Event{oct, nov})
+	if len(got) != 3002 {
+		t.Errorf("%d events; want 3,002: the trip once, and the school's own", len(got))
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("joining took %v", took)
+	}
+}

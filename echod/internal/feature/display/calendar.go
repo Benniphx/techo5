@@ -5,7 +5,6 @@ package display
 import (
 	"image"
 	"log/slog"
-	"slices"
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -60,20 +59,36 @@ func agendaEvents(now time.Time) ([]hass.Event, bool) {
 // whether all of them have been read. An event running across the turn of a month is in both: it is
 // kept once.
 func monthsEvents(from, to time.Time) ([]hass.Event, bool) {
-	var events []hass.Event
+	var months [][]hass.Event
 	ok := true
 	for m := firstOfMonth(from); !m.After(to); m = m.AddDate(0, 1, 0) {
 		more, read := home.Get().MonthEvents(m)
 		ok = ok && read
+		months = append(months, more)
+	}
+	return joinMonths(months), ok
+}
+
+// joinMonths is the months' events one after another, an event in more than one of them (one running
+// across the turn of a month) kept the first time: the same calendar, title and start. Looked up in a
+// map, where a search of those kept was thousands of comparisons for each of thousands of events.
+func joinMonths(months [][]hass.Event) []hass.Event {
+	type same struct {
+		calendar, summary string
+		start             int64
+	}
+	var events []hass.Event
+	seen := map[same]bool{}
+	for _, more := range months {
 		for _, e := range more {
-			if !slices.ContainsFunc(events, func(o hass.Event) bool {
-				return o.Calendar == e.Calendar && o.Summary == e.Summary && o.Start.Equal(e.Start)
-			}) {
+			k := same{e.Calendar, e.Summary, e.Start.UnixNano()}
+			if !seen[k] {
+				seen[k] = true
 				events = append(events, e)
 			}
 		}
 	}
-	return events, ok
+	return events
 }
 
 func firstOfMonth(t time.Time) time.Time {
