@@ -860,7 +860,9 @@ unknown.
 It holds its last reading while the device makes a sound of its own (an answer, music, an
 announcement, a ring) and for a second after, and through a voice request, a call or a talk through
 a camera, so the device's own voice and yours talking to it never show in it. It reads unknown while
-the microphones are muted.
+the microphones are muted (**Microphone mute** on, red light lit). If it stays unknown with the
+microphones live, the device log says why each time the reason changes: look for `ambient noise has no
+reading`.
 
 dBFS is measured against the loudest sound the microphones can take, which is 0, so a room reads
 below it, and a quieter room reads lower. It is not a calibrated sound level. **Microphone gain**
