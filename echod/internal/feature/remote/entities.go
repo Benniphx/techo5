@@ -37,6 +37,7 @@ var readOnly = []string{
 	"phone", "phone_answer", "phone_hangup", "phone_peer",
 	// Who can get in, and what it is paired with.
 	"settings_lock", "bluetooth_pairing", "bluetooth_phone_pairing", "bluetooth_forget", "bluetooth_forget_phones",
+	"bluetooth_secure_connections",
 	// What it runs.
 	"check_for_updates", "update_automatically", "update_channel", "restart", "purge_cache",
 }

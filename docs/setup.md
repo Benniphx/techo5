@@ -351,6 +351,17 @@ plain HTTP, as on most cameras, and the password itself is never sent.
   call. **Forget**, under the earbuds or speaker in **Settings > Connections** (it asks twice), or the
   **Bluetooth forget** button in Home Assistant on any device, forgets them, so new ones can be
   paired.
+- **Bluetooth Secure Connections (new).** On the Show, the Spot and the Dot, the **Bluetooth Secure
+  Connections** switch (Settings > Connections, the setup page's Connections tab, or Home Assistant)
+  is on by default, as it always was. **A phone pairs, then drops after a second or two: turn off
+  Bluetooth Secure Connections.** Some newer phones do that with it on (a POCO F8 Pro on Android 16,
+  #183); with it off they pair the older way and stay. What it costs: a phone set to pair
+  only with Secure Connections cannot pair at all, and Low Energy pairing falls back to the older,
+  weaker kind too. The device itself pairs only over classic Bluetooth (speakers, earbuds and phones
+  playing to it), and the Bluetooth proxy only listens, so nothing of the device's own uses LE
+  pairing. Changing it turns Bluetooth off and on again: whatever is connected drops for a moment and
+  may need connecting again. It is this device's own, never shared with the other devices or carried
+  by a settings file. The 2nd gen Show 8 on TECHO5's own kernel has it off already, and no switch.
 - **Radio.** The Radio drawer and its favorites are set with
   [the radio actions](actions.md#wire-up-the-radio-page). While a station plays, the **Radio station**,
   **Radio artist** and **Radio title** sensors say what's on (the artist and title when the station's

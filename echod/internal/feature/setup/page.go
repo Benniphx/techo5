@@ -264,6 +264,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveMusic(r)
 	case "streaming":
 		problem = saveStreaming(r)
+	case "bluetooth":
+		problem = saveBluetooth(r)
 	case "speaker":
 		problem = saveSpeaker(r)
 	case "screen":
@@ -422,6 +424,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 			fmt.Fprint(w, `<fieldset><legend>Wi-Fi</legend><p class="note" style="margin:0">This device's network
 			 is not one this page can change.</p></fieldset>`)
 		}
+		bluetoothSection(w, token)
 		reolinkSection(w, token)
 		go2rtcSection(w, token)
 		doorbellSection(w, token)

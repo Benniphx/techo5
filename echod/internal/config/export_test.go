@@ -420,6 +420,36 @@ func TestARestoreKeepsWhatIsOnByDefaultOff(t *testing.T) {
 	}
 }
 
+// Secure Connections is this device's own both ways (#183): a file never carries it, a restore keeps
+// this device's whichever way the file's device had it, and clearing what is a device's own leaves it on.
+func TestSecureConnectionsAreTheDevicesOwn(t *testing.T) {
+	from := Defaults()
+	from.Bluetooth.SecureConnectionsOff = true
+	file, err := Export(from, "m", "v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(file), "secure_connections") {
+		t.Errorf("the file carries secure connections: %s", file)
+	}
+	for _, off := range []bool{false, true} {
+		here := Defaults()
+		here.Bluetooth.SecureConnectionsOff = off
+		r, err := Restored(here, file, "m")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.Config.Bluetooth.SecureConnectionsOff != off || slices.Contains(r.Changed, "bluetooth") {
+			t.Errorf("here off=%v: restored off=%v, changed %v", off, r.Config.Bluetooth.SecureConnectionsOff, r.Changed)
+		}
+	}
+	cleared := from
+	ClearOwn(&cleared)
+	if cleared.Bluetooth.SecureConnectionsOff {
+		t.Error("cleared of what is the device's own, secure connections stay off")
+	}
+}
+
 // A long value with many addresses in it is cleaned in one pass, not one per address.
 func TestManyAddressesAreQuick(t *testing.T) {
 	s := strings.Repeat("a://", 1<<18)

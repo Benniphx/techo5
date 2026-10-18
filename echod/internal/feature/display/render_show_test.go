@@ -14,6 +14,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/notify"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
@@ -174,6 +175,11 @@ func TestShowScenesDraw(t *testing.T) {
 			sheet: settings{cat: catSound, volume: 15, wakeWord: "Okay Nabu", cardScroll: 1000}},
 		"settings-display": {now: at, phase: "idle", showSheet: true,
 			sheet: settings{cat: catDisplay, brightness: 70}},
+		// Bluetooth's rows, Secure Connections among them (#183): on, as it comes, and turned off.
+		"settings-connections": {now: at, phase: "idle", showSheet: true, bt: btaudio.State{Available: true, Remembered: "Speaker"},
+			sheet: settings{cat: catConnections, wifiName: "Home", address: "192.168.1.50", wifiOK: true}},
+		"settings-connections-sc-off": {now: at, phase: "idle", showSheet: true, bt: btaudio.State{Available: true, Remembered: "Speaker"},
+			sheet: settings{cat: catConnections, wifiName: "Home", address: "192.168.1.50", wifiOK: true, btSCOff: true, cardScroll: 1000}},
 		"settings-display-mid": {now: at, phase: "idle", showSheet: true,
 			sheet: settings{cat: catDisplay, brightness: 70, cardScroll: 420}},
 		"settings-display-end": {now: at, phase: "idle", showSheet: true,

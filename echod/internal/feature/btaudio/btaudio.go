@@ -20,8 +20,8 @@
 //
 // To Home Assistant: a switch for pairing mode, a "Bluetooth phone" switch (on while phone pairing
 // is on or a phone is connected; off disconnects it), a sensor saying what is connected (a phone
-// too), buttons to reconnect or disconnect the remembered device, and buttons to call the phones
-// back or forget them.
+// too), buttons to reconnect or disconnect the remembered device, buttons to call the phones back or
+// forget them, and a switch for the controller's Secure Connections (secureconn.go).
 package btaudio
 
 import (
@@ -109,6 +109,10 @@ type Feature struct {
 	callPhone  *esphome.Button
 	forget     *esphome.Button
 	forgetOne  *esphome.Button // the earbuds or speaker the device plays to (Forget)
+	secure     *esphome.Switch // the controller's Secure Connections (secureconn.go)
+
+	// sc puts the Secure Connections setting on the controller.
+	sc *secureConn
 
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
@@ -259,7 +263,12 @@ func build() *Feature {
 		phoneAudio: map[string]bool{},
 		poke:       make(chan struct{}, 1),
 		state:      State{Status: notConnected},
+		secure:     newSecureConnSwitch(),
+		sc:         newSecureConn(),
 	}
+	f.secure.Set(f.SecureConnections())
+	f.secure.OnCommand = func(on bool) { _ = f.SetSecureConnections(on) }
+	safe.Go("bluetooth secure connections", f.sc.loop)
 	f.pairing.OnCommand = func(on bool) { f.SetPairing(on) }
 	f.phonePair.OnCommand = func(on bool) {
 		f.mu.Lock()
@@ -282,9 +291,13 @@ func build() *Feature {
 func (f *Feature) Name() string { return "bluetooth audio" }
 
 func (f *Feature) Entities() []esphome.Entity {
-	return []esphome.Entity{
+	e := []esphome.Entity{
 		f.pairing, f.phonePair, f.status, f.reconnect, f.disconnect, f.forgetOne, f.callPhone, f.forget,
 	}
+	if secureConnHere() {
+		e = append(e, f.secure)
+	}
+	return e
 }
 
 // State is a copy of what the screen shows.
@@ -347,6 +360,10 @@ func (f *Feature) open(ctx context.Context) error {
 	f.mu.Unlock()
 	a.Changed.Listen(func(struct{}) { f.wake() })
 	a.PlayerChanged.Listen(f.followPlayer)
+	// The Secure Connections setting goes on each hci0: this one, and every new one under the same
+	// adapter, which bluetoothd sets up with Secure Connections on again.
+	a.Returned.Listen(func(struct{}) { f.sc.up() })
+	f.sc.up()
 	al.Changed.Listen(func(struct{}) { f.wake() })
 	// Sound starting is when a stream that stopped under it is opened again: looked at once it has
 	// had reopenSounding to start the stream itself.

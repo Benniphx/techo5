@@ -20,7 +20,7 @@ type tab struct{ id, title, blurb string }
 var tabs = []tab{
 	{"sound", "Sound & Voice", "Music, radio, voice assistant"},
 	{"alarms", "Alarms & Timers", "Alarms, timers and reminders"},
-	{"connections", "Connections", "Wi-Fi and cameras"},
+	{"connections", "Connections", "Wi-Fi, Bluetooth and cameras"},
 	{"weather", "Weather & Calendar", "Where it is, units, calendars"},
 	{"photos", "Screen & Photos", "Clock, dashboard, slideshow, pictures"},
 	{"privacy", "Privacy & Security", "What this device shares"},

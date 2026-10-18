@@ -178,6 +178,11 @@ func TestRoundScenesDraw(t *testing.T) {
 			return s
 		}(),
 	}
+	// Bluetooth's rows, Secure Connections among them (#183): on, as it comes, and turned off.
+	scenes["settings-connections"] = spotScene(catConnections)
+	scOff := spotScene(catConnections)
+	scOff.sheet.st.btSCOff, scOff.sheet.st.cardScroll = true, 1000
+	scenes["settings-connections-sc-off"] = scOff
 	// Weather alerts: the clock's pill, the alert face (a second one, scrolled), the rain map's pill.
 	wind := home.Alert{ID: "a", Event: "Wind Advisory", Severity: "Moderate", Sender: "NWS Omaha/Valley NE",
 		Ends: at.Add(20 * time.Hour), Color: home.AlertColor("Wind Advisory", ""), Here: true,

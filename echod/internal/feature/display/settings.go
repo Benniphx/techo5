@@ -12,6 +12,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/bluetooth"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
@@ -62,6 +63,7 @@ func (d *Display) gather(s scene, restartArm time.Time) settings {
 		}
 	}
 	st.btProxy = bluetooth.Get().Enabled()
+	st.btSCOff, st.btSCFixed = c.Bluetooth.SecureConnectionsOff, !btaudio.Get().SecureConnectionsHere()
 	st.address = address()
 	if !wifi.Available() {
 		st.wifi = st.address

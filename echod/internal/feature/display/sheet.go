@@ -318,7 +318,8 @@ func forgetRow(sv sheetView, name string) settingRow {
 	return row
 }
 
-// connectionRows are the Connections card's: Wi-Fi, Bluetooth audio, and the Bluetooth proxy.
+// connectionRows are the Connections card's: Wi-Fi, Bluetooth audio, Secure Connections, and the
+// Bluetooth proxy.
 func connectionRows(sv sheetView) []settingRow {
 	st, bt := sv.st, sv.bt
 	wifiRow := settingRow{label: "Wi-Fi", sub: st.address, kind: ctlValue, value: st.wifiName}
@@ -352,6 +353,12 @@ func connectionRows(sv sheetView) []settingRow {
 	}
 	if bt.Available {
 		rows = append(rows, settingRow{id: "pair", label: "Pair a new device", sub: "Put it in pairing mode first", kind: ctlButton, button: "Pair"})
+	}
+	// Off for a phone that pairs and is dropped a second or two later (#183). Changing it powers the
+	// controller off and on, so what is connected drops for a moment, and the row says so.
+	if bt.Available && !st.btSCFixed {
+		rows = append(rows, settingRow{id: "btsc", label: "Bluetooth Secure Connections",
+			sub: "Off if a phone pairs, then drops. Drops devices briefly", kind: ctlToggle, on: !st.btSCOff})
 	}
 	return append(rows, settingRow{id: "btproxy", label: "Bluetooth proxy", sub: "Lets Home Assistant hear nearby devices",
 		kind: ctlToggle, on: st.btProxy})
@@ -1136,6 +1143,9 @@ func (d *Display) rowTap(id string, p part, opt int) {
 	case "btproxy":
 		p := bluetooth.Get()
 		safe.Go("bluetooth proxy from the screen", func() { p.SetEnabled(!p.Enabled()) })
+	case "btsc":
+		bt := btaudio.Get()
+		safe.Go("bluetooth secure connections from the screen", func() { _ = bt.SetSecureConnections(!bt.SecureConnections()) })
 	case "photofolder":
 		d.openFolder(photosRoot, nil)
 	case "shuffle":
