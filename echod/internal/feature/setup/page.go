@@ -639,19 +639,26 @@ func playRow(r *http.Request) string {
 }
 
 // saveStations takes the rows the form posted, in the order they were in. Names and addresses come
-// back as two lists of the same length, one row each. A row with no name is left out, whatever its
-// address: that is how the note under the form says a station is taken out.
+// back as two lists of the same length, one row each. A row whose name was cleared on a station
+// already kept is left out, whatever its address still says: that is how the note under the form
+// says a station is taken out. A new address typed without a name is a mistake, and said to be.
 func saveStations(r *http.Request) string {
 	names, urls := r.PostForm["name"], r.PostForm["url"]
 	if len(names) != len(urls) {
 		return "that form did not arrive whole"
 	}
+	kept := map[string]bool{}
+	for _, s := range home.OwnStations() {
+		kept[s.URL] = true
+	}
 	var list []config.Station
 	for i := range names {
 		name, u := strings.TrimSpace(names[i]), strings.TrimSpace(urls[i])
 		switch {
-		case name == "":
+		case name == "" && (u == "" || kept[u]):
 			continue // a row never filled in, or one being taken out
+		case name == "":
+			return "a station needs a name as well as an address"
 		case u == "":
 			return name + " has no stream address"
 		case !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://"):

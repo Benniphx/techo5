@@ -10,8 +10,9 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 )
 
-// Saving keeps the rows as typed, in order. A row with its name cleared is taken out whatever its
-// address still says, as the note under the form promises; the spare row at the bottom is skipped.
+// Saving keeps the rows as typed, in order. A kept station's row with its name cleared is taken out
+// whatever its address still says, as the note under the form promises; the spare row at the bottom
+// is skipped.
 func TestSavingStationsTakesOutARowWithNoName(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	if err := home.SetOwnStations([]config.Station{
@@ -34,14 +35,16 @@ func TestSavingStationsTakesOutARowWithNoName(t *testing.T) {
 	}
 }
 
-// A row that is named but cannot play is refused, and nothing is saved: the list as it was stays.
-func TestSavingStationsRefusesANamedRowThatCannotPlay(t *testing.T) {
+// A row that is named but cannot play is refused, and so is a new address typed without a name;
+// nothing is saved, and the list as it was stays.
+func TestSavingStationsRefusesARowItCannotKeep(t *testing.T) {
 	for _, c := range []struct {
 		what   string
 		values url.Values
 		says   string
 	}{
 		{"a name with no address", url.Values{"name": {"KXYZ"}, "url": {""}}, "no stream address"},
+		{"a new address with no name", url.Values{"name": {""}, "url": {"https://stream.example/new"}}, "needs a name as well"},
 		{"an address that is not a stream address", url.Values{"name": {"KXYZ"}, "url": {"file:///etc/passwd"}}, "http://"},
 		{"a form that did not arrive whole", url.Values{"name": {"KXYZ", "KABC"}, "url": {"https://s/1"}}, "did not arrive whole"},
 	} {
