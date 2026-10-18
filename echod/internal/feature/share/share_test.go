@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -444,14 +445,14 @@ func TestANewLinkSettlesOnTheLater(t *testing.T) {
 	_ = config.Set().Share().Update(func(s *config.Share) {
 		s.From = map[string]config.ShareFrom{"screen_theme": {Device: "Kitchen", N: 1}}
 	})
-	var sets int
+	var sets atomic.Int32
 	r.f.send = func(_ context.Context, to string, body []byte) ([]byte, error) {
 		var m message
 		_ = json.Unmarshal(body, &m)
 		if m.Kind == "link" {
 			return json.Marshal(reply{Results: map[string]string{m.ID: Asked}})
 		}
-		sets++
+		sets.Add(1)
 		return json.Marshal(reply{Results: map[string]string{"screen_theme": Older},
 			Current: map[string]item{"screen_theme": {ID: "screen_theme", Value: "Light", N: 40, Origin: "Office"}}})
 	}
@@ -459,9 +460,10 @@ func TestANewLinkSettlesOnTheLater(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.receive(t, "Office", message{Kind: "link", Link: "accept", ID: "screen_theme"})
-	waitFor(t, func() bool { return r.theme.Get() == "Light" })
-	if from := config.Get().Share.From["screen_theme"]; from.N != 40 || from.Device != "Office" || sets != 1 {
-		t.Fatalf("from %+v, %d sets", from, sets)
+	// The theme is applied before the reply's origin is written down: both are waited for.
+	waitFor(t, func() bool { return r.theme.Get() == "Light" && config.Get().Share.From["screen_theme"].N == 40 })
+	if from := config.Get().Share.From["screen_theme"]; from.N != 40 || from.Device != "Office" || sets.Load() != 1 {
+		t.Fatalf("from %+v, %d sets", from, sets.Load())
 	}
 }
 
