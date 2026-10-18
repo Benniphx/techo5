@@ -285,7 +285,11 @@ func TestATimerSetHereCountsDownAndRings(t *testing.T) {
 	if id == "" {
 		t.Fatal("no timer started")
 	}
-	now := time.Now()
+	// The timer's own clock: Start saves and publishes after it reads the time, which on a busy machine
+	// takes over a second, and "four minutes later" read after that came out as 5m59s left.
+	ts.mu.Lock()
+	now := ts.held[id].at
+	ts.mu.Unlock()
 	list := ts.List(now.Add(4 * time.Minute))
 	if len(list) != 1 {
 		t.Fatalf("listing %d timers, want 1", len(list))
