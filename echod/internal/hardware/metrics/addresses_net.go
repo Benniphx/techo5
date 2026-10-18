@@ -92,5 +92,18 @@ func WiFiAddresses() []net.IP {
 	return reachable(addrs)
 }
 
+// reachable is the addresses something else on the network could reach: loopback and link-local are
+// left out, since neither is an answer to "where is it".
+func reachable(addrs []net.Addr) []net.IP {
+	var ips []net.IP
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if ok && ipnet.IP.IsGlobalUnicast() && !ipnet.IP.IsLinkLocalUnicast() {
+			ips = append(ips, ipnet.IP)
+		}
+	}
+	return ips
+}
+
 // MulticastInterfaces is nil here: the mDNS library lists the interfaces itself.
 func MulticastInterfaces() []net.Interface { return nil }

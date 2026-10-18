@@ -211,18 +211,6 @@ type capture interface {
 	Close() error
 }
 
-// openPlain opens the one capture device that carries the microphones and the loopback together.
-func openPlain() (capture, error) {
-	return alsa.Open(Card, CaptureDevice, alsa.Config{
-		Channels:   Channels,
-		Rate:       Rate,
-		Format:     alsa.FormatS24_3LE,
-		Bits:       Bits,
-		PeriodSize: period,
-		Periods:    periods,
-	})
-}
-
 func (s *Source) open() error {
 	pcm, err := openDevice()
 	if err != nil {
