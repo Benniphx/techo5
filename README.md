@@ -51,11 +51,12 @@ It started on the Show 5, which is where the name comes from.
 | <img src="docs/images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | <img src="docs/images/badges/biscuit.png" alt="" width="36" align="absmiddle"> **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
 | <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit |
+| **Android tablets and the Meta Portal**, no unlock | Android 7.1 or later, ARM | [TECHO5 Panel](https://github.com/HuskerMinion/techo5-panel), an app with the same daemon inside ([docs/panel.md](docs/panel.md)) | Tested on a Fire HD 8 (10th gen), a Galaxy Tab S6 Lite and a Meta Portal (2nd gen); other tablets may work |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
-One device that isn't an Echo runs it too: the **Skylight Calendar 15** (150-CAL), a wall calendar
-with a 1920x1080 touch screen. TECHO5 puts its own 64-bit mainline kernel and the same daemon on it,
+Beyond the Echos and the Panel's tablets, the **Skylight Calendar 15** (150-CAL) runs it too, a wall
+calendar with a 1920x1080 touch screen. TECHO5 puts its own 64-bit mainline kernel and the same daemon on it,
 over adb, after a full backup. It has no microphone, so it's a screen and a speaker: no wake word,
 voice, phone calls or intercom. Tried on one unit, the newest port:
 [docs/install-skylight.md](docs/install-skylight.md).
@@ -83,6 +84,11 @@ The bigger changes of September and October 2026. Every release lists the rest.
   word or voice, and no phone calls or intercom. One command installs it over adb from its stock
   firmware, after a full backup of the unit; it has been tried on one unit. Install:
   [docs/install-skylight.md](docs/install-skylight.md)
+- 📱 **TECHO5 on a tablet, no unlock** (v1.2.24). TECHO5 Panel is an Android app with the same daemon
+  inside: Home Assistant adds it like an Echo, with the same wake words, screens, timers, alarms,
+  intercom and announcements. No unlock and no root, on tablets and the Meta Portal. Tested on a Fire
+  HD 8 (10th gen), a Galaxy Tab S6 Lite and a Meta Portal (2nd gen); other Android 7.1+ tablets may
+  work. [TECHO5 Panel](https://github.com/HuskerMinion/techo5-panel), [docs/panel.md](docs/panel.md)
 - 📷 **The Echo Show 8 2nd gen's camera works** (v1.2.24). Live on its own screen, a Home Assistant
   camera, and everything else the other Shows do with theirs (presence, person detection, gestures,
   your recorder). It's off while the device is muted or the shutter is closed. It comes with a new
