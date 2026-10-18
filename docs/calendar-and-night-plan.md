@@ -122,6 +122,48 @@ and is easy on eyes adjusted to it.
   "Red clock").
 - The Spot's night only dims today; a red clock could come to it later if wanted.
 
+## 6. The calendar's look
+
+Added after the rest, as switches, each on the screen (Settings, Display, Calendar), on the setup
+page (Weather & Calendar) and in Home Assistant. Shared settings can keep them the same on every
+screen. The Spot keeps its own Today and Next.
+
+- **Day timeline** (on): a day on its hours. Events are boxes as long as they last, side by side when
+  they overlap. All-day events and the day's weather are in a strip under the header. ‹ › and a
+  swipe go to the day before or after. Today has a Today tag, the now line and its past hours shaded,
+  and opens an hour before now. Another day opens an hour before its first event. A "Later" pill
+  points to an event below, and a bar at the right edge shows where in the day the page is. Off: the
+  list it was.
+- **Coming up, one line each** (on): the time, the title and the place on one line. Each day's
+  heading has "Today", "Tomorrow" or "in 3 days", and the day's weather with the high and low.
+  Off: the two-line rows.
+- **Month details**: *Full* or *Simple*. Simple is an event of several days as one bar, pointed
+  where it runs past the week or the month and with the day it ends, the past days dimmed and
+  today's number in the accent. Full adds a timed event's start time in its calendar's color ("9a"),
+  icons on a screen bigger than the Show 5, and the next seven days' weather. Full on screens bigger
+  than the Show 5, Simple on the Show 5.
+- **Event icons** (on): a small picture before a title, by a word in it: birthday, trash or
+  recycling, a flight, the dentist, the doctor or an appointment, soccer or practice, school or
+  picture day, vacation or a holiday. In Coming up, the day and the week; on the month only on
+  screens bigger than the Show 5. The words are a table in `calendar_text.go`.
+- **Countdowns** (on): "now", "in 25 min" or "in 1 h 30 min" on today's events, the next one filled
+  in the accent; and "Vacation in 11 days" on the clock's card for an event of several days.
+- **Week view**: seven days on their hours, each headed by its weather, with an all-day strip and
+  today's column tinted. A Day, Week and Month switch sits in the header. On screens bigger than the
+  Show 5, off on the Show 5.
+- **Next up on the clock** (on): while an event is on, or comes up today or within 12 hours, the foot
+  of the clock shows it instead of the glance strip: its time, its countdown, and under it the long
+  countdown and what comes next. A tap opens that day. Not with the Dashboard or Agenda styles, or
+  with the clock in a corner.
+- **Weather in the calendar** (on): the device's own forecast on the days. Nothing without one.
+
+A default that goes by the screen's size is not saved until somebody chooses, so a later change to it
+still applies.
+
+**Which calendars.** With more than one calendar, a chip for each sits over the month, in its color. A
+tap hides that calendar's events on this screen: in every view and on the clock. It is remembered on
+the device and is not shared or put in a settings file.
+
 ## Order of work
 
 Small first, so each can go out in a release on its own:

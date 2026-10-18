@@ -475,6 +475,28 @@ Screen power exposed. With the setting off, the light is listed as it always was
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
   is drawn thin and in a dimmer red, so it doesn't light up a dark room.
 
+### Calendar
+
+The calendar page opens from the date under the clock. Under Settings → **Display** → **Calendar**,
+once a calendar is shown, and on the setup page's Weather & Calendar tab. Each is also in Home
+Assistant.
+
+- **Day timeline**: a day on its hours, with the day's weather, the now line on today, ‹ › and a
+  swipe for the day before or after. Off shows the day as a list.
+- **Coming up, one line each**: one line per event, each day with its weather.
+- **Month details**: *Full* shows start times, icons and the coming week's weather on the month.
+  *Simple* shows the bars only. It starts at Full on the Show 8 and bigger, Simple on the Show 5.
+- **Event icons**: a small picture before a title like "Birthday", "Trash day" or "Dentist".
+- **Countdowns**: "in 25 min" on today's events.
+- **Week view**: seven days on their hours, and a Day, Week and Month switch over the month. It
+  starts on for the Show 8 and bigger, off for the Show 5.
+- **Next up on the clock**: the next event at the foot of the clock, with its countdown. A tap
+  opens its day.
+- **Weather in the calendar**: the forecast on the days.
+
+With more than one calendar, the chips over the month turn a calendar off or on for this screen.
+That choice stays on the device: it isn't shared or saved in a settings file.
+
 ### Fonts of your own
 
 The screen's fonts draw Latin letters, and Go adds Greek and Cyrillic. Words in other scripts, such as
@@ -1013,7 +1035,7 @@ here.
   passed on to the rest of the link as a change made there would be.
 
 Only everyday settings can be shared: the speaker's sound, how an answer is shown and spoken, alarms'
-sound and snooze, the screen, night, photos' timing and look, calendar pop-up timing, and the
+sound and snooze, the screen, night, photos' timing and look, calendar pop-up timing and the calendar's look, and the
 dashboard's behavior. Never what opens the device to the network or has it listen or
 watch (the same list a restore leaves alone, above), and never a password, a key, a server's address
 or the device's name. Also never anything about the microphones: what they hear, how readily and how
