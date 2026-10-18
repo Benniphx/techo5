@@ -86,6 +86,17 @@ fi
 mkdir -p /data/techo5-linux
 LOGDIR=/data/techo5-linux
 
+# techo5-data is written small (the installer's is 64 MiB) and grown here, online, to fill its
+# partition. Once it does, resize2fs has nothing to do. A failure leaves it as it was.
+if [ -n "$DATA_DEV" ] && grep -q " /userdata " /proc/mounts && command -v resize2fs >/dev/null; then
+	if resize2fs $DATA_DEV > /tmp/data-grow.log 2>&1; then
+		crumb "techo5-data: $(tail -1 /tmp/data-grow.log)"
+	else
+		crumb "techo5-data: not grown: $(tail -2 /tmp/data-grow.log | tr '\n' ' ')"
+	fi
+	cp /tmp/data-grow.log $LOGDIR/data-grow.log 2>/dev/null
+fi
+
 # --- The store is this root.
 MODE=none
 [ -e /.techo5-store ] && MODE=store
