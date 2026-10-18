@@ -2020,8 +2020,9 @@ next one is ready, so the screen does not go dark in between. This works the sam
 Assistant folder, an Immich album or library, and the device's own photos. Use it after something
 outside fills or changes the folder; on its own the device reads the list again every hour.
 A slideshow in order carries on from the photo up when it is still in the folder. Given again while
-the photo the last one brought up is still showing, the folder is read again but that photo keeps
-its time, so a script that asks after each photo it copies in changes the photo once, not each time.
+the photo the last re-read brought up is still showing, the folder is read again but that photo
+keeps its time, so a script that asks after each photo it copies in changes the photo once, not each
+time.
 
 An automation that reads the folder again once a script has put new photos in it and said so over
 MQTT:

@@ -139,7 +139,7 @@ screen. The Spot keeps its own Today and Next.
   Off: the two-line rows.
 - **Month details**: *Full* or *Simple*. Simple is an event of several days as one spanning bar, pointed
   where it runs past the week or the month and with the day it ends, the past days dimmed and
-  today's number in the accent. Full adds a timed event's start time in its calendar's color ("9a"),
+  today's number in a pill. Full adds a timed event's start time in its calendar's color ("9a"),
   icons on a screen bigger than the Show 5, and the next seven days' weather. Full on screens bigger
   than the Show 5, Simple on the Show 5.
 - **Event icons** (on): a small picture before a title, by whole words in it: birthday, trash day,

@@ -491,9 +491,10 @@ Assistant.
 - **Day timeline**: a day on its hours, with the day's weather, the now line on today, ‹ › and a
   swipe for the day before or after. Off shows the day as a list.
 - **Coming up, one line each**: one line per event, each day with its weather.
-- **Month details**: *Full* shows start times, icons and the coming week's weather on the month.
-  *Simple* shows events of several days as spanning bars, the past days dimmed and today's number
-  in a pill, and the rest as bars. It starts at Full on the Show 8 and bigger, Simple on the Show 5.
+- **Month details**: *Full* shows start times and the coming week's weather on the month, and event
+  icons on screens bigger than the Show 5. *Simple* shows events of several days as spanning bars,
+  the past days dimmed and today's number in a pill, and the rest as bars. It starts at Full on the
+  Show 8 and bigger, Simple on the Show 5.
 - **Event icons**: a small picture before a title like "Birthday", "Trash day" or "Dentist".
 - **Countdowns**: "in 25 min" on today's events.
 - **Week view**: seven days on their hours, and a Day, Week and Month switch over the month. It
