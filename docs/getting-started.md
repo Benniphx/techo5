@@ -36,6 +36,11 @@ off until the unit is rebooted; the v1.0.1 boot image fixes that, and a unit ins
 by [updating its boot image](install.md#updating-the-boot-image). Other
 Echos (the Dot 3rd gen and later, and so on) are **not** supported.
 
+**Not an Echo: the Skylight Calendar 15 (150-CAL).** TECHO5 runs on this wall calendar too, with no
+unlock: an installer works over adb from its stock firmware, after a full backup of the unit. It has
+no microphone, so it's a screen and a speaker. It has its own guide:
+[install-skylight.md](install-skylight.md).
+
 ## What every device needs
 
 - A **USB data cable** for the device's USB port (micro-USB on the Dot and the Spot). A charge-only

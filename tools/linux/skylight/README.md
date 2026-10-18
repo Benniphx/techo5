@@ -5,7 +5,8 @@ board D156, FCC ID 2AABK-150). TECHO5 runs on it with its own 64-bit mainline ke
 32-bit userland, as on the 2nd gen Show 8. It has no microphones, so it is a screen, a speaker and
 Bluetooth: no wake word and no voice assistant.
 
-Status: bench work on one unit. Not in any release.
+Status: in the releases, tried on one unit. Install it with `tools/install-skylight.py`:
+[docs/install-skylight.md](../../../docs/install-skylight.md) has the steps, the risks and the way back.
 
 ## What works
 
@@ -38,11 +39,24 @@ The kernel mounts `techo5-store` read-only as `/` and runs `init` (this director
 picks a slot with `slotctl` and pivots into it, or stays as the rescue environment. `boot`, `super`
 and the rest of Android are left as they were.
 
+## Updates
+
+A Skylight takes the releases' `arm-skylight` root filesystem (`techo5-rootfs-skylight-<version>.tar.gz`)
+into its other slot, on trial, as the Shows take theirs; it never takes another board's, nor they its.
+The root filesystem carries the kernel it was tested with (`deploy-rootfs.sh` with `KERNEL_IMAGE`), and
+once the new slot is good that kernel goes into `recovery` on trial too (`KERNEL_UPDATE` in
+`device.conf`, `echod/internal/update/kernel`): three boots to settle, the previous kernel kept on
+`techo5-data` and put back if it never does. It is written only over TECHO5's own Skylight kernel. A
+kernel that never gets as far as the boot script cannot be caught that way; its way back is Loader
+mode (docs/install-skylight.md).
+
 ## Files
 
 - `kernel/`: the kernel's board files and `build.sh` (kernel.org linux-6.18.56, pinned by sha256),
-  which makes `boot-skylight.img`; `BENCH=1` also makes a bench image whose initramfs is a root shell
-  on USB serial.
+  which makes `boot-skylight.img` and the kernel's source tarball, for the GPL; `INSTALLER=1` also
+  makes the installer image (a release build), and `BENCH=1` a bench image whose initramfs is a root
+  shell on USB serial. `check-boot.py` and `check-source.py` check them; `tools/release.ps1` runs both
+  again before it publishes.
 - `init`, `mkstore.sh`, `rescue-profile.sh`, `overlay/`: the store and the board's `device.conf`.
 - `install/`: `mkgpt.py` (the new GPT, made from the unit's own table and size) and `install.sh`
   (the writes, each read back), which `tools/install-skylight.py` stages and the installer image runs.
@@ -57,7 +71,7 @@ during the install, back into that unit's store (`install.sh`), so the store ima
 everyone (`mkstore.sh -k none`, no `-F`). For bench work, `mkstore.sh -F <dir>` puts a unit's own
 files into its store image, which is then for that unit only.
 
-## Installing
+## How the installer works
 
 `tools/install-skylight.py` does it in one command, over adb from stock Android, on the firmware
 and hardware it knows (D156.V1.3; see [docs/install-skylight.md](../../../docs/install-skylight.md)):

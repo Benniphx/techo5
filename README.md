@@ -50,9 +50,15 @@ It started on the Show 5, which is where the name comes from.
 | <img src="docs/images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units |
 | <img src="docs/images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | <img src="docs/images/badges/biscuit.png" alt="" width="36" align="absmiddle"> **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
-| <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit, the newest port |
+| <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit |
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
+
+One device that isn't an Echo runs it too: the **Skylight Calendar 15** (150-CAL), a wall calendar
+with a 1920x1080 touch screen. TECHO5 puts its own 64-bit mainline kernel and the same daemon on it,
+over adb, after a full backup. It has no microphone, so it's a screen and a speaker: no wake word,
+voice, phone calls or intercom. Tried on one unit, the newest port:
+[docs/install-skylight.md](docs/install-skylight.md).
 
 How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and View Assist:
 [docs/comparison.md](docs/comparison.md).
@@ -83,6 +89,12 @@ The bigger changes of September and October 2026. Every release lists the rest.
   while they're watched. **If something reads those pages with no password today** (a Home Assistant
   Generic Camera, a recorder), set a camera password and give it to that with Digest authentication,
   or it stops getting pictures. [docs/setup.md](docs/setup.md#4-cameras)
+- 🆕 **The Skylight Calendar 15** (v1.2.24). Not an Echo: the 15-inch wall calendar (150-CAL) runs
+  TECHO5 on its own 64-bit mainline Linux kernel. Touch, the calendar, photos, dashboards, music and
+  the radio, Bluetooth, the light sensor and the clock work. It has no microphone, so there's no wake
+  word or voice, and no phone calls or intercom. One command installs it over adb from its stock
+  firmware, after a full backup of the unit; it has been tried on one unit. Install:
+  [docs/install-skylight.md](docs/install-skylight.md)
 - 📅 **A calendar for the wall** (v1.2.23). The calendar's new look: a day and a week on their hours,
   a cleaner month, Coming up with each day's weather, event icons, countdowns, a filter for which
   calendars a screen shows, and the next event at the foot of the clock, each with its own switch
@@ -441,8 +453,8 @@ the USB serial console, and prints where the Home Assistant key is kept. Later u
 Assistant. Every step by hand, and the fixes for what can go wrong: **[docs/install.md](docs/install.md)**.
 
 > **Status:** in daily use on at least five 2nd gen Echo Show 5s, a 1st gen Show 5 and two 1st gen
-> Show 8s, plus the Spot and the Dot, and working on two 2nd gen Show 8s and an Echo 2nd gen. It's a
-> hobby project, not a product: keep your backups, and expect rough edges.
+> Show 8s, plus the Spot and the Dot, and working on two 2nd gen Show 8s, an Echo 2nd gen and a
+> Skylight Calendar 15. It's a hobby project, not a product: keep your backups, and expect rough edges.
 
 **Echo Show 5 1st gen (2019, `checkers`)** installs with the same command: the installer sees which
 generation it is talking to and takes that unit's boot image from the release. Everything works on it:
@@ -465,11 +477,18 @@ supported on that kernel so far, and the installer checks yours. Every step:
 **[docs/install-athena.md](docs/install-athena.md)**. The story and the hardware:
 [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena).
 
+**Skylight Calendar 15 (150-CAL)** isn't an Echo and needs no unlock. On its stock firmware
+(D156.V1.3) adb is open, and `tools/install-skylight.py` backs up the whole eMMC, then puts TECHO5's
+own 64-bit mainline kernel and the system on it. The installer knows that one firmware and refuses any
+other. It has been tried on one unit, and the way back in Loader mode hasn't been tried yet, so keep
+the backup. Every step: **[docs/install-skylight.md](docs/install-skylight.md)**. The hardware:
+[tools/linux/skylight](tools/linux/skylight/README.md).
+
 ## Under the hood
 
 | Layer | What |
 |---|---|
-| Boot | Amazon's LK, unlocked with amonet; the LineageOS 4.9 kernel rebuilt with Bluetooth; a rescue initramfs that picks a slot. On the 2nd gen Show 8: saiyaku-athena and TECHO5's own Linux 6.18 kernel ([source](tools/linux/athena/kernel)) |
+| Boot | Amazon's LK, unlocked with amonet; the LineageOS 4.9 kernel rebuilt with Bluetooth; a rescue initramfs that picks a slot. On the 2nd gen Show 8: saiyaku-athena and TECHO5's own Linux 6.18 kernel ([source](tools/linux/athena/kernel)). On the Skylight Calendar 15: its stock U-Boot and TECHO5's own Linux 6.18 kernel ([source](tools/linux/skylight/kernel)) |
 | System | Alpine Linux armv7 in two root filesystem slots, read-only, with a trial-and-commit boot counter |
 | Daemon | `echod`, one Go binary: audio, wake word, echo cancellation, screen renderer, touch, camera ISP, Bluetooth, updates |
 | Home Assistant | The native ESPHome API: voice satellite, media player, camera, update entity, dozens of settings |

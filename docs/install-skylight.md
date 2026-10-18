@@ -89,6 +89,9 @@ itself) stay as they are.
 What could go wrong:
 
 - It has been tried on one unit. Another unit may differ in a way the checks don't catch.
+- The one-command install hasn't run end to end on a unit yet. The unit it was tried on had the same
+  writes made by the same install script, started by hand; the installer image that starts it by
+  itself is new.
 - If the power goes out while the install writes, the unit may not start until it is written back
   from the backup in Loader mode.
 - The way back in Loader mode has not been tried on this model yet. Reading the eMMC in Loader mode
@@ -140,6 +143,24 @@ Settings → Devices & services: the unit appears under Discovered as an ESPHome
 you gave it. Add it and paste the key the installer printed. It is also in
 `backups/skylight-<serial>/home-assistant.key`. If it doesn't appear, add the ESPHome integration by
 hand with the unit's address and port 6053.
+
+## Updates
+
+Updates come from Home Assistant, as on the Echos: the update card installs the next release into
+TECHO5's other system slot and goes back to the one before if the new one doesn't come up.
+
+A release can bring a new kernel too. Once the new system has run for a few minutes with Wi-Fi, the
+screen and the sound card working, the kernel goes into `recovery`, on trial for three starts. If it
+never settles, the kernel before it goes back by itself. A kernel that doesn't get that far (the unit
+stays dark, or restarts over and over) can't be caught that way. The way back from one is Loader mode
+(below): write the boot image of the release before it into `recovery`, from a computer:
+
+```
+rkdeveloptool wl <recovery> techo5-boot-skylight-<version>.img
+rkdeveloptool rd
+```
+
+`<recovery>` is in the backup's `restore/RESTORE.txt`. The boot image is on that release's page.
 
 ## If the install stops
 
