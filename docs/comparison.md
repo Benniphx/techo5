@@ -43,7 +43,7 @@ that project's docs. It doesn't mean they can't do it.
 | **Remote API** | Signed, off by default, can't touch privacy settings | Not listed | Not listed | Yes (Remote API) | Not listed |
 | **Updates** | Signed, A/B with fallback, from Home Assistant's update card; stable or dev channel; automatic between 2 and 5 AM if you want | From Home Assistant, stable or development channel | Over Wi-Fi from its dashboard, with automatic rollback | From GitHub, with a Home Assistant update entity | Integration through HACS |
 | **License** | MIT | MIT | MIT | CC BY-NC-ND 4.0 (free for personal, non-commercial use) | View Assist: CC BY-NC 4.0. Integration repo: no license file found. VACA: Apache 2.0 |
-| **Latest release** | v1.2.23, October 2026 | 0.0.9, October 15, 2026 | v2.18.1, October 15, 2026 | 2026.10.29, October 18, 2026 | VACA v0.13.5, October 10, 2026; integration 2026.7.0, July 8, 2026 |
+| **Latest release** | v1.2.23, October 18, 2026 | 0.0.9, October 15, 2026 | v2.18.1, October 15, 2026 | 2026.10.29, October 18, 2026 | VACA v0.13.5, October 10, 2026; integration 2026.7.0, July 8, 2026 |
 
 A few related projects, for context:
 
