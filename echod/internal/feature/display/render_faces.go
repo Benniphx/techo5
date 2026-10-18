@@ -134,9 +134,10 @@ func (r *renderer) agendaStyle(s scene, box image.Rectangle) {
 	base := box.Min.Y + r.s(20) + capHeight(tf)
 	r.text(tf, hm, box.Min.X, base, cream)
 	if suffix := clockSuffix(s.now); suffix != "" {
-		// A gap under the digits, then the suffix by its own height: a fixed step let a taller font's
-		// AM or PM reach up into the time.
-		step := r.s(12) + capHeight(r.ampm)
+		// The fixed step under the digits, or more where the suffix needs it: a small gap, then the
+		// suffix by its own height. The step alone let a taller font's AM or PM reach up into the time;
+		// the screen's own font fits the step exactly, so with it nothing moves.
+		step := max(r.s(48), r.s(6)+capHeight(r.ampm))
 		r.text(r.ampm, suffix, box.Min.X, base+step, dateColor(amber))
 		base += step
 	}
