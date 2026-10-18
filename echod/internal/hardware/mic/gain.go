@@ -86,6 +86,9 @@ func routeInputs() {
 // applyGain sets the analog gain on every ADC. A microphone that cannot be turned up is worth a log
 // and nothing more: the array still works, quietly.
 func applyGain(db int) {
+	if !hasMixer {
+		return // a panel: the app's microphone has no converter of ours to turn up
+	}
 	m, err := alsa.OpenMixer(Card)
 	if err != nil {
 		slog.Error("opening the mixer failed", "err", err)

@@ -76,7 +76,7 @@ func WiFiAddresses() []net.IP {
 func reported(keep func(name string) bool) []net.IP {
 	var ips []net.IP
 	for _, i := range readInterfaces() {
-		if i.Flags&net.FlagUp == 0 || !keep(i.Name) {
+		if i.Flags&net.FlagUp == 0 || !keep(i.Name) || tethered(i.Name) {
 			continue
 		}
 		for _, ip := range i.addrs {
@@ -88,12 +88,21 @@ func reported(keep func(name string) bool) []net.IP {
 	return ips
 }
 
+// tethered is whether an interface is Android's USB tethering link (rndis0, usb0): it reaches only the
+// computer on the cable, and advertised over mDNS it would be an address nothing in the house can use,
+// as athena's RNDIS was (addresses_net.go). By name here: Android names them so, and the app reports
+// no sysfs to tell a gadget by.
+func tethered(name string) bool {
+	return strings.HasPrefix(name, "rndis") || strings.HasPrefix(name, "usb")
+}
+
 // MulticastInterfaces is the interfaces that are up and take multicast, for the mDNS library, which
 // would otherwise list them itself and find none.
 func MulticastInterfaces() []net.Interface {
 	var out []net.Interface
 	for _, i := range readInterfaces() {
-		if i.Flags&net.FlagUp != 0 && i.Flags&net.FlagMulticast != 0 && i.Flags&net.FlagLoopback == 0 {
+		if i.Flags&net.FlagUp != 0 && i.Flags&net.FlagMulticast != 0 && i.Flags&net.FlagLoopback == 0 &&
+			!tethered(i.Name) {
 			out = append(out, i.Interface)
 		}
 	}

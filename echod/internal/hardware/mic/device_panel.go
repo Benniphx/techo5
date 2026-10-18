@@ -37,6 +37,10 @@ const VendorBeamformer = false
 
 func resetsOnMute() bool { return false }
 
+// hasMixer is false: a panel's microphone comes from the app, with no converter of the daemon's own,
+// so a gain change opens no mixer (applyGain) and logs no failure.
+const hasMixer = false
+
 // vendorBeamformerSkipped is false: a panel was never offered the vendor beamformer, so there is
 // nothing to say.
 const vendorBeamformerSkipped = false
