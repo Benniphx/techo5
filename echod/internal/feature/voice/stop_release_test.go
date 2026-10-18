@@ -27,7 +27,7 @@ func stopRoom(t *testing.T, playing bool) (*Voice, *int, *int) {
 	musicPlaying = func() bool { return playing }
 	pauseMusic = func() { playing = false; paused++ }
 	releaseRing = func() bool { released++; return true }
-	return &Voice{turn: newConversation(&esphome.VoiceSatellite{}), realtime: &realtime{}}, &released, &paused
+	return &Voice{turn: newConversation(&esphome.VoiceSatellite{}), realtime: &nativeRealtime{}}, &released, &paused
 }
 
 // sound starts a ring for the rest of the test.

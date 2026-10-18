@@ -196,11 +196,37 @@ class Stable120MergeTests(unittest.TestCase):
             merged = subprocess.run(["git", "merge-file", "-p", str(native), str(original), str(fixture)],
                                     capture_output=True, text=True, check=False)
         self.assertEqual(merged.returncode, 0, "Native voice conflicts with stable v1.2.20")
-        for retained in ("realtime *realtime", "effect *esphome.Action", "v.nativeRealtimeStart()",
+        for retained in ("realtime *nativeRealtime", "effect *esphome.Action", "v.nativeRealtimeStart()",
                          "v.Start(0)", "v.realtime.stop()", "HomeAssistant()",
                          "func (v *Voice) ShowEffect(", "v.turn.askEffect(name)", "releaseRing()"):
             # gofmt column alignment is immaterial to the retained fields.
             self.assertIn(" ".join(retained.split()), " ".join(merged.stdout.split()))
+
+
+class Stable122MergeTests(unittest.TestCase):
+    def test_actual_source_merges_upstream_realtime_and_streaming(self):
+        root = Path(__file__).resolve().parents[1]
+        ancestor = "0d4cb94cb08dbae20f70b312ce7a265c20f8510f"
+        for relative in ("internal/feature/display/render.go",
+                         "internal/feature/voice/realtime.go",
+                         "internal/feature/voice/realtime_test.go"):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as directory:
+                path = "echod/" + relative
+                native, original = Path(directory) / "native", Path(directory) / "base"
+                source = root / path
+                native.write_bytes(source.read_bytes() if source.exists() else b"")
+                base = subprocess.run(["git", "show", ancestor + ":" + path],
+                                      cwd=root, capture_output=True, check=False)
+                original.write_bytes(base.stdout if base.returncode == 0 else b"")
+                fixture = Path(directory) / "upstream"
+                fixture.write_bytes(subprocess.check_output(
+                    ["git", "show", "747246a5811de76d3b16bf26f3b867772d4b8b0c:" + path],
+                    cwd=root))
+                merged = subprocess.run(["git", "merge-file", "-p", str(native),
+                                         str(original), str(fixture)],
+                                        capture_output=True, text=True, check=False)
+                self.assertEqual(merged.returncode, 0,
+                                 "Native source conflicts with stable v1.2.22: " + relative)
 
 
 if __name__ == "__main__":

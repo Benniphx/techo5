@@ -1,6 +1,6 @@
-// Package realtime implements a direct OpenAI Realtime GA audio session. Each
+// Package nativerealtime implements a direct OpenAI Realtime GA audio session. Each
 // Run owns one connection; reconnecting requires a deliberate local wake.
-package realtime
+package nativerealtime
 
 import (
 	"context"

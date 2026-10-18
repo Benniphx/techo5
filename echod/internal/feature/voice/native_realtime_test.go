@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
-	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
+	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/nativerealtime"
 )
 
 func TestRealtimeFlushResetsAudioAndRejectsOverflow(t *testing.T) {

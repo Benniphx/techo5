@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
-	stream "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
+	stream "github.com/HuskerMinion/techo5/echod/internal/lib/nativerealtime"
 )
 
 func newVoiceCmd() *cobra.Command {

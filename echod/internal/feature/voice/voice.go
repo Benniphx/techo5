@@ -51,7 +51,7 @@ type Voice struct {
 	turn   *conversation
 	effect *esphome.Action
 
-	realtime *realtime
+	realtime *nativeRealtime
 }
 
 var (
@@ -107,7 +107,7 @@ func build() *Voice {
 		},
 	}
 	v.turn = newConversation(v.vs)
-	v.realtime = &realtime{}
+	v.realtime = &nativeRealtime{}
 	mute.Get().Changed.Listen(func(on bool) {
 		if on {
 			v.realtime.stop()

@@ -9,7 +9,7 @@ import (
 
 func TestNativeRealtimeAdmissionKeepsStockAndBusyOwners(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
-	v := &Voice{realtime: &realtime{}}
+	v := &Voice{realtime: &nativeRealtime{}}
 	if v.nativeRealtimeStart() {
 		t.Fatal("stock wake/button dispatch was intercepted")
 	}

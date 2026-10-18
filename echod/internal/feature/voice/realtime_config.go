@@ -12,7 +12,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/llm"
-	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
+	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/nativerealtime"
 )
 
 const realtimePilotFile = "/tmp/techo5-realtime.json"

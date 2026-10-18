@@ -14,12 +14,12 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
-	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
+	rtapi "github.com/HuskerMinion/techo5/echod/internal/lib/nativerealtime"
 )
 
-// realtime owns a whole multi-turn conversation beside the Assist turn machine.
+// nativeRealtime owns a whole multi-turn conversation beside the Assist turn machine.
 // An active connection is never replaced or retried without a fresh local wake.
-type realtime struct {
+type nativeRealtime struct {
 	mu             sync.Mutex
 	root           context.Context
 	cancel         context.CancelFunc
@@ -29,21 +29,21 @@ type realtime struct {
 	nextAttempt    time.Time
 }
 
-func (r *realtime) backingOff() bool {
+func (r *nativeRealtime) backingOff() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return time.Now().Before(r.nextAttempt)
 }
 
-func (r *realtime) attach(ctx context.Context) { r.mu.Lock(); defer r.mu.Unlock(); r.root = ctx }
-func (r *realtime) stop() {
+func (r *nativeRealtime) attach(ctx context.Context) { r.mu.Lock(); defer r.mu.Unlock(); r.root = ctx }
+func (r *nativeRealtime) stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.cancel != nil {
 		r.cancel()
 	}
 }
-func (r *realtime) shutdown() {
+func (r *nativeRealtime) shutdown() {
 	r.stop()
 	r.mu.Lock()
 	done := r.done
@@ -53,7 +53,7 @@ func (r *realtime) shutdown() {
 	}
 }
 
-func (r *realtime) start() {
+func (r *nativeRealtime) start() {
 	r.mu.Lock()
 	if r.root == nil || r.root.Err() != nil || r.busy.Load() || (ring.IsSounding() && !ring.Offered()) || phone.Get().Busy() || micTaken() {
 		r.mu.Unlock()
@@ -204,7 +204,7 @@ func (a *realtimeAudio) play(ctx context.Context) error {
 	}
 }
 
-func (r *realtime) run(parent context.Context) error {
+func (r *nativeRealtime) run(parent context.Context) error {
 	pilot, err := readRealtimeConfig()
 	if err != nil {
 		return err
@@ -463,4 +463,8 @@ func (m *realtimeTranscripts) take() []rtapi.Event {
 	m.user, m.assistant = nil, nil
 	return result
 }
-func (m *realtimeTranscripts) clear() { m.mu.Lock(); m.user, m.assistant = nil, nil; m.mu.Unlock() }
+func (m *realtimeTranscripts) clear() {
+	m.mu.Lock()
+	m.user, m.assistant = nil, nil
+	m.mu.Unlock()
+}

@@ -39,17 +39,15 @@ var shade = color.RGBA{0x00, 0x00, 0x00, 0x90}
 
 // scene is one frame's worth of facts.
 type scene struct {
-	realtime  bool
-	remaining int
-	now       time.Time
-	phase     string  // idle, listening, thinking, replying, lingering
-	eq        *eqView // a turn's bars, when turns are drawn as the equalizer
-	heard     string
-	reply     string
-	since     time.Time
-	playing   bool
-	paused    bool
-	muted     bool
+	now     time.Time
+	phase   string  // idle, listening, thinking, replying, lingering
+	eq      *eqView // a turn's bars, when turns are drawn as the equalizer
+	heard   string
+	reply   string
+	since   time.Time
+	playing bool
+	paused  bool
+	muted   bool
 
 	// glance is the glance strip's chips (feature/home/glance.go), drawn at the foot of the clock page.
 	glance []home.Chip
@@ -64,6 +62,10 @@ type scene struct {
 	updatePhase    string
 	updateTarget   string
 	updateMessage  string
+
+	// Native Realtime session status is independent of the upstream voice backend.
+	realtime  bool
+	remaining int
 
 	// The dashboard page, drawn instead of the clock while showDash is set: how it is shown, and
 	// when streamed, what arrived.

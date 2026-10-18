@@ -16,7 +16,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
-	stream "github.com/HuskerMinion/techo5/echod/internal/lib/realtime"
+	stream "github.com/HuskerMinion/techo5/echod/internal/lib/nativerealtime"
 )
 
 // maxLag is how far apart the reference and a microphone may be, in samples at the capture rate.
