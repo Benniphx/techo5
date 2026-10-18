@@ -796,11 +796,12 @@ func (s *session) finish() {
 var errSwitchedOff = errors.New("sendspin: switched off")
 
 // goodbyeFor is the client/goodbye reason for a session ctx ended. Music Assistant dials a device
-// set up by address again only after "restart"; after "user_request", or a connection that just
-// drops while nothing plays, it stops dialing for good. A device that restarted, was updated or
-// rebooted was then left out of Music Assistant until Music Assistant itself was restarted. So the
-// daemon stopping is "restart", since the device comes back, and only the switch turned off is
-// "user_request".
+// set up by address again only after "restart"; after any other goodbye, "user_request" among them,
+// it stops dialing for good (aiosendspin's should_retry_server_initiated_connection). A connection
+// that drops with no goodbye at all it takes for a restart. A device that restarted, was updated or
+// rebooted said "user_request" and was then left out of Music Assistant until Music Assistant itself
+// was restarted. So the daemon stopping is "restart", since the device comes back, and only the
+// switch turned off is "user_request".
 func goodbyeFor(ctx context.Context) string {
 	if errors.Is(context.Cause(ctx), errSwitchedOff) {
 		return "user_request"
