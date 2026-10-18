@@ -12,6 +12,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/panelsock"
 )
 
 // dump records what is played while files/dump-echo exists: echo-played.raw holds the 48 kHz stereo
@@ -34,7 +35,7 @@ const sendBuffer = 8 * period * Channels * Bits / 8
 func openDevice() (playback, *alsa.Mixer, *os.File, error) {
 	deadline := time.Now().Add(dialWait)
 	for {
-		conn, err := net.Dial("unix", speakerSocket)
+		conn, err := panelsock.Dial(speakerSocket)
 		if err == nil {
 			// A send buffer of a few periods, so a write blocks once the app is that far behind. With the
 			// default, the socket alone holds a second or more, the writes run that far ahead of what

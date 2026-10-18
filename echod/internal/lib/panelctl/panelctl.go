@@ -9,11 +9,14 @@ package panelctl
 
 import (
 	"bufio"
+	"errors"
 	"log/slog"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/lib/panelsock"
 )
 
 const socket = "@techo5.ctl"
@@ -61,12 +64,20 @@ func Handle(kind string, f func(args []string)) {
 
 func run() {
 	go func() {
+		// refused is whether a socket that was not the app's has been logged since the last connection,
+		// so one held by another app is said once rather than every second.
+		refused := false
 		for {
-			c, err := net.Dial("unix", socket)
+			c, err := panelsock.Dial(socket)
 			if err != nil {
+				if errors.Is(err, panelsock.ErrNotTheApp) && !refused {
+					slog.Error("panel control line refused", "err", err)
+					refused = true
+				}
 				time.Sleep(time.Second)
 				continue
 			}
+			refused = false
 			mu.Lock()
 			conn = c
 			for _, line := range latest {

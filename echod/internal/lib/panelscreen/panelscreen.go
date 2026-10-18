@@ -27,6 +27,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/lib/panelsock"
 )
 
 // Socket is the abstract socket the app serves the screen on.
@@ -88,7 +90,7 @@ func Get() (*Conn, error) {
 	var c net.Conn
 	for {
 		var err error
-		c, err = net.Dial("unix", Socket)
+		c, err = panelsock.Dial(Socket)
 		if err == nil {
 			break
 		}

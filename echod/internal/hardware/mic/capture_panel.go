@@ -17,6 +17,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/micsilent"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/panelsock"
 )
 
 // dump records what is heard while files/dump-echo exists: echo-mic.raw holds 16 kHz S16LE pairs,
@@ -83,7 +84,7 @@ type socketCapture struct {
 func openDevice() (capture, error) {
 	deadline := time.Now().Add(dialWait)
 	for {
-		conn, err := net.Dial("unix", micSocket)
+		conn, err := panelsock.Dial(micSocket)
 		if err == nil {
 			c := &socketCapture{conn: conn, lag: savedLag()}
 			// Silent as the last connection left it, so sound on this one clears it (flat_panel.go).
