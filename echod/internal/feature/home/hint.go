@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 )
 
 // A station asked for that Home Assistant never started, and a star with nothing behind it.
@@ -16,11 +18,16 @@ import (
 // nothing on the device to say why; the reason was a line in Home Assistant's own log.
 //
 // What the device can see is whether anything came of the call. A stream reaching its player, the
-// station script turning on, or the house's "last station" text naming a station are all Home Assistant
-// at work on it. With none of them within startWait, the station is no longer shown as starting, a
-// note says what to check, and the log says it too (a Dot has no screen, so the log is all it has).
-// None of that stops the stream: one that arrives after the note plays as any other does, and takes
-// the note down.
+// station script turning on, the house's "last station" text naming a station, or Music Assistant
+// playing on the device (through Sendspin, a remote holding the speaker) are all Home Assistant at work
+// on it. With none of them within startWait, the station is no longer shown as starting, a note says
+// what to check, and the log says it too (a Dot has no screen, so the log is all it has). None of that
+// stops the stream: one that arrives after the note plays as any other does, and takes the note down.
+//
+// Only a station somebody asked for is watched: one the device puts back on by itself after its stream
+// dropped (putBack) is not, since a note would be about nothing anybody did. And a call that went to no
+// Home Assistant at all, none being connected, is only logged (callFavorite): the note's question
+// about its settings would be the wrong one.
 
 // Hint is a short note for the screen about something this device asked for that went nowhere. The
 // screen puts it up as a card, the way it shows a notification (feature/notify), but quietly and
@@ -66,13 +73,26 @@ func (f *Feature) watchStart(service, station string, wait time.Duration) {
 	time.AfterFunc(wait, func() { f.noStart(service, station, seq, at, wait) })
 }
 
+// externalPlaying is whether something this device did not start is playing on it: Music Assistant's
+// Sendspin stream holds the speaker as a remote (media.Player.External). A test's Feature has its own
+// (f.external), since a timer of an earlier test may be reading it.
+func (f *Feature) externalPlaying() bool {
+	if f.external != nil {
+		return f.external()
+	}
+	return media.Get().ExternalPlaying()
+}
+
 // noStart is the wait for station over. Only while it is still the station being started (the one
 // chosen, with no station asked for since), and only when Home Assistant gave no sign at all since it was
-// asked at: its stream reaching the player clears the chosen station (played), and the script or the
-// "last station" text moving is heardAt (stationStarted). A Stop clears the chosen station too.
+// asked at: its stream reaching the player clears the chosen station (played), the script or the
+// "last station" text moving is heardAt (stationStarted), and Music Assistant playing on the device is
+// its stream arriving another way, which a working Music Assistant setup always shows. A Stop clears the
+// chosen station too.
 func (f *Feature) noStart(service, station string, seq uint64, at time.Time, wait time.Duration) {
+	external := f.externalPlaying()
 	f.mu.Lock()
-	missed := f.startSeq == seq && f.chosen == station && f.heardAt.Before(at)
+	missed := f.startSeq == seq && f.chosen == station && f.heardAt.Before(at) && !external
 	if missed {
 		// The page stops saying "Starting…" for it. The claim on the next stream stays as it is, so a
 		// stream that is only late is still the station's.

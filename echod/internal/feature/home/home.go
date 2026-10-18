@@ -158,6 +158,8 @@ type Feature struct {
 	startSeq uint64
 	heardAt  time.Time
 	hinted   bool
+	// external stands in for whether Music Assistant plays on the device, in a test (externalPlaying).
+	external func() bool
 
 	// resumed counts how many times a dropped stream has been put back on lately, and resumedAt when
 	// the last of those was, so a station that will not stay up is eventually left off (resume.go).
@@ -864,7 +866,9 @@ func (f *Feature) play(station string, gen *uint64) {
 	f.mu.Lock()
 	f.chosen = station
 	f.mu.Unlock()
-	f.callFavorite(h, station)
+	// Watched only when somebody asked for it (hint.go): a put-back, after a stream dropped, is the
+	// device's own doing, and a note about it would be about nothing anybody did.
+	f.callFavorite(h, station, gen == nil)
 	f.Changed.Emit(struct{}{})
 	f.pokeMeta()
 }

@@ -48,11 +48,17 @@ func newHintRig(t *testing.T, wait time.Duration) *hintRig {
 // and the call to the script, which the rig waits to see go out.
 func (r *hintRig) ask(t *testing.T, station string) {
 	t.Helper()
+	r.askWatched(t, station, true)
+}
+
+// askWatched is ask, with watch as callFavorite takes it: false for a station the device puts back on.
+func (r *hintRig) askWatched(t *testing.T, station string, watch bool) {
+	t.Helper()
 	r.f.mu.Lock()
 	r.f.askStation(station)
 	r.f.chosen = station
 	r.f.mu.Unlock()
-	r.f.callFavorite(r.h, station)
+	r.f.callFavorite(r.h, station, watch)
 	select {
 	case c := <-r.calls:
 		if c.Service != r.h.Service || c.Data["station"] != station {
@@ -106,6 +112,44 @@ func TestAStationThatStartsInTimeHasNoNote(t *testing.T) {
 		case <-time.After(400 * time.Millisecond):
 		}
 	}
+}
+
+// No note where it would be wrong: a station the device puts back on by itself after its stream dropped
+// (nobody asked for it), a call that went to no Home Assistant at all (none connected, so the question
+// about its settings is the wrong one; the station is not left starting either), and Music Assistant
+// playing on the device, which is the station arriving through Sendspin rather than as a stream to the
+// player.
+func TestNoNoteWhereItWouldBeWrong(t *testing.T) {
+	quiet := func(t *testing.T, r *hintRig, what string) {
+		t.Helper()
+		select {
+		case h := <-r.hints:
+			t.Errorf("%s: a note: %+v", what, h)
+		case <-time.After(300 * time.Millisecond):
+		}
+	}
+
+	r := newHintRig(t, 50*time.Millisecond)
+	r.askWatched(t, "Example FM", false)
+	quiet(t, r, "a put-back")
+
+	r = newHintRig(t, 50*time.Millisecond)
+	stop := component.CallService.Listen(func(c component.Call) {
+		if c.Unheard != nil {
+			c.Unheard()
+		}
+	})
+	r.ask(t, "Example FM")
+	stop()
+	quiet(t, r, "no Home Assistant connected")
+	if c := r.chosen(); c != "" {
+		t.Errorf("no Home Assistant connected: still shown as starting %q", c)
+	}
+
+	r = newHintRig(t, 50*time.Millisecond)
+	r.f.external = func() bool { return true }
+	r.ask(t, "Example FM")
+	quiet(t, r, "Music Assistant playing")
 }
 
 // Another station tapped, or a Stop, before the wait is out: the note is not for the station before.
