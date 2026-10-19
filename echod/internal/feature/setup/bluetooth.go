@@ -8,11 +8,22 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 )
 
+// secureConnSetting is the part of btaudio the section uses.
+type secureConnSetting interface {
+	SecureConnectionsHere() bool
+	SecureConnections() bool
+	SetSecureConnections(on bool) error
+}
+
+// secureConns is btaudio's setting. A variable for the tests, which leave btaudio unstarted: Get
+// starts its Secure Connections loop, which reads the config the other tests swap.
+var secureConns = func() secureConnSetting { return btaudio.Get() }
+
 // bluetoothSection is the controller's Secure Connections (#183): on, as it comes, and off for a phone
 // that pairs and is dropped a second or two later. On every device that offers it, the Dot too, whose
 // only place for it besides Home Assistant this is. Not on athena on mainline, which has it off for good.
 func bluetoothSection(w http.ResponseWriter, token string) {
-	bt := btaudio.Get()
+	bt := secureConns()
 	if !bt.SecureConnectionsHere() {
 		return
 	}
@@ -32,7 +43,7 @@ func bluetoothSection(w http.ResponseWriter, token string) {
 }
 
 func saveBluetooth(r *http.Request) string {
-	bt := btaudio.Get()
+	bt := secureConns()
 	if !bt.SecureConnectionsHere() {
 		return "this device has no such setting"
 	}
