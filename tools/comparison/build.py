@@ -2,7 +2,7 @@
 """Builds the project comparison from docs/comparison/data.json.
 
     python3 tools/comparison/build.py              # writes docs/comparison.md
-    python3 tools/comparison/build.py --site _site # also writes the interactive page for GitHub Pages
+    python3 tools/comparison/build.py --site _site # also writes the interactive page and the finder for GitHub Pages
 
 The data file is the one place a cell changes; the markdown page and the interactive page are both made
 from it. The workflow in .github/workflows/comparison-page.yml publishes only the interactive page.
@@ -17,6 +17,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DATA = os.path.join(ROOT, "docs", "comparison", "data.json")
 MD = os.path.join(ROOT, "docs", "comparison.md")
 TEMPLATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "page.html")
+FINDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "choose.html")
 PAGE_URL = "https://huskerminion.github.io/techo5/comparison/"
 ISSUES = "https://github.com/HuskerMinion/techo5/issues"
 
@@ -62,7 +63,8 @@ compare. This page lists what each one covers. It isn't a ranking: each project 
 its own focus, and the right one depends on your devices and what you want from them.
 
 **[Open the interactive version]({PAGE_URL})**: the header stays put while you scroll, you can filter
-by section or project, and each cell shows its note and source.
+by section or project, and each cell shows its note and source. Or **[answer a few questions]({PAGE_URL}choose/)**
+about your devices and what you want, and see which projects fit.
 
 This page lives in the TECHO5 repo and is kept by TECHO5's author, so read it with that in mind.
 To keep it even, it was built the same way for every project, TECHO5 included:
@@ -162,8 +164,8 @@ Projects are in alphabetical order.
     return "\n".join(o) + "\n"
 
 
-def page(d):
-    t = open(TEMPLATE, encoding="utf-8").read()
+def page(d, template=TEMPLATE):
+    t = open(template, encoding="utf-8").read()
     data = json.dumps(d, ensure_ascii=False).replace("</", "<\\/")
     return (t.replace("/*DATA*/null", data)
              .replace("{{CHECKED}}", html.escape(checked_words(d["checked"])))
@@ -180,6 +182,8 @@ def main():
     if a.site:
         os.makedirs(os.path.join(a.site, "comparison"), exist_ok=True)
         open(os.path.join(a.site, "comparison", "index.html"), "w", encoding="utf-8").write(page(d))
+        os.makedirs(os.path.join(a.site, "comparison", "choose"), exist_ok=True)
+        open(os.path.join(a.site, "comparison", "choose", "index.html"), "w", encoding="utf-8").write(page(d, FINDER))
         for img in ("banner.jpg", "og.jpg"):
             shutil.copy(os.path.join(os.path.dirname(DATA), img), os.path.join(a.site, "comparison", img))
         open(os.path.join(a.site, "index.html"), "w", encoding="utf-8").write(

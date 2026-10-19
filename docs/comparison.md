@@ -7,7 +7,8 @@ compare. This page lists what each one covers. It isn't a ranking: each project 
 its own focus, and the right one depends on your devices and what you want from them.
 
 **[Open the interactive version](https://huskerminion.github.io/techo5/comparison/)**: the header stays put while you scroll, you can filter
-by section or project, and each cell shows its note and source.
+by section or project, and each cell shows its note and source. Or **[answer a few questions](https://huskerminion.github.io/techo5/comparison/choose/)**
+about your devices and what you want, and see which projects fit.
 
 This page lives in the TECHO5 repo and is kept by TECHO5's author, so read it with that in mind.
 To keep it even, it was built the same way for every project, TECHO5 included:
