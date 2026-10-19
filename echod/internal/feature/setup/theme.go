@@ -21,10 +21,12 @@ import (
 func init() { routes["/setup/theme-match"] = (*Feature).themeMatch }
 
 // ThemeChoices is what the display hands in for the section: whether the light theme is the one worn
-// now, and how to tell the screen and Home Assistant of a change saved here.
+// now, how to tell the screen and Home Assistant of a change saved here, and whether Auto is offered
+// (only where there is a light sensor; not on a panel).
 type ThemeChoices struct {
 	LightNow func() bool
 	Changed  func()
+	Auto     bool
 }
 
 // themeModeChoices are the modes as the page names them, with what the config keeps. Home Assistant's
@@ -33,6 +35,14 @@ var themeModeChoices = []struct{ label, value string }{
 	{"Dark", ""},
 	{"Light", config.ThemeModeLight},
 	{"Auto, by the room's light", config.ThemeModeAuto},
+}
+
+// modeChoices are the modes the section offers: Auto only where tc says.
+func (tc *ThemeChoices) modeChoices() []struct{ label, value string } {
+	if tc.Auto {
+		return themeModeChoices
+	}
+	return themeModeChoices[:2]
 }
 
 // colorRoles are the five colors, as the form names them and as the page says them.
@@ -88,13 +98,17 @@ func themeSection(w http.ResponseWriter, token string) {
 	fmt.Fprint(w, `</select><label for="lighttheme">Light theme</label><select id="lighttheme" name="light">`)
 	themeOptions(w, themeNames(true), sc.ThemeFor(true))
 	fmt.Fprint(w, `</select><label for="thememode">Theme mode</label><select id="thememode" name="mode">`)
-	for _, m := range themeModeChoices {
+	for _, m := range tc.modeChoices() {
 		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, m.value, selected(m.value == sc.ThemeMode), m.label)
 	}
 	fmt.Fprint(w, `</select>
-	 <p class="note">Dark wears the dark theme, as the screen always has. Auto wears the light theme in a lit
+	 <p class="note">Dark wears the dark theme, as the screen always has.`)
+	if tc.Auto {
+		fmt.Fprint(w, ` Auto wears the light theme in a lit
 	  room and the dark theme in a dim one, once the room has stayed that way about a minute, by the light
-	  sensor auto-brightness uses; until the sensor has a reading it stays dark. The night clock keeps its own
+	  sensor auto-brightness uses; until the sensor has a reading it stays dark.`)
+	}
+	fmt.Fprint(w, ` The night clock keeps its own
 	  look. Also <strong>Theme mode</strong>, <strong>Theme</strong> (the dark theme) and <strong>Light
 	  theme</strong> in Home Assistant.</p>
 	 <p><button type="submit">Save</button></p></form>`)
@@ -159,7 +173,7 @@ func saveThemes(r *http.Request) string {
 	if !slices.Contains(themeNames(false), dark) || !slices.Contains(themeNames(true), light) {
 		return "that is not a theme this device has"
 	}
-	if !slices.ContainsFunc(themeModeChoices, func(m struct{ label, value string }) bool { return m.value == mode }) {
+	if !slices.ContainsFunc(tc.modeChoices(), func(m struct{ label, value string }) bool { return m.value == mode }) {
 		return "that is not a theme mode this device has"
 	}
 	if err := config.Set().Screen().Themes(dark, light, mode); err != nil {

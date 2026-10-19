@@ -37,10 +37,23 @@ var themeModes = []struct{ label, value string }{
 	{"Auto", config.ThemeModeAuto},
 }
 
-// themeModeIndex is the mode in force; one the file does not know is Dark.
+// hasLightSensor is whether the room's light can choose: not on a panel (ambient.Here). A variable for
+// the tests.
+var hasLightSensor = func() bool { return ambient.Here }
+
+// themeModesHere are the modes this device offers: Auto only where there is a light sensor.
+func themeModesHere() []struct{ label, value string } {
+	if hasLightSensor() {
+		return themeModes
+	}
+	return themeModes[:2]
+}
+
+// themeModeIndex is the mode in force, in themeModesHere; one the file does not know is Dark, and so is
+// Auto on a device with no light sensor, one shared from another device.
 func themeModeIndex() int {
 	m := config.Get().Screen.ThemeMode
-	for i, o := range themeModes {
+	for i, o := range themeModesHere() {
 		if o.value == m {
 			return i
 		}
@@ -115,7 +128,7 @@ func lightShown(sc config.Screen) bool {
 	case config.ThemeModeLight:
 		return true
 	case config.ThemeModeAuto:
-		return room.isLit()
+		return hasLightSensor() && room.isLit()
 	}
 	return false
 }
@@ -123,11 +136,12 @@ func lightShown(sc config.Screen) bool {
 // lightThemeShown is whether the light theme is the one in force, for the setup page, which wears it too.
 func lightThemeShown() bool { return lightShown(config.Get().Screen) }
 
-// themeModeSelect is Theme mode in Home Assistant: Dark, Light or Auto. Theme is the dark mode's theme
-// and Light theme the light mode's, whichever is worn.
+// themeModeSelect is Theme mode in Home Assistant: Dark, Light or Auto, without Auto where there is no
+// light sensor. Theme is the dark mode's theme and Light theme the light mode's, whichever is worn.
 func themeModeSelect(wake func()) *esphome.Select {
-	opts := make([]string, len(themeModes))
-	for i, o := range themeModes {
+	here := themeModesHere()
+	opts := make([]string, len(here))
+	for i, o := range here {
 		opts[i] = o.label
 	}
 	s := &esphome.Select{
@@ -143,6 +157,11 @@ func themeModeSelect(wake func()) *esphome.Select {
 		for _, o := range themeModes {
 			if o.label != v {
 				continue
+			}
+			// Auto shared from a device with a light sensor is Dark on one without.
+			if o.value == config.ThemeModeAuto && !hasLightSensor() {
+				o = themeModes[0]
+				v = o.label
 			}
 			if err := config.Set().Screen().ThemeMode(o.value); err != nil {
 				slog.Warn("saving the theme mode failed", "err", err)
@@ -161,7 +180,7 @@ func themeModeSelect(wake func()) *esphome.Select {
 // the mode and both themes, and the screen redrawn in the theme now in force.
 func (d *Display) themesChanged() {
 	if d.themeModeSel != nil {
-		d.themeModeSel.Set(themeModes[themeModeIndex()].label)
+		d.themeModeSel.Set(themeModesHere()[themeModeIndex()].label)
 	}
 	d.syncThemeSelects()
 	d.wake()

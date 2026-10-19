@@ -131,6 +131,7 @@ func TestThemeSelectsHoldTheirOwnMode(t *testing.T) {
 // Auto follows the room: the first reading decides at once, and after it the room has to stay past the
 // other threshold for themeHold before the theme turns, so a lamp or a shadow does not flip it.
 func TestAutoFollowsTheRoomWithAHold(t *testing.T) {
+	withLightSensor(t)
 	room.forget()
 	t.Cleanup(room.forget)
 	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
@@ -167,5 +168,40 @@ func TestAutoFollowsTheRoomWithAHold(t *testing.T) {
 	room.forget()
 	if current().name != "Ocean" {
 		t.Error("Auto with no reading does not wear the dark theme")
+	}
+}
+
+// withLightSensor is a screen with a light sensor, as a Show has, on the panel build too.
+func withLightSensor(t *testing.T) {
+	was := hasLightSensor
+	hasLightSensor = func() bool { return true }
+	t.Cleanup(func() { hasLightSensor = was })
+}
+
+// Where there is no light sensor (a panel) there is no Auto: Home Assistant is not offered it, Auto
+// shared from another device is saved as Dark, and Auto already in the file wears the dark theme
+// whatever the room.
+func TestNoLightSensorNoAuto(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	was := hasLightSensor
+	hasLightSensor = func() bool { return false }
+	t.Cleanup(func() { hasLightSensor = was })
+	room.forget()
+	t.Cleanup(room.forget)
+
+	s := themeModeSelect(func() {})
+	if len(s.Options) != 2 || s.Options[0] != "Dark" || s.Options[1] != "Light" {
+		t.Errorf("options %q, want Dark and Light", s.Options)
+	}
+	_ = config.Set().Screen().ThemeMode(config.ThemeModeLight)
+	s.OnCommand("Auto")
+	if m := config.Get().Screen.ThemeMode; m != "" {
+		t.Errorf("a shared Auto saved %q, want Dark", m)
+	}
+
+	_ = config.Set().Screen().ThemeMode(config.ThemeModeAuto)
+	room.step(5000, time.Now())
+	if themeModeIndex() != 0 || lightShown(config.Get().Screen) {
+		t.Error("Auto from the file is not Dark on a screen with no light sensor")
 	}
 }

@@ -20,7 +20,7 @@ func withThemes(t *testing.T, light bool) *int {
 	t.Helper()
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	told := 0
-	SetScreen(&ScreenChoices{Themes: &ThemeChoices{LightNow: func() bool { return light }, Changed: func() { told++ }}})
+	SetScreen(&ScreenChoices{Themes: &ThemeChoices{LightNow: func() bool { return light }, Changed: func() { told++ }, Auto: true}})
 	t.Cleanup(func() { SetScreen(nil) })
 	return &told
 }
@@ -39,6 +39,24 @@ func TestTheThemesSectionOffersPickersAndHex(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("the section has no %s", want)
 		}
+	}
+}
+
+// A screen with no light sensor (a panel) offers no Auto, says nothing of it, and refuses it.
+func TestNoLightSensorNoAuto(t *testing.T) {
+	withThemes(t, false)
+	themeChoices().Auto = false
+	w := httptest.NewRecorder()
+	themeSection(w, "tok")
+	body := w.Body.String()
+	if strings.Contains(body, `value="auto"`) || strings.Contains(body, "Auto wears") {
+		t.Errorf("a screen with no light sensor offers Auto: %s", body)
+	}
+	if !strings.Contains(body, `<option value="" selected>Dark</option><option value="light">Light</option></select>`) {
+		t.Errorf("the modes are not Dark and Light alone: %s", body)
+	}
+	if p := saveThemes(form(url.Values{"dark": {"Ocean"}, "light": {"Linen"}, "mode": {config.ThemeModeAuto}})); p == "" {
+		t.Error("Auto was saved on a screen with no light sensor")
 	}
 }
 

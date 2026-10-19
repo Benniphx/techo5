@@ -442,7 +442,7 @@ func build() *Display {
 		OwnFonts: ownFonts, AddFont: d.addOwnFont, RemoveFont: d.removeOwnFont, MaxFont: fonts.MaxOwnFile,
 		Taps: clockTapOptions(), TapNow: clockTapIndex, ChooseTap: func(i int) { setClockTap(d.clockTap, i) }, Places: maxWorld,
 		Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, IgnoreRoomLights: d.setRoomLightsIgnored, Calendar: d.lookChoices(),
-		Themes: &setup.ThemeChoices{LightNow: lightThemeShown, Changed: d.themesChanged}})
+		Themes: &setup.ThemeChoices{LightNow: lightThemeShown, Changed: d.themesChanged, Auto: hasLightSensor()}})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
@@ -563,7 +563,7 @@ func (d *Display) Restore(c config.Config) {
 	d.nightTapSw.Set(c.Screen.NightTapLifts)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
-	d.themeModeSel.Set(themeModes[themeModeIndex()].label)
+	d.themeModeSel.Set(themeModesHere()[themeModeIndex()].label)
 	// Set now, not at the first lit frame: a Show that starts dark would show them unknown until then,
 	// and settings sharing would take that first change for one made here.
 	d.syncThemeSelects()
