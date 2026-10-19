@@ -119,6 +119,30 @@ if (($AthenaImage -and -not $AthenaBoot) -or ($AthenaBoot -and -not $AthenaImage
 foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
     if (& tar -tzf $t | Where-Object { $_ -match '^(\./)?vendor/.' } | Select-Object -First 1) { throw "$t carries a vendor tree; build it without VENDOR_TGZ" }
 }
+# The plain -Rootfs is the one every Show without a rootfs of its own updates from: a board's own
+# (T5_BOARD in its device.conf, from the athena or Skylight overlay), or one carrying a kernel for the
+# kernel update (usr/share/techo5/kernel/), would be offered to all of them.
+if ($Rootfs) {
+    $board = @(& tar -xzOf $Rootfs ./etc/techo5/device.conf 2>$null) -match '^T5_BOARD=' | Select-Object -Last 1
+    if ($board) { throw "$Rootfs is a board's own rootfs (device.conf: '$board'), not the Shows': pass it as -AthenaRootfs or -SkylightRootfs" }
+    if (& tar -tzf $Rootfs | Where-Object { $_ -match '^(\./)?usr/share/techo5/kernel/.' } | Select-Object -First 1) {
+        throw "$Rootfs carries a kernel (usr/share/techo5/kernel/), which the Shows' rootfs never does: build it without KERNEL_IMAGE"
+    }
+}
+# The Skylight runs the Shows' binary: its rootfs must carry the same one as the Shows' in this release.
+if ($Rootfs -and $SkylightRootfs) {
+    $cmp = Join-Path ([System.IO.Path]::GetTempPath()) "techo5-release-$PID"
+    try {
+        $sums = foreach ($t in @($Rootfs, $SkylightRootfs)) {
+            $d = Join-Path $cmp ([guid]::NewGuid().ToString('n'))
+            New-Item -ItemType Directory -Force $d | Out-Null
+            & tar -xzf $t -C $d ./usr/local/bin/techo5
+            if ($LASTEXITCODE -ne 0) { throw "$t has no usr/local/bin/techo5" }
+            (Get-FileHash -Algorithm SHA256 (Join-Path $d 'usr/local/bin/techo5')).Hash
+        }
+        if ($sums[0] -ne $sums[1]) { throw "$Rootfs and $SkylightRootfs carry different usr/local/bin/techo5: build both from the same tree" }
+    } finally { Remove-Item -Recurse -Force $cmp -ErrorAction SilentlyContinue }
+}
 # Each Show rootfs says which board it is for (etc/techo5/device.conf, T5_BOARD); the athena store
 # installs only athena's.
 if ($AthenaRootfs) {
@@ -187,6 +211,8 @@ function Test-Image([string]$Path, [string[]]$NoFile = @(), [switch]$EmptyKeys) 
     if ($LASTEXITCODE -ne 0) { throw "$Path carries what no published image may (check-image.py)" }
 }
 if ($AthenaImage) { Test-Image $AthenaImage }
+# The Shows' rootfs (and the Spot's, released with -Rootfs) is published too.
+if ($Rootfs) { Test-Image $Rootfs }
 
 # The Skylight: its three images and the kernel's source from one release, with its rootfs. install-skylight.py
 # takes the installer, boot and store images from one release, and a kernel is published only with its
