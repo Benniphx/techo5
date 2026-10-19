@@ -44,7 +44,16 @@ func TestAPanelDoesNotTakeAStrangersRegisterOKForTheProvider(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.close()
-	port := l.ua.TransportLayer().GetListenPort("udp")
+	// The port is put down just after the listener reports ready, so it is waited for (ListenPorts
+	// takes the lock GetListenPort does not).
+	var port int
+	for range 100 {
+		if ports := l.ua.TransportLayer().ListenPorts("udp"); len(ports) > 0 {
+			port = ports[0]
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	if port == 0 {
 		t.Fatal("the listener has no port")
 	}
