@@ -21,6 +21,7 @@ PAGE_URL = "https://huskerminion.github.io/techo5/comparison/"
 ISSUES = "https://github.com/HuskerMinion/techo5/issues"
 
 SYMBOL = {"Yes": "✅", "Partly": "🟡", "No": "❌", "Not found": "❔", "In progress": "🚧", "n/a": "—"}
+DEVSYMBOL = {"yes": "✅", "lineage": "🔧", "progress": "🚧", "no": "❌", "unknown": "❔"}
 ZW = "​"
 
 
@@ -84,6 +85,30 @@ Projects are in alphabetical order.
             t = a + (f" ({n})" if n else "")
             o.append(f"- {r['name']}: {t}" + (f" ([source]({u}))" if u else ""))
         o.append("")
+    o.append("## Devices\n")
+    o.append("✅ supported &nbsp; 🔧 after putting another OS on it first &nbsp; 🚧 in progress &nbsp; "
+             "❌ the project says it isn't &nbsp; ❔ not found &nbsp; † see the notes. Each symbol links to its source.\n")
+    DV, DC = d["devices"]["list"], d["devices"]["cells"]
+    o.append("| Device | " + " | ".join(p["name"] for p in P) + " |")
+    o.append("|---" + "|:---:" * len(P) + "|")
+    dnotes = []
+    for dv in DV:
+        row = []
+        for p in P:
+            st_, n, u = DC[p["key"]].get(dv["id"], ["unknown", "", ""])
+            sym = DEVSYMBOL[st_]
+            row.append((f"[{sym}]({u})" if u else sym) + ("†" if n else ""))
+            if n:
+                dnotes.append((dv["name"], p["name"], n))
+        o.append(f"| {dv['name']} | " + " | ".join(row) + " |")
+    o.append("")
+    if dnotes:
+        o.append("<details>\n<summary>Notes to the devices</summary>\n")
+        for dv in DV:
+            ns = [f"{pn}: {text(n)}" for dn, pn, n in dnotes if dn == dv["name"]]
+            if ns:
+                o.append(f"- **{dv['name']}**: " + "; ".join(ns))
+        o.append("\n</details>\n")
     o.append("## The table\n")
     o.append("✅ yes &nbsp; 🟡 partly &nbsp; ❌ no (the project says so) &nbsp; ❔ not found &nbsp; "
              "🚧 in progress (not in a release yet) &nbsp; — doesn't apply &nbsp; † see the notes after the table. "

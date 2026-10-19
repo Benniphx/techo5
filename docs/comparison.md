@@ -83,6 +83,47 @@ Projects are in alphabetical order.
 - What runs on the device: Stock Android kept; VACA app (or other browser/mic apps); needs Home Assistant with View Assist and VACA integrations ([source](https://github.com/msp1974/ViewAssist_Companion_App/wiki/Getting-Started))
 - Install: HACS for both integrations; sideload VACA APK; Lovelace cards via HACS; no unlock unless device needs custom OS ([source](https://github.com/msp1974/ViewAssist_Companion_App/wiki/Getting-Started))
 
+## Devices
+
+✅ supported &nbsp; 🔧 after putting another OS on it first &nbsp; 🚧 in progress &nbsp; ❌ the project says it isn't &nbsp; ❔ not found &nbsp; † see the notes. Each symbol links to its source.
+
+| Device | echo-dot-assist | EchoLocal | EchoMuse | Kiosk Satellite | TECHO5 | View Assist |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Echo Dot 2nd gen | [✅](https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/biscuit/README.md)† | [✅](https://github.com/ygelfand/echolocal/blob/0.0.9/README.md)† | [✅](https://github.com/wilbowes/EchoMuse/releases/tag/v2.18.1)† | [🔧](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/echo-dot.md)† | [✅](https://github.com/HuskerMinion/techo5-dot/releases/tag/dot-v1.0.22)† | ❔ |
+| Echo Dot 3rd gen (2018) | [✅](https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/donut/README.md)† | [❔](https://github.com/ygelfand/echolocal/blob/main/internal/board/donut.go)† | [🚧](https://github.com/wilbowes/EchoMuse/issues/527)† | ❔ | [❌](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L37) | ❔ |
+| Echo Dot 3rd gen (2019, 2020, with clock) | [❌](https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/README.md#supported-echos)† | ❔ | [❌](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio)† | ❔ | [❌](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L37) | ❔ |
+| Echo 2nd gen | [✅](https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/radar/README.md)† | [🚧](https://github.com/ygelfand/echolocal/pull/64)† | [🚧](https://github.com/wilbowes/EchoMuse/pull/687)† | ❔ | [✅](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen)† | ❔ |
+| Echo Show 5 1st gen | [🚧](https://github.com/Gamer92000/echo-dot-assist/blob/checkers/devices/checkers/README.md)† | [✅](https://github.com/ygelfand/echolocal/releases/tag/0.0.9) | [🚧](https://github.com/wilbowes/EchoMuse/pull/36)† | [🔧](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/camera.md#L171)† | [🔧](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L24-L28)† | [🔧](https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show5)† |
+| Echo Show 5 2nd gen | ❔ | [✅](https://github.com/ygelfand/echolocal/releases/tag/0.0.9) | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio) | ❔ | [🔧](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L18)† | [🔧](https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show5)† |
+| Echo Show 8 1st gen | [🚧](https://github.com/Gamer92000/echo-dot-assist/pull/33)† | [✅](https://github.com/ygelfand/echolocal/releases/tag/0.0.9) | [🚧](https://github.com/wilbowes/EchoMuse/pull/358)† | [🔧](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/CHANGELOG.md#L2772)† | [🔧](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L24-L28)† | [🔧](https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show8)† |
+| Echo Show 8 2nd gen | [🚧](https://github.com/Gamer92000/echo-dot-assist/pull/34)† | [🚧](https://github.com/ygelfand/echolocal/blob/main/internal/board/athena.go)† | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio) | ❔ | [✅](https://github.com/HuskerMinion/techo5/blob/main/docs/install-athena.md)† | ❔ |
+| Echo Spot 1st gen | ❔ | [🚧](https://github.com/ygelfand/echolocal/blob/main/internal/host/profile/rook.go)† | [❔](https://github.com/wilbowes/EchoMuse/issues/991)† | ❔ | [🔧](https://github.com/HuskerMinion/techo5-spot/releases/tag/spot-v1.1.21)† | ❔ |
+| Fire tablets | ❔ | ❔ | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio) | [✅](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/fire.md)† | [❔](https://github.com/HuskerMinion/techo5#readme) | [✅](https://github.com/msp1974/ViewAssist_Companion_App/wiki)† |
+| Meta Portal | ❔ | ❔ | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio) | [✅](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/portal.md)† | [❔](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22) | [✅](https://github.com/msp1974/ViewAssistCompanionApp/blob/main/app/src/main/java/com/msp1974/vacompanion/device/DeviceUnsupportedFunctions.kt#L24-L29)† |
+| Raspberry Pi | ❔ | ❔ | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/quickstart.md)† | [🔧](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/raspberry-pi.md)† | [❔](https://github.com/HuskerMinion/techo5/blob/main/docs/deck.md)† | [❔](https://dinki.github.io/View-Assist/docs/intro)† |
+| Other Android devices | ❔ | ❔ | [❔](https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio) | [✅](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/README.md#get-started)† | [❔](https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22) | [✅](https://github.com/msp1974/ViewAssist_Companion_App/wiki)† |
+| Other devices | [❔](https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/README.md) | [❔](https://github.com/ygelfand/echolocal/blob/main/README.md#devices) | [❔](https://github.com/wilbowes/EchoMuse/blob/main/device/pkg/board/board.go#L43) | ❔ | [❔](https://github.com/HuskerMinion/techo5#readme) | [✅](https://dinki.github.io/View-Assist/docs/supported-devices)† |
+
+<details>
+<summary>Notes to the devices</summary>
+
+- **Echo Dot 2nd gen**: echo-dot-assist: biscuit; micro-USB, no soldering; EchoLocal: needs Fire OS 6 and TWRP; EchoMuse: needs one-time USB unlock (firebreak), runs FireOS or emOS; Kiosk Satellite: Needs Kiosk Satellite Edition LineageOS 14.1; headless, no screen; TECHO5: replaces Fire OS; installer starts from unlocked stock Fire OS
+- **Echo Dot 3rd gen (2018)**: echo-dot-assist: donut; firmware 6574.1 only, wires on test pads; EchoLocal: only a placeholder 'donut' board, no install path; EchoMuse: community fork by @shortgame11​, issue #527
+- **Echo Dot 3rd gen (2019, 2020, with clock)**: echo-dot-assist: crumpet/​doebrite: the Dot 3 unlock does not work; EchoMuse: FAQ: refreshed Gen 3 has no known unlock
+- **Echo 2nd gen**: echo-dot-assist: radar; solder USB to the amplifier board; EchoLocal: draft PR #64 (radar); EchoMuse: draft PR #687 (radar); TECHO5: TECHO5 Dot release; tested on one unit; USB inside case
+- **Echo Show 5 1st gen**: echo-dot-assist: checkers branch; tried on one unit; EchoMuse: open PR #36 (checkers); Kiosk Satellite: Needs LineageOS (Android 11); no guide, generation not named; TECHO5: LineageOS 18.1 installed first for drivers; tested on one unit; View Assist: needs LineageOS 18.1 (Android 11)
+- **Echo Show 5 2nd gen**: TECHO5: LineageOS 18.1 (2026-09-04 build) installed first for its drivers; View Assist: needs LineageOS 18.1 (cronos)
+- **Echo Show 8 1st gen**: echo-dot-assist: crown on checkers branch (PR #33); one unit; EchoMuse: draft PR #358 (crown), on LineageOS; Kiosk Satellite: Needs LineageOS (Android 11); no guide, generation not named; TECHO5: LineageOS 18.1 installed first for drivers; tested on one unit; View Assist: needs LineageOS 18.1 (Android 11)
+- **Echo Show 8 2nd gen**: echo-dot-assist: athena, open PR #34 onto checkers branch; EchoLocal: athena board on main, after 0.0.9; TECHO5: own mainline kernel, no LineageOS; BOE panel only; two units
+- **Echo Spot 1st gen**: EchoLocal: early, undocumented​; installer wants LineageOS on Android 11; EchoMuse: board profile issue #991 filed for later, no code; TECHO5: LineageOS 18.1 installed first for drivers; then TECHO5 replaces it
+- **Fire tablets**: Kiosk Satellite: Fire OS 7/8; Fire OS 5 below Android 7 minimum; View Assist: community reports: Fire 8 (2021), Fire 10 (2022)
+- **Meta Portal**: Kiosk Satellite: Verified on Portal Go; others expected, untested; View Assist: user reports; Portal+ quirk in app; camera in PR #39
+- **Raspberry Pi**: EchoMuse: Pi-class box runs the controller only, not a speaker; Kiosk Satellite: Pi 4 on KonstaKANG LineageOS 23.2; needs /vendor mic edits; TECHO5: only companion tools (Deck agent, dashcast) run on a Pi; View Assist: docs only say some users run Linux devices
+- **Other Android devices**: Kiosk Satellite: Android 7.0 or newer; View Assist: Android 8+; Android 7 in open PR #58
+- **Other devices**: View Assist: Lenovo ThinkSmart View/Smart Display, Xiaomi Clock, NSPanel Pro, ESPHome satellites
+
+</details>
+
 ## The table
 
 ✅ yes &nbsp; 🟡 partly &nbsp; ❌ no (the project says so) &nbsp; ❔ not found &nbsp; 🚧 in progress (not in a release yet) &nbsp; — doesn't apply &nbsp; † see the notes after the table. Each symbol links to its source.

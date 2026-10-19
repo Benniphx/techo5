@@ -73,6 +73,18 @@ td.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
 .card dd { margin: 0; overflow-wrap: anywhere; }
 .card ul { margin: 0; padding-left: 20px; font-size: 14px; }
 footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
+.picker { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 6px 0 14px; }
+.picker h2 { margin: 0 0 8px; font-size: 17px; }
+.picker p { margin: 8px 0 0; font-size: 14px; }
+.dev { display: block; margin-top: 3px; font: 600 11px var(--body); text-transform: none; letter-spacing: 0; }
+.d-yes { color: var(--yes); background: var(--yes-bg); } .d-lineage { color: var(--part); background: var(--part-bg); }
+.d-progress { color: var(--prog); background: var(--prog-bg); } .d-no { color: var(--no); background: var(--no-bg); }
+.d-unknown { color: var(--nf); background: var(--nf-bg); }
+button.star { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 15px; padding: 0 6px 0 0; line-height: 1; }
+button.star[aria-pressed="true"] { color: var(--part); }
+button.star:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.devgrid td { text-align: center; white-space: nowrap; }
+.devgrid th[scope="row"] { text-align: left; font-weight: 400; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -96,10 +108,22 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
     <span><span class="dag">†</span> has a note</span>
   </div>
 
+  <section class="picker" aria-labelledby="pickTitle">
+    <h2 id="pickTitle">What device do you have?</h2>
+    <div class="chips" id="devChips"></div>
+    <p id="devNote" class="muted">Pick one to see only the projects that list it.</p>
+  </section>
+
   <div class="toolbar"><span class="label">Section</span><div class="chips" id="secChips"></div></div>
   <div class="toolbar">
     <span class="label">Projects</span><div class="chips" id="projChips"></div>
     <label><input type="checkbox" id="diffOnly"> Only rows where they differ</label>
+  </div>
+  <div class="toolbar">
+    <span class="label">Features you care about</span>
+    <span class="muted" id="starNote">Click ☆ next to a feature to pick it.</span>
+    <label><input type="checkbox" id="starOnly"> Only picked features</label>
+    <button class="chip" id="starClear" hidden>Clear picks</button>
   </div>
 
   <div class="grid">
@@ -109,6 +133,10 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
       <p class="muted">Click a cell to see its note, its source and what the row counts as Yes or Partly.</p>
     </aside>
   </div>
+
+  <h2>Devices</h2>
+  <p class="muted">Which devices each project lists. Click a cell for its note and source.</p>
+  <div class="scroller" style="max-height:none"><table class="devgrid" id="devgrid"></table></div>
 
   <h2>The projects</h2>
   <div class="cards" id="facts"></div>
@@ -132,8 +160,22 @@ const link = u => /^https:\/\//.test(String(u)) ? esc(u) : "#";
 const ans = (k, id) => C[k][id];
 const kind = a => a.startsWith("Not") ? "Not" : a.startsWith("In") ? "In" : a === "n/a" ? "na" : a;
 const feat = R.filter(r => !r.fact), facts = R.filter(r => r.fact);
-const st = { sec: "All", hide: new Set(), diff: false, sel: null };
+const DV = D.devices.list, DC = D.devices.cells;
+const DEVWORD = { yes: "Supported", lineage: "With another OS first", progress: "In progress", no: "Not supported", unknown: "Not found" };
+const dev = (k, id) => DC[k][id] || ["unknown", "", ""];
+const st = { sec: "All", hide: new Set(), diff: false, sel: null, dev: "", star: new Set(), starOnly: false };
+const shown = () => P.filter(p => !st.hide.has(p.key) && (!st.dev || ["yes", "lineage", "progress"].includes(dev(p.key, st.dev)[0])));
 
+function devChips() {
+  document.getElementById("devChips").innerHTML = [["", "Any device"], ...DV.map(d => [d.id, d.name])].map(([id, n]) =>
+    `<button class="chip" aria-pressed="${st.dev === id}" data-dev="${esc(id)}">${esc(n)}</button>`).join("");
+  const el = document.getElementById("devNote");
+  if (!st.dev) { el.textContent = "Pick one to see only the projects that list it."; return; }
+  const d = DV.find(x => x.id === st.dev), ps = shown();
+  el.textContent = ps.length
+    ? `${d.name}: ${ps.map(p => `${p.name} (${DEVWORD[dev(p.key, st.dev)[0]].replace(/^./, c => c.toLowerCase())})`).join(", ")}. The others don't list it.`
+    : `None of the projects list the ${d.name}.`;
+}
 function chips() {
   document.getElementById("secChips").innerHTML = ["All", ...SECS].map(s =>
     `<button class="chip" aria-pressed="${st.sec === s}" data-sec="${esc(s)}">${esc(s)}</button>`).join("");
@@ -141,26 +183,47 @@ function chips() {
     `<button class="chip" aria-pressed="${!st.hide.has(p.key)}" data-proj="${esc(p.key)}">${esc(p.name)}</button>`).join("");
 }
 function table() {
-  const ps = P.filter(p => !st.hide.has(p.key));
-  let h = `<thead><tr><th class="feat">Feature</th>` + ps.map(p => `<th>${esc(p.name)}</th>`).join("") + "</tr></thead><tbody>";
+  const ps = shown();
+  let h = `<thead><tr><th class="feat">Feature</th>` + ps.map(p => `<th>${esc(p.name)}` +
+    (st.dev ? `<span class="dev pill d-${esc(dev(p.key, st.dev)[0])}">${esc(DEVWORD[dev(p.key, st.dev)[0]])}</span>` : "") + `</th>`).join("") + "</tr></thead><tbody>";
   let any = false;
   for (const s of SECS) {
     if (st.sec !== "All" && st.sec !== s) continue;
     let rs = feat.filter(r => r.section === s);
     if (st.diff) rs = rs.filter(r => new Set(ps.map(p => ans(p.key, r.id)[0])).size > 1);
+    if (st.starOnly) rs = rs.filter(r => st.star.has(r.id));
     if (!rs.length) continue;
     any = true;
     h += `<tr class="sec"><th class="feat">${esc(s)}</th>` + ps.map(() => "<td></td>").join("") + "</tr>";
     for (const r of rs) {
-      h += `<tr><th class="feat" scope="row">${esc(r.name)}</th>` + ps.map(p => {
+      const on = st.star.has(r.id);
+      h += `<tr><th class="feat" scope="row"><button class="star" data-star="${esc(r.id)}" aria-pressed="${on}" aria-label="Pick ${esc(r.name)}">${on ? "★" : "☆"}</button>${esc(r.name)}</th>` + ps.map(p => {
         const [a, n] = ans(p.key, r.id);
         const sel = st.sel && st.sel[0] === p.key && st.sel[1] === r.id ? " sel" : "";
         return `<td class="cell${sel}" tabindex="0" data-k="${esc(p.key)}" data-r="${esc(r.id)}"><span class="pill p-${esc(kind(a))}">${esc(a)}</span>${n ? '<span class="dag">†</span>' : ""}</td>`;
       }).join("") + "</tr>";
     }
   }
-  if (!any) h += `<tr><td colspan="${ps.length + 1}" class="muted">No rows match. Turn a filter off to see more.</td></tr>`;
+  if (!any) h += `<tr><td colspan="${ps.length + 1}" class="muted">${st.starOnly && !st.star.size ? "Click ☆ next to a feature to pick it, or turn off Only picked features." : "No rows match. Turn a filter off to see more."}</td></tr>`;
   document.getElementById("tbl").innerHTML = h + "</tbody>";
+}
+function devDetail(k, id) {
+  const d = DV.find(x => x.id === id), p = P.find(x => x.key === k), [s, n, u] = dev(k, id);
+  const el = document.getElementById("detail");
+  el.innerHTML = `<span class="label">${esc(p.name)} · Devices</span><h3>${esc(d.name)}</h3>
+    <p><span class="pill d-${esc(s)}">${esc(DEVWORD[s])}</span></p>${n ? `<p>${esc(n)}</p>` : ""}
+    ${u ? `<p><a href="${link(u)}" target="_blank" rel="noopener">Source</a></p>` : ""}`;
+  el.scrollIntoView({ block: "nearest" });
+}
+function devGrid() {
+  let h = "<thead><tr><th>Device</th>" + P.map(p => `<th>${esc(p.name)}</th>`).join("") + "</tr></thead><tbody>";
+  for (const d of DV) h += `<tr><th scope="row">${esc(d.name)}</th>` + P.map(p => { const [s, n] = dev(p.key, d.id);
+    return `<td class="cell" tabindex="0" data-dk="${esc(p.key)}" data-dd="${esc(d.id)}"><span class="pill d-${esc(s)}">${esc(DEVWORD[s])}</span>${n ? '<span class="dag">†</span>' : ""}</td>`; }).join("") + "</tr>";
+  document.getElementById("devgrid").innerHTML = h + "</tbody>";
+}
+function stars() {
+  document.getElementById("starNote").textContent = st.star.size ? `${st.star.size} picked.` : "Click ☆ next to a feature to pick it.";
+  document.getElementById("starClear").hidden = !st.star.size;
 }
 function detail(k, id) {
   const r = R.find(x => x.id === id), p = P.find(x => x.key === k), [a, n, u] = ans(k, id);
@@ -172,9 +235,13 @@ function detail(k, id) {
   if (window.matchMedia("(max-width: 960px)").matches) el.scrollIntoView({ block: "nearest" });
 }
 document.addEventListener("click", e => {
-  const t = e.target.closest("button.chip, td.cell");
+  const t = e.target.closest("button.chip, button.star, td.cell");
   if (!t) return;
-  if (t.dataset.sec) { st.sec = t.dataset.sec; chips(); table(); }
+  if (t.id === "starClear") { st.star.clear(); stars(); table(); }
+  else if (t.dataset.star) { st.star.has(t.dataset.star) ? st.star.delete(t.dataset.star) : st.star.add(t.dataset.star); stars(); table(); }
+  else if (t.dataset.dev !== undefined) { st.dev = t.dataset.dev; devChips(); table(); }
+  else if (t.dataset.dk) devDetail(t.dataset.dk, t.dataset.dd);
+  else if (t.dataset.sec) { st.sec = t.dataset.sec; chips(); table(); }
   else if (t.dataset.proj) {
     st.hide.has(t.dataset.proj) ? st.hide.delete(t.dataset.proj) : st.hide.add(t.dataset.proj);
     if (st.hide.size === P.length) st.hide.delete(t.dataset.proj);
@@ -185,6 +252,7 @@ document.addEventListener("keydown", e => {
   if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.cell")) { e.preventDefault(); e.target.click(); }
 });
 document.getElementById("diffOnly").addEventListener("change", e => { st.diff = e.target.checked; table(); });
+document.getElementById("starOnly").addEventListener("change", e => { st.starOnly = e.target.checked; table(); });
 
 document.getElementById("facts").innerHTML = P.map(p => `<div class="card"><h3>${esc(p.name)}</h3><dl>` +
   facts.map(r => { const [a, n, u] = ans(p.key, r.id);
@@ -196,7 +264,7 @@ document.getElementById("focus").innerHTML = P.map(p => `<div class="card"><h3>$
 document.getElementById("sources").innerHTML = "<b>Sources.</b> " + P.map(p => `${esc(p.name)}: ` +
   p.repos.map(([n, u]) => `<a href="${link(u)}">${esc(n)}</a>`).join(", ")).join(" · ") +
   ` · Also as a <a href="https://github.com/HuskerMinion/techo5/blob/main/docs/comparison.md">markdown page</a>.`;
-chips(); table();
+devChips(); chips(); stars(); table(); devGrid();
 </script>
 </body>
 </html>

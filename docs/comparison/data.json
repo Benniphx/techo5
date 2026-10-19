@@ -6221,5 +6221,499 @@
     ""
    ]
   }
+ },
+ "devices": {
+  "list": [
+   {
+    "id": "echo-dot-2",
+    "name": "Echo Dot 2nd gen"
+   },
+   {
+    "id": "echo-dot-3",
+    "name": "Echo Dot 3rd gen (2018)"
+   },
+   {
+    "id": "echo-dot-3-later",
+    "name": "Echo Dot 3rd gen (2019, 2020, with clock)"
+   },
+   {
+    "id": "echo-2",
+    "name": "Echo 2nd gen"
+   },
+   {
+    "id": "echo-show-5-1",
+    "name": "Echo Show 5 1st gen"
+   },
+   {
+    "id": "echo-show-5-2",
+    "name": "Echo Show 5 2nd gen"
+   },
+   {
+    "id": "echo-show-8-1",
+    "name": "Echo Show 8 1st gen"
+   },
+   {
+    "id": "echo-show-8-2",
+    "name": "Echo Show 8 2nd gen"
+   },
+   {
+    "id": "echo-spot-1",
+    "name": "Echo Spot 1st gen"
+   },
+   {
+    "id": "fire-tablet",
+    "name": "Fire tablets"
+   },
+   {
+    "id": "meta-portal",
+    "name": "Meta Portal"
+   },
+   {
+    "id": "raspberry-pi",
+    "name": "Raspberry Pi"
+   },
+   {
+    "id": "android-other",
+    "name": "Other Android devices"
+   },
+   {
+    "id": "other",
+    "name": "Other devices"
+   }
+  ],
+  "cells": {
+   "echo-dot-assist": {
+    "echo-dot-2": [
+     "yes",
+     "biscuit; micro-USB, no soldering",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/biscuit/README.md"
+    ],
+    "echo-dot-3": [
+     "yes",
+     "donut; firmware 6574.1 only, wires on test pads",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/donut/README.md"
+    ],
+    "echo-dot-3-later": [
+     "no",
+     "crumpet/doebrite: the Dot 3 unlock does not work",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/README.md#supported-echos"
+    ],
+    "echo-2": [
+     "yes",
+     "radar; solder USB to the amplifier board",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/radar/README.md"
+    ],
+    "echo-show-5-1": [
+     "progress",
+     "checkers branch; tried on one unit",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/checkers/devices/checkers/README.md"
+    ],
+    "echo-show-5-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-show-8-1": [
+     "progress",
+     "crown on checkers branch (PR #33); one unit",
+     "https://github.com/Gamer92000/echo-dot-assist/pull/33"
+    ],
+    "echo-show-8-2": [
+     "progress",
+     "athena, open PR #34 onto checkers branch",
+     "https://github.com/Gamer92000/echo-dot-assist/pull/34"
+    ],
+    "echo-spot-1": [
+     "unknown",
+     "",
+     ""
+    ],
+    "fire-tablet": [
+     "unknown",
+     "",
+     ""
+    ],
+    "meta-portal": [
+     "unknown",
+     "",
+     ""
+    ],
+    "raspberry-pi": [
+     "unknown",
+     "",
+     ""
+    ],
+    "android-other": [
+     "unknown",
+     "",
+     ""
+    ],
+    "other": [
+     "unknown",
+     "",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/README.md"
+    ]
+   },
+   "echolocal": {
+    "echo-dot-2": [
+     "yes",
+     "needs Fire OS 6 and TWRP",
+     "https://github.com/ygelfand/echolocal/blob/0.0.9/README.md"
+    ],
+    "echo-dot-3": [
+     "unknown",
+     "only a placeholder 'donut' board, no install path",
+     "https://github.com/ygelfand/echolocal/blob/main/internal/board/donut.go"
+    ],
+    "echo-dot-3-later": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-2": [
+     "progress",
+     "draft PR #64 (radar)",
+     "https://github.com/ygelfand/echolocal/pull/64"
+    ],
+    "echo-show-5-1": [
+     "yes",
+     "",
+     "https://github.com/ygelfand/echolocal/releases/tag/0.0.9"
+    ],
+    "echo-show-5-2": [
+     "yes",
+     "",
+     "https://github.com/ygelfand/echolocal/releases/tag/0.0.9"
+    ],
+    "echo-show-8-1": [
+     "yes",
+     "",
+     "https://github.com/ygelfand/echolocal/releases/tag/0.0.9"
+    ],
+    "echo-show-8-2": [
+     "progress",
+     "athena board on main, after 0.0.9",
+     "https://github.com/ygelfand/echolocal/blob/main/internal/board/athena.go"
+    ],
+    "echo-spot-1": [
+     "progress",
+     "early, undocumented; installer wants LineageOS on Android 11",
+     "https://github.com/ygelfand/echolocal/blob/main/internal/host/profile/rook.go"
+    ],
+    "fire-tablet": [
+     "unknown",
+     "",
+     ""
+    ],
+    "meta-portal": [
+     "unknown",
+     "",
+     ""
+    ],
+    "raspberry-pi": [
+     "unknown",
+     "",
+     ""
+    ],
+    "android-other": [
+     "unknown",
+     "",
+     ""
+    ],
+    "other": [
+     "unknown",
+     "",
+     "https://github.com/ygelfand/echolocal/blob/main/README.md#devices"
+    ]
+   },
+   "echomuse": {
+    "echo-dot-2": [
+     "yes",
+     "needs one-time USB unlock (firebreak), runs FireOS or emOS",
+     "https://github.com/wilbowes/EchoMuse/releases/tag/v2.18.1"
+    ],
+    "echo-dot-3": [
+     "progress",
+     "community fork by @shortgame11, issue #527",
+     "https://github.com/wilbowes/EchoMuse/issues/527"
+    ],
+    "echo-dot-3-later": [
+     "no",
+     "FAQ: refreshed Gen 3 has no known unlock",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "echo-2": [
+     "progress",
+     "draft PR #687 (radar)",
+     "https://github.com/wilbowes/EchoMuse/pull/687"
+    ],
+    "echo-show-5-1": [
+     "progress",
+     "open PR #36 (checkers)",
+     "https://github.com/wilbowes/EchoMuse/pull/36"
+    ],
+    "echo-show-5-2": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "echo-show-8-1": [
+     "progress",
+     "draft PR #358 (crown), on LineageOS",
+     "https://github.com/wilbowes/EchoMuse/pull/358"
+    ],
+    "echo-show-8-2": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "echo-spot-1": [
+     "unknown",
+     "board profile issue #991 filed for later, no code",
+     "https://github.com/wilbowes/EchoMuse/issues/991"
+    ],
+    "fire-tablet": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "meta-portal": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "raspberry-pi": [
+     "unknown",
+     "Pi-class box runs the controller only, not a speaker",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/quickstart.md"
+    ],
+    "android-other": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/docs/faq.md#will-this-work-on-an-echo-dot-gen-3--show--studio"
+    ],
+    "other": [
+     "unknown",
+     "",
+     "https://github.com/wilbowes/EchoMuse/blob/main/device/pkg/board/board.go#L43"
+    ]
+   },
+   "kiosk-satellite": {
+    "echo-dot-2": [
+     "lineage",
+     "Needs Kiosk Satellite Edition LineageOS 14.1; headless, no screen",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/echo-dot.md"
+    ],
+    "echo-dot-3": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-dot-3-later": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-show-5-1": [
+     "lineage",
+     "Needs LineageOS (Android 11); no guide, generation not named",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/camera.md#L171"
+    ],
+    "echo-show-5-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-show-8-1": [
+     "lineage",
+     "Needs LineageOS (Android 11); no guide, generation not named",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/CHANGELOG.md#L2772"
+    ],
+    "echo-show-8-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-spot-1": [
+     "unknown",
+     "",
+     ""
+    ],
+    "fire-tablet": [
+     "yes",
+     "Fire OS 7/8; Fire OS 5 below Android 7 minimum",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/fire.md"
+    ],
+    "meta-portal": [
+     "yes",
+     "Verified on Portal Go; others expected, untested",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/portal.md"
+    ],
+    "raspberry-pi": [
+     "lineage",
+     "Pi 4 on KonstaKANG LineageOS 23.2; needs /vendor mic edits",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/docs/raspberry-pi.md"
+    ],
+    "android-other": [
+     "yes",
+     "Android 7.0 or newer",
+     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.31/README.md#get-started"
+    ],
+    "other": [
+     "unknown",
+     "",
+     ""
+    ]
+   },
+   "techo5": {
+    "echo-dot-2": [
+     "yes",
+     "replaces Fire OS; installer starts from unlocked stock Fire OS",
+     "https://github.com/HuskerMinion/techo5-dot/releases/tag/dot-v1.0.22"
+    ],
+    "echo-dot-3": [
+     "no",
+     "",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L37"
+    ],
+    "echo-dot-3-later": [
+     "no",
+     "",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L37"
+    ],
+    "echo-2": [
+     "yes",
+     "TECHO5 Dot release; tested on one unit; USB inside case",
+     "https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen"
+    ],
+    "echo-show-5-1": [
+     "lineage",
+     "LineageOS 18.1 installed first for drivers; tested on one unit",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L24-L28"
+    ],
+    "echo-show-5-2": [
+     "lineage",
+     "LineageOS 18.1 (2026-09-04 build) installed first for its drivers",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L18"
+    ],
+    "echo-show-8-1": [
+     "lineage",
+     "LineageOS 18.1 installed first for drivers; tested on one unit",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L24-L28"
+    ],
+    "echo-show-8-2": [
+     "yes",
+     "own mainline kernel, no LineageOS; BOE panel only; two units",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/install-athena.md"
+    ],
+    "echo-spot-1": [
+     "lineage",
+     "LineageOS 18.1 installed first for drivers; then TECHO5 replaces it",
+     "https://github.com/HuskerMinion/techo5-spot/releases/tag/spot-v1.1.21"
+    ],
+    "fire-tablet": [
+     "unknown",
+     "",
+     "https://github.com/HuskerMinion/techo5#readme"
+    ],
+    "meta-portal": [
+     "unknown",
+     "",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22"
+    ],
+    "raspberry-pi": [
+     "unknown",
+     "only companion tools (Deck agent, dashcast) run on a Pi",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/deck.md"
+    ],
+    "android-other": [
+     "unknown",
+     "",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22"
+    ],
+    "other": [
+     "unknown",
+     "",
+     "https://github.com/HuskerMinion/techo5#readme"
+    ]
+   },
+   "view-assist": {
+    "echo-dot-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-dot-3": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-dot-3-later": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-show-5-1": [
+     "lineage",
+     "needs LineageOS 18.1 (Android 11)",
+     "https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show5"
+    ],
+    "echo-show-5-2": [
+     "lineage",
+     "needs LineageOS 18.1 (cronos)",
+     "https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show5"
+    ],
+    "echo-show-8-1": [
+     "lineage",
+     "needs LineageOS 18.1 (Android 11)",
+     "https://dinki.github.io/View-Assist/docs/supported-devices/android-devices/amazon-echo-show8"
+    ],
+    "echo-show-8-2": [
+     "unknown",
+     "",
+     ""
+    ],
+    "echo-spot-1": [
+     "unknown",
+     "",
+     ""
+    ],
+    "fire-tablet": [
+     "yes",
+     "community reports: Fire 8 (2021), Fire 10 (2022)",
+     "https://github.com/msp1974/ViewAssist_Companion_App/wiki"
+    ],
+    "meta-portal": [
+     "yes",
+     "user reports; Portal+ quirk in app; camera in PR #39",
+     "https://github.com/msp1974/ViewAssistCompanionApp/blob/main/app/src/main/java/com/msp1974/vacompanion/device/DeviceUnsupportedFunctions.kt#L24-L29"
+    ],
+    "raspberry-pi": [
+     "unknown",
+     "docs only say some users run Linux devices",
+     "https://dinki.github.io/View-Assist/docs/intro"
+    ],
+    "android-other": [
+     "yes",
+     "Android 8+; Android 7 in open PR #58",
+     "https://github.com/msp1974/ViewAssist_Companion_App/wiki"
+    ],
+    "other": [
+     "yes",
+     "Lenovo ThinkSmart View/Smart Display, Xiaomi Clock, NSPanel Pro, ESPHome satellites",
+     "https://dinki.github.io/View-Assist/docs/supported-devices"
+    ]
+   }
+  }
  }
 }
