@@ -59,5 +59,5 @@ func openDevice() (playback, *alsa.Mixer, *os.File, error) {
 // volumeChanged has nothing to tell on an Echo: the step is applied here, in software.
 func volumeChanged(int) {}
 
-// ringsRideTheDeviceVolume is false: an Echo's volume is all in software.
-const ringsRideTheDeviceVolume = false
+// followRing has nothing to move on an Echo: a ring's level is worked out in software, in fill.
+func (p *Player) followRing(bool, int) {}

@@ -799,9 +799,13 @@ func (p *Player) fill(buf []byte) {
 	// The two are compared at the level they come out at: tuned with a curve in front, that is the
 	// curve's, which can rise where the usual one stands still (the Spot's and the Dot's vendor curves
 	// repeat values near the top).
+	// A panel plays at Android's volume, which a ring raises for as long as it sounds (paths_panel.go);
+	// an Echo's volume is all here.
+	ringing := rang > 0 || p.ringing.Load()
+	p.followRing(ringing, int(p.bellStep.Load()))
 	gain, step := p.Volume(), int(p.step.Load())
 	mediaK, bellK := float32(1), float32(0)
-	if rang > 0 || p.ringing.Load() {
+	if ringing {
 		var first *[VolumeSteps + 1]float64
 		if tuned {
 			first = p.first
