@@ -259,6 +259,14 @@ def find_disk(adb):
     return disk, total
 
 
+def read_cid(adb, disk):
+    """The eMMC's CID: the chip's own id, which ties a backup to this unit."""
+    cid = adb.sh('cat /sys/class/block/%s/device/cid 2>/dev/null' % disk).strip().lower()
+    if not re.fullmatch(r'[0-9a-f]{32}', cid):
+        fail('could not read the CID of %s (the eMMC chip\'s id)' % disk)
+    return cid
+
+
 def read_table(adb, disk, total, work):
     """The disk's first 34 sectors and last 33: the stock GPT, both copies."""
     first = read_bytes(adb, 'dd if=/dev/block/%s bs=512 count=34 2>/dev/null' % disk, work)
@@ -352,7 +360,7 @@ def stream_to_file(adb, command, path, size, ranges=(), what='', every=30):
     return whole.hexdigest(), {k: h.hexdigest() for k, h in hs.items()}
 
 
-def make_backup(adb, disk, total, layout, first, folder):
+def make_backup(adb, disk, total, layout, first, folder, cid):
     """The whole eMMC and its boot areas into folder, verified. Read only."""
     os.makedirs(folder, exist_ok=True)
     size = total * SECTOR
@@ -399,14 +407,25 @@ def make_backup(adb, disk, total, layout, first, folder):
     write_restore(folder, total, layout, first, last, img)
     # Last, so a backup that stopped anywhere above is never taken as verified.
     with open(os.path.join(folder, 'verified'), 'w', newline='\n') as f:
-        f.write('verified %s sectors=%d sha256=%s\n' % (time.strftime('%Y-%m-%dT%H:%M:%S'), total, whole))
+        f.write('verified %s sectors=%d sha256=%s cid=%s\n'
+                % (time.strftime('%Y-%m-%dT%H:%M:%S'), total, whole, cid))
     return img
 
 
-def backup_verified(folder, total, first, rehash=True):
+def backup_cid(folder):
+    """The CID a finished backup in folder was made of: None without one, '' when it does not say."""
+    try:
+        marker = read_file(os.path.join(folder, 'verified')).decode('ascii', 'replace')
+    except OSError:
+        return None
+    c = re.search(r'\bcid=([0-9a-f]{32})\b', marker)
+    return c.group(1) if c else ''
+
+
+def backup_verified(folder, total, first, cid, rehash=True):
     """Whether folder holds a verified backup of this unit as it is now: made and checked by this
-    installer, the eMMC's size, the same partition table, and (rehash) the image still matching its
-    sha256. Returns '' when it does, else why not."""
+    installer, of this eMMC chip (its CID), the eMMC's size, the same partition table, and (rehash) the
+    image still matching its sha256. Returns '' when it does, else why not."""
     try:
         marker = read_file(os.path.join(folder, 'verified')).decode('ascii', 'replace')
         sums = read_file(os.path.join(folder, 'SHA256SUMS')).decode('ascii', 'replace')
@@ -415,6 +434,13 @@ def backup_verified(folder, total, first, rehash=True):
     m = re.search(r'sectors=(\d+) sha256=([0-9a-f]{64})', marker)
     if not m or int(m.group(1)) != total:
         return 'the backup in %s is of another eMMC' % folder
+    c = backup_cid(folder)
+    if not c:
+        return ('the backup in %s does not say which eMMC chip it is of (made before the installer wrote the '
+                'CID down), so it cannot be tied to this unit. Move that folder aside and run this again for '
+                'a new backup' % folder)
+    if c != cid:
+        return 'the backup in %s is of another unit (another eMMC chip)' % folder
     if ('%s  emmc.img' % m.group(2)) not in sums.splitlines():
         return 'the backup in %s does not agree with its SHA256SUMS' % folder
     img = os.path.join(folder, 'emmc.img')
@@ -757,6 +783,7 @@ def main(argv=None):
     note('%s: stock firmware %s, adb root' % (a.serial, fw_name))
     note(check_board(adb, a.work))
     disk, total = find_disk(adb)
+    cid = read_cid(adb, disk)
     first, last = read_table(adb, disk, total, a.work)
     layout = check_table(first, last, total)
     check_names(adb, disk, layout)
@@ -830,12 +857,12 @@ def main(argv=None):
     # ------------------------------------------------------------------------------------ 3. backup
     step('backup')
     if a.backup:
-        why = backup_verified(folder, total, first, rehash=not a.dry_run)
+        why = backup_verified(folder, total, first, cid, rehash=not a.dry_run)
         if why:
             fail('--backup: %s. Without a verified backup nothing is written.' % why)
         note('the backup in %s checks out' % folder)
     else:
-        why = backup_verified(folder, total, first, rehash=not (a.dry_run or a.resume))
+        why = backup_verified(folder, total, first, cid, rehash=not (a.dry_run or a.resume))
         if not why:
             note('a verified backup of this unit is there already: %s' % folder)
         elif a.dry_run:
@@ -845,8 +872,11 @@ def main(argv=None):
                   % (disk, os.path.join(folder, 'emmc.img')))
         elif a.resume:
             fail('--resume needs the verified backup the first run made: %s' % why)
+        elif backup_cid(folder) not in (None, cid):
+            # A finished backup that is not of this chip, or does not say: never written over.
+            fail('%s. Nothing was written, and that backup is left as it is.' % why)
         else:
-            make_backup(adb, disk, total, layout, first, folder)
+            make_backup(adb, disk, total, layout, first, folder, cid)
             note('the whole eMMC is in %s, checked by sha256 against what the unit reads' % folder)
 
     # ------------------------------------------------------------------------------------ 4. firmware

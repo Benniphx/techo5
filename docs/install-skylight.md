@@ -67,6 +67,9 @@ each partition again and the hashes have to match. Without a verified backup not
 - `userdata`, `cache` and `metadata` are copied while Android is running and using them. They are
   copied as they were, but not compared. The rest is checked.
 - The folder also holds `restore/RESTORE.txt`: the way back, with your unit's own numbers.
+- The backup notes the eMMC chip's id (its CID), and is only used for that chip. A backup of
+  another unit, or one made by an installer before v1.3.0, is refused and left as it is: move it
+  aside for a new one.
 
 The installer also copies the unit's Wi-Fi and Bluetooth firmware out of its vendor partition, into
 `backups/skylight-<serial>/firmware/`. Those files are the vendor's, so TECHO5 doesn't ship them.

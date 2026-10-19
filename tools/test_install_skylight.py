@@ -181,6 +181,7 @@ class FakeSkylight:
         self.corrupt_stream = None   # (offset, byte): what the stream gets wrong
         self.short_stream = False
         self.before = bytes(self.disk)
+        self.cid = 'ce0000c0ffee0000000000000000aa00'   # made up
 
     # -------------------------------------------------------------------- helpers
     def part(self, name):
@@ -251,6 +252,8 @@ class FakeSkylight:
                 return '/dev/block/by-name/' + m.group(1)
         if cmd == 'cat /sys/class/block/%s/size' % D:
             return str(self.total)
+        if cmd == 'cat /sys/class/block/%s/device/cid 2>/dev/null' % D:
+            return self.cid + '\n'
         m = re.fullmatch(r'cat /sys/class/block/%sp(\d+)/uevent' % D, cmd)
         if m:
             n = int(m.group(1))
@@ -882,7 +885,48 @@ class Backup(Scaled):
         u = FakeSkylight()
         self.assertIsNone(self.run_installer(u)[1])
         os.remove(os.path.join(self.folder(), 'verified'))
-        self.assertIn('no verified backup', inst.backup_verified(self.folder(), TOTAL, u.before[:34 * S]))
+        self.assertIn('no verified backup', inst.backup_verified(self.folder(), TOTAL, u.before[:34 * S], u.cid))
+
+    def test_backup_of_another_chip_refused(self):
+        u = FakeSkylight()
+        self.assertIsNone(self.run_installer(u)[1])
+        with open(os.path.join(self.folder(), 'verified')) as f:
+            self.assertIn('cid=' + u.cid, f.read())
+        self.assertEqual(inst.backup_verified(self.folder(), TOTAL, u.before[:34 * S], u.cid), '')
+        # Another unit with the same table and size, given this one's backup.
+        v = FakeSkylight()
+        v.cid = '11' * 16
+        out, err = self.run_installer(v, '--backup', self.folder())
+        self.assertIn('of another unit', err)
+        self.assert_nothing_written(v)
+
+    def test_backup_without_cid_refused(self):
+        u = FakeSkylight()
+        self.assertIsNone(self.run_installer(u)[1])
+        marker = os.path.join(self.folder(), 'verified')
+        with open(marker) as f:
+            old = re.sub(r' cid=\S+', '', f.read())
+        with open(marker, 'w', newline='\n') as f:
+            f.write(old)
+        v = FakeSkylight()
+        out, err = self.run_installer(v, '--backup', self.folder())
+        self.assertIn('does not say which eMMC chip', err)
+        self.assert_nothing_written(v)
+        # Found in its usual place, it is not backed up over either.
+        v = FakeSkylight()
+        out, err = self.run_installer(v)
+        self.assertIn('that backup is left as it is', err)
+        self.assertEqual(v.streams, [])
+        self.assert_nothing_written(v)
+        with open(marker) as f:
+            self.assertEqual(f.read(), old)
+
+    def test_unreadable_cid(self):
+        u = FakeSkylight()
+        u.cid = ''
+        out, err = self.run_installer(u)
+        self.assertIn('could not read the CID', err)
+        self.assert_nothing_written(u)
 
 
 class Watch(unittest.TestCase):
