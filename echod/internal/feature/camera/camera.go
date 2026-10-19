@@ -2,8 +2,9 @@
 // on the network: a JPEG snapshot and an MJPEG stream. Home Assistant's "Generic Camera" takes the
 // snapshot URL, "MJPEG IP Camera" the stream; either makes the Show a camera entity there.
 //
-// Both pages are off unless switched on (feature/security): they have no login, so the port is only
-// open while the camera or the screen page is wanted.
+// Both pages are off unless switched on (feature/security), and take the camera stream's login or a
+// browser the setup page has let in (feature/camstream webpages.go). While either sends the camera, the
+// screen shows it is being watched, as it does for the stream.
 //
 // The sensor runs only while a request holds it, and stops a few seconds after the last one, so
 // a device nobody is watching has its camera off — and the mute button keeps it off entirely.
@@ -22,6 +23,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/camstream"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/camera"
 )
@@ -51,8 +53,8 @@ func (f *Feature) Name() string { return "camera" }
 // of its pages is switched on and shut when none is. A device with no camera registers nothing here
 // and still has the port for the pages it does have.
 func (f *Feature) register() {
-	web.Handle("/camera.jpg", "Camera", cameraOpen, f.snapshot)
-	web.Handle("/camera.mjpeg", "", cameraOpen, f.stream)
+	web.Handle("/camera.jpg", "Camera", cameraOpen, guarded(f.snapshot))
+	web.Handle("/camera.mjpeg", "", cameraOpen, guarded(f.stream))
 	f.registerScreen()
 }
 
@@ -60,6 +62,17 @@ func (f *Feature) register() {
 // nodes are looked for then rather than when the daemon starts, since this runs before the rest of
 // the daemon has touched anything.
 func cameraOpen() bool { return config.Get().Security.Camera && camera.Available() }
+
+// guarded asks for the camera's login and marks the camera watched while the page is sent.
+func guarded(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !camstream.PageAllowed(w, r) {
+			return
+		}
+		defer camstream.PageWatching()()
+		h(w, r)
+	}
+}
 
 func encode(f *camera.Frame) ([]byte, error) {
 	return encodeImage(f.Image())

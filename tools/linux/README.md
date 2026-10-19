@@ -231,7 +231,8 @@ The camera is driven from userspace through the ISP driver's register windows; t
 they are in the history before 2026-09-16 evening.) `hardware/camera` streams on demand with
 auto-exposure and `feature/camera` serves
 the ESPHome camera entity Home Assistant creates on its own, plus `http://<device>:8181/camera.jpg`
-and `/camera.mjpeg` while Camera web access is on. `/screen.png[?sheet=<category>&list=<row>&theme=<name>]` on the
+and `/camera.mjpeg` while Camera web access is on (with the camera stream's login, or a browser the
+setup page has let in; the green dot shows while either is read). `/screen.png[?sheet=<category>&list=<row>&theme=<name>]` on the
 same port, while Screen web access is on, is a screenshot of the panel, for checking layouts from a
 PC; the parameters that put a page up first work the screen rather than read it, so they need a
 browser the setup page has let in. With both off the port is closed.

@@ -270,8 +270,10 @@ cameras:
 
 A recorder that adds cameras by ONVIF can take it from `http://<device address>:8181/onvif/device_service`
 with the same login: one profile, its stream, and its snapshot while **Camera web access** is on. The
-snapshot is the camera page's `/camera.jpg`, which asks for no login and does not light the green dot:
-it is there for anybody on the network whenever Camera web access is on, ONVIF or not. The
+snapshot is the camera page's `/camera.jpg`, which takes the same login and lights the green dot while
+it is read. The camera pages (`/camera.jpg` and `/camera.mjpeg`, there while Camera web access is on)
+ask for that login too, so set a camera password before you use them; a browser the setup page has let
+in needs none. The
 device is not found by ONVIF discovery: give the recorder its address. ONVIF here is a login digest over
 plain HTTP, as on most cameras, and the password itself is never sent.
 

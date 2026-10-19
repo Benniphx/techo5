@@ -94,6 +94,7 @@ type Feature struct {
 	since   map[net.Conn]waiter // each connection not logged in yet, and when it came
 	subs    map[chan rtpjpeg.Frame]struct{}
 	stopPic func() // ends the pictures, while anybody watches
+	pages   int    // camera web pages being sent (webpages.go)
 }
 
 var (
@@ -161,13 +162,13 @@ func Poke() {
 // Offered is whether the device has a camera to stream, for the setup page.
 func Offered() bool { return Get().available() }
 
-// Watching is whether anybody is being sent the camera, for the screen.
+// Watching is whether anybody is being sent the camera, over the stream or a camera page, for the screen.
 func Watching() bool { return Get().watching() }
 
 func (f *Feature) watching() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.subs) > 0
+	return len(f.subs) > 0 || f.pages > 0
 }
 
 // wanted is whether the camera is to be served: on, with a password, on a device with a camera.
