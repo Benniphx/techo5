@@ -11,6 +11,7 @@ import argparse
 import html
 import json
 import os
+import shutil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATA = os.path.join(ROOT, "docs", "comparison", "data.json")
@@ -140,7 +141,8 @@ def page(d):
     data = json.dumps(d, ensure_ascii=False).replace("</", "<\\/")
     return (t.replace("/*DATA*/null", data)
              .replace("{{CHECKED}}", html.escape(checked_words(d["checked"])))
-             .replace("{{ISSUES}}", ISSUES))
+             .replace("{{ISSUES}}", ISSUES)
+             .replace("{{PAGE_URL}}", PAGE_URL))
 
 
 def main():
@@ -152,6 +154,8 @@ def main():
     if a.site:
         os.makedirs(os.path.join(a.site, "comparison"), exist_ok=True)
         open(os.path.join(a.site, "comparison", "index.html"), "w", encoding="utf-8").write(page(d))
+        for img in ("banner.jpg", "og.jpg"):
+            shutil.copy(os.path.join(os.path.dirname(DATA), img), os.path.join(a.site, "comparison", img))
         open(os.path.join(a.site, "index.html"), "w", encoding="utf-8").write(
             '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=comparison/">'
             '<link rel="canonical" href="comparison/"><title>TECHO5</title><a href="comparison/">Comparison</a>\n')
