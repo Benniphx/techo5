@@ -41,6 +41,9 @@ Android does for the app instead:
   video or camera sound (the Echos' video decoder isn't in the app; cameras show Home Assistant's
   snapshots). No AirPlay or Spotify Connect, no remote adb, and no firewall of its own. A call to a
   SIP account rings only when it comes from the provider.
+- **`.local` names.** A Show looks up a name like `homeassistant.local` itself. A panel leaves
+  names to Android, so a `.local` address works only where Android itself resolves it, which older
+  versions don't. Home Assistant's IP address always works.
 - **Microphone silenced.** Android can take the microphone away from an app (its privacy switch,
   another app). When the app has heard nothing but silence for 20 seconds, Home Assistant shows a
   Microphone silenced problem, which clears as soon as there's sound again.

@@ -32,8 +32,10 @@ talk to the device is not enough for this.
      token: "paste the token here"
    ```
 
-Use Home Assistant's local IP address, as above with your own. The device can't look up `.local`
-names like `homeassistant.local`, and an external or Nabu Casa address does not work either.
+Use Home Assistant's local IP address, as above with your own. A Show, a Spot or the Skylight
+Calendar can also take a `.local` name like `homeassistant.local`: it looks the name up itself. The
+Dot and the Echo 2nd gen can't, and on a panel it works only where Android looks `.local` names up.
+An external or Nabu Casa address does not work on any of them.
 
 If a photo folder says **Couldn't open this folder**, or a camera shows `hass: no access configured`,
 this step is missing or the address is wrong.
