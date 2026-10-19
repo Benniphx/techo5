@@ -122,6 +122,10 @@ thermostats, covers, players, locks, doors and windows.
 
 A change you save in Home Assistant's dashboard editor shows on the device within a second or two.
 
+A tap that opens another view keeps the page you tapped on up until the new view and its
+full-screen pictures are ready, for a second and a half at most. The last few pictures are kept, so
+going back to a view you just left draws it at once.
+
 ### A dashboard for the screen
 
 The simplest way to get a good drawn dashboard is to make one for it: in Home Assistant, **Settings

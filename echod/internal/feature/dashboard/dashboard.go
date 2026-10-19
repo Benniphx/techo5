@@ -74,6 +74,11 @@ type Feature struct {
 	stream    *stream  // while the page is up in streamed mode
 	drawn     *session // while the page is up drawn, for drawnPath
 	drawnPath string
+	// navTo is the path a tap on the page is going to, until the page is asked for it there: the one
+	// change of path that holds the page it left (session.hold).
+	navTo string
+	// recent is the last few pictures the drawn page showed, kept between its views.
+	recent recent
 
 	// When the page last asked for each: a session nobody has asked for in a while is closed, however
 	// the page went away - a turn, the screen going dark, the night.
@@ -371,6 +376,7 @@ func (f *Feature) closeUnused() {
 		s.close()
 	}
 	if d != nil {
+		f.recent.empty() // nobody is looking: the memory is the device's again
 		d.close()
 	}
 }
