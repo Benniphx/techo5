@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Echo Project Comparison</title>
+<meta name="description" content="What each project that brings Echo devices and other screens to Home Assistant covers, side by side.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: intro and filters on top; a scrolling table with a fixed header and feature column beside a details panel */
+:root {
+  --bg: #f4f6f7; --panel: #ffffff; --fg: #1d2529; --muted: #5b6970; --line: #d5dde1; --accent: #0f6f74;
+  --yes: #1f7a3a; --yes-bg: #e3f3e7; --part: #8a5a00; --part-bg: #fbf0d5; --no: #a3262a; --no-bg: #f8e1e1;
+  --nf: #55626a; --nf-bg: #e9edef; --prog: #3a4fa3; --prog-bg: #e4e8f8; --na: #8b979d;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #12171a; --panel: #1a2125; --fg: #e3e9ec; --muted: #9aa8af; --line: #2e393f; --accent: #5cc3c8;
+  --yes: #7fd394; --yes-bg: #173525; --part: #f0c264; --part-bg: #3a2f14; --no: #f29a9a; --no-bg: #3d1d1f;
+  --nf: #a9b5bb; --nf-bg: #263036; --prog: #a9b6f2; --prog-bg: #232a48; --na: #6c7980; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 28px; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 20px; margin: 36px 0 10px; }
+p { max-width: 75ch; }
+a { color: var(--accent); }
+.intro p { margin: 0 0 10px; }
+.muted { color: var(--muted); }
+.label { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 16px 0 12px; font-size: 14px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font: 600 13px var(--body); border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.chip:focus-visible, td.cell:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.scroller { max-height: 75vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+table { border-collapse: separate; border-spacing: 0; font-size: 14px; width: 100%; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); }
+thead th { position: sticky; top: 0; background: var(--panel); z-index: 2; font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); white-space: nowrap; }
+th.feat { position: sticky; left: 0; background: var(--panel); z-index: 1; text-align: left; font-weight: 400; min-width: 200px; max-width: 260px; }
+thead th.feat { z-index: 3; }
+tr.sec th { position: sticky; left: 0; font: 600 12px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--accent); background: var(--bg); text-align: left; }
+tr.sec td { background: var(--bg); }
+td.cell { cursor: pointer; text-align: center; white-space: nowrap; }
+td.cell:hover { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+td.sel { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pill { display: inline-block; font: 600 12px var(--body); border-radius: 4px; padding: 1px 7px; }
+.p-Yes { color: var(--yes); background: var(--yes-bg); } .p-Partly { color: var(--part); background: var(--part-bg); }
+.p-No { color: var(--no); background: var(--no-bg); } .p-Not { color: var(--nf); background: var(--nf-bg); }
+.p-In { color: var(--prog); background: var(--prog-bg); } .p-na { color: var(--na); }
+.dag { color: var(--muted); font-size: 11px; vertical-align: super; }
+.detail { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; position: sticky; top: 12px; min-width: 0; }
+.detail h3 { margin: 4px 0 6px; font-size: 17px; }
+.detail p { margin: 6px 0; overflow-wrap: anywhere; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.card h3 { margin: 0 0 6px; font-size: 16px; }
+.card dl { margin: 0; display: grid; grid-template-columns: minmax(0, 9em) minmax(0, 1fr); gap: 4px 10px; font-size: 14px; }
+.card dt { color: var(--muted); }
+.card dd { margin: 0; overflow-wrap: anywhere; }
+.card ul { margin: 0; padding-left: 20px; font-size: 14px; }
+footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="intro">
+    <h1>Echo project comparison</h1>
+    <p>People often ask how the projects that bring Echo devices and other screens to Home Assistant compare. This page lists what each one covers. It isn't a ranking: each project is good work with its own focus, and the right one depends on your devices and what you want from them.</p>
+    <p>This page is kept by TECHO5's author, so read it with that in mind. To keep it even, it was built the same way for every project, TECHO5 included: a separate reviewer for each project read only that project's public repos and listed every feature, the rows come from all six lists, and each answer was checked by a second reviewer.</p>
+    <p class="muted">Checked {{CHECKED}}. These projects move fast, so some cells will be out of date soon. Spot something wrong or missing? <a href="{{ISSUES}}">Open an issue</a> and it will be fixed. Projects are in alphabetical order.</p>
+  </header>
+
+  <div class="legend" aria-label="What the answers mean">
+    <span><span class="pill p-Yes">Yes</span> in a release</span>
+    <span><span class="pill p-Partly">Partly</span> per the row's definition</span>
+    <span><span class="pill p-No">No</span> the project says so</span>
+    <span><span class="pill p-Not">Not found</span> may still be there</span>
+    <span><span class="pill p-In">In progress</span> not released yet</span>
+    <span><span class="pill p-na">n/a</span> doesn't apply</span>
+    <span><span class="dag">†</span> has a note</span>
+  </div>
+
+  <div class="toolbar"><span class="label">Section</span><div class="chips" id="secChips"></div></div>
+  <div class="toolbar">
+    <span class="label">Projects</span><div class="chips" id="projChips"></div>
+    <label><input type="checkbox" id="diffOnly"> Only rows where they differ</label>
+  </div>
+
+  <div class="grid">
+    <div class="scroller"><table id="tbl"></table></div>
+    <aside class="detail" id="detail" aria-live="polite">
+      <span class="label">Details</span>
+      <p class="muted">Click a cell to see its note, its source and what the row counts as Yes or Partly.</p>
+    </aside>
+  </div>
+
+  <h2>The projects</h2>
+  <div class="cards" id="facts"></div>
+
+  <h2>Also does</h2>
+  <p class="muted">Released features that no row covers, as each project's reviewer picked them.</p>
+  <div class="cards" id="also"></div>
+
+  <h2>What each project focuses on</h2>
+  <p class="muted">In each project's own terms.</p>
+  <div class="cards" id="focus"></div>
+
+  <footer id="sources"></footer>
+</div>
+<script>
+const D = /*DATA*/null;
+const P = D.projects, R = D.rows, C = D.cells, SECS = D.sections;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const ans = (k, id) => C[k][id];
+const kind = a => a.startsWith("Not") ? "Not" : a.startsWith("In") ? "In" : a === "n/a" ? "na" : a;
+const feat = R.filter(r => !r.fact), facts = R.filter(r => r.fact);
+const st = { sec: "All", hide: new Set(), diff: false, sel: null };
+
+function chips() {
+  document.getElementById("secChips").innerHTML = ["All", ...SECS].map(s =>
+    `<button class="chip" aria-pressed="${st.sec === s}" data-sec="${esc(s)}">${esc(s)}</button>`).join("");
+  document.getElementById("projChips").innerHTML = P.map(p =>
+    `<button class="chip" aria-pressed="${!st.hide.has(p.key)}" data-proj="${p.key}">${esc(p.name)}</button>`).join("");
+}
+function table() {
+  const ps = P.filter(p => !st.hide.has(p.key));
+  let h = `<thead><tr><th class="feat">Feature</th>` + ps.map(p => `<th>${esc(p.name)}</th>`).join("") + "</tr></thead><tbody>";
+  let any = false;
+  for (const s of SECS) {
+    if (st.sec !== "All" && st.sec !== s) continue;
+    let rs = feat.filter(r => r.section === s);
+    if (st.diff) rs = rs.filter(r => new Set(ps.map(p => ans(p.key, r.id)[0])).size > 1);
+    if (!rs.length) continue;
+    any = true;
+    h += `<tr class="sec"><th class="feat">${esc(s)}</th>` + ps.map(() => "<td></td>").join("") + "</tr>";
+    for (const r of rs) {
+      h += `<tr><th class="feat" scope="row">${esc(r.name)}</th>` + ps.map(p => {
+        const [a, n] = ans(p.key, r.id);
+        const sel = st.sel && st.sel[0] === p.key && st.sel[1] === r.id ? " sel" : "";
+        return `<td class="cell${sel}" tabindex="0" data-k="${p.key}" data-r="${r.id}"><span class="pill p-${kind(a)}">${esc(a)}</span>${n ? '<span class="dag">†</span>' : ""}</td>`;
+      }).join("") + "</tr>";
+    }
+  }
+  if (!any) h += `<tr><td colspan="${ps.length + 1}" class="muted">No rows match. Turn a filter off to see more.</td></tr>`;
+  document.getElementById("tbl").innerHTML = h + "</tbody>";
+}
+function detail(k, id) {
+  const r = R.find(x => x.id === id), p = P.find(x => x.key === k), [a, n, u] = ans(k, id);
+  const el = document.getElementById("detail");
+  el.innerHTML = `<span class="label">${esc(p.name)} · ${esc(r.section)}</span><h3>${esc(r.name)}</h3>
+    <p><span class="pill p-${kind(a)}">${esc(a)}</span></p>${n ? `<p>${esc(n)}</p>` : ""}
+    ${u ? `<p><a href="${esc(u)}" target="_blank" rel="noopener">Source</a></p>` : ""}
+    <p class="muted"><b>What counts:</b> ${esc(r.def)}</p>`;
+  if (window.matchMedia("(max-width: 960px)").matches) el.scrollIntoView({ block: "nearest" });
+}
+document.addEventListener("click", e => {
+  const t = e.target.closest("button.chip, td.cell");
+  if (!t) return;
+  if (t.dataset.sec) { st.sec = t.dataset.sec; chips(); table(); }
+  else if (t.dataset.proj) {
+    st.hide.has(t.dataset.proj) ? st.hide.delete(t.dataset.proj) : st.hide.add(t.dataset.proj);
+    if (st.hide.size === P.length) st.hide.delete(t.dataset.proj);
+    chips(); table();
+  } else if (t.dataset.k) { st.sel = [t.dataset.k, t.dataset.r]; table(); detail(t.dataset.k, t.dataset.r); }
+});
+document.addEventListener("keydown", e => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches("td.cell")) { e.preventDefault(); e.target.click(); }
+});
+document.getElementById("diffOnly").addEventListener("change", e => { st.diff = e.target.checked; table(); });
+
+document.getElementById("facts").innerHTML = P.map(p => `<div class="card"><h3>${esc(p.name)}</h3><dl>` +
+  facts.map(r => { const [a, n, u] = ans(p.key, r.id);
+    return `<dt>${esc(r.name)}</dt><dd>${esc(a)}${n ? " (" + esc(n) + ")" : ""}${u ? ` <a href="${esc(u)}" target="_blank" rel="noopener">source</a>` : ""}</dd>`; }).join("") +
+  "</dl></div>").join("");
+document.getElementById("also").innerHTML = P.map(p => `<div class="card"><h3>${esc(p.name)}</h3><ul>` +
+  p.also.map(x => `<li>${esc(x)}</li>`).join("") + "</ul></div>").join("");
+document.getElementById("focus").innerHTML = P.map(p => `<div class="card"><h3>${esc(p.name)}</h3><p>${esc(p.focus)}</p></div>`).join("");
+document.getElementById("sources").innerHTML = "<b>Sources.</b> " + P.map(p => `${esc(p.name)}: ` +
+  p.repos.map(([n, u]) => `<a href="${esc(u)}">${esc(n)}</a>`).join(", ")).join(" · ") +
+  ` · Also as a <a href="https://github.com/HuskerMinion/techo5/blob/main/docs/comparison.md">markdown page</a>.`;
+chips(); table();
+</script>
+</body>
+</html>
