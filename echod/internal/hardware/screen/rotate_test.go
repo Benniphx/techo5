@@ -42,7 +42,7 @@ func TestRotateMatchesThePixelAtATimeWay(t *testing.T) {
 		rng.Read(d.canvas.Pix)
 		want := make([]byte, len(dst))
 		oldRotate(d, want)
-		d.rotate(dst, 0)
+		d.rotate(d.canvas, dst, 0)
 		if !bytes.Equal(dst, want) {
 			t.Fatalf("shift %v: the first frame differs", shift)
 		}
@@ -51,7 +51,7 @@ func TestRotateMatchesThePixelAtATimeWay(t *testing.T) {
 			d.canvas.Pix[rng.Intn(len(d.canvas.Pix))] ^= 0xff
 		}
 		oldRotate(d, want)
-		d.rotate(dst, 0)
+		d.rotate(d.canvas, dst, 0)
 		if !bytes.Equal(dst, want) {
 			t.Fatalf("shift %v: a changed frame differs", shift)
 		}
@@ -71,7 +71,7 @@ func BenchmarkRotateEverythingChanged(b *testing.B) {
 		for x := 0; x < len(d.canvas.Pix); x += 4 {
 			d.canvas.Pix[x] ^= 1
 		}
-		d.rotate(dst, 0)
+		d.rotate(d.canvas, dst, 0)
 	}
 }
 

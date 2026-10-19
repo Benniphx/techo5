@@ -64,3 +64,50 @@ func TestMockClockCorners(t *testing.T) {
 		mockSheet(t, out, panel.name+"-sheet", tiles, 3)
 	}
 }
+
+// Mockups of the Nixie, Stack and Overlap styles on the plain ground, dark and light, at 12 and 24
+// hours, in the middle and in a corner (MOCK_OUT): a sheet each.
+func TestMockPlainStyles(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	previewFont(t)
+	keepPalette(t)
+	t.Cleanup(func() { clock24.Store(false) })
+	out := os.Getenv("MOCK_OUT")
+	at := time.Date(2026, 9, 16, 14, 7, 38, 0, time.Local)
+	for _, style := range []string{styleNixie, styleStack, styleOverlap} {
+		if err := config.Set().Screen().ClockStyle(style); err != nil {
+			t.Fatal(err)
+		}
+		var tiles []mockTile
+		for _, panel := range []struct {
+			name       string
+			wide, high int
+		}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}, {"skylight", skylightWide, skylightHigh}} {
+			for _, theme := range []string{"", "Paper"} {
+				applyTheme(themes[themeIndex(theme)])
+				for _, pos := range []string{"", "bottom-right"} {
+					if err := config.Set().Screen().ClockPosition(pos); err != nil {
+						t.Fatal(err)
+					}
+					for _, h24 := range []bool{false, true} {
+						clock24.Store(h24)
+						img := image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high))
+						s := scene{now: at, phase: "idle", weather: home.Weather{Condition: "partlycloudy", Temp: "72°"}}
+						if h24 {
+							s.now = at.Add(8 * time.Hour)
+							s.timers = []timer.Countdown{{Name: "pasta", Left: 272 * time.Second, Total: 600 * time.Second, Active: true}}
+						}
+						newRenderer(img).draw(s)
+						name := panel.name + "-" + style + map[string]string{"": "", "Paper": "-light"}[theme] + map[string]string{"": "", "bottom-right": "-corner"}[pos]
+						if h24 {
+							name += "-24h-timer"
+						}
+						mockSave(t, out, name, img)
+						tiles = append(tiles, mockTile{name, img})
+					}
+				}
+			}
+		}
+		mockSheet(t, out, style+"-sheet", tiles, 4)
+	}
+}

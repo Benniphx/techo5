@@ -21,6 +21,8 @@ var notOnPanel = []string{
 	"bluetooth_audio", "bluetooth_disconnect", "bluetooth_forget", "bluetooth_forget_phones", "bluetooth_pairing",
 	"bluetooth_phone_pairing", "bluetooth_reconnect", "bluetooth_reconnect_phone", "bluetooth_secure_connections",
 	"camera_web_access",
+	// The Tessera screen is the Show's own for now (feature/tessera).
+	"tessera_screen",
 }
 
 // onlyOnPanel is what a panel adds: Android can silence a tablet's microphone under the app.

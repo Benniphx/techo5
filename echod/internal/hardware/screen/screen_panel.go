@@ -29,6 +29,10 @@ type Device struct {
 	// prev is what the app was last sent, so a frame sends only what differs: a clock that ticks
 	// changes a few rows, and the whole canvas at Show 8 size is 4 MB a frame.
 	prev []byte
+
+	// filter is laid over every row on its way to the app (SetFilter, filter.go), as on an Echo's
+	// panel: a skin's one color reaches the app's surface the same way.
+	filter rowFilter
 }
 
 // Open connects to the app and makes a canvas the size it asked for.
@@ -53,9 +57,16 @@ func (d *Device) String() string {
 	return fmt.Sprintf("panel app surface, %dx%d canvas, %d dpi", d.canvas.Rect.Dx(), d.canvas.Rect.Dy(), d.density)
 }
 
-// Present sends the smallest rectangle holding every pixel that changed.
+// SetFilter lays f over every row of the canvas on its way to the app, as on an Echo's panel
+// (screen.go); nil takes it off. The canvas itself is not touched.
+func (d *Device) SetFilter(name string, f func(row []byte, y int)) { d.filter.set(name, f) }
+
+// source is what Present sends: the canvas, or the canvas through the filter.
+func (d *Device) source() *image.RGBA { return d.filter.over(d.canvas) }
+
+// Present sends the smallest rectangle holding every pixel that changed, after the filter.
 func (d *Device) Present() error {
-	img := d.canvas
+	img := d.source()
 	w, h, stride := img.Rect.Dx(), img.Rect.Dy(), img.Stride
 	c, err := panelscreen.Get()
 	if err != nil {
@@ -65,7 +76,7 @@ func (d *Device) Present() error {
 		d.prev, d.sent = nil, c
 	}
 	if d.prev == nil {
-		if err := d.send(0, 0, w, h); err != nil {
+		if err := d.send(img, 0, 0, w, h); err != nil {
 			return err
 		}
 		d.prev = append(d.prev[:0], img.Pix...)
@@ -96,7 +107,7 @@ func (d *Device) Present() error {
 	if top < 0 {
 		return nil
 	}
-	if err := d.send(left, top, right-left+1, bottom-top+1); err != nil {
+	if err := d.send(img, left, top, right-left+1, bottom-top+1); err != nil {
 		return err
 	}
 	for y := top; y <= bottom; y++ {
@@ -106,8 +117,9 @@ func (d *Device) Present() error {
 	return nil
 }
 
-func (d *Device) send(x, y, w, h int) error {
-	if err := d.sent.Frame(d.canvas.Pix, d.canvas.Stride, x, y, w, h); err != nil {
+// send sends the rectangle x, y, w, h of img, the canvas as it goes out.
+func (d *Device) send(img *image.RGBA, x, y, w, h int) error {
+	if err := d.sent.Frame(img.Pix, img.Stride, x, y, w, h); err != nil {
 		panelscreen.Drop(d.sent)
 		d.prev, d.sent = nil, nil
 		return fmt.Errorf("screen: %w", err)

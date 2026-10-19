@@ -250,7 +250,8 @@ func (r *renderer) alertBadge(s scene) {
 	room := right - left - mark - r.s(28)
 	label := r.clipTo(r.tiny, a.Event, room-r.width(r.tiny, more)) + more
 	w := r.width(r.tiny, label) + mark + r.s(28)
-	b := image.Rect(right-w, r.s(18), right, r.s(18)+h)
+	top := r.badgeTop()
+	b := image.Rect(right-w, top, right, top+h)
 	r.roundButton(b, float64(h)/2, a.Color)
 	ink := inkOn(a.Color)
 	// The mark: a triangle with an exclamation point.

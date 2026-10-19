@@ -66,14 +66,14 @@ func TestAFrameIsCopiedAndTheControlsDrawnOverIt(t *testing.T) {
 func TestAPageAFrameWentOnIsDrawnWholeNextTime(t *testing.T) {
 	d, dst := fake([4]uint{16, 8, 0, 24})
 	rand.New(rand.NewSource(3)).Read(d.canvas.Pix)
-	d.rotate(dst, 0)
+	d.rotate(d.canvas, dst, 0)
 	want := append([]byte(nil), dst...)
 
 	w, h := d.FrameSize()
 	if err := d.paintFrame(dst, 0, make([]byte, w*h*4), image.Rectangle{}); err != nil {
 		t.Fatal(err)
 	}
-	d.rotate(dst, 0)
+	d.rotate(d.canvas, dst, 0)
 	if !bytes.Equal(dst, want) {
 		t.Error("the canvas was not drawn back over the frame")
 	}

@@ -238,6 +238,17 @@ func TestRoundScenesDraw(t *testing.T) {
 		scenes["turn-"+style+"-night"] = roundScene{now: at, phase: "replying", heard: "Turn off the bedroom light", reply: "Bedroom light is off.",
 			eq: &eqView{level: night, peak: nightPk, night: true, wave: wave}}
 	}
+	// The pictures of turn_visual.go, which take the turn's phase.
+	for _, style := range []string{"vu", "orb", "hal"} {
+		think := eqFor("thinking", false, at)
+		think.style, think.phase = style, "thinking"
+		scenes["turn-"+style+"-listening"] = roundScene{now: at, phase: "listening", eq: &eqView{level: listen, peak: listenPk, style: style, phase: "listening"}}
+		scenes["turn-"+style+"-thinking"] = roundScene{now: at, phase: "thinking", heard: "What's the weather tomorrow?", eq: think}
+		scenes["turn-"+style+"-replying"] = roundScene{now: at, phase: "replying", heard: "What's the weather tomorrow?",
+			reply: "Tomorrow will be sunny, with a high of 74 and a low of 51.", eq: &eqView{level: reply, peak: replyPk, style: style, phase: "replying"}}
+		scenes["turn-"+style+"-night"] = roundScene{now: at, phase: "replying", heard: "Turn off the bedroom light", reply: "Bedroom light is off.",
+			eq: &eqView{level: night, peak: nightPk, night: true, style: style, phase: "replying"}}
+	}
 
 	dir := os.Getenv("SPOT_PREVIEW")
 	for name, s := range scenes {

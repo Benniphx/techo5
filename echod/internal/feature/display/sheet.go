@@ -119,6 +119,9 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		}
 		// The light first, then each group under its name: what is changed most near the top.
 		rows = append(rows, settingRow{label: "Look", kind: ctlHeading})
+		if hasSkins {
+			rows = append(rows, settingRow{id: "skin", label: "Skin", sub: "A whole look over the theme and font", kind: ctlChoice, value: skins[skinIndex()].label})
+		}
 		rows = append(rows, themeRows()...)
 		rows = append(rows,
 			fontRow(),
@@ -162,8 +165,11 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			settingRow{id: "camtime", label: "Camera time", sub: "How long a camera opened here stays up", kind: ctlChoice, value: cameraTimes[cameraTimeIndex()].label},
 			settingRow{id: "answertime", label: "Answer time", sub: "How long an answer stays up; a tap clears it", kind: ctlChoice, value: answerTimes[answerTimeIndex()].label},
 		)
+		if hasTimerStyles {
+			rows = append(rows, settingRow{id: "timerstyle", label: "Timers", sub: "How running timers show on the clock", kind: ctlChoice, value: timerStyles[timerStyleIndex()].label})
+		}
 		if hasEqualizer && hasMicrophone() {
-			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or a wave or bars that move with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
+			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or a picture that moves with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
 		}
 		return withPresence(rows), ""
 	case catSound:
@@ -633,6 +639,8 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return clockStylePicker()
 	case "font":
 		return fontPicker()
+	case "skin":
+		return pickerView{title: "Skin", opts: skinOptions(), cur: skinIndex()}, true
 	case "clockpos", "datecolor":
 		return clockLayoutPicker(id)
 	case "camtime":
@@ -641,6 +649,8 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		return pickerView{title: "Call ring", opts: phone.RingSounds, cur: phone.RingSoundIndex()}, true
 	case "answertime":
 		return pickerView{title: "Answer time", opts: answerTimeOptions(), cur: answerTimeIndex()}, true
+	case "timerstyle":
+		return pickerView{title: "Timers", opts: timerStyleOptions(), cur: timerStyleIndex()}, true
 	case "turnstyle":
 		return pickerView{title: "Turn screen", opts: turnStyleOptions(), cur: turnStyleIndex()}, true
 	case "clocktap":
@@ -767,6 +777,8 @@ func (d *Display) choose(id string, i int) {
 		d.setClockStyle(i)
 	case "font":
 		d.setFont(i)
+	case "skin":
+		setSkin(d.skinSel(), i)
 	case "clockpos", "datecolor":
 		d.chooseClockLayout(id, i)
 	case "clock":
@@ -786,6 +798,8 @@ func (d *Display) choose(id string, i int) {
 		}
 	case "turnstyle":
 		setTurnStyle(d.turnStyleSel(), i)
+	case "timerstyle":
+		setTimerStyle(d.timerStyleSel(), i)
 	case "clocktap":
 		setClockTap(d.clockTapSel(), i)
 	case "radarsrc":
@@ -1190,7 +1204,7 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowCaption(!home.Get().SlideshowCaption())
 	case "immichfav":
 		home.Get().SetImmichFavorites(!home.Get().ImmichFavorites())
-	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "clockpos", "datecolor", "camtime", "answertime", "callring", "turnstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
+	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "skin", "clockpos", "datecolor", "camtime", "answertime", "callring", "turnstyle", "timerstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
 		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap":
 		d.openPicker(id)
 	}

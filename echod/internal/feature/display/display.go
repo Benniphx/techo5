@@ -52,6 +52,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/tessera"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
@@ -74,6 +75,13 @@ func init() {
 // hasEqualizer is whether this screen offers the equalizer turn screen: the Show's does; the Spot's
 // round one would want its own.
 const hasEqualizer = true
+
+// hasTimerStyles is whether the clock offers the timer styles (render_timers.go): the Show's does;
+// the Spot keeps its timers around the rim.
+const hasTimerStyles = true
+
+// hasSkins is whether the screen offers skins (skin.go): the Show's does, and the Spot's.
+const hasSkins = true
 
 const (
 	// volumeShow is how long the level stays up after it last moved.
@@ -131,6 +139,8 @@ type Display struct {
 	dateCol    *esphome.Select
 	answerTime *esphome.Select
 	turnStyle  *esphome.Select
+	timerStyle *esphome.Select
+	skinSl     *esphome.Select
 	clockTap   *esphome.Select // what a tap on the clock does (clock_tap.go)
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
@@ -190,6 +200,8 @@ type Display struct {
 	dashEdgeAt    image.Point
 	dashAwayUntil time.Time // the idle dashboard put away, the clock up until then
 	dashScroll    int       // how far down the drawn dashboard is scrolled
+	tessPage      int       // the Tessera page's page shown (tessera.go)
+	tessRev       string    // the revision of the Tessera layout it was shown on
 	dashScrollFor string    // the dashboard it is scrolled on
 	dashDrag      drawnDrag // a finger moving on the drawn dashboard
 	dashAdjust    dashAdjusting
@@ -447,6 +459,8 @@ func build() *Display {
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
 	d.turnStyle = turnStyleSelect(d.wake)
+	d.timerStyle = timerStyleSelect(d.wake)
+	d.skinSl = skinSelect(d.wake)
 	d.clockTap = clockTapSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.styleSwipeSw = styleSwipeSwitch()
@@ -516,6 +530,7 @@ func build() *Display {
 	home.Get().Changed.Listen(func(struct{}) { d.wake() })
 	d.watchRoom()
 	dashboard.Get().Changed.Listen(func(struct{}) { d.wake() })
+	tessera.Changed.Listen(func(struct{}) { d.wake() })
 	dashboard.Get().Asked.Listen(d.dashboardAsked)
 	deck.Get().Changed.Listen(d.deckChanged)
 	video.Get().Changed.Listen(func(struct{}) { d.wake() })
@@ -536,11 +551,17 @@ func turnShown(s scene) bool {
 // turnStyleSel is the Turn screen setting in Home Assistant.
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
+// timerStyleSel is the Timers setting in Home Assistant.
+func (d *Display) timerStyleSel() *esphome.Select { return d.timerStyle }
+
+// skinSel is the Screen skin setting in Home Assistant.
+func (d *Display) skinSel() *esphome.Select { return d.skinSl }
+
 // clockTapSel is the Tap on the clock setting in Home Assistant.
 func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
-	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
+	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 }
 
@@ -557,6 +578,8 @@ func (d *Display) Restore(c config.Config) {
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)
 	d.dateCol.Set(dateColors[dateColorIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
+	d.timerStyle.Set(timerStyles[timerStyleIndex()].label)
+	d.skinSl.Set(skins[skinIndex()].label)
 	d.clockTap.Set(clockTapChoices()[clockTapIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
@@ -2355,6 +2378,7 @@ func (d *Display) frame() time.Duration {
 		// video's last frame), at the panel's lowest light (relight), so the room can tell. Looked at
 		// again until the watching ends.
 		d.r.watchedDark()
+		unskinned(d.dev, true)
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
@@ -2376,6 +2400,12 @@ func (d *Display) frame() time.Duration {
 	}
 	followRoom(now)
 	applyTheme(current())
+	if d.dev != nil {
+		w, h := d.dev.Size()
+		applySkin(d.dev, w, h)
+	} else {
+		applySkin(nil, 0, 0)
+	}
 	d.syncThemeSelects()
 
 	d.mu.Lock()
@@ -2672,6 +2702,7 @@ func (d *Display) frame() time.Duration {
 		d.deckDrawn = key
 	}
 	d.r.draw(s)
+	unskinned(d.dev, s.redClockFace())
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)
 	}
@@ -2710,8 +2741,8 @@ func (d *Display) frame() time.Duration {
 		return home.SlideshowFrame
 	}
 	if turnShown(s) && !(s.phase == "lingering" && s.eq.quiet) {
-		if s.eq.wave {
-			return waveFrame
+		if s.eq.wave || s.eq.style == "orb" {
+			return waveFrame // ten a second: the orb is a soft glow that needs no more
 		}
 		return eqFrame // the bars are moving
 	}

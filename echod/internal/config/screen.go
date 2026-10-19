@@ -90,8 +90,8 @@ type Screen struct {
 	DateColor     string `json:"date_color,omitempty"`
 
 	// ClockStyle is how the home screen's clock looks all day: empty for the classic face, or "big",
-	// "flip", "led", "analog", "words", "sun", "dashboard", "binary", "world", "agenda" or "glow"
-	// (display/clock_style.go). The night clock keeps its own look.
+	// "flip", "led", "analog", "words", "sun", "dashboard", "binary", "world", "agenda", "glow", "nixie",
+	// "stack" or "overlap" (display/clock_style.go). The night clock keeps its own look.
 	ClockStyle string `json:"clock_style,omitempty"`
 
 	// WorldClocks are the World style's places, as time zone names ("Europe/London"); none for its
@@ -108,9 +108,20 @@ type Screen struct {
 	NightOverride   string `json:"night_override,omitempty"`
 	NightOverrideAt int64  `json:"night_override_at,omitempty"`
 
-	// TurnStyle is how a voice turn is drawn: empty for the classic title and words, "equalizer" for
-	// bars moving with the voice.
+	// TurnStyle is how a voice turn is drawn: empty for the classic title and words, "wave" for a wave
+	// moving with the voice, "equalizer" for bars, "vu" for a pair of needle meters, "orb" for a ball of
+	// light, or "hal" for the HAL 9000 computer's eye.
 	TurnStyle string `json:"turn_style,omitempty"`
+
+	// TimerStyle is how running timers show on the Show's clock: empty for the line under the date,
+	// "ring", "corner", "banner" or "big".
+	TimerStyle string `json:"timer_style,omitempty"`
+
+	// Skin is a whole look for the screen over the theme and the font, on the Show, the Spot and the
+	// Panel app: empty for none, "pipboy" for the green phosphor terminal, "amber" for the amber one,
+	// "lcars" for the starship console, "eink" for ink on paper, "blueprint", "gameboy" for the
+	// handheld's four greens, "matrix", "synthwave" or "hal9000".
+	Skin string `json:"skin,omitempty"`
 
 	// CallButton puts a Call button on the home screen, which opens the list of devices in the house
 	// and phone contacts to call. Off until somebody wants it, so an update changes nobody's screen.
@@ -321,6 +332,14 @@ func (w ScreenWriter) AnswerSeconds(v int) error {
 
 func (w ScreenWriter) TurnStyle(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.TurnStyle = v })
+}
+
+func (w ScreenWriter) TimerStyle(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.TimerStyle = v })
+}
+
+func (w ScreenWriter) Skin(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.Skin = v })
 }
 
 func (w ScreenWriter) WeatherStill(v bool) error {

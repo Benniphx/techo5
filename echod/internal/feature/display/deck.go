@@ -95,7 +95,7 @@ func deckFrameKey(s scene, ringing, calling bool) string {
 	// The colors too: the deck is drawn in the theme's, and a change from the setup page (a custom
 	// palette's included) should show. So should a change of font, or of the owner's own fonts.
 	return fmt.Sprintf("%+v|%v|%v|%s|%d", s.deck, s.muted, [5]color.RGBA{walnut, amber, cream, dim, ember},
-		screenFont(), fonts.Generation())
+		drawnFont(), fonts.Generation())
 }
 
 // deckScene fills in what the deck page shows, when it is up.

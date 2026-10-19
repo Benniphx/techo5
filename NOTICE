@@ -129,6 +129,7 @@ Text fonts (embedded in the Show and Spot daemons, not the Dot's)
     Saira, Copyright 2020 The Saira Project Authors (https://github.com/Omnibus-Type/Saira)
     Comic Neue, Copyright 2014 The Comic Neue Project Authors (https://github.com/crozynski/comicneue)
     Open Sans, Copyright 2020 The Open Sans Project Authors (https://github.com/googlefonts/opensans)
+    Antonio, Copyright 2013 The Antonio Project Authors (https://github.com/googlefonts/antonioFont)
     Google Sans Flex, Copyright 2015 The Google Sans Flex Authors
       (https://github.com/googlefonts/googlesans-flex). "Google", "Google Sans" and "Google Sans Flex"
       are trademarks of Google LLC; see TRADEMARKS.md beside the files. TECHO5 is not affiliated with
@@ -136,7 +137,8 @@ Text fonts (embedded in the Show and Spot daemons, not the Dot's)
   Taken from Google Fonts (https://github.com/google/fonts) and changed by tools/fonts/make_fonts.py:
   variable fonts cut to static Regular (400) and Bold (700) instances, every font cut down to the
   characters the screen draws, with hinting and all layout features but kerning removed. Go Regular
-  and Go Bold, the default, come from golang.org/x/image/font/gofont (BSD 3-Clause, the Go license).
+  and Go Bold, the default, and Go Mono and Go Mono Bold come from golang.org/x/image/font/gofont
+  (BSD 3-Clause, the Go license).
 
 Sounds (embedded in the daemon)
   Home Assistant Voice sounds, echod/internal/hardware/speaker/sounds — Creative Commons Attribution

@@ -78,12 +78,12 @@ func climateWord(key string) string {
 	return key
 }
 
-// climateSet is how the sheet's steps and modes reach Home Assistant; variables so that a test can
-// see what they ask for.
+// climateSet is how the sheet's steps and modes reach Home Assistant, by the dashboard whose sheet it
+// is (sheets); variables so that a test can see what they ask for.
 var (
-	climateSet  = func(entity string, low, high float64) { dashboard.Get().SetClimate(entity, low, high) }
-	climateMode = func(entity, mode string) { dashboard.Get().SetHVACMode(entity, mode) }
-	climateNow  = func(entity string) (dashboard.ClimateNow, bool) { return dashboard.Get().ClimateNow(entity) }
+	climateSet  = func(entity string, low, high float64) { sheets().SetClimate(entity, low, high) }
+	climateMode = func(entity, mode string) { sheets().SetHVACMode(entity, mode) }
+	climateNow  = func(entity string) (dashboard.ClimateNow, bool) { return sheets().ClimateNow(entity) }
 )
 
 // climatePress is a tap on a thermostat's tile whose card sets no tap of its own: its sheet.

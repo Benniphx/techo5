@@ -56,10 +56,7 @@ func capHeight(face font.Face) int {
 
 // styledClock is the home screen in a clock style other than the classic one.
 func (r *renderer) styledClock(s scene, style string) {
-	timers := false
-	for _, t := range s.timers {
-		timers = timers || t.Active
-	}
+	timers := timersAtFoot(s)
 	// The next-up card, in place of the glance strip, unless the style lists the events itself or the clock
 	// is in a bottom corner where the card would be.
 	_, foot := clockAlign()
@@ -77,9 +74,10 @@ func (r *renderer) styledClock(s scene, style string) {
 	}
 	if style == styleGlow {
 		r.glowGround(s)
+		r.skinBackdrop(s)
 	}
 	if timers {
-		r.timersLine(s, bottom-r.s(16))
+		r.timersFoot(s, bottom-r.s(16))
 		bottom -= r.s(64)
 	}
 	box := image.Rect(r.margin, r.s(84), r.w-r.margin, bottom)
@@ -123,6 +121,12 @@ func (r *renderer) styledClock(s scene, style string) {
 		r.agendaStyle(s, box)
 	case styleGlow:
 		r.glowStyle(s, box)
+	case styleNixie:
+		r.nixieStyle(s, box)
+	case styleStack:
+		r.stackStyle(s, box)
+	case styleOverlap:
+		r.overlapStyle(s, box)
 	}
 	if glance {
 		r.glanceStrip(s.glance, s.callButton)
@@ -216,6 +220,7 @@ func (r *renderer) analogStyle(s scene, box image.Rectangle) {
 	at := func(n int) int { return int(float64(n) * k) }
 	cx := float64(box.Min.X) + rad + float64(r.s(8))
 	cy := float64(box.Min.Y+box.Dy()/2) - float64(r.s(10))
+	r.dialWedge(s, cx, cy, rad)
 	r.dial(s.now, cx, cy, rad)
 
 	x := int(cx+rad) + r.s(at(64))

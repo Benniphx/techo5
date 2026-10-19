@@ -8,6 +8,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
@@ -95,9 +96,12 @@ func dropListening(ents []esphome.Entity) []esphome.Entity {
 	return out
 }
 
-// listeningDevice is whether a sub-device is about listening: the microphone's, or an assistant's.
+// listeningDevice is whether a sub-device is about listening: the microphone's, or an assistant's. The
+// assistants' are the slots counted up from DeviceAssistant, and no further: a sub-device numbered past
+// them (component.DeviceTessera) is not about listening.
 func listeningDevice(id uint32) bool {
-	return id == component.DeviceMicrophone || id >= component.DeviceAssistant
+	return id == component.DeviceMicrophone ||
+		id >= component.DeviceAssistant && id < component.AssistantDevice(wakeword.Slots)
 }
 
 // deviceOf is the sub-device an entity is on (its Base.DeviceID), 0 for the device itself. The

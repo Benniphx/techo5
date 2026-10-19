@@ -480,7 +480,9 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8
   from the bottom), *World* (the time here and in other places), *Agenda* (the coming week's
-  events beside the time, each day under its heading) and *Glow* (soft colors drifting behind the time). Swipe left or right
+  events beside the time, each day under its heading), *Glow* (soft colors drifting behind the
+  time), *Nixie* (each figure glowing orange in a glass tube), *Stack* (the hours over the minutes,
+  large) and *Overlap* (very large figures, each laid a little over the next). Swipe left or right
   across the clock for the next style or the one before; its name shows for a moment, and a swipe
   the other way puts the last style back. The night clock keeps its own look. Also in Home Assistant
   and on the setup page's Screen & Photos tab.
@@ -490,10 +492,27 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   dark room.
 - **Font**: the font of every word the screen draws: the clock, the date, the weather, the settings
   and the rest (not the icons). *Go*, the screen's own and the default, *Inter*, *MuseoModerno*,
-  *Exo*, *Overpass*, *Saira*, *Comic Neue*, *Open Sans* or *Google Sans Flex*. Each is sized so a line
+  *Exo*, *Overpass*, *Saira*, *Comic Neue*, *Open Sans*, *Google Sans Flex* or *Go Mono*. Each is sized so a line
   takes about the room it takes in Go, and a new choice shows at once. A character a font doesn't
   have, like the ♪ in "♪ playing", is drawn in Go. Under Look, also **Screen font** in Home Assistant
   and on the setup page's Screen & Photos tab.
+- **Skin** (Show, Spot and the Panel app; Settings > Display > Look, or **Screen skin** in Home
+  Assistant): a whole look over the theme and the font. The Panel app wears skins as the Show does. On
+  the Spot a skin brings its colors, font and filter; the frames, backdrops and the eye drawn around
+  the clock are the Show's. The theme and custom colors you chose, and your font when the skin has
+  its own, are kept for when the skin is taken off, and their rows say so. The red night clock stays
+  red under any skin, and on the Spot so do the muted ring and the camera's mark: while one of them is
+  up, the one-color skins' tint is off. **Pip-Boy** turns the screen into a green phosphor terminal: every screen in one
+  green, in Go Mono, with faint scanlines and edges darker like an old tube's. Photos and cameras turn
+  green too; a video plays in its own colors. **LCARS** is a starship console: black, with orange,
+  peach, lavender and blue, the tall narrow Antonio font, and the console's frame of elbows and colored
+  bars around the home clock. **Amber terminal** is Pip-Boy in amber. **E-ink** is ink on paper, and
+  photos turn black and white. **Blueprint** is white on blueprint blue over a faint grid. **Game Boy**
+  is the handheld's four greens. **Matrix** is green on black with code falling behind the clock.
+  **Synthwave** is a neon sunset over a grid, the sun only behind a clock in the middle. **HAL 9000** is
+  black and red with the computer's eye at the top right (not behind the Overlap style, whose figures
+  reach into that corner). On the turn screens a skin brings its ground and colors too, except at
+  night. **None** puts back the theme and font you chose. It costs a little time on each frame.
 - **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
   switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
   **Tap on the clock** is *Nothing*, too.
@@ -528,8 +547,17 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   Dutch or Russian, and English for *Match all* or *English*. It also picks which words the screen
   listens for. It doesn't change what the assistant understands or says, and the rest of the screen
   stays in English.
-- **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines and
-  **Bars** is an LED-style equalizer, both moving with the voice. This one is on the Spot too.
+- **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines,
+  **Bars** is an LED-style equalizer, **VU meters** are two moving-needle meters, **Orb** is a ball of
+  light (cool while it listens, violet while it thinks, warm while it answers) and **HAL 9000** is the
+  computer's red eye, all moving with the voice. This one is on the Spot too.
+- **Timers** (Show; **Timers on the clock** in Home Assistant): how running timers show on the clock.
+  **Line** is the soonest under the date with a thin bar, as before. **Ring** is a ring for each (up
+  to three) that empties as it runs, and on the Analog style a wedge on the dial from the minute hand
+  to where it will be when the soonest ends. **Corner** is a small badge at the top right, so the
+  clock keeps the whole screen. **Banner** is a card for each across the foot. **Big** puts the
+  soonest's countdown in place of the clock, with the time of day under it. A finished timer rings
+  the same way in every style.
 - **Subtle mute ring** (Spot, in Home Assistant): the red ring shown while the microphones are muted
   is drawn thin and in a dimmer red, so it doesn't light up a dark room.
 

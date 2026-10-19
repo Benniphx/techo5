@@ -25,6 +25,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/tessera"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
@@ -78,6 +79,10 @@ type scene struct {
 	dashColor   *dashboard.LightColor // the color sheet over the page, while it is up
 	dashMedia   *mediaView            // the media sheet over the page, while it is up
 	dashClimate *climateView          // the thermostat sheet over the page, while it is up
+	// The Tessera layout, when that is the dashboard: whether Tessera screen is on, and the page shown.
+	tessera  tessera.View
+	tessOn   bool
+	tessPage int
 
 	// bt is the Bluetooth audio state: the pairing page replaces everything while it is on, and a
 	// connected device is named in the footer.
@@ -269,6 +274,10 @@ type renderer struct {
 	climateParts // the thermostat sheet's, where it was last drawn (climate_sheet.go)
 	// glow is the Glow style's images, kept between frames (glow.go).
 	glow glowBuffers
+	// nixie is the Nixie style's tubes, kept between frames (nixie.go).
+	nixie nixieTubes
+	// figures is the Stack and Overlap styles' figures, likewise (figures.go).
+	figures figureShapes
 
 	// flip is the flip clock's cards, at night or as a day style: what they show, and a flip under
 	// way; ink is what the LED and flip clocks are drawn in for the frame in hand.
@@ -484,9 +493,7 @@ func (r *renderer) draw(s scene) {
 	// and it stays up while an alarm or a timer rings (a tap on it stops the ring). A call has lifted
 	// the night light and takes the screen; a turn, a camera, an announcement or a reminder is shown in
 	// its place at the night light's level.
-	if s.redClock && s.phase == "idle" && s.call.Phase == phone.Idle && !s.setupAsking && !s.showVideoAsk &&
-		!s.showWifi && !s.bt.Pairing && !s.showCamera && !s.showAnnouncement && !s.showReminder &&
-		!(s.showDash && s.dashAsked) {
+	if s.redClockFace() {
 		r.redClockPage(s)
 		return
 	}
@@ -618,9 +625,12 @@ func (r *renderer) draw(s scene) {
 	}
 
 	if s.eq != nil {
-		if s.eq.wave {
+		switch {
+		case s.eq.wave:
 			r.wave(s)
-		} else {
+		case s.eq.style == "vu" || s.eq.style == "orb" || s.eq.style == "hal":
+			r.turnVisual(s)
+		default:
 			r.equalizer(s)
 		}
 		if s.showVolume {
@@ -757,6 +767,18 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 // the date.
 func (r *renderer) bigClock(s scene) {
 	defer r.styleNameTag(s)
+	defer r.lcarsFrame()
+	bigTimer := timerStyle() == timerBig && len(runningTimers(s)) > 0
+	if bigTimer || s.style.style() != styleGlow {
+		r.skinBackdrop(s) // Glow's colors cover the screen: its backdrop goes over them (styledClock)
+	}
+	if bigTimer {
+		r.bigTimer(s)
+		r.weatherCorner(s)
+		r.alertBadge(s)
+		return
+	}
+	defer r.timerCorner(s, timerStyle() == timerCorner)
 	// The Sun without sunrise and sunset yet is the classic face, drawn as the classic face is.
 	if style := s.style.style(); style != styleClassic && !(style == styleSun && !s.style.sunOK) {
 		r.styledClock(s, style)
@@ -768,10 +790,7 @@ func (r *renderer) bigClock(s scene) {
 		// The compact clock in a corner at the foot, the date clear of the footer's line.
 		base, timersAt = r.h-r.s(106), r.s(96)
 	}
-	timers := false
-	for _, t := range s.timers {
-		timers = timers || t.Active
-	}
+	timers := timersAtFoot(s)
 	if timers {
 		base -= r.s(36)
 		if foot {
@@ -812,7 +831,7 @@ func (r *renderer) bigClock(s scene) {
 	}
 	r.setDateAt(r.timeAndDateAt(s.now, base, suffix, align, left).Inset(-r.s(16)))
 	if timers {
-		r.timersLine(s, base+timersAt)
+		r.timersFoot(s, base+timersAt)
 	}
 	if glance {
 		r.glanceStrip(s.glance, s.callButton)

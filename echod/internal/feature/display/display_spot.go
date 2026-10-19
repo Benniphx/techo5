@@ -76,6 +76,13 @@ func init() {
 // hasEqualizer is whether this screen offers the Wave and Bars turn screens (render_turn_spot.go).
 const hasEqualizer = true
 
+// hasTimerStyles: the Spot's timers stay around its rim, whatever the Show's are set to.
+const hasTimerStyles = false
+
+// hasSkins: the Spot has the skins too, in their colors, fonts and filters (skin_spot.go); what the
+// Show draws around its own clock is the Show's.
+const hasSkins = true
+
 // hasMicrophone: the Spot always has its microphones (the Show's is render_welcome.go).
 var hasMicrophone = func() bool { return true }
 
@@ -141,6 +148,7 @@ type Display struct {
 	camTime    *esphome.Select
 	answerTime *esphome.Select
 	turnStyle  *esphome.Select // Turn screen: Classic, Wave or Bars
+	skinSl     *esphome.Select // Screen skin
 	// callBtn is the home screen's Call button, on or off (callbutton.go).
 	callBtn *esphome.Switch
 	// styleSwipeSw is Swipe between clock styles (style_swipe.go).
@@ -359,6 +367,7 @@ func build() *Display {
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.turnStyle = turnStyleSelect(d.wake)
+	d.skinSl = skinSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
 	d.styleSwipeSw = styleSwipeSwitch()
 	d.weatherFx = weatherAnimationSwitch(d.wake)
@@ -422,8 +431,14 @@ func (d *Display) Name() string { return "screen" }
 // turnStyleSel is the Turn screen setting in Home Assistant.
 func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 
+// timerStyleSel: the Spot has no Timers setting.
+func (d *Display) timerStyleSel() *esphome.Select { return nil }
+
+// skinSel is the Screen skin setting in Home Assistant.
+func (d *Display) skinSel() *esphome.Select { return d.skinSl }
+
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.fontSel,
+	return []esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.skinSl, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.fontSel,
 		d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel}
 }
 
@@ -438,6 +453,7 @@ func (d *Display) Restore(c config.Config) {
 	d.camTime.Set(cameraTimes[cameraTimeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
+	d.skinSl.Set(skins[skinIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
@@ -1321,6 +1337,11 @@ func (d *Display) Run(ctx context.Context) error {
 func (d *Display) frame() time.Duration {
 	d.videoPainting, d.vp.dark = false, false
 	now := time.Now()
+	if d.dev != nil {
+		applySkin(d.dev, side, side)
+	} else {
+		applySkin(nil, side, side)
+	}
 	d.mu.Lock()
 	nightChanged := d.wasNight != nightNow(now)
 	d.mu.Unlock()
@@ -1438,6 +1459,7 @@ func (d *Display) frame() time.Duration {
 		// frame), at the dimmest light (relight), so the room can tell. Looked at again until the
 		// watching ends.
 		d.r.watchedDark()
+		unskinned(d.dev, true)
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
@@ -1647,6 +1669,7 @@ func (d *Display) frame() time.Duration {
 	d.callShown = d.r.callDrawn
 	d.mu.Unlock()
 	painted := time.Now()
+	unskinned(d.dev, s.nightClockFace() || s.muted || s.cameraLive)
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)
 	}
@@ -1688,8 +1711,8 @@ func (d *Display) frame() time.Duration {
 	case s.eq != nil && !s.showVolume && !s.menuOpen && !s.sheetOpen && !s.showCamera && s.call.Phase == phone.Idle &&
 		!s.ringing.any() && !s.setupAsking && !s.announceRecording && !s.showReminder && !s.showAnnouncement && !s.showNotification &&
 		!s.showAlert && !(s.phase == "lingering" && s.eq.quiet):
-		if s.eq.wave {
-			return waveFrame
+		if s.eq.wave || s.eq.style == "orb" {
+			return waveFrame // ten a second: the orb is a soft glow that needs no more
 		}
 		return eqFrame // the bars are moving
 	case s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.showVolume || s.menuOpen || s.btPairing || s.call.Phase != phone.Idle || s.ringing.any():

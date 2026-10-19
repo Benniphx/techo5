@@ -64,6 +64,9 @@ type eqView struct {
 	night       bool
 	quiet       bool // every bar has fallen: nothing left to animate
 	wave        bool // drawn as the wave rather than the bars
+	// style is the turn screen chosen (turnStyles' value), and phase the turn's, for the pictures that
+	// look different listening, thinking and answering (turn_visual.go).
+	style, phase string
 }
 
 var (
@@ -106,7 +109,7 @@ func eqThinking(now time.Time, level, peak []float64) {
 
 // eqFor is the view for a turn's phase at now.
 func eqFor(phase string, night bool, now time.Time) *eqView {
-	v := &eqView{night: night}
+	v := &eqView{night: night, style: turnStyles[turnStyleIndex()].value, phase: phase}
 	switch phase {
 	case "listening":
 		v.level, v.peak = spectrum.Mic.Bands(eqBands, now)

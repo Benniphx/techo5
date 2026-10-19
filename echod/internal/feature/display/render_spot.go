@@ -264,6 +264,10 @@ type roundRenderer struct {
 
 	// glow is the Glow style's images, kept between frames (glow.go).
 	glow glowBuffers
+	// nixie is the Nixie style's tubes, kept between frames (nixie.go).
+	nixie nixieTubes
+	// figures is the Stack and Overlap styles' figures, likewise (figures.go).
+	figures figureShapes
 	// videoZones are the video face's controls as last drawn, under zmu, and videoOver what of the
 	// canvas goes over the picture (render_video_spot.go).
 	videoZones []image.Rectangle

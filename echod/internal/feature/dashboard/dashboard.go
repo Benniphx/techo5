@@ -156,7 +156,7 @@ func Get() *Feature {
 		f.back, f.tiles = backSelect(f), tilesSelect(f)
 		f.board.OnCommand = f.chooseBoard
 		f.boardOpts = component.NewOptions(f.board)
-		component.Bind(f.mode, config.DashboardModes(), f.setMode, config.Set().Dashboard().Mode)
+		component.Bind(f.mode, Modes(), f.setMode, config.Set().Dashboard().Mode)
 		f.idle.OnCommand = func(on bool) {
 			f.idle.Set(on)
 			if err := config.Set().Dashboard().Idle(on); err != nil {
@@ -436,7 +436,10 @@ func webChoices(d config.Dashboard) []config.DashboardChoice {
 
 // setMode applies a mode: a stream open in the old one is closed, and the page asks again.
 func (f *Feature) setMode(m config.DashboardMode) config.DashboardMode {
-	if m != config.DashboardOff {
+	if !slices.Contains(Modes(), m) {
+		m = config.DashboardOff // a mode this device does not have, saved by another build
+	}
+	if m != config.DashboardOff && m != config.DashboardTessera {
 		select { // turned on: the list is wanted now, not at the next look
 		case f.look <- struct{}{}:
 		default:

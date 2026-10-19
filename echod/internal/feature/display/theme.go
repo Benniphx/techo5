@@ -14,34 +14,6 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/palette"
 )
 
-// Themes: five colors make the whole screen — the ground, the accent, the text, a dim text and
-// the rules and boxes. The palette lives in package variables the renderer reads on every frame,
-// so switching is a matter of assigning them; the choice is saved with the screen settings. A
-// preset is picked by name; a color changed in the custom colors editor makes the theme "Custom", saved as
-// its five colors.
-type theme struct {
-	name   string
-	colors [roles]color.RGBA
-}
-
-// The five roles, in the order the custom colors editor lists them.
-const (
-	roleGround = iota
-	roleAccent
-	roleText
-	roleDim
-	roleRules
-	roles
-)
-
-var roleNames = [roles]string{"Ground", "Accent", "Text", "Dim text", "Rules"}
-
-func rgb(v uint32) color.RGBA { return color.RGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 0xff} }
-
-func preset(name string, ground, accent, text, dim, rules uint32) theme {
-	return theme{name, [roles]color.RGBA{rgb(ground), rgb(accent), rgb(text), rgb(dim), rgb(rules)}}
-}
-
 // themes are the presets, from lib/palette, where the setup page reads them too.
 var themes = func() []theme {
 	out := make([]theme, len(palette.Presets))
@@ -99,6 +71,10 @@ func savedCustom(light bool) (theme, bool) {
 
 // applyTheme sets the palette the renderer draws with. Called from the display's goroutine only.
 func applyTheme(t theme) {
+	// A skin's palette wins over any theme while it is on (skin_show.go).
+	if st := skinLooks[skin()].theme; st != nil {
+		t = *st
+	}
 	walnut, amber, cream, dim, ember = t.colors[roleGround], t.colors[roleAccent], t.colors[roleText], t.colors[roleDim], t.colors[roleRules]
 }
 

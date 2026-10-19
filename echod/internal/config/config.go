@@ -53,6 +53,7 @@ type Config struct {
 	CamStream      CamStream      `json:"cam_stream,omitempty"`
 	Share          Share          `json:"share,omitempty"`
 	Realtime       Realtime       `json:"realtime,omitempty"`
+	Tessera        Tessera        `json:"tessera,omitempty"`
 }
 
 // Defaults is a device nobody has set anything on.
@@ -120,6 +121,7 @@ func (w Writer) Remote() RemoteWriter                 { return RemoteWriter(w) }
 func (w Writer) CamStream() CamStreamWriter           { return CamStreamWriter(w) }
 func (w Writer) Share() ShareWriter                   { return ShareWriter(w) }
 func (w Writer) Realtime() RealtimeWriter             { return RealtimeWriter(w) }
+func (w Writer) Tessera() TesseraWriter               { return TesseraWriter(w) }
 
 // Wake names one slot, since every wake word setting belongs to one.
 func (w Writer) Wake(slot int) WakeWriter { return WakeWriter{st: w.st, slot: slot} }

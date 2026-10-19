@@ -398,6 +398,9 @@ func KeepOwn(c *Config, from Config) {
 	// Sharing settings with the other devices, and which of them, is this device's to set up: a file
 	// from another device names that device's links, not this one's.
 	c.Share = from.Share.clone()
+	// Being a screen for the Tessera add-on puts a device of its own in Home Assistant and lets the add-on
+	// send it layouts, and a change to it restarts the daemon: this device's to turn on, never a file's.
+	c.Tessera = from.Tessera
 
 	// "No wake word" chosen on purpose is a device that is not to listen: a file with words in it does
 	// not start it listening.

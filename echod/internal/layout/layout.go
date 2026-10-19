@@ -256,6 +256,15 @@ func CutName(name string, n int) string {
 	return strings.TrimRight(name[:cut], " ")
 }
 
+// NodeName is the ESPHome node's own name, which it is advertised under over mDNS: the device's name as
+// a slug (Slug), one DNS label long at most. A name with nothing in it a slug keeps (one in Greek,
+// Cyrillic or Chinese, say) falls back to the name the device would have had with none, which carries
+// the end of its MAC address, so two such devices are still two nodes. Home Assistant names the
+// device's actions after it: esphome.<node>_<action>, with its dashes made underscores.
+func NodeName(name, mac string) string {
+	return strings.TrimRight(CutName(SlugOr(name, mac), LabelMax), "-")
+}
+
 // SlugOr is name's Slug, or, for a name with nothing in it a slug keeps (one in Greek, Cyrillic or
 // Chinese, say), the slug of the name the device has with none set (NameFromMAC), which carries the end
 // of its MAC address: never empty, and two such devices still differ.

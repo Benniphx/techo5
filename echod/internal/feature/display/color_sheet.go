@@ -178,7 +178,7 @@ func (d *Display) sliderBegins(s sheetSlider) {
 	}
 	main := m.volume
 	if main < 0 {
-		now, _ := dashboard.Get().MediaNow(m.entity)
+		now, _ := sheets().MediaNow(m.entity)
 		main = now.Volume
 	}
 	d.editMedia(func(n *mediaSheet) {
@@ -236,7 +236,7 @@ const sheetSendEvery = 300 * time.Millisecond
 
 // sliderTap is how a slider's value reaches Home Assistant; a variable so that a test can see what
 // is sent, and when.
-var sliderTap = func(a dashboard.Action) { dashboard.Get().Tap(a) }
+var sliderTap = func(a dashboard.Action) { sheets().Tap(a) }
 
 // sliderSent is what a sheet's slider last sent, and the value waiting to be sent while sends are held
 // back. gen is which wait a held-back send belongs to: a send, or the finger lifting, starts the next,
@@ -398,12 +398,12 @@ func (d *Display) colorTap(x, y int) bool {
 		d.mu.Unlock()
 	case z.kind == colorPartWhite:
 		slog.Info("dashboard color", "entity", c.Entity, "kelvin", z.value)
-		dashboard.Get().Tap(dashboard.Action{Entity: c.Entity, Service: "light.turn_on",
+		sheets().Tap(dashboard.Action{Entity: c.Entity, Service: "light.turn_on",
 			Data: map[string]any{"color_temp_kelvin": int(z.value)}})
 		d.setShownColor(z.value)
 	case z.kind == colorPartHue:
 		slog.Info("dashboard color", "entity", c.Entity, "hue", z.value)
-		dashboard.Get().Tap(dashboard.Action{Entity: c.Entity, Service: "light.turn_on",
+		sheets().Tap(dashboard.Action{Entity: c.Entity, Service: "light.turn_on",
 			Data: map[string]any{"hs_color": []any{z.value, 100.0}}})
 		d.setShownHue(z.value)
 	}

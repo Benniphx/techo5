@@ -228,13 +228,8 @@ func (a *API) Start(ctx context.Context) error {
 	return nil
 }
 
-// nodeName is the ESPHome node's own name, which it is advertised under over mDNS: the device's name as
-// a slug (layout.Slug), one DNS label long at most. A name with nothing in it a slug keeps (one in
-// Greek, Cyrillic or Chinese, say) falls back to the name the device would have had with none, which
-// carries the end of its MAC address, so two such devices are still two nodes.
-func nodeName(name, mac string) string {
-	return strings.TrimRight(layout.CutName(layout.SlugOr(name, mac), layout.LabelMax), "-")
-}
+// nodeName is the ESPHome node's own name (layout.NodeName).
+func nodeName(name, mac string) string { return layout.NodeName(name, mac) }
 
 // subDevices groups entities onto pages of their own, since Home Assistant puts every entity a device has
 // on one page and there are more here than anyone wants to read. A device that cannot hear has no
@@ -251,6 +246,8 @@ func subDevices(name string) []esphome.Device {
 		// Only a device with a ring has anything to put on its page (led.HasRing).
 		out = append([]esphome.Device{{ID: component.DeviceRing, Name: name + " ring"}}, out...)
 	}
+	// Sub-devices a component asks for while a setting is on (component.Offer): the Tessera screen.
+	out = append(out, component.OfferedDevices(name)...)
 	if !layout.HasMicrophone() {
 		kept := out[:0]
 		for _, d := range out {
