@@ -5,6 +5,7 @@ package layout
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -17,13 +18,7 @@ const (
 	// daemon may write.
 	PackageName = "app.techo5.panel"
 
-	// AndroidDir is where an in-place update would put the binary. The app ships the daemon in its
-	// own APK and updates come with the app, so nothing is ever written here.
-	AndroidDir = StateDir + "/bin"
-	BinaryName = "techo5"
-	StateDir   = "/data/user/0/" + PackageName + "/files"
-
-	Service     = AndroidDir + "/" + BinaryName
+	BinaryName  = "techo5"
 	ServiceName = "techo5"
 
 	StockLabel = "u:object_r:system_file:s0"
@@ -40,10 +35,37 @@ const (
 
 	// DefaultName is the fallback display name when a device has none recorded.
 	DefaultName = "TECHO5 Panel"
+)
+
+// StateDir is the app's files directory, which the app starts echod with as HOME and as its working
+// directory. It is found rather than compiled in: Android gives each user of the tablet the app's own
+// directory (/data/user/<user>/app.techo5.panel/files), so a panel set up for a second user is not
+// in user 0's. The first user's is the fallback, for a daemon started by hand.
+var StateDir = stateDir()
+
+var (
+	// AndroidDir is where an in-place update would put the binary. The app ships the daemon in its
+	// own APK and updates come with the app, so nothing is ever written here.
+	AndroidDir = StateDir + "/bin"
+	Service    = AndroidDir + "/" + BinaryName
 
 	LogPath = StateDir + "/techo5.log"
 	BootLog = StateDir + "/boot.log"
 )
+
+func stateDir() string {
+	for _, d := range []string{os.Getenv("HOME"), workingDir()} {
+		if filepath.IsAbs(d) && strings.HasSuffix(filepath.Clean(d), "/"+PackageName+"/files") {
+			return filepath.Clean(d)
+		}
+	}
+	return "/data/user/0/" + PackageName + "/files"
+}
+
+func workingDir() string {
+	d, _ := os.Getwd()
+	return d
+}
 
 var AnimationScripts = []string{}
 

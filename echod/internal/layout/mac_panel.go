@@ -15,7 +15,7 @@ import (
 // one up the first time it starts and keeps it: a random, locally administered unicast address, which
 // can never be a real vendor's. Home Assistant knows the device by it, so it must not change; clearing
 // the app's data is what makes a new device.
-const macPath = StateDir + "/mac"
+var macPath = StateDir + "/mac"
 
 var macOnce sync.Mutex
 

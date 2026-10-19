@@ -33,7 +33,9 @@ var (
 // so boot.Run logs this rather than detection itself.
 var BoardDoubt string
 
-const (
+// Variables rather than constants, as everything under StateDir is: a panel finds its StateDir when
+// it starts (device_panel.go).
+var (
 	KeyPath  = StateDir + "/psk"
 	NamePath = StateDir + "/name"
 
@@ -78,10 +80,9 @@ func installDir() string {
 }
 
 // BackupSuffix marks the vendor binary an install displaced, and Backup is where it is kept.
-const (
-	BackupSuffix = ".orig"
-	Backup       = Service + BackupSuffix
-)
+const BackupSuffix = ".orig"
+
+var Backup = Service + BackupSuffix
 
 // OurLabel is the SELinux label echod's files carry. A service's domain comes from the label of the
 // file init execs, and system_file has no transition rule, which leaves echod in init's own domain.
@@ -119,11 +120,11 @@ const Platform = "echolocal"
 const MACPath = "/proc/idme/mac_addr"
 
 // StatePath holds echod's runtime settings.
-const StatePath = StateDir + "/state.json"
+var StatePath = StateDir + "/state.json"
 
 // Wake word models live in /data, not /system: Home Assistant can offer new ones at runtime and
 // /system is mounted read-only.
-const ModelDir = StateDir + "/models"
+var ModelDir = StateDir + "/models"
 
 // RecordingDir holds the kept turn audio, one WAV and one metadata file per turn, named by turn id.
 // A variable rather than a constant so that a test can keep recordings somewhere harmless.
