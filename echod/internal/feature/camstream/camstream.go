@@ -95,6 +95,7 @@ type Feature struct {
 	subs    map[chan rtpjpeg.Frame]struct{}
 	stopPic func() // ends the pictures, while anybody watches
 	pages   int    // camera web pages being sent (webpages.go)
+	pageGen uint64 // moves on when open page streams must end: a new login, the lens cover (PageGen)
 }
 
 var (
@@ -156,7 +157,23 @@ func (f *Feature) poke() {
 func Poke() {
 	f := Get()
 	f.dropAll()
+	f.endPages()
 	f.poke()
+}
+
+// PageGen is the generation a camera page stream started in; once it moves on, the stream ends: the
+// login it came in with may be gone, or the lens cover closed.
+func PageGen() uint64 {
+	f := Get()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pageGen
+}
+
+func (f *Feature) endPages() {
+	f.mu.Lock()
+	f.pageGen++
+	f.mu.Unlock()
 }
 
 // Offered is whether the device has a camera to stream, for the setup page.
@@ -180,7 +197,7 @@ func (f *Feature) wanted() bool {
 // Run keeps the port open while the camera is to be served, and shut while it is not.
 func (f *Feature) Run(ctx context.Context) error {
 	defer f.close()
-	defer onCover(f.dropAll)()
+	defer onCover(func() { f.dropAll(); f.endPages() })()
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
@@ -376,14 +393,21 @@ func (f *Feature) unsubscribe(ch chan rtpjpeg.Frame) {
 }
 
 // pump encodes the camera's pictures, at most maxFPS a second, and hands each to every viewer, the newest
-// only to one that is behind. When the camera stops by itself, every viewer is let go.
+// only to one that is behind. When the camera stops by itself, every viewer is let go. A frame that
+// comes too soon is kept and sent when its time comes, so the last one always goes out: when the
+// sensor stops for the mute, its last frame is the black one, and none follows it.
 func (f *Feature) pump(frames <-chan frame, stop <-chan struct{}) {
 	var last time.Time
+	var held frame
+	var due <-chan time.Time
 	for {
+		var develop frame
 		select {
 		case <-stop:
 			return
-		case develop, ok := <-frames:
+		case <-due:
+			develop, held, due = held, nil, nil
+		case next, ok := <-frames:
 			if !ok {
 				f.mu.Lock()
 				subs := make([]chan rtpjpeg.Frame, 0, len(f.subs))
@@ -396,34 +420,38 @@ func (f *Feature) pump(frames <-chan frame, stop <-chan struct{}) {
 				}
 				return
 			}
-			now := time.Now()
-			if now.Sub(last) < time.Second/maxFPS {
-				continue
-			}
-			last = now
-			img := develop()
-			if img == nil {
-				continue
-			}
-			b, err := encode(eighths(img))
-			if err != nil {
-				continue
-			}
-			pic, err := rtpjpeg.Parse(b)
-			if err != nil {
-				slog.Warn("camera streaming: a picture that cannot be sent", "err", err)
-				continue
-			}
-			f.mu.Lock()
-			for ch := range f.subs {
-				select {
-				case <-ch: // behind: the older picture goes
-				default:
+			if wait := time.Second/maxFPS - time.Since(last); wait > 0 {
+				held = next // the newest waiting one
+				if due == nil {
+					due = time.After(wait)
 				}
-				ch <- pic
+				continue
 			}
-			f.mu.Unlock()
+			develop, held, due = next, nil, nil
 		}
+		last = time.Now()
+		img := develop()
+		if img == nil {
+			continue
+		}
+		b, err := encode(eighths(img))
+		if err != nil {
+			continue
+		}
+		pic, err := rtpjpeg.Parse(b)
+		if err != nil {
+			slog.Warn("camera streaming: a picture that cannot be sent", "err", err)
+			continue
+		}
+		f.mu.Lock()
+		for ch := range f.subs {
+			select {
+			case <-ch: // behind: the older picture goes
+			default:
+			}
+			ch <- pic
+		}
+		f.mu.Unlock()
 	}
 }
 
@@ -439,14 +467,24 @@ func cameraFrames() (<-chan frame, func(), error) {
 	}
 	out := make(chan frame, 1)
 	stop := camera.Get().Frames.Listen(func(fr *camera.Frame) {
-		select {
-		case out <- func() image.Image {
+		next := func() image.Image {
 			if img := fr.Image(); img != nil {
 				return img
 			}
 			return nil // a typed nil would not compare as nil
-		}:
-		default: // the stream is slower than the sensor: skip, never queue
+		}
+		// The stream is slower than the sensor: skip, never queue, but keep the newest (the black
+		// frame of a sensor that stopped is the last one; see camera.ListenLatest).
+		for {
+			select {
+			case out <- next:
+				return
+			default:
+			}
+			select {
+			case <-out:
+			default:
+			}
 		}
 	})
 	return out, func() { stop(); release() }, nil

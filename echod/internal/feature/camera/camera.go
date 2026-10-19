@@ -63,13 +63,13 @@ func (f *Feature) register() {
 // the daemon has touched anything.
 func cameraOpen() bool { return config.Get().Security.Camera && camera.Available() }
 
-// guarded asks for the camera's login and marks the camera watched while the page is sent.
+// guarded asks for the camera's login. The handlers mark the camera watched themselves, once there is
+// a picture to send: a request refused for the mute or the lens cover lights nothing.
 func guarded(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !camstream.PageAllowed(w, r) {
 			return
 		}
-		defer camstream.PageWatching()()
 		h(w, r)
 	}
 }
@@ -101,6 +101,7 @@ func (f *Feature) snapshot(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
+	defer camstream.PageWatching()() // only a picture that goes out lights the dot
 	b, err := encodeFull(fr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -120,6 +121,9 @@ func (f *Feature) stream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	defer camstream.PageWatching()()
+	// A new login or the lens cover ends the stream (camstream.PageGen).
+	gen := camstream.PageGen()
 	const boundary = "techo5frame"
 	frames := make(chan *camera.Frame, 1)
 	// The client is slower than the sensor: skip, never queue, but end on the newest frame.
@@ -129,11 +133,20 @@ func (f *Feature) stream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
+	check := time.NewTicker(time.Second)
+	defer check.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-check.C:
+			if camstream.PageGen() != gen {
+				return
+			}
 		case fr := <-frames:
+			if camstream.PageGen() != gen {
+				return
+			}
 			b, err := encode(fr)
 			if err != nil {
 				return
@@ -149,6 +162,11 @@ func (f *Feature) stream(w http.ResponseWriter, r *http.Request) {
 			}
 			if flusher != nil {
 				flusher.Flush()
+			}
+			// The sensor stopped (the mute): its black frame is shown, and the page is done, so
+			// the dot goes out; a reconnect is refused while it stays off.
+			if fr.Blank() {
+				return
 			}
 		}
 	}

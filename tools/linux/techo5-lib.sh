@@ -752,6 +752,17 @@ t5_bt_stack() {
 t5_bt_again() {
 	g=$(( $(cat /run/techo5-bt-again 2>/dev/null || echo 0) + 1 ))
 	echo $g > /run/techo5-bt-again
+	# Busy while this runs: the daemon leaves the controller alone until it is gone (btaudio
+	# secureconn.go), since a power cycle for Secure Connections in the middle would undo it.
+	echo $g > /run/techo5-bt-again.busy
+	t5_bt_again_pass $g
+	[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] && rm -f /run/techo5-bt-again.busy
+	return 0
+}
+
+# t5_bt_again_pass: t5_bt_again's work for generation $1, which a newer generation cuts short.
+t5_bt_again_pass() {
+	g=$1
 	sleep 5
 	n=1
 	while :; do

@@ -955,10 +955,10 @@ type fakeGroup struct {
 
 func newFakeGroup(t *testing.T) *fakeGroup {
 	wasRun, wasUp, wasAir, wasSpot, wasFirst, wasLeft := runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst, leftovers
-	wasEvery, wasMisses, wasAnswered := answerEvery, answerMisses, answered
+	wasEvery, wasMisses, wasAnswered, wasCanAsk, wasPaused := answerEvery, answerMisses, answered, canAsk, pausedFor
 	t.Cleanup(func() {
 		runAvahi, avahiUp, runAirPlay, runSpotify, restartFirst, leftovers = wasRun, wasUp, wasAir, wasSpot, wasFirst, wasLeft
-		answerEvery, answerMisses, answered = wasEvery, wasMisses, wasAnswered
+		answerEvery, answerMisses, answered, canAsk, pausedFor = wasEvery, wasMisses, wasAnswered, wasCanAsk, wasPaused
 		receivedAt.Store(0)
 	})
 	receivedAt.Store(0)
@@ -966,6 +966,7 @@ func newFakeGroup(t *testing.T) *fakeGroup {
 	leftovers = func() {}
 	restartFirst = 10 * time.Millisecond
 	answerEvery, answerMisses = 20*time.Millisecond, 2
+	pausedFor = 60 * time.Millisecond // a pause outlasts a few asks, as 10 minutes do a few minutes
 	runAvahi = func(ctx context.Context) {
 		g.mu.Lock()
 		g.avahis++
@@ -973,6 +974,7 @@ func newFakeGroup(t *testing.T) *fakeGroup {
 		<-ctx.Done()
 	}
 	avahiUp = func(context.Context) bool { return true }
+	canAsk = func() bool { return true }
 	runAirPlay = func(ctx context.Context, _ string) {
 		g.mu.Lock()
 		g.airplays++
@@ -1019,6 +1021,21 @@ func TestAQuietAvahiIsStartedAgain(t *testing.T) {
 	waitUntil(t, func() bool { _, _, asks := g.counts(); return asks >= at+5 })
 	if n, _, _ := g.counts(); n != 2 {
 		t.Errorf("avahi started %d times; want 2", n)
+	}
+}
+
+// With no way to ask (Wi-Fi down, no route to the group) nothing counts as a miss: an outage is not
+// avahi failing.
+func TestNoRouteIsNoMiss(t *testing.T) {
+	g := newFakeGroup(t)
+	g.run(t)
+	waitUntil(t, func() bool { _, _, asks := g.counts(); return asks >= 2 })
+	canAsk = func() bool { return false }
+	g.answer(false)
+	_, _, at := g.counts()
+	waitUntil(t, func() bool { _, _, asks := g.counts(); return asks >= at+5 })
+	if n, _, _ := g.counts(); n != 1 {
+		t.Errorf("avahi started %d times with no route; want 1", n)
 	}
 }
 

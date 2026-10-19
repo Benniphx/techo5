@@ -35,7 +35,23 @@ var (
 	answerEvery  = time.Minute
 	answerMisses = 3
 	answered     = airplayAnswered
+	canAsk       = routeToGroup
 )
+
+// pausedFor is how long after a receiver's last audio a restart still waits: a session that is only
+// paused would be cut too, and the phone that holds it has found the speaker already.
+var pausedFor = 10 * time.Minute
+
+// routeToGroup is whether an ask can leave at all: with Wi-Fi down there is no route to the group,
+// and an outage is not avahi failing.
+func routeToGroup() bool {
+	c, err := net.DialUDP("udp4", nil, mdnsGroup)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
+}
 
 // answerWait is how long an ask waits for avahi's answer.
 var answerWait = 2 * time.Second
@@ -63,11 +79,11 @@ func watchAnswers(ctx context.Context, gone chan<- struct{}) {
 			heard, misses = true, 0
 			continue
 		}
-		if !heard || ctx.Err() != nil {
+		if !heard || ctx.Err() != nil || !canAsk() {
 			continue
 		}
 		misses++
-		if misses >= answerMisses && !receivedWithin(answerEvery) {
+		if misses >= answerMisses && !receivedWithin(pausedFor) {
 			slog.Warn("streaming: avahi no longer answers for AirPlay; starting it and the receivers again", "asked", misses)
 			close(gone)
 			return

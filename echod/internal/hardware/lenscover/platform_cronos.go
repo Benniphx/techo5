@@ -7,7 +7,8 @@ import "github.com/HuskerMinion/techo5/echod/internal/layout"
 // hasShutter says whether this board has a physical cover over the lens. Both Echo Show 8s do: the
 // 2nd gen's slider is GPIO152 on gpio-keys and reports covered only while closed (checked on a unit,
 // 2026-10-19: covered=true on closing, false on opening; before it was trusted here, closing it while
-// the camera ran turned the picture white, the exposure loop chasing a black frame).
+// the camera ran turned the picture white, the exposure loop chasing a black frame). That is TECHO5's
+// own kernel; a 2nd gen on Amazon's kernel has no camera here and an unchecked switch, so not there.
 //
 // This has to be a board question, not a capability question. Both Show 5 generations expose
 // SW_CAMERA_LENS_COVER on their gpio-keys node exactly as the Show 8 does — measured on a 2nd gen
@@ -15,4 +16,4 @@ import "github.com/HuskerMinion/techo5/echod/internal/layout"
 // false on that unit, so nothing was blocked, but reading the capability bitmap alone would publish
 // a cover sensor for hardware that has none, and a unit whose pin read the other way would refuse
 // the camera with nothing in the log but "the lens cover is closed".
-func hasShutter() bool { return layout.Crown() || layout.Athena() }
+func hasShutter() bool { return layout.Crown() || layout.AthenaMainline() }

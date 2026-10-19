@@ -273,9 +273,14 @@ with the same login: one profile, its stream, and its snapshot while **Camera we
 snapshot is the camera page's `/camera.jpg`, which takes the same login and lights the green dot while
 it is read. The camera pages (`/camera.jpg` and `/camera.mjpeg`, there while Camera web access is on)
 ask for that login too, so set a camera password before you use them; a browser the setup page has let
-in needs none. The
-device is not found by ONVIF discovery: give the recorder its address. ONVIF here is a login digest over
-plain HTTP, as on most cameras, and the password itself is never sent.
+in needs none. **Since v1.2.24:** a Home Assistant Generic Camera, MJPEG camera or recorder that read
+`/camera.jpg` or `/camera.mjpeg` with no login gets "401" until you set a camera password and give it the
+user and password with **Digest** authentication (Basic is not taken). Changing the password ends the
+pages' open streams, and so does closing the lens cover. The device is not found by ONVIF discovery:
+give the recorder its address. ONVIF and the pages are a login digest over plain HTTP, as on most
+cameras: the password itself is never sent, but anyone who can watch your Wi-Fi traffic could replay a
+captured login to the same page for a few minutes, and could see the pictures anyway. `/screen.png`
+(Screen web access) has no login: if the screen is showing the camera, a screenshot shows it too.
 
 ## 5. Music
 

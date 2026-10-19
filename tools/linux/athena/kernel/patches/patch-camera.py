@@ -10,10 +10,11 @@ Echo Show 5. This adds:
   - src/camera/isp/: the seninf (CSI-2 receiver) and CAMSV (raw DMA) drivers, BayLibre's MT8365
     "ISP 3.0" v8 series with MT8183 support, as published in github.com/vpavlin/mt8183-camera
     (commit c00ad16, GPL-2.0, original copyright and SPDX headers kept), which runs them on an
-    MT8183 Chromebook. Built in as drivers/media/platform/mediatek/isp. Three changes to them,
-    each marked "athena:": v4l2_get_link_freq() takes the sensor's pad since 6.13; CAMSV writes
-    packed 10-bit by default (out_mode=1), MediaTek's LSB-first packing that echod reads; and
-    CAMSV's error interrupts stay off (one stays asserted on MT8183 with nothing wrong).
+    MT8183 Chromebook. Built in as drivers/media/platform/mediatek/isp. Four changes to them,
+    each marked "athena:": v4l2_get_link_freq() takes the sensor's pad since 6.13 (and its result
+    is checked); CAMSV writes packed 10-bit by default (out_mode=1), MediaTek's LSB-first packing
+    that echod reads; CAMSV's error interrupts stay off (one stays asserted on MT8183 with nothing
+    wrong); and userspace may ask for cached buffers (the MT8183 is not DMA-coherent).
   - the "mediatek,mt8183-csi-rx" compatible in the mainline MIPI CSI-2 D-PHY driver
     (phy-mtk-mipi-csi-0-5), the same block as MT8365's.
   - src/camera/ov13855.c: a sensor driver (register tables from Rockchip's GPL driver), as

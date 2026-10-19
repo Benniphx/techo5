@@ -80,7 +80,9 @@ The bigger changes of September and October 2026. Every release lists the rest.
   stops showing up after the first use
   ([techo5-dot#14](https://github.com/HuskerMinion/techo5-dot/issues/14)); and the camera's
   `/camera.jpg` and `/camera.mjpeg` pages now ask for the camera password and light the green dot
-  while they're watched.
+  while they're watched. **If something reads those pages with no password today** (a Home Assistant
+  Generic Camera, a recorder), set a camera password and give it to that with Digest authentication,
+  or it stops getting pictures. [docs/setup.md](docs/setup.md#4-cameras)
 - 📅 **A calendar for the wall** (v1.2.23). The calendar's new look: a day and a week on their hours,
   a cleaner month, Coming up with each day's weather, event icons, countdowns, a filter for which
   calendars a screen shows, and the next event at the foot of the clock, each with its own switch

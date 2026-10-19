@@ -73,7 +73,55 @@ func (c *fakeController) commands() []string {
 func testSC(c *fakeController) *secureConn {
 	s := newSecureConn()
 	s.run, s.have = c.run, func() bool { return true }
+	s.busy = func() bool { return false }
 	return s
+}
+
+// On athena on mainline the setting is fixed off: a controller bluetoothd turned back on is put
+// back off, with no switch offered.
+func TestSecureConnectionsKeptOffWhereFixed(t *testing.T) {
+	here, fixed := secureConnHere, secureConnFixedOff
+	secureConnHere = func() bool { return false }
+	secureConnFixedOff = func() bool { return true }
+	defer func() { secureConnHere, secureConnFixedOff = here, fixed }()
+
+	c := &fakeController{supported: true, on: true, powered: true}
+	if changed, err := testSC(c).apply(context.Background(), true); !changed || err != nil || c.on {
+		t.Errorf("changed %v, err %v, on %v, commands %q", changed, err, c.on, c.commands())
+	}
+}
+
+// The setting waits for t5_bt_again's busy marker to go, a second at a time.
+func TestSecureConnectionsWaitsForTheClassPass(t *testing.T) {
+	s := testSC(&fakeController{supported: true, powered: true})
+	busy := 3
+	s.busy = func() bool { busy--; return busy >= 0 }
+	var slept []time.Duration
+	s.sleep = func(d time.Duration) { slept = append(slept, d) }
+	s.settled()
+	if len(slept) != 3 {
+		t.Errorf("slept %v, want three one-second waits", slept)
+	}
+}
+
+// A hci0 that comes back during the settle pushes it on.
+func TestSecureConnectionsSettleMovesOn(t *testing.T) {
+	s := testSC(&fakeController{supported: true, powered: true})
+	s.settle = time.Hour
+	s.up()
+	var slept []time.Duration
+	s.sleep = func(d time.Duration) {
+		slept = append(slept, d)
+		if len(slept) == 1 {
+			s.mu.Lock()
+			s.notBefore = s.notBefore.Add(time.Minute) // came back meanwhile
+			s.mu.Unlock()
+		}
+	}
+	s.settled()
+	if len(slept) != 2 {
+		t.Errorf("slept %d times, want the settle and its extension", len(slept))
+	}
 }
 
 func TestReadSC(t *testing.T) {

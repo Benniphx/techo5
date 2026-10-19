@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,19 +42,36 @@ func pageNonce(now time.Time) string {
 
 // nonceOK is whether a nonce is one of ours and not too old.
 func nonceOK(n string, now time.Time) bool {
+	ours, fresh := nonceAge(n, now)
+	return ours && fresh
+}
+
+// nonceAge says whether a nonce is one of ours, and whether it is still fresh. One of ours that
+// has only aged out gets stale=true with the next challenge, so a client logs in again by itself.
+func nonceAge(n string, now time.Time) (ours, fresh bool) {
 	t, _, ok := strings.Cut(n, ".")
 	if !ok {
-		return false
+		return false, false
 	}
 	sec, err := strconv.ParseInt(t, 16, 64)
 	if err != nil {
-		return false
+		return false, false
 	}
 	at := time.Unix(sec, 0)
-	if now.Sub(at) > nonceFor || at.After(now.Add(time.Minute)) {
-		return false
+	if !hmac.Equal([]byte(n), []byte(pageNonce(at))) {
+		return false, false
 	}
-	return hmac.Equal([]byte(n), []byte(pageNonce(at)))
+	return true, now.Sub(at) <= nonceFor && !at.After(now.Add(time.Minute))
+}
+
+// uriMatches is whether a Digest uri names this request: the path and query as sent, or the same in
+// the absolute form some clients send.
+func uriMatches(uri string, r *http.Request) bool {
+	if uri == r.URL.RequestURI() {
+		return true
+	}
+	u, err := url.Parse(uri)
+	return err == nil && u.IsAbs() && u.RequestURI() == r.URL.RequestURI()
 }
 
 // PageAllowed is whether a request may see a camera page, and answers it with the login asked for when not.
@@ -62,12 +80,18 @@ func PageAllowed(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	now := time.Now()
+	stale := ""
 	if h := r.Header.Get("Authorization"); h != "" {
 		if pageLogin(r, h, now) {
 			return true
 		}
+		if rest, ok := strings.CutPrefix(h, "Digest "); ok {
+			if ours, fresh := nonceAge(digestParams(rest)["nonce"], now); ours && !fresh {
+				stale = ", stale=true"
+			}
+		}
 	}
-	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=MD5`, realm, pageNonce(now)))
+	w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Digest realm="%s", nonce="%s", algorithm=MD5%s`, realm, pageNonce(now), stale))
 	web.Refuse(w, "401 the camera's login is needed", http.StatusUnauthorized)
 	return false
 }
@@ -83,7 +107,7 @@ func pageLogin(r *http.Request, h string, now time.Time) bool {
 		return false
 	}
 	p := digestParams(rest)
-	if p["realm"] != realm || !nonceOK(p["nonce"], now) || p["uri"] != r.URL.RequestURI() {
+	if p["realm"] != realm || !nonceOK(p["nonce"], now) || !uriMatches(p["uri"], r) {
 		return false
 	}
 	ok, done := Get().guard.attempt(remoteHost(r))

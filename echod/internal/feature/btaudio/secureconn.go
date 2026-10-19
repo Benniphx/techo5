@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -42,6 +43,10 @@ const (
 	// either is what this waits out.
 	scSettle = 12 * time.Second
 
+	// busyFor caps the wait for t5_bt_again's marker (/run/techo5-bt-again.busy): it retries the
+	// class for up to a minute on a Spot that is slow to take it.
+	busyFor = 90 * time.Second
+
 	// The btmgmt timeouts techo5-lib.sh uses: 3 s to read, 5 s to set.
 	btmgmtRead = 3 * time.Second
 	btmgmtSet  = 5 * time.Second
@@ -72,6 +77,7 @@ type secureConn struct {
 	wanted func() bool // the setting: true is on
 	settle time.Duration
 	sleep  func(time.Duration)
+	busy   func() bool // t5_bt_again still at work on hci0
 
 	wake chan struct{}
 
@@ -87,15 +93,28 @@ func newSecureConn() *secureConn {
 		wanted: func() bool { return !config.Get().Bluetooth.SecureConnectionsOff },
 		settle: scSettle,
 		sleep:  time.Sleep,
+		busy:   btAgainBusy,
 		wake:   make(chan struct{}, 1),
 		said:   map[string]bool{},
 	}
 }
 
+// btAgainBusy is whether t5_bt_again (techo5-lib.sh) is still at work on hci0.
+func btAgainBusy() bool {
+	_, err := os.Stat("/run/techo5-bt-again.busy")
+	return err == nil
+}
+
 // secureConnHere is whether this device offers the setting: not athena on mainline, whose controller
 // has Secure Connections off for good (device.conf BT_SC=off), and not on Android, whose own stack has
 // the radio. A variable for the tests.
-var secureConnHere = func() bool { return !layout.AthenaMainline() && !layout.OnAndroid() }
+var secureConnHere = func() bool { return !isAthena() && !layout.OnAndroid() }
+
+// secureConnFixedOff is where it stays off with no setting: athena on mainline. boot.sh turns it off
+// once, and bluetoothd turns it back on when it takes the adapter again (a bridge that restarted), so
+// the daemon puts it back off each time hci0 returns. Athena on Amazon's kernel has btbridge's
+// -p192-keys instead and is left alone. A variable for the tests.
+var secureConnFixedOff = func() bool { return layout.AthenaMainline() }
 
 // up says hci0 has come up or come back: the setting goes on it once the controller has settled.
 func (s *secureConn) up() {
@@ -118,13 +137,32 @@ func (s *secureConn) poke() {
 // loop applies the setting each time it is poked; pokes while it works make one more pass.
 func (s *secureConn) loop() {
 	for range s.wake {
+		s.settled()
+		s.apply(context.Background(), s.wanted())
+	}
+}
+
+// settled waits until hci0 has settled: the settle time from the last time it came up (read again
+// after each wait, so a hci0 that comes back meanwhile pushes it on), then t5_bt_again's busy marker
+// gone, for at most busyFor (a marker left by a pass that was killed must not hold the setting off).
+func (s *secureConn) settled() {
+	notBefore := func() time.Time {
 		s.mu.Lock()
-		wait := time.Until(s.notBefore)
-		s.mu.Unlock()
-		if wait > 0 {
+		defer s.mu.Unlock()
+		return s.notBefore
+	}
+	for deadline := notBefore(); ; {
+		if wait := time.Until(deadline); wait > 0 {
 			s.sleep(wait)
 		}
-		s.apply(context.Background(), s.wanted())
+		next := notBefore()
+		if !next.After(deadline) {
+			break
+		}
+		deadline = next // hci0 came back while this waited
+	}
+	for end := time.Now().Add(busyFor); s.busy() && time.Now().Before(end); {
+		s.sleep(time.Second)
 	}
 }
 
@@ -190,7 +228,9 @@ var errNotTaken = errors.New("the controller did not take it")
 // reports whether it changed it. A controller that was powered is powered on again whatever went
 // wrong in between: Bluetooth left off would be worse than the setting not taking.
 func (s *secureConn) apply(ctx context.Context, on bool) (bool, error) {
-	if !secureConnHere() {
+	if secureConnFixedOff() {
+		on = false
+	} else if !secureConnHere() {
 		return false, nil
 	}
 	if !s.have() {
@@ -228,6 +268,11 @@ func (s *secureConn) apply(ctx context.Context, on bool) (bool, error) {
 	now, ok := readSC(info)
 	switch {
 	case !ok:
+		// Not known to be powered: asked once more all the same (powering on a powered
+		// controller does nothing).
+		if c.powered {
+			s.powerOn(ctx)
+		}
 		slog.Error("bluetooth secure connections: could not read the controller back", "want", onOff(on))
 		return false, errNotTaken
 	case c.powered && !now.powered:

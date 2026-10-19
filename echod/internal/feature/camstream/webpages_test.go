@@ -87,6 +87,42 @@ func TestPageNonce(t *testing.T) {
 	}
 }
 
+// An aged-out nonce of ours asks again with stale=true; a made-up one does not.
+func TestPageStaleNonce(t *testing.T) {
+	pageConfig(t)
+	old := pageNonce(time.Now().Add(-nonceFor - time.Minute))
+	for _, c := range []struct {
+		nonce string
+		stale bool
+	}{{old, true}, {"5f00." + "abcd", false}} {
+		r := httptest.NewRequest("GET", "/camera.jpg", nil)
+		r.RemoteAddr = "192.0.2.20:5000"
+		r.Header.Set("Authorization", fmt.Sprintf(`Digest username="viewer", realm="%s", nonce="%s", uri="/camera.jpg", response="0"`, realm, c.nonce))
+		w := httptest.NewRecorder()
+		if PageAllowed(w, r) {
+			t.Fatal("let in with a bad nonce")
+		}
+		if got := regexp.MustCompile(`stale=true`).MatchString(w.Header().Get("WWW-Authenticate")); got != c.stale {
+			t.Errorf("nonce %q: stale=%v, want %v", c.nonce, got, c.stale)
+		}
+	}
+}
+
+// The uri may come in the absolute form; another path does not do.
+func TestPageURIForms(t *testing.T) {
+	r := httptest.NewRequest("GET", "/camera.jpg?t=1", nil)
+	for uri, want := range map[string]bool{
+		"/camera.jpg?t=1":                      true,
+		"http://192.0.2.5:8181/camera.jpg?t=1": true,
+		"/camera.mjpeg":                        false,
+		"http://192.0.2.5:8181/other":          false,
+	} {
+		if got := uriMatches(uri, r); got != want {
+			t.Errorf("%q: %v, want %v", uri, got, want)
+		}
+	}
+}
+
 func TestPageWatchingLightsAndLingers(t *testing.T) {
 	old := lingerFor
 	lingerFor = 50 * time.Millisecond
