@@ -129,6 +129,10 @@
     [
      "techo5-spot",
      "https://github.com/HuskerMinion/techo5-spot"
+    ],
+    [
+     "techo5-panel",
+     "https://github.com/HuskerMinion/techo5-panel"
     ]
    ],
    "focus": "TECHO5 turns old, unlockable Echo devices into private Home Assistant voice satellites with \"Linux inside, Home Assistant in charge, no Amazon cloud\", replacing Fire OS with Alpine Linux and one daemon that drives the hardware directly. Its own emphasis is on a useful touch screen (clock, calendar, dashboards, photos, cameras), alarms and house features that keep working when Home Assistant is down, and security by default with signed updates that \"can't brick it\".",
@@ -4589,17 +4593,17 @@
   },
   "techo5": {
    "type": [
-    "Replacement firmware: Alpine Linux image plus one Go daemon (echod) on Echo devices; optional dashcast server and Deck PC agent",
+    "Replacement firmware: Alpine Linux image plus one Go daemon (echod) on Echo devices and the Skylight Calendar; the same daemon in an Android app (TECHO5 Panel) for tablets and the Portal; optional dashcast server and Deck PC agent",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/README.md"
    ],
    "started": [
-    "techo5 2026-09-14; techo5-dot 2026-09-16; techo5-spot 2026-09-16",
+    "techo5 2026-09-14; techo5-dot 2026-09-16; techo5-spot 2026-09-16; techo5-panel public 2026-10-19",
     "",
     "https://github.com/HuskerMinion/techo5/commits/main"
    ],
    "releases": [
-    "v1.2.24 (2026-10-19), 116 releases incl. 1 pre-release; Dot dot-v1.0.23 (84, 1 pre); Spot spot-v1.1.22 (92, 1 pre)",
+    "v1.3.0 (2026-10-19), 117 releases incl. 1 pre-release; Dot dot-v1.0.24 (85, 1 pre); Spot spot-v1.1.23 (93, 1 pre); Panel app: no release yet",
     "",
     "https://github.com/HuskerMinion/techo5/releases"
    ],
@@ -4609,24 +4613,24 @@
     "https://github.com/HuskerMinion/techo5/blob/v1.2.23/LICENSE"
    ],
    "devices": [
-    "Echo Show 5 gen 1/2, Show 8 gen 1/2 (gen 2: one panel, two units), Spot gen 1, Dot gen 2, Echo gen 2 (one unit); none in progress",
+    "Echo Show 5 gen 1/2, Show 8 gen 1/2, Spot gen 1, Dot gen 2, Echo gen 2 (one unit), Skylight Calendar 15; with the TECHO5 Panel app: Fire HD 8 (10th gen), Galaxy Tab S6 Lite, Meta Portal (2nd gen); none in progress",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/README.md"
    ],
    "on-device": [
-    "No Android/Fire OS; Alpine Linux with echod daemon; no separate server needed (dashcast optional for streamed dashboards)",
+    "Echos and Skylight: no Android/Fire OS, Alpine Linux with the echod daemon; tablets and Portal: Android app with echod inside; no separate server needed (dashcast optional for streamed dashboards)",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/docs/overview.md"
    ],
    "install": [
-    "Unlock (amonet; saiyaku for Show 8 gen 2); Show 5 and Show 8 gen 1 need LineageOS 18.1 drivers; USB; Python installer on Windows/Linux/macOS; Echo gen 2 needs soldering",
+    "Unlock (amonet; saiyaku for Show 8 gen 2); Show 5 and Show 8 gen 1 need LineageOS 18.1 drivers; USB; Python installer on Windows/Linux/macOS; Echo gen 2 needs soldering; Skylight: no unlock, adb on stock firmware; tablets and Portal: no unlock, adb install of the Panel app",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/docs/getting-started.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/docs/getting-started.md"
    ],
    "os-replaced": [
-    "Yes",
-    "Show 8 gen 2 can also keep Amazon's kernel",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/README.md#why-techo5"
+    "Partly",
+    "Echos and Skylight: yes; the Panel app runs on Android; Show 8 gen 2 can also keep Amazon's kernel",
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/README.md"
    ],
    "third-party-parts": [
     "Not found",
@@ -4695,8 +4699,8 @@
    ],
    "arbitration": [
     "Yes",
-    "off by default; needs same house word",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/docs/setup.md#the-nearest-device-answers"
+    "on by default; needs same house word",
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/docs/setup.md#the-nearest-device-answers"
    ],
    "echo-cancel": [
     "Yes",
@@ -5010,8 +5014,8 @@
    ],
    "themes": [
     "Yes",
-    "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.2.23/echod/internal/lib/palette/palette.go"
+    "dark, light or auto by room light; custom colors",
+    "https://github.com/HuskerMinion/techo5/blob/v1.3.0/docs/setup.md"
    ],
    "fonts": [
     "Yes",
@@ -6608,8 +6612,8 @@
     ],
     "echo-show-8-2": [
      "yes",
-     "own mainline kernel, no LineageOS; BOE panel only; two units",
-     "https://github.com/HuskerMinion/techo5/blob/main/docs/install-athena.md"
+     "own mainline kernel, no LineageOS; one screen panel tested, nine more known but untested; two units",
+     "https://github.com/HuskerMinion/techo5/blob/v1.3.0/README.md"
     ],
     "echo-spot-1": [
      "lineage",
@@ -6617,14 +6621,14 @@
      "https://github.com/HuskerMinion/techo5-spot/releases/tag/spot-v1.1.21"
     ],
     "fire-tablet": [
-     "unknown",
-     "",
-     "https://github.com/HuskerMinion/techo5#readme"
+     "yes",
+     "TECHO5 Panel app, no unlock; Fire HD 8 (10th gen) tested",
+     "https://github.com/HuskerMinion/techo5-panel#supported-devices"
     ],
     "meta-portal": [
-     "unknown",
-     "",
-     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22"
+     "yes",
+     "TECHO5 Panel app; Portal 2nd gen (10\") tested",
+     "https://github.com/HuskerMinion/techo5-panel#supported-devices"
     ],
     "raspberry-pi": [
      "unknown",
@@ -6632,14 +6636,14 @@
      "https://github.com/HuskerMinion/techo5/blob/main/docs/deck.md"
     ],
     "android-other": [
-     "unknown",
-     "",
-     "https://github.com/HuskerMinion/techo5/blob/main/docs/getting-started.md#L16-L22"
+     "yes",
+     "TECHO5 Panel app; Galaxy Tab S6 Lite tested; other Android 8.0+ ARM tablets may work, untested",
+     "https://github.com/HuskerMinion/techo5-panel#supported-devices"
     ],
     "other": [
-     "unknown",
-     "",
-     "https://github.com/HuskerMinion/techo5#readme"
+     "yes",
+     "Skylight Calendar 15 (150-CAL); no unlock",
+     "https://github.com/HuskerMinion/techo5/blob/v1.3.0/docs/install-skylight.md"
     ]
    },
    "view-assist": {
