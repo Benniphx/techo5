@@ -270,6 +270,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveSpeaker(r)
 	case "screen":
 		problem = saveScreen(r)
+	case "themes":
+		problem = saveThemes(r)
+	case "theme-colors":
+		problem = saveThemeColors(r)
 	case "listening":
 		problem = saveListening(r)
 	case "photos-remove":
@@ -432,6 +436,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		dashboardSection(w, token)
 	case "photos":
 		screenSection(w, token)
+		themeSection(w, token)
 		ownFontsSection(w, token)
 		dashboardPanelSection(w, token)
 		deckSection(w, token)

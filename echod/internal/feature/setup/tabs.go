@@ -12,8 +12,9 @@ import (
 // is drawn: no script, and a save comes back to the tab it was made on.
 //
 // There is no Display tab. What the screen shows is set on the screen, which is where it can be seen
-// changing - except the clock's look, what a tap on it does, the dashboard and the slideshow, which a
-// device far from its owner or on a wall still needs set from a phone, and which are on Screen & Photos.
+// changing - except the clock's look, what a tap on it does, the themes, the dashboard and the slideshow,
+// which a device far from its owner or on a wall still needs set from a phone, and which are on Screen &
+// Photos.
 
 type tab struct{ id, title, blurb string }
 

@@ -349,9 +349,14 @@ type Display struct {
 	stripFullUntil time.Time
 	showingStrip   bool
 
-	// themeSel is the theme in Home Assistant, and themeShown what it was last set to.
-	themeSel   *esphome.Select
-	themeShown string
+	// themeSel and lightThemeSel are the dark and light modes' themes in Home Assistant, and themeShown
+	// what each was last set to (themeMu, held across the Set too, so an older name can't land last);
+	// themeModeSel is Theme mode, which of them is worn (theme_mode.go).
+	themeSel      *esphome.Select
+	lightThemeSel *esphome.Select
+	themeMu       sync.Mutex
+	themeShown    [2]string
+	themeModeSel  *esphome.Select
 
 	// callShown is the Call button on the clock as last drawn, and callees who the drawer's Call tab
 	// listed: a tap acts on what was on the screen.
@@ -436,7 +441,8 @@ func build() *Display {
 		Fonts: fonts.Names(), FontNow: fontIndex, ChooseFont: d.setFont,
 		OwnFonts: ownFonts, AddFont: d.addOwnFont, RemoveFont: d.removeOwnFont, MaxFont: fonts.MaxOwnFile,
 		Taps: clockTapOptions(), TapNow: clockTapIndex, ChooseTap: func(i int) { setClockTap(d.clockTap, i) }, Places: maxWorld,
-		Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, IgnoreRoomLights: d.setRoomLightsIgnored, Calendar: d.lookChoices()})
+		Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, IgnoreRoomLights: d.setRoomLightsIgnored, Calendar: d.lookChoices(),
+		Themes: &setup.ThemeChoices{LightNow: lightThemeShown, Changed: d.themesChanged}})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
@@ -447,7 +453,8 @@ func build() *Display {
 	d.nightTapSw = nightTapSwitch(d)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
-	d.themeSel = themeSelect(d.wake)
+	d.themeSel, d.lightThemeSel = themeSelect(false, d.wake), themeSelect(true, d.wake)
+	d.themeModeSel = themeModeSelect(d.wake)
 	d.nightHours = nightHoursSelect(d)
 	d.nightStart, d.nightEnd = nightEndSelect(d, true), nightEndSelect(d, false)
 	d.nightStyle = nightStyleSelect(d)
@@ -533,7 +540,7 @@ func (d *Display) turnStyleSel() *esphome.Select { return d.turnStyle }
 func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
-	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
+	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 }
 
@@ -556,6 +563,10 @@ func (d *Display) Restore(c config.Config) {
 	d.nightTapSw.Set(c.Screen.NightTapLifts)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
+	d.themeModeSel.Set(themeModes[themeModeIndex()].label)
+	// Set now, not at the first lit frame: a Show that starts dark would show them unknown until then,
+	// and settings sharing would take that first change for one made here.
+	d.syncThemeSelects()
 	d.nightHoursChanged()
 	d.atNight.Set(atNightOptions[atNightIndex()])
 	d.nightStyle.Set(nightStyleOptions[nightStyleIndex()])
@@ -2018,9 +2029,9 @@ func (d *Display) Screenshot(ctx context.Context) (*image.RGBA, error) {
 	}
 }
 
-// SetTheme switches to a preset by name and saves it.
+// SetTheme switches to a preset by name and saves it, as the theme of the mode in force.
 func (d *Display) SetTheme(name string) {
-	if err := config.Set().Screen().Theme(themes[themeIndex(name)].name); err != nil {
+	if err := config.Set().Screen().ThemeFor(lightShown(config.Get().Screen), themes[themeIndex(name)].name); err != nil {
 		slog.Warn("saving the theme failed", "err", err)
 	}
 	d.wake()
@@ -2357,9 +2368,9 @@ func (d *Display) frame() time.Duration {
 		}
 		return time.Hour
 	}
-	t := current()
-	applyTheme(t)
-	d.syncThemeSelect(t.name)
+	followRoom(now)
+	applyTheme(current())
+	d.syncThemeSelects()
 
 	d.mu.Lock()
 	booting, started := d.booting, d.started

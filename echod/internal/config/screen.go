@@ -55,9 +55,19 @@ type Screen struct {
 	// Brightness, 1 to 50; none is the default (display.go).
 	AutoDimmest int `json:"auto_dimmest,omitempty"`
 
-	// Theme names the screen's palette; empty is the first one, "Custom" is Palette.
+	// Theme names the screen's palette; empty is the first one, "Custom" is Palette. It is the dark
+	// mode's theme, which is the one worn unless ThemeMode says otherwise.
 	Theme   string  `json:"theme,omitempty"`
 	Palette Palette `json:"palette,omitempty"`
+
+	// LightTheme is the light mode's theme, named as Theme is; empty is DefaultLightTheme. Its
+	// "Custom" is LightPalette, the light mode's own, so a custom theme for each mode can be kept.
+	LightTheme   string  `json:"light_theme,omitempty"`
+	LightPalette Palette `json:"light_palette,omitempty"`
+
+	// ThemeMode is which of the two the screen wears: empty for Theme, always, as before there were
+	// modes; "light" for LightTheme; "auto" for the room's light to choose (display/theme_mode.go).
+	ThemeMode string `json:"theme_mode,omitempty"`
 
 	// Welcomed is the first-run card having been seen and put away.
 	Welcomed bool `json:"welcomed,omitempty"`
@@ -140,6 +150,34 @@ type Screen struct {
 // DefaultTheme is the palette a new device comes up in.
 const DefaultTheme = "Ember"
 
+// DefaultLightTheme is the light mode's theme until another is chosen.
+const DefaultLightTheme = "Paper"
+
+// The theme modes ThemeMode may be; the dark mode is empty.
+const (
+	ThemeModeLight = "light"
+	ThemeModeAuto  = "auto"
+)
+
+// ThemeFor is the name of the light mode's theme, or the dark mode's.
+func (s Screen) ThemeFor(light bool) string {
+	switch {
+	case !light:
+		return s.Theme
+	case s.LightTheme == "":
+		return DefaultLightTheme
+	}
+	return s.LightTheme
+}
+
+// PaletteFor is the light mode's custom palette, or the dark mode's.
+func (s Screen) PaletteFor(light bool) Palette {
+	if light {
+		return s.LightPalette
+	}
+	return s.Palette
+}
+
 // Palette is a custom theme's five colors, as #rrggbb.
 type Palette struct {
 	Ground string `json:"ground,omitempty"`
@@ -172,6 +210,24 @@ func (w ScreenWriter) Auto(v bool) error {
 
 func (w ScreenWriter) Theme(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.Theme = v })
+}
+
+// ThemeFor saves the light mode's theme, or the dark mode's.
+func (w ScreenWriter) ThemeFor(light bool, v string) error {
+	if !light {
+		return w.Theme(v)
+	}
+	return w.st.Update(func(c *Config) { c.Screen.LightTheme = v })
+}
+
+// ThemeMode saves which theme the screen wears: "", ThemeModeLight or ThemeModeAuto.
+func (w ScreenWriter) ThemeMode(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.ThemeMode = v })
+}
+
+// Themes saves both modes' themes and the mode at once, as the setup page sets them.
+func (w ScreenWriter) Themes(dark, light, mode string) error {
+	return w.st.Update(func(c *Config) { c.Screen.Theme, c.Screen.LightTheme, c.Screen.ThemeMode = dark, light, mode })
 }
 
 func (w ScreenWriter) NightLightLevel(v int) error {
@@ -295,9 +351,16 @@ func (w ScreenWriter) ClockTap(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.ClockTap = v })
 }
 
-// Custom saves a palette and makes it the theme.
-func (w ScreenWriter) Custom(p Palette) error {
-	return w.st.Update(func(c *Config) { c.Screen.Theme, c.Screen.Palette = "Custom", p })
+// CustomFor saves the light mode's custom palette, or the dark mode's, and makes it that mode's theme.
+// The other mode's is left as it is.
+func (w ScreenWriter) CustomFor(light bool, p Palette) error {
+	return w.st.Update(func(c *Config) {
+		if light {
+			c.Screen.LightPalette, c.Screen.LightTheme = p, "Custom"
+		} else {
+			c.Screen.Palette, c.Screen.Theme = p, "Custom"
+		}
+	})
 }
 
 // ClockHold is whether a finger held on the clock is told to Home Assistant.

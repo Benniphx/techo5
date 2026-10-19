@@ -91,7 +91,7 @@ func devicePicker(id string, sv sheetView) (pickerView, bool) {
 	switch id {
 	case "theme":
 		p := pickerView{title: "Theme", cur: -1}
-		name := config.Get().Screen.Theme
+		name := shownName()
 		for i, t := range themes {
 			p.opts = append(p.opts, t.name)
 			p.swatches = append(p.swatches, [2]color.RGBA{t.colors[roleGround], t.colors[roleAccent]})
@@ -100,7 +100,7 @@ func devicePicker(id string, sv sheetView) (pickerView, bool) {
 			}
 		}
 		// Custom, once there is one to go back to.
-		if c, ok := savedCustom(); ok {
+		if c, ok := savedCustom(lightShown(config.Get().Screen)); ok {
 			if name == customName {
 				p.cur = len(p.opts)
 			}
@@ -130,7 +130,7 @@ func (d *Display) deviceChoose(id string, i int) {
 	case i < len(themes):
 		d.SetTheme(themes[i].name)
 	case i == len(themes):
-		if err := config.Set().Screen().Theme(customName); err != nil {
+		if err := config.Set().Screen().ThemeFor(lightShown(config.Get().Screen), customName); err != nil {
 			slog.Warn("saving the theme failed", "err", err)
 		}
 	}

@@ -59,6 +59,10 @@ type ScreenChoices struct {
 	// Calendar is how the calendar page looks, where the screen has one of its own (the Show): on the
 	// Weather & Calendar tab, under the calendars.
 	Calendar []CalendarChoice
+
+	// Themes is the screen's themes and light and dark mode, where it has them (the Show); nil leaves
+	// the Themes section off the page (theme.go).
+	Themes *ThemeChoices
 }
 
 // CalendarChoice is one of the calendar's look switches (display/calendar_look.go): its name and what it

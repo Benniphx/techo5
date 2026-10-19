@@ -46,7 +46,7 @@ var groups = []group{
 	{"Voice: second wake word", []string{"thinking_effect_2", "replying_effect_2", "reply_delivery_2",
 		"reply_buffer_2", "max_think_2"}},
 	{"Alarms", []string{"alarm_sound", "alarm_snooze_length"}},
-	{"Screen", []string{"screen_theme", "screen_font", "screen_language", "screen_clock_style", "screen_clock_format",
+	{"Screen", []string{"screen_theme_mode", "screen_theme", "screen_light_theme", "screen_font", "screen_language", "screen_clock_style", "screen_clock_format",
 		"screen_clock_position", "screen_date_color", "screen_clock_style_swipe", "screen_clock_tap",
 		"screen_turn_style", "screen_answer_time", "screen_camera_time", "screen_call_button", "screen_now_playing",
 		"screen_weather_animation", "screen_auto_brightness", "screen_auto_brightness_dimmest",

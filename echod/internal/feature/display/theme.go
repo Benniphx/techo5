@@ -63,26 +63,29 @@ func themeIndex(name string) int {
 	return 0
 }
 
-// current is the palette in force, from the config.
+// current is the palette in force, from the config: the theme of the mode the screen wears.
 func current() theme {
-	sc := config.Get().Screen
-	if sc.Theme == customName {
-		t := theme{name: customName}
-		for i, hex := range [roles]string{sc.Palette.Ground, sc.Palette.Accent, sc.Palette.Text, sc.Palette.Dim, sc.Palette.Rules} {
-			c, err := parseHex(hex)
-			if err != nil {
-				return themes[0]
-			}
-			t.colors[i] = c
-		}
+	light := lightShown(config.Get().Screen)
+	name := config.Get().Screen.ThemeFor(light)
+	if name != customName {
+		return themes[themeIndex(name)]
+	}
+	if t, ok := savedCustom(light); ok {
 		return t
 	}
-	return themes[themeIndex(sc.Theme)]
+	return themes[0]
 }
 
-// savedCustom is the custom palette saved, whether or not it is in force.
-func savedCustom() (theme, bool) {
-	p := config.Get().Screen.Palette
+// shownName is the name of the theme in force as it is saved: a preset's, or Custom.
+func shownName() string {
+	sc := config.Get().Screen
+	return sc.ThemeFor(lightShown(sc))
+}
+
+// savedCustom is the light mode's custom palette saved, or the dark mode's, whether or not it is in
+// force.
+func savedCustom(light bool) (theme, bool) {
+	p := config.Get().Screen.PaletteFor(light)
 	t := theme{name: customName}
 	for i, hex := range [roles]string{p.Ground, p.Accent, p.Text, p.Dim, p.Rules} {
 		c, err := parseHex(hex)
@@ -99,12 +102,13 @@ func applyTheme(t theme) {
 	walnut, amber, cream, dim, ember = t.colors[roleGround], t.colors[roleAccent], t.colors[roleText], t.colors[roleDim], t.colors[roleRules]
 }
 
-// setRole changes one color of the palette in force and saves the result as Custom.
+// setRole changes one color of the palette in force and saves the result as Custom, the theme of the
+// mode in force.
 func setRole(role int, c color.RGBA) {
 	t := current()
 	t.colors[role] = c
 	p := config.Palette{Ground: hex(t.colors[0]), Accent: hex(t.colors[1]), Text: hex(t.colors[2]), Dim: hex(t.colors[3]), Rules: hex(t.colors[4])}
-	if err := config.Set().Screen().Custom(p); err != nil {
+	if err := config.Set().Screen().CustomFor(lightShown(config.Get().Screen), p); err != nil {
 		slog.Warn("saving the custom theme failed", "err", err)
 	}
 	slog.Info("theme", "role", roleNames[role], "color", hex(c))

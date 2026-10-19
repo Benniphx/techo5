@@ -498,7 +498,19 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 - **World clock places** (setup page, Screen & Photos tab): the World style's places, as time zone
   names with commas between them, like `America/Chicago, Europe/Paris, Asia/Tokyo`. Up to three; the
   Spot shows the first two. Leave it empty for New York, London and Tokyo.
-- **Theme**, **Answer time** and **Now playing** (the full page, or a strip over the clock).
+- **Answer time** and **Now playing** (the full page, or a strip over the clock).
+- **Theme** (Show): a preset, or **Custom colors** of your own. On the screen, tap a color for each part.
+  On the setup page's Screen & Photos tab, **Themes**, each of the five colors has a color picker and a
+  `#rrggbb` box; they start from the theme the screen wears now. **Match the accent** fills in the
+  ground, text, dim text and rules from the accent's hue, for a dark or a light theme, and you can
+  change any of them after. The dark and light themes each keep a Custom of their own.
+- **Theme mode** (Show): the screen has a dark theme (the Theme it always had) and a light theme
+  (*Paper* until you choose another), both set on the setup page. *Dark*, the default, wears the dark
+  theme as before. *Light* wears the light one. *Auto* follows the light sensor: the light theme in a
+  lit room, the dark one in a dim room, once the room has stayed that way about a minute. In Home
+  Assistant: **Theme mode** (*Dark*, *Light*, *Auto*), **Theme** (the dark theme) and **Light theme**;
+  neither theme select changes when the mode does. On the screen, Settings > Display > Theme sets the
+  theme it is wearing. The night clock keeps its own look.
 - **Tap on the clock** (Show): *Assist*, as it always was, *Dashboard* to open the dashboard, *Deck*
   to open TECHO5 Deck (until a deck has buttons, a tap still starts Assist), or *Nothing*, for a panel
   you only talk to. A voice request under way still
