@@ -205,3 +205,35 @@ func TestNoLightSensorNoAuto(t *testing.T) {
 		t.Error("Auto from the file is not Dark on a screen with no light sensor")
 	}
 }
+
+// The Display card's theme row says which theme it changes: Theme in Dark mode, as it always did, and
+// in Light or Auto the one worn now.
+func TestTheThemeRowSaysWhichItChanges(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	withLightSensor(t)
+	room.forget()
+	t.Cleanup(room.forget)
+	label := func() string { return themeRows()[0].label }
+	if got := label(); got != "Theme" {
+		t.Errorf("Dark mode: %q", got)
+	}
+	_ = config.Set().Screen().ThemeMode(config.ThemeModeLight)
+	if got := label(); got != "Light theme" {
+		t.Errorf("Light mode: %q", got)
+	}
+	_ = config.Set().Screen().ThemeMode(config.ThemeModeAuto)
+	if got := label(); got != "Dark theme" {
+		t.Errorf("Auto, no reading yet: %q", got)
+	}
+	room.step(5000, time.Now())
+	if got := label(); got != "Light theme" {
+		t.Errorf("Auto in a lit room: %q", got)
+	}
+	if p, _ := devicePicker("theme", sheetView{}); p.title != "Light theme" {
+		t.Errorf("the picker is %q", p.title)
+	}
+	hasLightSensor = func() bool { return false }
+	if got := label(); got != "Theme" {
+		t.Errorf("Auto with no light sensor, which is Dark: %q", got)
+	}
+}

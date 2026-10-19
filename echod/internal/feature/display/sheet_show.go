@@ -57,9 +57,21 @@ func (s scene) view() sheetView {
 // themeRows are the Display card's rows for the theme.
 func themeRows() []settingRow {
 	return []settingRow{
-		{id: "theme", label: "Theme", kind: ctlChoice, value: current().name},
+		{id: "theme", label: themeRowLabel(), kind: ctlChoice, value: current().name},
 		{id: "colors", label: "Custom colors", sub: "Make the theme your own", kind: ctlButton, button: "Edit"},
 	}
+}
+
+// themeRowLabel names the theme the row changes: the one worn. In Dark mode that is simply Theme, as it
+// always was; in Light or Auto it is the dark theme or the light one, whichever the screen wears now.
+func themeRowLabel() string {
+	switch {
+	case themeModeIndex() == 0:
+		return "Theme"
+	case lightShown(config.Get().Screen):
+		return "Light theme"
+	}
+	return "Dark theme"
 }
 
 // deviceCard is a card of the Show's own in place of the category's: the custom colors editor.
@@ -90,7 +102,7 @@ func adaptRows(rows []settingRow, _ sheetView) []settingRow { return rows }
 func devicePicker(id string, sv sheetView) (pickerView, bool) {
 	switch id {
 	case "theme":
-		p := pickerView{title: "Theme", cur: -1}
+		p := pickerView{title: themeRowLabel(), cur: -1}
 		name := shownName()
 		for i, t := range themes {
 			p.opts = append(p.opts, t.name)
