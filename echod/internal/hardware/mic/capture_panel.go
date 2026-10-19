@@ -67,6 +67,8 @@ type socketCapture struct {
 	// want is where offset should sit, averaged over about a second of reads: the writer moves a
 	// period at a time and is held up by the app now and then, so one read's view of it jitters.
 	want float64
+	// written is the writer's position at the last line-up.
+	written uint64
 
 	// Loudness of the microphone, one value per envBlock, since the last time offset moved.
 	env   []float64
@@ -159,7 +161,15 @@ func (c *socketCapture) Read(p []byte) (int, error) {
 // lineUp keeps offset where the writer says it should be, on average: the writer moves a period at a
 // time and stalls while the app catches up, and following every jump would tear the reference.
 func (c *socketCapture) lineUp() {
-	now := float64(int64(loopback.Played.Written()) - c.read - c.lag)
+	// While the speaker is down (the app gone, or the write loop held) the writer stands still and the
+	// microphone reads on, so every read would seem to drift and line up again. Nothing is played then
+	// to line up against: the line-up waits for the writer to move, and catches up once when it does.
+	w := loopback.Played.Written()
+	if c.started && w == c.written {
+		return
+	}
+	c.written = w
+	now := float64(int64(w) - c.read - c.lag)
 	if !c.started {
 		c.want, c.offset, c.started = now, int64(now), true
 		c.restart()
