@@ -27,14 +27,20 @@ Android does for the app instead:
 - **Microphone and speaker.** The app records and plays through Android and passes the sound to the
   daemon over local sockets. Echo cancellation runs in the daemon, against what it played.
 - **Volume.** The tablet's own volume: the daemon's volume steps set Android's media volume, so the
-  tablet's buttons, its slider and Home Assistant all move the same level.
+  tablet's buttons, its slider and Home Assistant all move the same level. Mute stays in the daemon,
+  so Android's volume never goes to zero, and an alarm, a timer or a ring raises Android's volume to
+  its own level while it sounds and puts it back after. A muted or quiet panel still rings.
 - **Screen and touch.** The daemon draws its own screens and the app shows them, scaled to the
   tablet.
 - **Updates.** The app updates itself, daemon and all, from its own releases. There's no Stable or Dev
-  channel and no A/B slots on a panel. The update card in Home Assistant shows the app's version, and
-  Install asks the app.
-- **What it leaves out.** No LED ring, no camera yet, no Bluetooth (Android keeps the radio), no
-  AirPlay or Spotify Connect, and no firewall of its own.
+  channel and no A/B slots on a panel. The update card in Home Assistant shows the app's version.
+  Checking only looks; Install asks the app to install. With **Install updates automatically** on,
+  it installs by itself in the same night hours as an Echo (2 to 5 am), when nothing is playing.
+- **What it leaves out.** No LED ring and no camera of its own. No Bluetooth at all: no Bluetooth
+  proxy and no Bluetooth speaker or phone (Android keeps the radio). No video player, live camera
+  video or camera sound (the Echos' video decoder isn't in the app; cameras show Home Assistant's
+  snapshots). No AirPlay or Spotify Connect, no remote adb, and no firewall of its own. A call to a
+  SIP account rings only when it comes from the provider.
 - **Microphone silenced.** Android can take the microphone away from an app (its privacy switch,
   another app). When the app has heard nothing but silence for 20 seconds, Home Assistant shows a
   Microphone silenced problem, which clears as soon as there's sound again.
