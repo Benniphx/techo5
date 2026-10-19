@@ -12,6 +12,7 @@ func TestPanelIsNoShowBoard(t *testing.T) {
 		"Checkers":       Checkers(),
 		"Crown":          Crown(),
 		"Show8":          Show8(),
+		"Athena":         Athena(),
 		"AthenaMainline": AthenaMainline(),
 	} {
 		if got {

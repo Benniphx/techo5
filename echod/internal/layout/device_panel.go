@@ -101,6 +101,10 @@ func Crown() bool { return false }
 // frames and photos are fetched at the Show 5's size and scaled to it.
 func Show8() bool { return false }
 
+// Athena is false: a panel is not the 2nd gen Show 8, on either kernel, so main's athena paths
+// (the front camera, Bluetooth's athena handling) never run in the app.
+func Athena() bool { return false }
+
 func getprop(name, fallback string) string {
 	out, err := exec.Command("/system/bin/getprop", name).Output()
 	if v := strings.TrimSpace(string(out)); err == nil && v != "" {
