@@ -8,7 +8,7 @@ import (
 )
 
 // The star and the strip's cross come from the icon font as well, and the ink of a symbol sits at its own
-// height above the baseline, so one lifted box cannot centre them all: measured, the cross was two pixels
+// height above the baseline, so one lifted box cannot center them all: measured, the cross was two pixels
 // high and the star one. mdiIconIn asks the face for the glyph's bounds instead, and these two keep it that
 // way. The transport marks are covered by TestTheTransportIconSitsOnItsButton.
 func TestTheStarAndCrossSitOnTheirButtons(t *testing.T) {
@@ -23,6 +23,7 @@ func TestTheStarAndCrossSitOnTheirButtons(t *testing.T) {
 	}{
 		{"close", closeX, func(rr *renderer) { rr.iconIn(closeX, "close", closeIcon, cream) }},
 		{"star", fav, func(rr *renderer) { rr.iconIn(fav, "star", transportIcon, amber) }},
+		{"star-outline", fav, func(rr *renderer) { rr.iconIn(fav, "star-outline", transportIcon, cream) }},
 	} {
 		with := testRenderer()
 		with.buttonFace(c.b, float64(c.b.Dy())/2, btnSecondary)
@@ -35,7 +36,7 @@ func TestTheStarAndCrossSitOnTheirButtons(t *testing.T) {
 		}
 		cx, cy := c.b.Min.X+c.b.Dx()/2, c.b.Min.Y+c.b.Dy()/2
 		dx, dy := (ink.Min.X+ink.Max.X)/2-cx, (ink.Min.Y+ink.Max.Y)/2-cy
-		t.Logf("%-6s button %v centre %d,%d | ink %v | off %+d,%+d", c.name, c.b, cx, cy, ink, dx, dy)
+		t.Logf("%-6s button %v center %d,%d | ink %v | off %+d,%+d", c.name, c.b, cx, cy, ink, dx, dy)
 		if !ink.In(c.b) {
 			t.Errorf("the %s icon %v is not inside its button %v", c.name, ink, c.b)
 		}

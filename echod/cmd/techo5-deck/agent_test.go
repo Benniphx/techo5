@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -145,6 +146,9 @@ func TestPrivateFolderAccepted(t *testing.T) {
 // A folder others can write to is refused: this is the rule the tests above have to satisfy with their
 // scratch folders, and without this test the rule would only exist rather than be pinned.
 func TestGroupWritableFolderRefused(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no mode bits to check (perm_windows.go)")
+	}
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o777); err != nil {
 		t.Fatal(err)

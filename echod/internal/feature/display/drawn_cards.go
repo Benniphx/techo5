@@ -326,7 +326,7 @@ func (r *paint) mdiIcon(name string, x, y, size int, c color.RGBA) {
 	r.text(face, string(g), x, y+r.s(size)-r.s(2), c)
 }
 
-// mdiIconIn draws an icon-font glyph centred in b, and centred by the ink of the glyph itself. mdiIcon
+// mdiIconIn draws an icon-font glyph centered in b, and centered by the ink of the glyph itself. mdiIcon
 // places the baseline at the bottom of its box, and the ink of a symbol sits at its own height above that
 // baseline, which differs per glyph: two pixels for the transport marks, three for the star, four for the
 // strip's cross. Asking the face for the glyph's own bounds is what puts them all on the middle.

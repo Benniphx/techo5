@@ -68,8 +68,9 @@ func TestTheTransportIconSitsOnItsButton(t *testing.T) {
 				t.Errorf("the %s icon %v is not inside %s %v", icon, mark, where, b)
 			}
 			// Sideways two is the glyph's own doing — MDI's play sits right of its em box's middle — and
-			// is left as it is. Vertically one is the whole tolerance: iconLift is what takes out the two
-			// pixels mdiIcon's baseline leaves in, and this is the test that says so.
+			// is left as it is. Vertically one is the whole tolerance: placing the glyph by its own ink
+			// (mdiIconIn) is what takes out the pixels mdiIcon's baseline leaves in, and this is the test
+			// that says so.
 			if dx < -2 || dx > 2 {
 				t.Errorf("the %s icon is %d px off the middle of %s", icon, dx, where)
 			}
