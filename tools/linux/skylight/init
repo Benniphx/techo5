@@ -22,7 +22,9 @@
 #     failing), stay up as the rescue environment on the store root itself: root shell on USB serial
 #     (ACM), RNDIS at 172.16.42.1 with DHCP for the host, dropbear only when /root/.ssh holds a key
 #     (a bench image built with mkstore.sh -k; release images carry none), Wi-Fi when a network is
-#     saved. The USB link is always there, so rescue never reboots by itself.
+#     saved. The USB link is always there, so rescue never reboots by itself, but for one case: a
+#     kernel on trial that could not hand over is put back first, and the unit reboots into the
+#     previous one (kernel_rollback).
 #
 # techo5-data holds TECHO5's state in its techo5 directory, bound to /data. Without it, /data is a
 # tmpfs.
@@ -194,6 +196,62 @@ if [ $MODE = store ]; then
 			crumb "slotctl: $(tr '\n' ' ' < /tmp/slotctl.err)"
 		fi
 	fi
+fi
+
+# --- A kernel on trial that cannot hand over to a slot. Its tries are counted by the slot's boot.sh
+# (echod's kernel.Boot), which this boot never reaches: left alone, the unit would sit in rescue on
+# the new kernel for good. So it is put back from here the way kernel.Boot does when a trial runs out:
+# prev.img, checked against prev.sha256, into recovery and read back; the kernel on trial marked bad,
+# the trial over; then a reboot into the previous kernel. One that cannot be put back is marked failed
+# (nothing more is written; kernel restore, or the installer) and the boot goes on into rescue.
+# Not when rescue was asked for: that is someone at the unit.
+KDIR=/data/techo5-linux/kernel
+kernel_rollback() {
+	[ -e /tmp/rescue-asked ] && return 1
+	set -- $($BB cat $KDIR/state 2>/dev/null)
+	[ "$1" = trial ] && [ $# -eq 5 ] || return 1
+	written=$3 length=$4 shipped=$5
+	rec=$(part recovery) || { crumb "kernel rollback: no recovery partition"; return 1; }
+	# The trial is only this kernel's while recovery holds what it wrote.
+	if [ "$($BB head -c "$length" "$rec" 2>/dev/null | $BB sha256sum | $BB cut -d' ' -f1)" != "$written" ]; then
+		crumb "kernel rollback: recovery does not hold the kernel on trial; trial dropped"
+		$BB rm -f $KDIR/state; sync
+		return 1
+	fi
+	crumb "kernel rollback: the kernel on trial ($shipped) did not reach a slot; putting the previous one back"
+	prev=$KDIR/prev.img
+	want=$($BB cut -d' ' -f1 $KDIR/prev.sha256 2>/dev/null)
+	plen=$($BB stat -c %s $prev 2>/dev/null)
+	ok=
+	if [ -z "$want" ] || [ "$($BB sha256sum < $prev 2>/dev/null | $BB cut -d' ' -f1)" != "$want" ]; then
+		crumb "kernel rollback: the kept previous kernel does not match its sum; not writing it"
+	elif [ "$($BB head -c 8 $prev)" != "ANDROID!" ]; then
+		crumb "kernel rollback: the kept previous kernel is not a boot image; not writing it"
+	elif ! $BB dd if=$prev of=$rec bs=4096 conv=notrunc,fsync 2>/dev/null; then
+		crumb "kernel rollback: writing recovery failed"
+	else
+		sync
+		{ echo 3 > /proc/sys/vm/drop_caches; } 2>/dev/null
+		if [ "$($BB head -c "$plen" "$rec" | $BB sha256sum | $BB cut -d' ' -f1)" = "$want" ]; then
+			ok=1
+		else
+			crumb "kernel rollback: recovery does not read back the previous kernel"
+		fi
+	fi
+	if [ -z "$ok" ]; then
+		crumb "KERNEL ROLLBACK FAILED: the kernel on trial stays; state failed"
+		echo "failed $shipped" > $KDIR/state.tmp && $BB mv $KDIR/state.tmp $KDIR/state
+		sync
+		return 1
+	fi
+	$BB grep -qx "$shipped" $KDIR/bad 2>/dev/null || echo "$shipped" >> $KDIR/bad
+	$BB rm -f $KDIR/state $KDIR/noroute
+	sync
+	crumb "kernel rollback: the previous kernel is back; rebooting into it"
+	return 0
+}
+if kernel_rollback; then
+	$BB reboot -f
 fi
 
 # --- Rescue environment, on the store root (read-only; /run, /tmp and /data are writable).

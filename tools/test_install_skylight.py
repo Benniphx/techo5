@@ -1144,5 +1144,98 @@ class InstallSh(Scaled):
         self.assertIn('holds lines it should not', out)
 
 
+# ------------------------------------------------------------------------------------------ /init
+
+@unittest.skipUnless(BASH, 'needs a POSIX shell (Git Bash on Windows)')
+class KernelRollback(unittest.TestCase):
+    """The store /init's kernel_rollback, taken out of the file and run on a scratch recovery and
+    kernel state directory: a kernel on trial that never reached a slot is put back from there."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        with open(os.path.join(SKY, 'init'), newline='') as f:
+            text = f.read()
+        m = re.search(r'^kernel_rollback\(\) \{\n.*?^\}\n', text, re.S | re.M)
+        self.assertIsNotNone(m)
+        self.fn = m.group(0)
+        self.kdir = os.path.join(self.tmp, 'kernel')
+        os.makedirs(self.kdir)
+        self.rec = os.path.join(self.tmp, 'recovery')
+        self.prev = b'ANDROID!' + b'previous kernel' * 300
+        self.new = b'ANDROID!' + b'kernel on trial' * 500
+        with open(self.rec, 'wb') as f:
+            f.write(self.new + bytes(4096 * 8 - len(self.new)))
+        self.put('prev.img', self.prev)
+        self.put('prev.sha256', hashlib.sha256(self.prev).hexdigest() + '\n')
+        self.shipped = 'ab' * 32
+        self.put('state', 'trial 0 %s %d %s\n' % (hashlib.sha256(self.new).hexdigest(), len(self.new), self.shipped))
+
+    def put(self, name, data):
+        with open(os.path.join(self.kdir, name), 'wb') as f:
+            f.write(data.encode() if isinstance(data, str) else data)
+
+    def get(self, name):
+        p = os.path.join(self.kdir, name)
+        if not os.path.exists(p):
+            return None
+        with open(p, 'rb') as f:
+            return f.read().decode()
+
+    def rollback(self):
+        sp = InstallSh.sh_path
+        script = ('BB=; crumb() { echo "crumb: $*"; }; part() { echo "%s"; }; dd() { command dd "$@" conv=notrunc; }\n'
+                  '%sKDIR="%s"\nkernel_rollback; echo "rc=$?"\n') % (sp(self, self.rec), self.fn, sp(self, self.kdir))
+        p = subprocess.run([BASH, '-c', script], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        out = p.stdout.decode('utf-8', 'replace')
+        return out.strip().split('rc=')[-1], out
+
+    def recovery(self):
+        with open(self.rec, 'rb') as f:
+            return f.read()
+
+    def test_put_back(self):
+        rc, out = self.rollback()
+        self.assertEqual(rc, '0', out)
+        self.assertEqual(self.recovery()[:len(self.prev)], self.prev)
+        self.assertEqual(len(self.recovery()), 4096 * 8)
+        self.assertIsNone(self.get('state'))
+        self.assertEqual(self.get('bad'), self.shipped + '\n')
+
+    def test_no_trial(self):
+        self.put('state', 'good %s %d %s\n' % (hashlib.sha256(self.new).hexdigest(), len(self.new), self.shipped))
+        rc, out = self.rollback()
+        self.assertEqual(rc, '1', out)
+        self.assertEqual(self.recovery()[:len(self.new)], self.new)
+
+    def test_recovery_not_the_trial(self):
+        with open(self.rec, 'r+b') as f:
+            f.write(b'ANDROID?')
+        rc, out = self.rollback()
+        self.assertEqual(rc, '1', out)
+        self.assertIn('trial dropped', out)
+        self.assertIsNone(self.get('state'))
+        self.assertIsNone(self.get('bad'))
+
+    def test_prev_damaged(self):
+        self.put('prev.img', self.prev[:-1] + b'x')
+        before = self.recovery()
+        rc, out = self.rollback()
+        self.assertEqual(rc, '1', out)
+        self.assertIn('does not match its sum', out)
+        self.assertEqual(self.recovery(), before)
+        self.assertEqual(self.get('state'), 'failed %s\n' % self.shipped)
+
+    def test_prev_not_a_boot_image(self):
+        prev = b'NOTABOOT' + self.prev[8:]
+        self.put('prev.img', prev)
+        self.put('prev.sha256', hashlib.sha256(prev).hexdigest() + '\n')
+        before = self.recovery()
+        rc, out = self.rollback()
+        self.assertEqual(rc, '1', out)
+        self.assertEqual(self.recovery(), before)
+        self.assertEqual(self.get('state'), 'failed %s\n' % self.shipped)
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)
