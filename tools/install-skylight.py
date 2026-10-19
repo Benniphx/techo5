@@ -670,11 +670,17 @@ def write_recovery(adb, w, disk, layout, image, want):
 
 # ------------------------------------------------------------------------------------------ after
 
-def watch(serial, exe, adb, minutes=15, sleep=time.sleep, clock=time.time, devices=adb_devices,
-          consoles=list_consoles):
+def watch(serial, exe, adb, minutes=15, sleep=time.sleep, clock=time.time, devices=None, consoles=None,
+          known=()):
     """After `adb reboot recovery`: the unit leaves adb, installs, and either starts TECHO5 (its USB
     console appears) or comes back to Android (the install stopped before writing). Returns 'techo5',
-    'android' or 'unknown'; a console from the installer itself means it stopped partway."""
+    'android' or 'unknown'; a console from the installer itself means it stopped partway.
+
+    Every TECHO5 unit has the same USB ids, so only consoles that were not there before the reboot
+    (known, as consoles() listed them then) count: another unit on this computer is not this one."""
+    devices = devices or adb_devices
+    consoles = consoles or list_consoles
+    known = set(known)
     start = clock()
     gone, said = False, start
     while clock() - start < minutes * 60:
@@ -683,7 +689,7 @@ def watch(serial, exe, adb, minutes=15, sleep=time.sleep, clock=time.time, devic
             gone = True
         elif gone and states[serial] == 'device':
             return 'android'
-        ports = consoles(CONSOLE_TECHO5)
+        ports = [p for p in consoles(CONSOLE_TECHO5) if p not in known]
         if any(usb.lower() == 'techo5-installer' for _, usb in ports):
             fail('the installer stopped partway; it says why on the unit\'s screen, and its USB serial console\n'
                  '   is up (%s). Leave the unit plugged in and see "If the install stops" in\n'
@@ -956,12 +962,14 @@ def main(argv=None):
 
     # ------------------------------------------------------------------------------------ 7. install
     step('install')
+    # The TECHO5 consoles already here (another unit), before this one could add its own.
+    known = [] if a.no_watch else list_consoles(CONSOLE_TECHO5)
     adb.reboot('recovery')
     note('the unit restarts into the installer; its screen says what it is doing. Do not unplug it.')
     if a.no_watch:
         print('\nThe installer runs on the unit now. When it is done the unit starts TECHO5 by itself.')
     else:
-        how = watch(a.serial, a.adb, adb)
+        how = watch(a.serial, a.adb, adb, known=known)
         if how == 'android':
             status, log = came_back(adb)
             fail('the unit came back to Android: the installer stopped before writing anything (status: %s).\n'

@@ -923,6 +923,53 @@ class Watch(unittest.TestCase):
         with redirect_stdout(io.StringIO()):
             self.assertEqual(inst.watch('S', 'adb', None, minutes=1, **t), 'unknown')
 
+    def test_other_unit_console(self):
+        # Another TECHO5 unit on this computer: its console was there before the reboot.
+        other = ('COM3', 'techo5')
+        t = self.timeline([([('S', 'device', '')], [other]), ([], [other])])
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(inst.watch('S', 'adb', None, minutes=1, known=[other], **t), 'unknown')
+        t = self.timeline([([('S', 'device', '')], [other]), ([], [other]), ([], [other, ('COM5', 'techo5')])])
+        with redirect_stdout(io.StringIO()):
+            self.assertEqual(inst.watch('S', 'adb', None, known=[other], **t), 'techo5')
+
+
+class WatchAfterInstall(Scaled):
+    """The whole run, watched: the consoles are listed before `adb reboot recovery`."""
+
+    def run_watched(self, unit, appears):
+        other = ('COM3', 'techo5')
+        saved = (inst.list_consoles, inst.adb_devices, inst.watch)
+        self.addCleanup(lambda: setattr(inst, 'list_consoles', saved[0]) or setattr(inst, 'adb_devices', saved[1])
+                        or setattr(inst, 'watch', saved[2]))
+        clock = {'now': 0}
+
+        def consoles(ids):
+            return [other] + ([('COM5', 'techo5')] if appears and unit.rebooted and clock['now'] >= 20 else [])
+
+        def sleep(n):
+            clock['now'] += n
+        inst.SkyAdb = lambda serial, exe='adb': unit
+        inst.need = lambda *a, **k: None
+        inst.list_consoles = consoles
+        inst.adb_devices = lambda exe: [] if unit.rebooted else [('SIM-1', 'device', '')]
+        real = saved[2]
+        inst.watch = lambda *a, **k: real(*a, minutes=1, sleep=sleep, clock=lambda: clock['now'], **k)
+        argv = ['--serial', 'SIM-1', '--backups', self.backups, '--work', self.work, '--force', '--name', 'Kitchen']
+        out = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(io.StringIO()):
+            inst.main(argv + self.images())
+        return out.getvalue()
+
+    def test_other_unit_is_not_this_one(self):
+        out = self.run_watched(FakeSkylight(), appears=False)
+        self.assertNotIn('the install is done', out)
+        self.assertIn('no word from the unit', out)
+
+    def test_this_unit(self):
+        out = self.run_watched(FakeSkylight(), appears=True)
+        self.assertIn('the install is done', out)
+
 
 # ------------------------------------------------------------------------------------------ install.sh
 
