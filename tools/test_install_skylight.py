@@ -1126,10 +1126,10 @@ class InstallSh(Scaled):
             return p
         return subprocess.run([BASH, '-c', 'cygpath -u "$1"', '_', p], stdout=subprocess.PIPE).stdout.decode().strip()
 
-    def install_sh(self):
+    def install_sh(self, attempt=1):
         r = self.sh_path(self.root)
-        cmd = 'export INSTALL_ROOT="%s"; export PATH="%s/bin:$PATH"; chmod +x "%s"/bin/*; sh "%s" "%s/set"' % (
-            r, r, r, self.sh_path(INSTALL_SH), r)
+        cmd = ('export INSTALL_ROOT="%s" INSTALL_ATTEMPT=%d; export PATH="%s/bin:$PATH"; chmod +x "%s"/bin/*; '
+               'sh "%s" "%s/set"') % (r, attempt, r, r, self.sh_path(INSTALL_SH), r)
         p = subprocess.run([BASH, '-c', cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         return p.returncode, p.stdout.decode('utf-8', 'replace')
 
@@ -1190,6 +1190,34 @@ class InstallSh(Scaled):
         with open(self.disk, 'r+b') as f:
             f.seek(2 * S + 100)
             f.write(b'\x01')
+        before = self.read(self.disk)
+        rc, out = self.install_sh()
+        self.assertEqual(rc, 2, out)
+        self.assertIn('neither the stock one', out)
+        self.assertEqual(self.read(self.disk), before)
+        self.assertEqual(self.read(self.misc), self.misc_before)
+
+    def tear_primary(self):
+        # Power lost while the new primary table went down: its header new, the entries stock.
+        new = self.unit.files[inst.STAGE + '/gpt-primary.bin']
+        with open(self.disk, 'r+b') as f:
+            f.seek(S)
+            f.write(new[:S])
+
+    def test_torn_primary_on_the_second_run(self):
+        rc, out = self.install_sh()
+        self.assertEqual(rc, 0, out)
+        done = self.read(self.disk)
+        with open(self.disk, 'wb') as f:
+            f.write(self.unit.before)
+        self.tear_primary()
+        rc, out = self.install_sh(attempt=2)
+        self.assertEqual(rc, 0, out)
+        self.assertIn('cut off writing it', out)
+        self.assertEqual(self.read(self.disk), done)
+
+    def test_torn_primary_on_a_first_run_writes_nothing(self):
+        self.tear_primary()
         before = self.read(self.disk)
         rc, out = self.install_sh()
         self.assertEqual(rc, 2, out)

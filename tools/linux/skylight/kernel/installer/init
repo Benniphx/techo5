@@ -101,7 +101,7 @@ sync
 umount /cache || stay "Android's cache partition would not unmount"
 
 show "Installing TECHO5. Do not unplug the unit."
-sh /installer/install.sh /tmp/set > /tmp/install.log 2>&1
+INSTALL_ATTEMPT=$attempt sh /installer/install.sh /tmp/set > /tmp/install.log 2>&1
 rc=$?
 last=$(grep 'install: ' /tmp/install.log | tail -1 | sed 's/^install: //')
 

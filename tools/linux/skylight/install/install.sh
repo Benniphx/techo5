@@ -25,7 +25,11 @@
 # stock U-Boot starts recovery (TECHO5) on every boot. Nothing outside these ranges is written.
 #
 # Run again on the same set, it writes the same bytes: a table that is already the new one is taken
-# as an earlier, interrupted run of this set.
+# as an earlier, interrupted run of this set. So is a primary table that is neither (a write of it cut
+# off by a power loss) with the backup table still the stock one, but only when the installer says an
+# earlier run of this set never finished (INSTALL_ATTEMPT=2): then nothing else wrote it, and stopping
+# with "nothing written" would send the unit back to an Android whose table this set tore. On a first
+# run the same table stops it before writing.
 #
 # Exit status: 0 done; 2 stopped before writing anything; 1 stopped after writing began.
 #
@@ -100,6 +104,8 @@ if [ "$p" = "$STOCK_PRIMARY_SHA" ] && [ "$b" = "$STOCK_BACKUP_SHA" ]; then
 	say "the partition table is the stock one install-skylight.py read"
 elif [ "$p" = "$NEW_PRIMARY_SHA" ] || [ "$b" = "$NEW_BACKUP_SHA" ]; then
 	say "the partition table is already (partly) the new one: an earlier run of this set; going on"
+elif [ "$b" = "$STOCK_BACKUP_SHA" ] && [ "${INSTALL_ATTEMPT:-1}" = 2 ]; then
+	say "the primary partition table is torn and the backup one is stock: an earlier run of this set was cut off writing it; going on"
 else
 	stop "the partition table is neither the stock one install-skylight.py read nor the new one"
 fi
