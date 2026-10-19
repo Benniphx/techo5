@@ -73,11 +73,6 @@ func open(ctx context.Context, acct Account, incoming func(*diago.DialogServerSe
 		return nil, err
 	}
 	l.ua = ua
-	if checkCallSource {
-		// The provider's side of the registration is where its calls come from, so its address is
-		// remembered from each registration it accepts.
-		ua.TransportLayer().OnMessage(l.prov.registered)
-	}
 
 	tr := diago.Transport{Transport: l.tran, BindHost: host}
 	if !acct.Plain {
@@ -176,8 +171,9 @@ const providerLookup = 5 * time.Second
 
 // provider is where calls may come from: the addresses the server's name resolves to, looked up when
 // the call arrives so a provider that moves is still recognized, and every address it has been seen at
-// before, in earlier lookups and as the far side of a registration it accepted. When the lookup fails
-// those are what a call is checked against, so a broken name server does not refuse the provider.
+// before, in earlier lookups. When the lookup fails those are what a call is checked against, so a
+// broken name server does not refuse the provider. A response's source is never taken for the
+// provider's: anything on the home network can send the listener a REGISTER's 200 it never asked for.
 type provider struct {
 	server string
 	lookup func(ctx context.Context, host string) ([]net.IPAddr, error)
@@ -222,27 +218,6 @@ func (p *provider) from(source string) bool {
 		p.known[a.IP.String()] = true
 	}
 	return p.known[ip.String()]
-}
-
-// registered remembers the far side of a registration the provider accepted. It is shown every
-// message the user agent receives, so it keeps to a REGISTER's 200.
-func (p *provider) registered(msg sip.Message) {
-	res, ok := msg.(*sip.Response)
-	if !ok || res.StatusCode != sip.StatusOK {
-		return
-	}
-	if cseq := res.CSeq(); cseq == nil || cseq.MethodName != sip.REGISTER {
-		return
-	}
-	host, _, err := net.SplitHostPort(res.Source())
-	if err != nil {
-		return
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		p.mu.Lock()
-		p.known[ip.String()] = true
-		p.mu.Unlock()
-	}
 }
 
 // fromProvider is provider.from for a provider not seen before.

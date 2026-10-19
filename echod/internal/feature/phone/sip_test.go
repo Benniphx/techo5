@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net"
 	"testing"
-
-	"github.com/emiago/sipgo/sip"
 )
 
 // A call is rung for only when it came from the provider: the listener is on the home network, and on
@@ -35,9 +33,9 @@ func TestOnlyTheProviderRings(t *testing.T) {
 	}
 }
 
-// The provider's addresses are remembered, from each lookup and from the registrations it accepted,
-// and a call is checked against them when the lookup fails: a name server that is down when the call
-// arrives does not refuse the provider's call.
+// The provider's addresses are remembered from each lookup, and a call is checked against them when
+// the lookup fails: a name server that is down when the call arrives does not refuse the provider's
+// call.
 func TestTheProviderIsRememberedWhenTheLookupFails(t *testing.T) {
 	p := newProvider("sip.provider.example")
 	answer := []net.IPAddr{{IP: net.ParseIP("192.0.2.10")}}
@@ -52,15 +50,6 @@ func TestTheProviderIsRememberedWhenTheLookupFails(t *testing.T) {
 		t.Error("the provider moved, and a call from where it was looked up before was refused")
 	}
 
-	reg := sip.NewResponse(sip.StatusOK, "OK")
-	reg.AppendHeader(&sip.CSeqHeader{SeqNo: 2, MethodName: sip.REGISTER})
-	reg.SetSource("198.51.100.4:5061")
-	p.registered(reg)
-	other := sip.NewResponse(sip.StatusOK, "OK")
-	other.AppendHeader(&sip.CSeqHeader{SeqNo: 3, MethodName: sip.OPTIONS})
-	other.SetSource("203.0.113.9:5061")
-	p.registered(other)
-
 	answer, down = nil, errors.New("no name server")
 	for _, c := range []struct {
 		source string
@@ -68,8 +57,6 @@ func TestTheProviderIsRememberedWhenTheLookupFails(t *testing.T) {
 	}{
 		{"192.0.2.10:5061", true},
 		{"192.0.2.11:5060", true},
-		{"198.51.100.4:40000", true}, // the registration's far side
-		{"203.0.113.9:5061", false},  // answered something other than a REGISTER
 		{"192.0.2.99:5061", false},
 	} {
 		if got := p.from(c.source); got != c.want {
