@@ -74,6 +74,9 @@ jobs:
           go test ./...
           go test -tags dot ./...
           go test -tags spot ./...
+          # The panel is built on the Show's code, so a change on main that breaks it shows here, not
+          # only when a panel tag is pushed.
+          go test -tags panel ./...
           # The deck agent's Windows and macOS code doesn't build here otherwise.
           GOOS=windows go vet ./cmd/techo5-deck
           GOOS=darwin go vet ./cmd/techo5-deck
@@ -138,6 +141,8 @@ jobs:
   # app's tools/build-apk.sh builds it (tags, -trimpath, -s -w, API 26, the version stamp), so a library
   # built from the same commit with the same Go and NDK can be compared with these. A plain linux build
   # is not the same thing: Android's app seccomp filter kills it the first time it starts a process.
+  # Go and the NDK are pinned to the exact versions build-apk.sh insists on, so the two builds match
+  # byte for byte; move them together.
   panel:
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'panel-') }}
     runs-on: ubuntu-latest
@@ -150,7 +155,7 @@ jobs:
 
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
-          go-version: '1.26'
+          go-version: '1.26.8'
           cache-dependency-path: echod/go.sum
 
       - name: Version info
