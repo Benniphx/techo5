@@ -220,14 +220,14 @@ func TestAndroidLevelKnowsARaise(t *testing.T) {
 	p.bellStep.Store(25)
 	p.ringing.Store(true)
 	p.fill(make([]byte, period*Channels*2))
-	if told, raised := AndroidLevel(); raised || told != 3 {
+	if told, _, raised := AndroidLevel(); raised || told != 3 {
 		t.Errorf("before the raise reached Android: told %d, raised %v; want 3, not raised", told, raised)
 	}
 	p.Ringing(false, 25)
 	p.fill(make([]byte, period*Channels*2))
 
 	p, buf := ringOver(t, heard)
-	if told, raised := AndroidLevel(); !raised || told != 25 {
+	if told, _, raised := AndroidLevel(); !raised || told != 25 {
 		t.Errorf("ringing: told %d, raised %v; want 25, raised", told, raised)
 	}
 	p.Ringing(false, 25)
@@ -235,7 +235,21 @@ func TestAndroidLevelKnowsARaise(t *testing.T) {
 	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
 		t.Fatalf("after the ring Android was told %q, want %q", last(heard()), want)
 	}
-	if told, raised := AndroidLevel(); raised || told != 3 {
+	if told, _, raised := AndroidLevel(); raised || told != 3 {
 		t.Errorf("after the ring: told %d, raised %v; want 3, not raised", told, raised)
+	}
+}
+
+// AndroidLevel says when the level it gives was sent, so a report from Android that crossed it on the
+// way can be told apart from a press made after it (media/volume_panel.go).
+func TestAndroidLevelSaysWhenItWasSent(t *testing.T) {
+	heard := androidHears(t)
+	before := time.Now()
+	(&Player{}).SetVolume(9)
+	if want := fmt.Sprintf("volume 9 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Fatalf("Android was told %q, want %q", last(heard()), want)
+	}
+	if told, at, _ := AndroidLevel(); told != 9 || at.Before(before) || at.After(time.Now()) {
+		t.Errorf("told %d at %v, want 9 sent after %v", told, at, before)
 	}
 }

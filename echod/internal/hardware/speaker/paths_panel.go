@@ -120,12 +120,14 @@ var androidLag = 360 * time.Millisecond
 var sendToApp = panelctl.Send
 
 // The level changes for Android in the order they were made: a late one is not sent over a newer one.
-// toldStep is the last step sent, the level Android is at as far as the daemon knows.
+// toldStep is the last step sent, the level Android is at as far as the daemon knows, and toldAt when
+// it was sent.
 var (
 	levelMu      sync.Mutex
 	levelSeq     uint64
 	levelSentSeq uint64
 	toldStep     = VolumeSteps
+	toldAt       time.Time
 )
 
 // sendMu keeps the level lines to the app in the order they are sent. It is held over the write and
@@ -153,7 +155,7 @@ func tellAndroid(step int, wait time.Duration) {
 			levelMu.Unlock()
 			return
 		}
-		levelSentSeq, toldStep = seq, step
+		levelSentSeq, toldStep, toldAt = seq, step, time.Now()
 		levelMu.Unlock()
 		sendToApp(fmt.Sprintf("volume %d %d", step, VolumeSteps))
 	}
@@ -202,16 +204,18 @@ func (p *Player) followRing(on bool, step int) {
 	tellAndroid(d, wait)
 }
 
-// AndroidLevel is the step Android was last told, and whether a ring raised it above the music. A
-// level Android reports while raised is the ring's level moved by a press of the tablet's buttons, so
-// the press is applied to the music by as much as it moved Android (media/volume_panel.go).
-func AndroidLevel() (told int, raised bool) {
+// AndroidLevel is the step Android was last told, when it was sent, and whether a ring raised it
+// above the music. A level Android reports while raised is the ring's level moved by a press of the
+// tablet's buttons, so the press is applied to the music by as much as it moved Android; one reported
+// just after a new level was sent may be the app's word on the level before, and is not taken
+// (media/volume_panel.go).
+func AndroidLevel() (told int, at time.Time, raised bool) {
 	stepMu.Lock()
 	defer stepMu.Unlock()
 	levelMu.Lock()
-	told = toldStep
+	told, at = toldStep, toldAt
 	levelMu.Unlock()
-	return told, told > max(int(mediaStep.Load()), deviceFloor)
+	return told, at, told > max(int(mediaStep.Load()), deviceFloor)
 }
 
 // MediaService is empty: nothing has to be stopped to play.

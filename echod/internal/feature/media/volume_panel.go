@@ -4,6 +4,7 @@ package media
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/panelctl"
@@ -20,7 +21,10 @@ func init() {
 		if err != nil {
 			return
 		}
-		told, raised := speaker.AndroidLevel()
+		told, at, raised := speaker.AndroidLevel()
+		if crossed(at, time.Now()) {
+			return
+		}
 		if step = fromAndroid(Get().Volume(), step, told, raised); step != Get().Volume() {
 			Get().Set(step)
 		}
@@ -36,4 +40,16 @@ func fromAndroid(music, reported, told int, raised bool) int {
 		return reported
 	}
 	return max(0, min(music+reported-told, VolumeSteps))
+}
+
+// androidSettle is how long after the daemon sent Android a new level a level Android reports is not
+// taken. The app works a press out against the level it had; one made just as a ring's raise or drop
+// went out is reported against the level before, and taken against the new one it would move the
+// music to the wrong place (music at 3, a press up reported as 4 just as a raise to 25 goes out: 4
+// from a ring at 25 is music at 0). Short enough that a press after it is never missed.
+const androidSettle = 150 * time.Millisecond
+
+// crossed is whether a level Android reports at now may have crossed the one the daemon sent at sent.
+func crossed(sent, now time.Time) bool {
+	return !sent.IsZero() && now.Sub(sent) < androidSettle
 }

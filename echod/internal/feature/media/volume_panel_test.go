@@ -2,7 +2,10 @@
 
 package media
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // A press of the tablet's buttons while a ring has Android raised moves the music by the press, not
 // to the ring's level; with nothing raised Android's level is the music's.
@@ -24,5 +27,29 @@ func TestAPressDuringARingMovesTheMusicByThePress(t *testing.T) {
 			t.Errorf("music at %d, Android told %d (raised %v) and reporting %d: music to %d, want %d",
 				c.music, c.told, c.raised, c.reported, got, c.want)
 		}
+	}
+}
+
+// A level Android reports just after the daemon sent it a new one is not taken: it may have been
+// worked out against the level before (music at 3 reported as 4 just as a raise to 25 goes out would
+// put the music at 0). One reported once Android has had a moment is.
+func TestAReportCrossingANewLevelIsNotTaken(t *testing.T) {
+	sent := time.Unix(1000, 0)
+	for _, c := range []struct {
+		after time.Duration
+		want  bool
+	}{
+		{0, true},
+		{10 * time.Millisecond, true},
+		{androidSettle - time.Millisecond, true},
+		{androidSettle, false},
+		{time.Second, false},
+	} {
+		if got := crossed(sent, sent.Add(c.after)); got != c.want {
+			t.Errorf("a report %v after a level was sent: crossed %v, want %v", c.after, got, c.want)
+		}
+	}
+	if crossed(time.Time{}, sent) {
+		t.Error("with no level sent yet, a report was taken for one that crossed it")
 	}
 }
