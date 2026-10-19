@@ -5,6 +5,7 @@ package media
 import (
 	"strconv"
 
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/panelctl"
 )
 
@@ -19,8 +20,20 @@ func init() {
 		if err != nil {
 			return
 		}
-		if step != Get().Volume() {
+		told, raised := speaker.AndroidLevel()
+		if step = fromAndroid(Get().Volume(), step, told, raised); step != Get().Volume() {
 			Get().Set(step)
 		}
 	})
+}
+
+// fromAndroid is the media step a level Android reports stands for. Android reports where its level
+// is, and while a ring raised it above the music (raised, to told) that is the ring's level, so a press
+// moves the music from where it was by as much as it moved Android: music at 3 under a ring at 25,
+// a press down is 24 from Android and 2 for the music.
+func fromAndroid(music, reported, told int, raised bool) int {
+	if !raised {
+		return reported
+	}
+	return max(0, min(music+reported-told, VolumeSteps))
 }

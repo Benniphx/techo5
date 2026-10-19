@@ -120,10 +120,12 @@ var androidLag = 360 * time.Millisecond
 var sendToApp = panelctl.Send
 
 // The level changes for Android in the order they were made: a late one is not sent over a newer one.
+// toldStep is the last step sent, the level Android is at as far as the daemon knows.
 var (
 	levelMu      sync.Mutex
 	levelSeq     uint64
 	levelSentSeq uint64
+	toldStep     = VolumeSteps
 )
 
 // stepMu keeps deviceStep, and the order its changes are sent to Android in, to one writer at a time:
@@ -142,7 +144,7 @@ func tellAndroid(step int, wait time.Duration) {
 		if seq <= levelSentSeq {
 			return
 		}
-		levelSentSeq = seq
+		levelSentSeq, toldStep = seq, step
 		sendToApp(fmt.Sprintf("volume %d %d", step, VolumeSteps))
 	}
 	if wait <= 0 {
@@ -191,6 +193,18 @@ func (p *Player) followRing(on bool, step int) {
 		wait = 0
 	}
 	tellAndroid(d, wait)
+}
+
+// AndroidLevel is the step Android was last told, and whether a ring raised it above the music. A
+// level Android reports while raised is the ring's level moved by a press of the tablet's buttons, so
+// the press is applied to the music by as much as it moved Android (media/volume_panel.go).
+func AndroidLevel() (told int, raised bool) {
+	stepMu.Lock()
+	defer stepMu.Unlock()
+	levelMu.Lock()
+	told = toldStep
+	levelMu.Unlock()
+	return told, told > max(int(mediaStep.Load()), deviceFloor)
 }
 
 // MediaService is empty: nothing has to be stopped to play.

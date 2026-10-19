@@ -162,3 +162,31 @@ func TestARingEndReachesAndroidAtOnce(t *testing.T) {
 		t.Errorf("as the ring ended Android was told %q, want %q at once", last(heard()), want)
 	}
 }
+
+// While a ring has Android raised above the music, AndroidLevel says so, and to what: a press of the
+// tablet's buttons then is worked out against it (media/volume_panel.go). Before the raise reaches
+// Android, and once the ring ends, Android is at the music's level.
+func TestAndroidLevelKnowsARaise(t *testing.T) {
+	heard := androidHears(t)
+	androidLag = 60 * time.Millisecond
+	p := &Player{}
+	p.SetVolume(3)
+	p.bellStep.Store(25)
+	p.ringing.Store(true)
+	p.fill(make([]byte, period*Channels*2))
+	if told, raised := AndroidLevel(); raised || told != 3 {
+		t.Errorf("before the raise reached Android: told %d, raised %v; want 3, not raised", told, raised)
+	}
+	p.Ringing(false, 25)
+	p.fill(make([]byte, period*Channels*2))
+
+	p, buf := ringOver(t, heard)
+	if told, raised := AndroidLevel(); !raised || told != 25 {
+		t.Errorf("ringing: told %d, raised %v; want 25, raised", told, raised)
+	}
+	p.Ringing(false, 25)
+	p.fill(buf)
+	if told, raised := AndroidLevel(); raised || told != 3 {
+		t.Errorf("after the ring: told %d, raised %v; want 3, not raised", told, raised)
+	}
+}
