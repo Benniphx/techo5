@@ -68,7 +68,7 @@ func TestHomeAssistantsNameIsWritten(t *testing.T) {
 		if fail.Load() == 1 {
 			return nil, errors.New("no answer")
 		}
-		return net.IPv4(192, 168, 1, 20), nil
+		return net.IPv4(192, 0, 2, 20), nil
 	})
 	// Every turn asks again, so the unanswered turns below come quickly.
 	was := every
@@ -77,7 +77,7 @@ func TestHomeAssistantsNameIsWritten(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { (&Feature{}).Run(ctx); close(done) }()
-	waitFor(t, file, "192.168.1.20\thomeassistant.local")
+	waitFor(t, file, "192.0.2.20\thomeassistant.local")
 
 	// Unanswered from now on, and asked again: the address stays.
 	fail.Store(1)
@@ -85,7 +85,7 @@ func TestHomeAssistantsNameIsWritten(t *testing.T) {
 	for calls.Load() < at+3 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	waitFor(t, file, "192.168.1.20\thomeassistant.local")
+	waitFor(t, file, "192.0.2.20\thomeassistant.local")
 	cancel()
 	<-done
 }
@@ -95,7 +95,7 @@ func TestHomeAssistantsNameIsWritten(t *testing.T) {
 func TestNothingToDo(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	hass.Path = filepath.Join(t.TempDir(), "hass.json")
-	if err := hass.Get().Set("http://192.168.1.20:8123", "token"); err != nil {
+	if err := hass.Get().Set("http://192.0.2.20:8123", "token"); err != nil {
 		t.Fatal(err)
 	}
 	if len(names()) != 0 {

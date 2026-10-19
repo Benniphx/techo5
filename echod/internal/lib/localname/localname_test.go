@@ -14,7 +14,7 @@ import (
 func TestIsLocal(t *testing.T) {
 	for host, want := range map[string]bool{
 		"homeassistant.local": true, "HomeAssistant.LOCAL.": true, "ha.lan": false,
-		"192.168.1.20": false, "local": false, "": false, "my.local.example.com": false,
+		"192.0.2.20": false, "local": false, "": false, "my.local.example.com": false,
 	} {
 		if IsLocal(host) != want {
 			t.Errorf("IsLocal(%q) = %v", host, !want)
@@ -68,28 +68,28 @@ func answer(t *testing.T, name string, ip net.IP, skip int) (asked func() int) {
 }
 
 func TestResolveFindsTheName(t *testing.T) {
-	answer(t, "homeassistant.local", net.IPv4(192, 168, 1, 20), 0)
+	answer(t, "homeassistant.local", net.IPv4(192, 0, 2, 20), 0)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	ip, err := Resolve(ctx, "HomeAssistant.local")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ip.Equal(net.IPv4(192, 168, 1, 20)) {
+	if !ip.Equal(net.IPv4(192, 0, 2, 20)) {
 		t.Errorf("got %v", ip)
 	}
 }
 
 // A question lost is asked again within the wait.
 func TestResolveAsksAgain(t *testing.T) {
-	asked := answer(t, "homeassistant.local", net.IPv4(192, 168, 1, 20), 1)
+	asked := answer(t, "homeassistant.local", net.IPv4(192, 0, 2, 20), 1)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	ip, err := Resolve(ctx, "homeassistant.local")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !ip.Equal(net.IPv4(192, 168, 1, 20)) || asked() != 2 {
+	if !ip.Equal(net.IPv4(192, 0, 2, 20)) || asked() != 2 {
 		t.Errorf("got %v after %d questions", ip, asked())
 	}
 }
@@ -105,14 +105,14 @@ func TestResolveGivesUp(t *testing.T) {
 
 func TestWriteHosts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hosts")
-	if err := WriteHosts(path, map[string]net.IP{"music.local": net.IPv4(192, 168, 1, 30), "HomeAssistant.local": net.IPv4(192, 168, 1, 20)}); err != nil {
+	if err := WriteHosts(path, map[string]net.IP{"music.local": net.IPv4(192, 0, 2, 30), "HomeAssistant.local": net.IPv4(192, 0, 2, 20)}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := base + "192.168.1.20\thomeassistant.local\n192.168.1.30\tmusic.local\n"
+	want := base + "192.0.2.20\thomeassistant.local\n192.0.2.30\tmusic.local\n"
 	if string(b) != want {
 		t.Errorf("hosts file:\n%s\nwant:\n%s", b, want)
 	}
