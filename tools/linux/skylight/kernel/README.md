@@ -36,8 +36,9 @@ saying where its source is, and `reboot-normal`, which is built without a C libr
 - `pack-sky.py`: the boot image. Its header ID is checked against the stock image's algorithm.
 - `check-boot.py`, `check-source.py`: the checks above.
 - `mklogo.py`: the kernel's boot logo and U-Boot's `logo.bmp`, from `logo/TECHO5_logo.png`.
-- `bench/`: the bench initramfs (a root shell on USB serial, `BENCH=1`), and `reboot-normal.c`, which
-  restarts with the boot mode register saying normal (the bench and installer images use it).
+- `reboot-normal.c`: restarts with the boot mode register saying normal (the bench and installer
+  images use it, so it ships in the release's installer image).
+- `bench/`: the bench initramfs (a root shell on USB serial, `BENCH=1`).
 - `installer/`: the installer image's `/init` (`INSTALLER=1`): it runs `../install/install.sh` on the
   set `tools/install-skylight.py` stages on `/cache`, then restarts into TECHO5, or into Android when
   it stopped before writing anything.

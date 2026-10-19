@@ -95,7 +95,7 @@ busybox_in() { # busybox_in ROOT
 	  BusyBox, GPL-2.0: Alpine Linux's busybox-static package (armv7), unmodified.
 	  Source: https://busybox.net/downloads/busybox-$bv.tar.bz2 with Alpine's build files and
 	  patches, https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/busybox
-	bin/reboot-normal: TECHO5's tools/linux/skylight/kernel/bench/reboot-normal.c, MIT, built
+	bin/reboot-normal: TECHO5's tools/linux/skylight/kernel/reboot-normal.c, MIT, built
 	  without a C library.
 	The kernel: linux-$KVER-techo5-skylight-source.tar.xz, published with the release.
 	EOF
@@ -104,7 +104,7 @@ busybox_in() { # busybox_in ROOT
 # reboot-normal: built without a C library, so nothing of one goes into an image.
 reboot_normal() { # reboot_normal OUT
 	${CROSS_COMPILE}gcc -static -nostdlib -ffreestanding -fno-stack-protector -fno-pie -no-pie -O2 -s \
-		-Wl,--build-id=none -o "$1" "$HERE/bench/reboot-normal.c"
+		-Wl,--build-id=none -o "$1" "$HERE/reboot-normal.c"
 }
 
 # 1. Kernel source

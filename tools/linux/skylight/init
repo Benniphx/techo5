@@ -4,8 +4,8 @@
 # (tools/linux/athena/init) with the Skylight's storage under it.
 #
 # The Skylight keeps its stock bootloader. Android's userdata area is split in two GPT partitions,
-# techo5-store and techo5-data; the boot image (kernel, device tree, Wi-Fi firmware in its ramdisk)
-# is in the recovery partition, and a "boot-recovery" command at the start of misc makes the stock
+# techo5-store and techo5-data; the boot image (kernel and device tree, with an empty ramdisk) is in
+# the recovery partition, and a "boot-recovery" command at the start of misc makes the stock
 # U-Boot start recovery on every boot, which is TECHO5. This file never clears that command: it is
 # what keeps the unit on TECHO5. Clearing it (the first 2048 bytes of misc back to zeros) boots stock
 # Android again, which then finds no userdata and starts fresh.
@@ -298,9 +298,9 @@ fi
 snapshot
 crumb "rescue: USB up ($(ip -4 addr 2>/dev/null | grep -c 'inet ') addresses)"
 
-# Wi-Fi in the background: brcmfmac is built into the kernel and its firmware comes from the boot
-# image's ramdisk, so wlan0 is there already; a network saved in $LOGDIR/wpa_supplicant.conf, or one
-# written into it later (t5_wifi_watch).
+# Wi-Fi in the background: brcmfmac is built into the kernel and loads the unit's own firmware, which
+# the installer put in the store's /lib/firmware/brcm, so wlan0 is there already; a network saved in
+# $LOGDIR/wpa_supplicant.conf, or one written into it later (t5_wifi_watch).
 (
 	t5_wifi_conf $LOGDIR/wpa_supplicant.conf
 	if t5_wifi_up builtin $LOGDIR/wpa_supplicant.conf; then
