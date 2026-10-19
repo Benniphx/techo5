@@ -151,9 +151,19 @@ TECHO5's other system slot and goes back to the one before if the new one doesn'
 
 A release can bring a new kernel too. Once the new system has run for a few minutes with Wi-Fi, the
 screen and the sound card working, the kernel goes into `recovery`, on trial for three starts. If it
-never settles, the kernel before it goes back by itself. A kernel that doesn't get that far (the unit
-stays dark, or restarts over and over) can't be caught that way. The way back from one is Loader mode
-(below): write the boot image of the release before it into `recovery`, from a computer:
+never settles, the kernel before it goes back by itself, and so does one that starts but can't hand
+over to the system.
+
+Two cases can't be caught that way, because `recovery` is the only partition the unit starts TECHO5
+from, and the new kernel is written over the old one there:
+
+- **Power lost while the kernel is written.** The write takes a second or two. Cut in that window,
+  `recovery` holds part of each kernel and the unit stays dark.
+- **A kernel that panics before TECHO5 starts.** The unit restarts by itself, over and over,
+  and never gets as far as counting its tries.
+
+The way back from either is Loader mode (below): write the boot image of the release before it into
+`recovery`, from a computer:
 
 ```
 rkdeveloptool wl <recovery> techo5-boot-skylight-<version>.img

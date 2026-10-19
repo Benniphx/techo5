@@ -20,8 +20,13 @@
 // starts the recovery partition (misc says boot-recovery), and that is where TECHO5's kernel lives.
 // Nothing of the unit's own is in it, so the slot's image is written as it is, and only over an image
 // that is TECHO5's Skylight kernel already: never over Android's recovery, never as the installer
-// image. Its way back from a kernel that never reaches boot.sh is Loader mode
-// (docs/install-skylight.md).
+// image. A kernel on trial that reaches the store's /init but cannot hand over to a slot is put back
+// by that /init (tools/linux/skylight/init). Recovery is the only partition the stock U-Boot starts
+// TECHO5 from, and the trial kernel is written over the previous one there, so two cases have no way
+// back from the unit itself: a power cut during writeBoot (recovery holds part of each image), and a
+// kernel that panics before /init (panic=10 restarts it for good). Both need Loader mode
+// (docs/install-skylight.md). A spare partition with a one-shot boot from misc would close that
+// window, but it rests on U-Boot behavior no unit has tried.
 //
 // Except when every try failed for want of a network alone: the daemon settled and the hardware was
 // there, but there was never a default route (NoRoute, from boot.sh). That may be the kernel's Wi-Fi,
@@ -270,6 +275,8 @@ func (p Paths) readBoot() ([]byte, error) {
 }
 
 // writeBoot writes img at the start of the kernel's partition, syncs, and reads it back past the cache.
+// On the Skylight this overwrites the only kernel the unit boots: a power cut before the sync leaves
+// it needing Loader mode (see the package comment).
 func (p Paths) writeBoot(img []byte) error {
 	f, err := os.OpenFile(p.Boot, os.O_RDWR, 0)
 	if err != nil {
