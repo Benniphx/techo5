@@ -15,10 +15,11 @@ name: Build release binaries
 # stamped v0.0.0-dev, for testing only: no release script accepts it.
 #
 # The TECHO5 Panel (Android tablets and Meta Portals) carries echod inside its app, as
-# lib/<abi>/libechod.so, built by the app's own tools/build-apk.sh (github.com/HuskerMinion/techo5-panel).
-# A panel-vX.Y.Z tag builds and attests the same two libraries here, from this repo's panel build, so
-# the core in a released APK can be checked against this source too (docs/panel.md). X.Y.Z is the app
-# release's version (0.1.<code>), the stamp the app's build gives its own echod, so the two can match.
+# lib/<abi>/libechod.so, packed by the app's own tools/build-apk.sh (github.com/HuskerMinion/techo5-panel).
+# A panel-vX.Y.Z tag builds and attests those two libraries here, from this repo's panel build, and a
+# release of the app carries them as they are (its tools/release.sh downloads them and checks their
+# attestations), as the Echos' images carry this workflow's binaries (docs/panel.md). X.Y.Z is the app
+# release's version (0.1.<code>), stamped into them, so the app and its echod say the same version.
 #
 # Every action is pinned to a full commit SHA, with the release it belongs to in the comment beside
 # it. This workflow is the root of the provenance story — it builds and attests the binaries every
@@ -138,11 +139,11 @@ jobs:
           if-no-files-found: error
 
   # The panel app's echod: GOOS=android with the NDK's clang, for both of the app's ABIs, exactly as the
-  # app's tools/build-apk.sh builds it (tags, -trimpath, -s -w, API 26, the version stamp), so a library
-  # built from the same commit with the same Go and NDK can be compared with these. A plain linux build
-  # is not the same thing: Android's app seccomp filter kills it the first time it starts a process.
-  # Go and the NDK are pinned to the exact versions build-apk.sh insists on, so the two builds match
-  # byte for byte; move them together.
+  # app's tools/build-apk.sh builds it for development (tags, -trimpath, -s -w, API 26, the version
+  # stamp); a release of the app packs these. A plain linux build is not the same thing: Android's app
+  # seccomp filter kills it the first time it starts a process. Go and the NDK are pinned to the
+  # versions build-apk.sh pins, so a development build is as near these as another machine's gets
+  # (never byte for byte: the compiler's path is in Go's build ID); move them together.
   panel:
     if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'panel-') }}
     runs-on: ubuntu-latest

@@ -67,4 +67,5 @@ steps. It builds the daemon from a checkout of this repo. What that build is:
   Never in a release.
 
 Its tests run on a PC like the Echos' (`go test -tags panel ./...`, GOOS=linux). A `panel-vX.Y.Z`
-tag has CI build and attest both libraries, like the Echos' binaries.
+tag has CI build and attest both libraries, like the Echos' binaries, and an app release carries
+those two as they are.
