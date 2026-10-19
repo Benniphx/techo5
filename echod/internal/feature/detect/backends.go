@@ -159,10 +159,7 @@ func (b *microBackend) load(m wake.Model) (err error) {
 	if err != nil {
 		return fmt.Errorf("wake: loading %s: %w", m.Path, err)
 	}
-	step := cfg.FeaturesStepMs
-	if step == 0 {
-		step = 20 // what NewDetector takes zero to mean
-	}
+	step := mwwfront.StepMs(cfg.FeaturesStepMs)
 	if _, ok := b.dets[m.ID]; ok {
 		b.unload(m.ID) // a reload may change the step
 	}

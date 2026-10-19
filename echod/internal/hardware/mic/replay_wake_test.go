@@ -216,6 +216,8 @@ func scoreWake(t *testing.T, raw []byte, mixer Mixer, m wake.Model) []float64 {
 	}
 	c, l := newCanceller(), newLeveler()
 	setReplayEngine(c)
+	// The env is read here because detect imports this package; the step goes by mwwfront.StepMs, as
+	// the daemon's does, so a manifest without one is 20 ms here too.
 	var exact *mwwfront.Frontend
 	if os.Getenv("TECHO5_WAKE_FRONTEND") == "exact" {
 		exact = mwwfront.New(m.Config.FeaturesStepMs)

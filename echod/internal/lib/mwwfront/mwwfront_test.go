@@ -135,6 +135,34 @@ func TestTablesArePinned(t *testing.T) {
 
 const pinnedTables = "172ea6b086249b23"
 
+// There is no reference dump at a 20 ms step, so it is held to what a step must not change: windows
+// 320 samples apart, and the same audio giving the same features, from a fresh front end or one that
+// was Reset after hearing it. A manifest without a step gets 20 ms, as the daemon runs it.
+func TestStep20IsDeterministic(t *testing.T) {
+	if got := New(0).StepSamples(); got != 320 {
+		t.Fatalf("no step: %d samples a step, want 320", got)
+	}
+	s := readWAV(t, "testdata/hey_jarvis.wav")
+	f := New(20)
+	if got := f.StepSamples(); got != 320 {
+		t.Fatalf("step 20: %d samples a step, want 320", got)
+	}
+	first := features(f, s)
+	if want := (len(s)-f.WindowSamples())/f.StepSamples() + 1; len(first) != want {
+		t.Fatalf("%d frames, want %d", len(first), want)
+	}
+	f.Reset()
+	for name, got := range map[string][][]int8{"after Reset": features(f, s), "fresh": features(New(20), s)} {
+		for i := range first {
+			for c := range first[i] {
+				if got[i][c] != first[i][c] {
+					t.Fatalf("%s: frame %d channel %d: %d, first run %d", name, i, c, got[i][c], first[i][c])
+				}
+			}
+		}
+	}
+}
+
 // Silence, full scale and a step are edges the arithmetic has to survive without a panic.
 func TestEdges(t *testing.T) {
 	f := New(10)

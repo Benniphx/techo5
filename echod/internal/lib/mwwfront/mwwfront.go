@@ -63,12 +63,19 @@ type Frontend struct {
 	nrg [fftC + 1]int32
 }
 
-// New makes a front end for a model whose feature step is stepMs (zero is 10, microWakeWord's own).
+// New makes a front end for a model whose feature step is stepMs (zero is StepMs's default).
 func New(stepMs int) *Frontend {
+	return &Frontend{stepMs: StepMs(stepMs)}
+}
+
+// StepMs is the feature step a model runs at, given the one its manifest says: zero, a manifest that
+// does not say, is 20 ms, what github.com/zserge/microwakeword's NewDetector takes it to mean. The
+// daemon, the tools and the replay tests all go by this, so a model gets the same step everywhere.
+func StepMs(stepMs int) int {
 	if stepMs <= 0 {
-		stepMs = 10
+		return 20
 	}
-	return &Frontend{stepMs: stepMs}
+	return stepMs
 }
 
 // WindowSamples is how many samples ProcessFrame reads.
