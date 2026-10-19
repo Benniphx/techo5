@@ -43,6 +43,9 @@ func TestAndroidZoneDatabase(t *testing.T) {
 	t.Cleanup(func() { zoneDB, nameFile, linkFile = oldDB, oldName, oldLink })
 	drainRestarts()
 
+	if !HasDatabase() {
+		t.Error("HasDatabase() = false with Android's database there")
+	}
 	if got := Regions(); !reflect.DeepEqual(got, []string{"America", "Europe"}) {
 		t.Errorf("Regions() = %v", got)
 	}
@@ -70,5 +73,15 @@ func TestAndroidZoneDatabase(t *testing.T) {
 	}
 	if err := z.apply("Nowhere/Atlantis"); err == nil {
 		t.Error("a zone the database does not have was applied")
+	}
+}
+
+// A tablet without the database (none found where Android keeps it) has the common zones only.
+func TestNoAndroidZoneDatabase(t *testing.T) {
+	old := zoneDB
+	zoneDB = filepath.Join(t.TempDir(), "tzdata")
+	t.Cleanup(func() { zoneDB = old })
+	if HasDatabase() {
+		t.Error("HasDatabase() = true with no database")
 	}
 }

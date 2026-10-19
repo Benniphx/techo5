@@ -19,6 +19,13 @@ import (
 // app cannot link into a system file and have that last, the zone's data is copied out instead.
 var zoneDB = layout.ZoneDB
 
+// HasDatabase is whether the tablet has Android's zone database, and so every zone, rather than only
+// Common: the setup page then lists the database's zones alone, and diagnostics have nothing to say.
+func HasDatabase() bool {
+	zones, err := zoneTable()
+	return err == nil && len(zones) > 0
+}
+
 // fromDatabase writes the named zone's zoneinfo data to tmp and returns it loaded. Nil, and no error,
 // when the database does not have the zone (or there is no database).
 func fromDatabase(zone, tmp string) (*time.Location, error) {

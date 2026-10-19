@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// HasDatabase is whether this image carries the zone database, and so every zone, rather than only
+// Common.
+func HasDatabase() bool {
+	_, err := os.Stat(filepath.Join(zoneinfo, "UTC"))
+	return err == nil
+}
+
 // fromDatabase puts the named zone at tmp as a link into the image's zoneinfo directory, and returns
 // it loaded. Nil, and no error, when the image does not have the zone.
 func fromDatabase(zone, tmp string) (*time.Location, error) {
