@@ -28,9 +28,9 @@ On TECHO5's kernel:
 
 Known limits:
 
-- **Only one screen is supported: the ILI9881C panel with BOE glass.** Amazon built this model with
-  several panels. The installer checks which one your unit has and stops on any other (see
-  [Which screen](#which-screen)).
+- **Only one screen is tested: the ILI9881C panel with BOE glass.** Amazon built this model with
+  several panels. TECHO5's kernel has the others' settings too, but they haven't been tried on a
+  unit yet. The installer checks which one your unit has (see [Which screen](#which-screen)).
 - The light sensor works but its lux values aren't calibrated yet.
 - The microphone beamformer is off; the microphones are used without it.
 
@@ -115,21 +115,45 @@ with the unit's address and port 6053. The rest of the setup is as on the other 
 
 ## Which screen
 
-TECHO5's kernel drives one panel: the **ILI9881C with BOE glass**. The boot loader tells the kernel
-which panel the unit has with `jd936x_id=` on its command line. The low digit is the panel: `6` is the
-ILI9881C BOE (this unit type's `jd936x_id=0x36`). The boot loader's own name for it is
-`ili9881c_wxga_dsi_vdo_st_boe`.
+Amazon built this model with several panels, on two controllers (ILI9881C and JD9365). The boot
+loader tells the kernel which one the unit has: by name in its framebuffer entry in the device tree,
+and with `jd936x_id=` on the command line, whose low digit is the panel. TECHO5's kernel picks the
+panel's settings from that at boot, so one kernel covers every unit.
 
-The installer reads both in TWRP (`/proc/cmdline` and the boot loader's framebuffer entry in the
-device tree) and stops on any other panel, or when it can't tell. To check by hand:
+Only one has been tested on a unit: the **ILI9881C with BOE glass** (`jd936x_id=0x36`, the boot
+loader's name `ili9881c_wxga_dsi_vdo_st_boe`). The others:
+
+| `jd936x_id` low digit | Boot loader's name | Panel |
+|---|---|---|
+| 1 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd` | JD9365, KD/HSD glass |
+| 2 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd_new` | JD9365, KD/HSD glass (new) |
+| 3 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd_proto` or `ili9881c_wxga_dsi_vdo_st_kd_hsd` | JD9365 or ILI9881C, KD/HSD glass |
+| 4 | `jd936x_wxga_dsi_vdo_athena_st_boe` | JD9365, BOE glass |
+| 5 | `jd936x_wxga_dsi_vdo_athena_st_boe_new` | JD9365, BOE glass (new) |
+| 6 | `ili9881c_wxga_dsi_vdo_st_boe` | ILI9881C, BOE glass (tested) |
+| 7 | `jd936x_wxga_dsi_vdo_athena_st_inx` | JD9365, INX glass |
+| 8 | `ili9881c_wxga_dsi_vdo_st_inx` | ILI9881C, INX glass |
+| 9 | `ili9881c_wxga_dsi_vdo_st_kd_hsd_onyx` | ILI9881C, KD/HSD glass (onyx) |
+| a | `ili9881c_wxga_dsi_vdo_st_kd_inx_o` | ILI9881C, KD/INX glass |
+
+The installer reads both in TWRP (`/proc/cmdline` and the device tree) and goes on by itself only on
+the tested panel. On one of the others it stops and says which panel it found: add `--force-panel`
+to try it, with `--wifi` and `--ssh-key` too, so you can still reach the unit if its screen stays
+dark (without a screen there's no other way to set up Wi-Fi). On a panel it doesn't know, or when it can't tell, it stops too. To check by hand:
 
 ```
 adb shell cat /proc/cmdline
 ```
 
-Look for `jd936x_id=0x?6`. Other values are other panels: TECHO5's kernel would leave the screen
-dark on them. Use `--kernel amazon` on those units. `--force-panel` installs the mainline kernel
-anyway, if you know better.
+Look for `jd936x_id=`. Running TECHO5's kernel, `dmesg | grep "athena panel"` shows which panel it
+picked.
+
+If you try a panel that isn't tested and the screen stays dark, TECHO5 should still start: Home Assistant
+should find it as before. Please tell us on GitHub which panel it was. To go back to Amazon's kernel,
+which drives every screen: hold Volume Up while the unit powers on to start TWRP (TWRP shows on the
+screen with its own kernel), write `p20-boot.img` back from your backup (see
+[The way back to Fire OS](#the-way-back-to-fire-os), the `p20` line only), then install with
+`--kernel amazon`.
 
 ## The speaker tuning
 
@@ -307,7 +331,7 @@ install instead.
 ## Amazon's kernel instead
 
 `--kernel amazon` keeps Amazon's 32-bit kernel on `boot` and writes only `system`. Use it on a unit
-whose screen isn't the ILI9881C BOE, or to compare. Amazon's kernel drives every screen. TECHO5 then
+whose screen TECHO5's kernel doesn't drive yet, or to compare. Amazon's kernel drives every screen. TECHO5 then
 uses Amazon's drivers from the `vendor` partition (mounted read-only).
 
 ```

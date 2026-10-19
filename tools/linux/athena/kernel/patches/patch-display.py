@@ -13,6 +13,11 @@ What it does:
      daemon draws to fb0. With it, simplefb is unregistered first and the DRM fbdev takes fb0; if
      mediatek-drm never binds, simplefb stays and the screen works as before. Same call as
      rockchip/sun4i/meson make.
+  3. Adds src/panel/panel-athena-select.c (athena: panel select): at boot it sets the panel node's
+     compatible to the unit's own screen, by the LCM name LK leaves in /chosen atag,videolfb (or the
+     jd936x_id nibble), so one boot image drives every athena screen. The device tree lists unit 1's.
+  4. panel-jadard-jd9365da-h3 takes its reset line deasserted at probe (athena: reset deasserted at
+     probe), as panel-ilitek-ili9881c does, so LK's picture stays up until the first modeset.
 
 Usage: patch-display.py KTREE   (idempotent: each step is skipped when its marker is present)
 """
@@ -59,12 +64,29 @@ edit(BIND + "ilitek,ili9881c.yaml", "  port: true\n", [
     ("  backlight: true\n  power-supply: true\n",
      "  backlight: true\n  port: true\n  power-supply: true\n"),
 ])
+# athena's one panel node carries the JD9365 driver's supplies too (panel-athena-select.c picks the
+# driver at boot): allow them on the ili9881c binding as well.
+edit(BIND + "ilitek,ili9881c.yaml", "  vccio-supply: true\n", [
+    ("  port: true\n  power-supply: true\n",
+     "  port: true\n  power-supply: true\n  vccio-supply: true\n  vdd-supply: true\n"),
+])
 apply_patch("0002-drm-panel-ili9881c-add-amazon-athena-panels.patch",
             "drivers/gpu/drm/panel/panel-ilitek-ili9881c.c", "amazon,athena-ili9881c-boe")
 apply_patch("0003-dt-bindings-jd9365da-add-amazon-athena-panels.patch",
             BIND + "jadard,jd9365da-h3.yaml", "amazon,athena-jd9365-boe")
 apply_patch("0004-drm-panel-jd9365da-add-amazon-athena-panels.patch",
             "drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c", "amazon,athena-jd9365-boe")
+# athena: reset deasserted at probe. The driver takes its reset line asserted, which puts the panel
+# in reset as soon as mediatek-dsi adds it: LK's picture goes, and stays gone if mediatek-drm never
+# binds. Taken deasserted, as panel-ilitek-ili9881c does, the picture stays until the first modeset;
+# prepare pulses the line itself either way.
+edit("drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c", "athena: reset deasserted at probe", [
+    ("""	jadard->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
+""",
+     """	/* athena: reset deasserted at probe, so LK's picture stays until prepare */
+	jadard->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
+"""),
+])
 
 edit("drivers/gpu/drm/mediatek/mtk_drm_drv.c", "athena: evict-simplefb", [
     ("#include <linux/component.h>\n",
@@ -93,5 +115,20 @@ edit("drivers/gpu/drm/mediatek/mtk_drm_drv.c", "athena: evict-simplefb", [
 
 	drm = drm_dev_alloc(&mtk_drm_driver, dev);
 """),
+])
+src = os.path.join(here, "..", "src", "panel", "panel-athena-select.c")
+dst = os.path.join(tree, "drivers/gpu/drm/panel/panel-athena-select.c")
+with open(src, "rb") as f:
+    new = f.read()
+if not os.path.exists(dst) or open(dst, "rb").read() != new:
+    with open(dst, "wb") as f:
+        f.write(new)
+edit("drivers/gpu/drm/panel/Makefile", "panel-athena-select.o", [
+    ("obj-$(CONFIG_DRM_PANEL_ILITEK_ILI9881C) += panel-ilitek-ili9881c.o\n",
+     "obj-$(CONFIG_DRM_PANEL_ILITEK_ILI9881C) += panel-ilitek-ili9881c.o\n"
+     "# athena: panel select. Built in only: it runs before the DSI host adds the panel.\n"
+     "ifeq ($(CONFIG_DRM_PANEL_ILITEK_ILI9881C),y)\n"
+     "obj-y += panel-athena-select.o\n"
+     "endif\n"),
 ])
 print("patched")

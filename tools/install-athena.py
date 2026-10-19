@@ -26,7 +26,8 @@ recovery). Each step is checked before the next:
 
   1. checks    adb sees an athena in TWRP; its partition table is the one this installer knows (boot
                p20, system p21, userdata p23, the unlock's tee1_real and lk_real where they belong);
-               for the mainline kernel, the screen is the one it drives (ILI9881C, BOE glass)
+               for the mainline kernel, the screen is the one it is tested on (ILI9881C, BOE
+               glass), or another it has tables for and --force-panel is given
   2. backup    every partition but cache and userdata, the boot0 and boot1 areas too, into
                backups/<serial>/partitions/, each checked against the unit's own sha256 (skipped when a
                backup is already there)
@@ -148,9 +149,23 @@ SLOT_SIZE = 8192
 SLOT_HEAD = 44
 SLOT_MAX = SLOT_SIZE - SLOT_HEAD
 
-# The one screen TECHO5's mainline kernel drives: LK's jd936x_id vendor nibble 6, LK's name for it.
-PANEL_NIBBLE = 6
-PANEL_LK_NAME = 'ili9881c_wxga_dsi_vdo_st_boe'
+# The screens TECHO5's mainline kernel has tables for, by LK's name for each: (jd936x_id vendor nibble,
+# or None where both controllers use it; what to call it). The kernel picks the unit's own at boot
+# (panel-athena-select.c). Only the tested one is installed without --force-panel.
+PANELS = {
+    'ili9881c_wxga_dsi_vdo_st_boe': (6, 'ILI9881C, BOE glass'),
+    'ili9881c_wxga_dsi_vdo_st_kd_hsd': (None, 'ILI9881C, KD/HSD glass'),
+    'ili9881c_wxga_dsi_vdo_st_inx': (8, 'ILI9881C, INX glass'),
+    'ili9881c_wxga_dsi_vdo_st_kd_hsd_onyx': (9, 'ILI9881C, KD/HSD glass (onyx)'),
+    'ili9881c_wxga_dsi_vdo_st_kd_inx_o': (0xa, 'ILI9881C, KD/INX glass'),
+    'jd936x_wxga_dsi_vdo_athena_st_kd_hsd': (1, 'JD9365, KD/HSD glass'),
+    'jd936x_wxga_dsi_vdo_athena_st_kd_hsd_new': (2, 'JD9365, KD/HSD glass (new)'),
+    'jd936x_wxga_dsi_vdo_athena_st_kd_hsd_proto': (None, 'JD9365, KD/HSD glass (proto)'),
+    'jd936x_wxga_dsi_vdo_athena_st_boe': (4, 'JD9365, BOE glass'),
+    'jd936x_wxga_dsi_vdo_athena_st_boe_new': (5, 'JD9365, BOE glass (new)'),
+    'jd936x_wxga_dsi_vdo_athena_st_inx': (7, 'JD9365, INX glass'),
+}
+PANEL_TESTED = 'ili9881c_wxga_dsi_vdo_st_boe'
 
 
 def image_name(version):
@@ -624,20 +639,48 @@ def panel_of(adb, work):
 
 
 def check_panel(panel_id, lk_name, force):
-    """Refuses the mainline kernel on a screen it doesn't drive. Returns what to say about it."""
+    """Refuses the mainline kernel on a screen it isn't tested on, unless forced. Returns what to say about it."""
     said = 'jd936x_id=%s, LK panel %s' % ('0x%02x' % panel_id if panel_id is not None else '?', lk_name or '?')
-    ok_id = panel_id is not None and panel_id & 0xf == PANEL_NIBBLE
-    ok_name = lk_name == PANEL_LK_NAME
-    if (ok_id or panel_id is None) and (ok_name or lk_name is None) and (ok_id or ok_name):
-        return 'screen: ILI9881C, BOE glass (%s), the one TECHO5\'s kernel drives' % said
+    which, doubt = panel_which(panel_id, lk_name)
+    if which == PANEL_TESTED and not doubt:
+        return 'screen: %s (%s), the one TECHO5\'s kernel is tested on' % (PANELS[which][1], said)
+    reach = ('give --wifi and --ssh-key too, so the unit can be reached if the screen stays dark; "Which '
+             'screen" in\n   docs/install-athena.md has the way back')
+    if which:
+        why = 'this unit\'s screen is the %s (%s)' % (PANELS[which][1], said)
+        if doubt:
+            why += ': %s, and TECHO5\'s kernel would pick that one' % doubt
+        else:
+            why += ': TECHO5\'s kernel has its tables, but they have not been tested on a unit yet'
+        if force:
+            return why + '; going on (--force-panel): if the screen stays dark, see "Which screen"'
+        fail(why + '.\n   To try it, run this again with --force-panel; ' + reach + '. Or use --kernel amazon '
+             '(Amazon\'s kernel\n   drives every screen).')
     if panel_id is None and lk_name is None:
         why = 'TWRP does not show which screen this unit has (no jd936x_id on its command line, no LK panel name)'
     else:
-        why = 'this unit\'s screen is not the ILI9881C (BOE glass) TECHO5\'s mainline kernel drives (%s)' % said
+        why = 'this unit\'s screen is not one TECHO5\'s mainline kernel knows (%s)' % said
     if force:
         return why + '; going on anyway (--force-panel): the screen may stay dark'
     fail(why + '.\n   With TECHO5\'s kernel the screen would stay dark. Use --kernel amazon (Amazon\'s kernel '
-         'drives every\n   screen), or --force-panel if you know better. See "Which screen" in docs/install-athena.md.')
+         'drives every\n   screen), or --force-panel if you know better (and ' + reach + ').')
+
+
+def panel_which(panel_id, lk_name):
+    """(LK's name for the screen TECHO5's kernel would pick, or None; why that pick is in doubt, or None).
+    As the kernel picks: by LK's name, else by the id's vendor nibble where only one screen has it."""
+    nibble = panel_id & 0xf if panel_id is not None else None
+    if lk_name in PANELS:
+        want = PANELS[lk_name][0]
+        if nibble is not None and want is not None and want != nibble:
+            return lk_name, 'LK\'s name and jd936x_id disagree'
+        return lk_name, None
+    named = [n for n, (nib, _) in PANELS.items() if nibble is not None and nib == nibble]
+    if len(named) != 1:
+        return None, None
+    if lk_name is not None:
+        return named[0], 'LK names a screen this installer does not know, so this is by jd936x_id'
+    return named[0], None
 
 
 def live_speaker_config(adb):
@@ -975,7 +1018,7 @@ def main(argv=None):
     ap.add_argument('--stock-boot', help="Fire OS's boot image, when the backup's boot is already TECHO5's "
                     '(the amp tuning is read from it)')
     ap.add_argument('--force-panel', action='store_true',
-                    help='install the mainline kernel even when the screen is not the one it drives')
+                    help='install the mainline kernel on a screen it is not tested on, or one it does not know')
     ap.add_argument('--name', help='the name Home Assistant shows, e.g. Kitchen; a unit that has one keeps it')
     ap.add_argument('--key-file', help='where the Home Assistant key is kept (default backups/<serial>/home-assistant.key)')
     ap.add_argument('--ssh-key', help='an SSH public key the unit accepts from the start (SSH is switched on)')

@@ -929,12 +929,14 @@
  * 4 lanes, burst video, 478 Mbps/lane: from Amazon's LCM driver, added to
  * panel-ilitek-ili9881c by patches/panel/0002 (patch-display.py).
  *
- * Other units: only this panel has been tested. The other variants' tables
- * are in patches/panel (amazon,athena-ili9881c-* and amazon,athena-jd9365-*),
- * untested; using one means changing the compatible below.
- * The JD9365 ones bind panel-jadard-jd9365da-h3 instead and take
- * vccio-supply = <&mt6358_vcama2_reg> and vdd-supply = <&lcd_avee> in
- * place of power-supply.
+ * Other units: the compatible below is unit 1's. At boot
+ * panel-athena-select.c (patch-display.py) sets it to the unit's own
+ * screen, by LK's LCM name in atag,videolfb (or the jd936x_id nibble), from
+ * the other variants' tables in patches/panel (amazon,athena-ili9881c-* and
+ * amazon,athena-jd9365-*). Only the ILI9881C BOE has been tested on a unit.
+ * The JD9365 ones bind panel-jadard-jd9365da-h3, which takes vccio-supply
+ * and vdd-supply where the ILI9881C driver takes power-supply: the node
+ * has all three, and each driver reads its own.
  *
  * mediatek-dsi finds the panel through the graph (dsi_out -> panel_in),
  * as on kukui. No pinctrl for GPIO45: kukui's panel pins drive it low,
@@ -954,10 +956,14 @@
 		reg = <0>;
 		/* the bias chain above: vcama2 -> P (GPIO176) -> N (GPIO175) */
 		power-supply = <&lcd_avee>;
+		/* the same rails for the JD9365 driver: vio first, then the bias */
+		vccio-supply = <&mt6358_vcama2_reg>;
+		vdd-supply = <&lcd_avee>;
 		/*
 		 * GPIO45 LCM_RST: stock idles high and pulses low, so active
-		 * low. The driver requests it deasserted (high), which keeps
-		 * LK's picture until the first modeset.
+		 * low. Both drivers request it deasserted (high; the JD9365
+		 * one by patch-display.py), which keeps LK's picture until
+		 * the first modeset.
 		 */
 		reset-gpios = <&pio 45 GPIO_ACTIVE_LOW>;
 		backlight = <&backlight_lcd0>;

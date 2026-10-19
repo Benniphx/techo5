@@ -47,8 +47,9 @@ export ARCH=arm64 CROSS_COMPILE=${CROSS_COMPILE:-aarch64-linux-gnu-}
 export KBUILD_BUILD_USER=techo5 KBUILD_BUILD_HOST=athena-build
 # Fixed, so a build is reproducible, but it is what `uname -v` says: bump it whenever the kernel
 # changes (a patch, the config, the kernel.org version), or a unit cannot tell the new kernel from
-# the one before. 2026-10-15 was v1.2.16 to v1.2.18's, 2026-10-16 v1.2.19 to v1.2.23's.
-export KBUILD_BUILD_TIMESTAMP="2026-10-19 00:00:00 UTC" KBUILD_BUILD_VERSION=1
+# the one before. 2026-10-15 was v1.2.16 to v1.2.18's, 2026-10-16 v1.2.19 to v1.2.23's, 2026-10-19
+# v1.2.24's.
+export KBUILD_BUILD_TIMESTAMP="2026-10-20 00:00:00 UTC" KBUILD_BUILD_VERSION=1
 export LC_ALL=C TZ=UTC
 
 mkdir -p "$WORK/cache" "$OUT"
@@ -123,7 +124,7 @@ make -s olddefconfig
 for want in 'CONFIG_SND_SOC_MT8183_ATHENA=y' 'CONFIG_SND_SOC_TAS5805M=y' 'CONFIG_CRYPTO_LIB_SHA256=y' \
 		'# CONFIG_FRAMEBUFFER_CONSOLE is not set' 'CONFIG_QFMT_V2=y' 'CONFIG_TCS3472=y' \
 		'CONFIG_BT_MTKSDIO=y' 'CONFIG_MT7663S=y' 'CONFIG_DRM_MEDIATEK=y' \
-		'CONFIG_DRM_PANEL_ILITEK_ILI9881C=y' 'CONFIG_MTK_IOMMU=y' 'CONFIG_DRM_FBDEV_EMULATION=y' \
+		'CONFIG_DRM_PANEL_ILITEK_ILI9881C=y' 'CONFIG_DRM_PANEL_JADARD_JD9365DA_H3=y' 'CONFIG_MTK_IOMMU=y' 'CONFIG_DRM_FBDEV_EMULATION=y' \
 		'CONFIG_EXTRA_FIRMWARE=""' 'CONFIG_BLK_DEV_INITRD=y' 'CONFIG_RD_GZIP=y' \
 		'CONFIG_INITRAMFS_SOURCE=""' 'CONFIG_LOCALVERSION="-techo5-athena"' \
 		'CONFIG_ARM_MEDIATEK_CPUFREQ=y' 'CONFIG_ARM_MEDIATEK_CCI_DEVFREQ=y' 'CONFIG_MTK_SOC_THERMAL=y' \

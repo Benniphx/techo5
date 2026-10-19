@@ -434,6 +434,49 @@ class Panel(unittest.TestCase):
                 inst.check_panel(pid, name, False)
             self.assertIn('--force-panel', inst.check_panel(pid, name, True))
 
+    def test_untested_known(self):
+        with self.assertRaisesRegex(Fail, 'JD9365, BOE glass \\(new\\).*not been tested'):
+            inst.check_panel(0x35, 'jd936x_wxga_dsi_vdo_athena_st_boe_new', False)
+        said = inst.check_panel(0x35, 'jd936x_wxga_dsi_vdo_athena_st_boe_new', True)
+        self.assertIn('JD9365, BOE glass (new)', said)
+        self.assertIn('--force-panel', said)
+        self.assertIn('JD9365, KD/HSD glass', inst.check_panel(0x31, None, True))
+        self.assertIn('ILI9881C, KD/HSD glass', inst.check_panel(0x33, 'ili9881c_wxga_dsi_vdo_st_kd_hsd', True))
+
+    def test_which(self):
+        boe_new = 'jd936x_wxga_dsi_vdo_athena_st_boe_new'
+        inx = 'ili9881c_wxga_dsi_vdo_st_inx'
+        self.assertEqual(inst.panel_which(0x35, None), (boe_new, None))
+        self.assertEqual(inst.panel_which(None, inx), (inx, None))
+        self.assertEqual(inst.panel_which(0x33, None), (None, None), 'nibble 3 is on both controllers')
+        which, doubt = inst.panel_which(0x36, inx)
+        self.assertEqual(which, inx, 'the kernel goes by the name')
+        self.assertIn('disagree', doubt)
+        which, doubt = inst.panel_which(0x36, 'some_other_dsi_panel')
+        self.assertEqual(which, inst.PANEL_TESTED, 'the kernel falls back to the nibble')
+        self.assertIn('does not know', doubt)
+        self.assertEqual(inst.panel_which(0x3b, None), (None, None))
+        self.assertEqual(inst.panel_which(None, None), (None, None))
+
+    def test_doubt_needs_force(self):
+        with self.assertRaisesRegex(Fail, 'disagree'):
+            inst.check_panel(0x36, 'ili9881c_wxga_dsi_vdo_st_inx', False)
+        with self.assertRaisesRegex(Fail, 'does not know'):
+            inst.check_panel(0x36, 'some_other_dsi_panel', False)
+        self.assertIn('--force-panel', inst.check_panel(0x36, 'some_other_dsi_panel', True))
+        with self.assertRaisesRegex(Fail, '--ssh-key'):
+            inst.check_panel(0x35, None, False)
+
+    def test_same_table_as_the_kernel(self):
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           'linux', 'athena', 'kernel', 'src', 'panel', 'panel-athena-select.c')
+        with open(src) as f:
+            rows = re.findall(r'ATHENA_(ILI|JD)\("(\w+)", (-1|0x[0-9a-f]+|\d+), "[\w-]+"\)', f.read())
+        prefix = {'ILI': 'ili9881c_wxga_dsi_vdo_st_', 'JD': 'jd936x_wxga_dsi_vdo_athena_st_'}
+        kernel = {prefix[ic] + name: (None if nib == '-1' else int(nib, 0)) for ic, name, nib in rows}
+        self.assertEqual(kernel, {n: nib for n, (nib, _) in inst.PANELS.items()})
+        self.assertEqual(rows[0][:2], ('ILI', 'boe'), "the kernel's first row is the device tree's own")
+
 
 @unittest.skipUnless(BASH, 'needs a POSIX shell (Git Bash on Windows)')
 class SimulatedTWRP(unittest.TestCase):

@@ -27,12 +27,15 @@ MARKERS = {
     "sound/soc/mediatek/mt8183/mt8183-afe-pcm.c": b"leave cache-only mode before the clocks are enabled",
     "drivers/phy/mediatek/phy-mtk-mipi-csi-0-5.c": b"athena: camera",
     "drivers/media/platform/mediatek/isp/mtk_camsv_hw.c": b"athena: no error interrupts",
+    "drivers/gpu/drm/panel/Makefile": b"athena: panel select",
+    "drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c": b"athena: reset deasserted at probe",
 }
 # Files TECHO5 adds to the tree.
 OURS = [
     "arch/arm64/boot/dts/mediatek/mt8183-amazon-athena.dts",
     "arch/arm64/boot/dts/mediatek/mt8183-amazon-athena-dsp-slot.bin",
     "sound/soc/mediatek/mt8183/mt8183-athena.c",
+    "drivers/gpu/drm/panel/panel-athena-select.c",
     "drivers/media/i2c/ov13855.c",
     "drivers/media/i2c/ov13855-tables.inc",
     "drivers/media/platform/mediatek/isp/mtk_seninf.c",
