@@ -387,7 +387,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	fmt.Fprintf(w, `<div class="wrap"><h1>%s</h1><p class="sub">Setup</p><div class="layout">`, html.EscapeString(deviceName()))
 	nav(w, tab)
 	fmt.Fprint(w, `<section>`)
-	for _, t := range tabs {
+	for _, t := range shownTabs() {
 		if t.id == tab {
 			fmt.Fprintf(w, `<h2>%s</h2>`, html.EscapeString(t.title))
 		}
@@ -411,12 +411,19 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		stationsSection(w, token)
 		musicSection(ctx, w, token)
 		streamingSection(w, token)
-		fmt.Fprint(w, `<h3>Voice</h3>`)
-		brainSection(w, token)
-		realtimeSection(w, token)
-		listeningSection(w, token)
-		houseSection(w, token)
-		wakeWordsSection(w, token)
+		// A device that cannot hear has no voice assistant, wake words or listening to set up: only the
+		// announcements it plays and its sounds are left of the group.
+		if layout.HasMicrophone() {
+			fmt.Fprint(w, `<h3>Voice</h3>`)
+			brainSection(w, token)
+			realtimeSection(w, token)
+			listeningSection(w, token)
+			houseSection(w, token)
+			wakeWordsSection(w, token)
+		} else {
+			fmt.Fprint(w, `<h3>Announcements and sounds</h3>`)
+			houseSection(w, token)
+		}
 		soundsSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)
@@ -432,7 +439,9 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		reolinkSection(w, token)
 		go2rtcSection(w, token)
 		doorbellSection(w, token)
-		talkBackSection(w, token)
+		if layout.HasMicrophone() {
+			talkBackSection(w, token) // the microphones to a camera's speaker
+		}
 		dashboardSection(w, token)
 	case "photos":
 		screenSection(w, token)
