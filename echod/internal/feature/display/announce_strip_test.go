@@ -33,4 +33,9 @@ func TestWhereATapEndsAnAnnouncement(t *testing.T) {
 	if !onAnnounceStrip(sw/2, top+2, sw, sh) || onAnnounceStrip(sw/2, top-4, sw, sh) {
 		t.Errorf("on a 1920 by 1080 panel the strip's top should be at %d", top)
 	}
+	// The Show 8's 16:10 panel draws it a tenth smaller than its width alone would, clear of the date
+	// line above it: 158 high, 34 in, so its top is at 608.
+	if b := announceBox(show8Wide, show8High); b.Min.Y != 608 || b.Max.Y != show8High-34 {
+		t.Errorf("on the Show 8 the strip is %v", b)
+	}
 }
