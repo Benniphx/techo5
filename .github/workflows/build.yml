@@ -135,7 +135,7 @@ jobs:
           if-no-files-found: error
 
   # The panel app's echod: GOOS=android with the NDK's clang, for both of the app's ABIs, exactly as the
-  # app's tools/build-apk.sh builds it (tags, -trimpath, -s -w, API 25, the version stamp), so a library
+  # app's tools/build-apk.sh builds it (tags, -trimpath, -s -w, API 26, the version stamp), so a library
   # built from the same commit with the same Go and NDK can be compared with these. A plain linux build
   # is not the same thing: Android's app seccomp filter kills it the first time it starts a process.
   panel:
@@ -144,7 +144,7 @@ jobs:
     env:
       # The NDK the app's docs/building.md names. The runner's SDK installs it; nothing else is fetched.
       NDK_VERSION: 28.2.13676358
-      API: 25
+      API: 26
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 

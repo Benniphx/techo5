@@ -16,7 +16,7 @@ Tested on:
 | Samsung Galaxy Tab S6 Lite | Android 14 |
 | Meta Portal (2nd gen) | Android 10 |
 
-Other ARM tablets with Android 7.1 or later may work. They haven't been tried yet, so please say how
+Other ARM tablets with Android 8.0 or later may work. They haven't been tried yet, so please say how
 it goes in an issue on the app's repo.
 
 ## What's different from an Echo
@@ -47,7 +47,7 @@ steps. It builds the daemon from a checkout of this repo. What that build is:
 
 - **The `panel` Go build tag**, the Show's build with the hardware swapped out
   (`echod/internal/layout/device_panel.go` and the `_panel.go` files beside the Echos' ones).
-- **GOOS=android, with the Android NDK's clang**, for `arm64` and for `arm` (GOARM=7), at API 25.
+- **GOOS=android, with the Android NDK's clang**, for `arm64` and for `arm` (GOARM=7), at API 26.
   A plain linux build does not work inside an app: Android's seccomp filter kills it the first time
   it starts a process (Go probes `pidfd_open`), and only GOOS=android steps around that.
 - **Inside the APK** as `lib/arm64-v8a/libechod.so` and `lib/armeabi-v7a/libechod.so`, with the
