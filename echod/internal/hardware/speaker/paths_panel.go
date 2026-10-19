@@ -128,30 +128,36 @@ var (
 	toldStep     = VolumeSteps
 )
 
+// sendMu keeps the level lines to the app in the order they are sent. It is held over the write and
+// nothing else is, so an app that stops reading holds up only the next level's send, never the write
+// loop or a volume change.
+var sendMu sync.Mutex
+
 // stepMu keeps deviceStep, and the order its changes are sent to Android in, to one writer at a time:
 // a ring starting or ending works it out from mediaStep as the media step moves.
 var stepMu sync.Mutex
 
-// tellAndroid sends the step to the app after wait, unless a newer level has been sent by then.
+// tellAndroid sends the step to the app after wait, unless a newer level has been sent by then. It
+// never waits on the app: even with no wait the line goes out on a goroutine of its own, as it is
+// called with stepMu held, by the write loop among others.
 func tellAndroid(step int, wait time.Duration) {
 	levelMu.Lock()
 	levelSeq++
 	seq := levelSeq
 	levelMu.Unlock()
 	send := func() {
+		sendMu.Lock()
+		defer sendMu.Unlock()
 		levelMu.Lock()
-		defer levelMu.Unlock()
 		if seq <= levelSentSeq {
+			levelMu.Unlock()
 			return
 		}
 		levelSentSeq, toldStep = seq, step
+		levelMu.Unlock()
 		sendToApp(fmt.Sprintf("volume %d %d", step, VolumeSteps))
 	}
-	if wait <= 0 {
-		send()
-		return
-	}
-	time.AfterFunc(wait, send)
+	time.AfterFunc(max(wait, 0), send)
 }
 
 // volumeChanged is the media step moving (Home Assistant, the buttons, mute): Android's level
@@ -168,8 +174,9 @@ func volumeChanged(step int) {
 // followRing is the write loop's word, every period, on whether a ring or a chime is sounding and at
 // what step. When that moves Android's level, the music's gain is worked out again against the new
 // one from this period on. A raise is sent androidLag later, when these samples are heard; a drop at
-// once, so the samples still on their way, scaled for the louder level, come out quieter for a moment
-// rather than the music coming back at its own gain over a level still raised for the ring.
+// once, though never on the loop itself (tellAndroid), so the samples still on their way, scaled for
+// the louder level, come out quieter for a moment rather than the music coming back at its own gain
+// over a level still raised for the ring.
 func (p *Player) followRing(on bool, step int) {
 	need := 0
 	if on {

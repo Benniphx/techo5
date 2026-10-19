@@ -44,14 +44,14 @@ func TestMuteIsKeptInSoftware(t *testing.T) {
 	heard := androidHears(t)
 	p := &Player{}
 	p.SetVolume(0)
-	if want := fmt.Sprintf("volume %d %d", deviceFloor, VolumeSteps); last(heard()) != want {
+	if want := fmt.Sprintf("volume %d %d", deviceFloor, VolumeSteps); !androidTold(heard, want) {
 		t.Errorf("muted, Android was told %q, want %q", last(heard()), want)
 	}
 	if p.Volume() != 0 {
 		t.Errorf("muted, the music's gain is %v", p.Volume())
 	}
 	p.SetVolume(12)
-	if last(heard()) != fmt.Sprintf("volume 12 %d", VolumeSteps) || p.Volume() != 1 {
+	if !androidTold(heard, fmt.Sprintf("volume 12 %d", VolumeSteps)) || p.Volume() != 1 {
 		t.Errorf("at step 12 Android was told %q and the music is at %v; want step 12 at unity", last(heard()), p.Volume())
 	}
 }
@@ -94,6 +94,9 @@ func TestAQuietRingLeavesAndroidAlone(t *testing.T) {
 	heard := androidHears(t)
 	p := &Player{}
 	p.SetVolume(20)
+	if want := fmt.Sprintf("volume 20 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Fatalf("music at 20: Android was told %q, want %q", last(heard()), want)
+	}
 	before := len(heard())
 	p.bellStep.Store(8)
 	p.ringing.Store(true)
@@ -118,8 +121,8 @@ func TestALateLevelIsNotSentOverANewerOne(t *testing.T) {
 	}
 }
 
-// androidTold is whether the last line Android was told becomes want within a moment (a raise or a
-// release goes out on a timer, even with no lag).
+// androidTold is whether the last line Android was told becomes want within a moment (every level
+// goes out on a goroutine of its own, even with no lag).
 func androidTold(heard func() []string, want string) bool {
 	for range 50 {
 		if last(heard()) == want {
@@ -135,6 +138,9 @@ func ringOver(t *testing.T, heard func() []string) (*Player, []byte) {
 	t.Helper()
 	p := &Player{}
 	p.SetVolume(3)
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Fatalf("music at 3: Android was told %q, want %q", last(heard()), want)
+	}
 	p.bellStep.Store(25)
 	p.ringing.Store(true)
 	buf := make([]byte, period*Channels*2)
@@ -151,15 +157,52 @@ func ringOver(t *testing.T, heard func() []string) (*Player, []byte) {
 
 // A ring's raise reaches Android androidLag after the samples scaled for it, but the drop when it ends
 // goes at once: the music is back at its own gain from that period on, and over a level still raised
-// for the ring it would be played out loud.
+// for the ring it would be played out loud. androidLag is long here, so a drop held back by it would
+// miss androidTold's moment.
 func TestARingEndReachesAndroidAtOnce(t *testing.T) {
 	heard := androidHears(t)
-	androidLag = 60 * time.Millisecond
+	androidLag = 300 * time.Millisecond
 	p, buf := ringOver(t, heard)
 	p.Ringing(false, 25)
 	p.fill(buf)
-	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); last(heard()) != want {
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
 		t.Errorf("as the ring ended Android was told %q, want %q at once", last(heard()), want)
+	}
+}
+
+// An app that stops reading never holds up the write loop: the drop at a ring's end is sent off the
+// loop, and the period after it is written while the send is still stuck.
+func TestAStuckAppDoesNotStallTheWriteLoop(t *testing.T) {
+	heard := androidHears(t)
+	p, buf := ringOver(t, heard)
+	stuck, release := make(chan struct{}), make(chan struct{})
+	record := sendToApp
+	var once sync.Once
+	sendToApp = func(line string) {
+		once.Do(func() { close(stuck) })
+		<-release
+		record(line)
+	}
+	done := make(chan struct{})
+	go func() {
+		p.Ringing(false, 25)
+		p.fill(buf)
+		p.fill(buf)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a ring's end waited on an app that is not reading")
+	}
+	select {
+	case <-stuck:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the drop at the ring's end was never sent")
+	}
+	close(release)
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Errorf("once the app read again it was told %q, want %q", last(heard()), want)
 	}
 }
 
@@ -171,6 +214,9 @@ func TestAndroidLevelKnowsARaise(t *testing.T) {
 	androidLag = 60 * time.Millisecond
 	p := &Player{}
 	p.SetVolume(3)
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Fatalf("music at 3: Android was told %q, want %q", last(heard()), want)
+	}
 	p.bellStep.Store(25)
 	p.ringing.Store(true)
 	p.fill(make([]byte, period*Channels*2))
@@ -186,6 +232,9 @@ func TestAndroidLevelKnowsARaise(t *testing.T) {
 	}
 	p.Ringing(false, 25)
 	p.fill(buf)
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); !androidTold(heard, want) {
+		t.Fatalf("after the ring Android was told %q, want %q", last(heard()), want)
+	}
 	if told, raised := AndroidLevel(); raised || told != 3 {
 		t.Errorf("after the ring: told %d, raised %v; want 3, not raised", told, raised)
 	}
