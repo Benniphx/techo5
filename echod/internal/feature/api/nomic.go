@@ -1,10 +1,12 @@
 package api
 
 import (
+	"reflect"
 	"strings"
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
+	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
@@ -16,6 +18,9 @@ import (
 // calls and the intercom (which need a microphone to talk back) or recordings of turns. What it
 // says still reaches it: tts.speak to its media player, alarms, timers and everything on the screen.
 // The features keep running; their entities are only not listed, so their updates go nowhere.
+//
+// Everything on the microphone's page and on the assistants' pages goes by its sub-device
+// (listeningDevice), along with those pages themselves (subDevices); the rest by its object id.
 
 // listeningObjects are those entities, by object id, and listeningPrefixes the families of them
 // numbered per assistant.
@@ -30,8 +35,13 @@ var listeningObjects = map[string]bool{
 	"wake_clips": true, "wake_clips_by_kind": true,
 	// feature/activity
 	"last_heard": true, "last_reply": true, "last_wake_word": true,
-	// feature/room and diag's room readings
+	// feature/room and diag's room readings; feature/noise, feature/clap
 	"room_reaction": true, "room_level": true, "room_floor": true,
+	"ambient_noise": true, "ambient_noise_sensor": true, "clap_gesture": true,
+	// feature/nearest: which device answers a wake word heard by several
+	"nearest_device_answers": true, "nearest_device_offset": true, "nearest_device_window": true,
+	// feature/media: the music during a turn, and after a near miss
+	"media_on_turn": true, "media_duck_level": true, "duck_on_near_miss": true,
 	// feature/mute
 	"mic_mute": true, "mute_led_brightness": true, "ring_muted": true,
 	// feature/wakeword
@@ -50,6 +60,7 @@ var listeningActions = map[string]bool{
 var listeningPrefixes = []string{
 	"wake_assistant_", "wake_threshold_", "wake_tone_", "wake_effect_", "thinking_effect_",
 	"replying_effect_", "reply_delivery_", "reply_buffer_", "keep_recordings_",
+	"follow_up_", "follow_ups_", "follow_up_tone_", "max_listen_", "max_think_",
 }
 
 // listening is whether an entity is about listening.
@@ -77,11 +88,35 @@ func heard(ents []esphome.Entity) []esphome.Entity {
 func dropListening(ents []esphome.Entity) []esphome.Entity {
 	out := ents[:0:0]
 	for _, e := range ents {
-		if !listening(e.Object()) {
+		if !listening(e.Object()) && !listeningDevice(deviceOf(e)) {
 			out = append(out, e)
 		}
 	}
 	return out
+}
+
+// listeningDevice is whether a sub-device is about listening: the microphone's, or an assistant's.
+func listeningDevice(id uint32) bool {
+	return id == component.DeviceMicrophone || id >= component.DeviceAssistant
+}
+
+// deviceOf is the sub-device an entity is on (its Base.DeviceID), 0 for the device itself. The
+// library keeps it out of the Entity interface, but every entity type carries a Base.
+func deviceOf(e esphome.Entity) uint32 {
+	v := reflect.ValueOf(e)
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return 0
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return 0
+	}
+	if b := v.FieldByName("Base"); b.IsValid() && b.Type() == reflect.TypeOf(esphome.Base{}) {
+		return uint32(b.FieldByName("DeviceID").Uint())
+	}
+	return 0
 }
 
 // heardActions is the actions to offer: all of them on a device that can hear, those not about

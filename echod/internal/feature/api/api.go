@@ -236,7 +236,8 @@ func nodeName(name, mac string) string {
 }
 
 // subDevices groups entities onto pages of their own, since Home Assistant puts every entity a device has
-// on one page and there are more here than anyone wants to read.
+// on one page and there are more here than anyone wants to read. A device that cannot hear has no
+// microphone or assistant pages: nothing is listed on them there (nomic.go).
 //
 // Each name carries the device's own, because Home Assistant shows what it is given verbatim: a bare "Ring"
 // or "Assistant 1" is unreadable in a house with several satellites.
@@ -248,6 +249,15 @@ func subDevices(name string) []esphome.Device {
 	if led.HasRing {
 		// Only a device with a ring has anything to put on its page (led.HasRing).
 		out = append([]esphome.Device{{ID: component.DeviceRing, Name: name + " ring"}}, out...)
+	}
+	if !layout.HasMicrophone() {
+		kept := out[:0]
+		for _, d := range out {
+			if !listeningDevice(d.ID) {
+				kept = append(kept, d)
+			}
+		}
+		return kept
 	}
 
 	for slot := range wakeword.Slots {
