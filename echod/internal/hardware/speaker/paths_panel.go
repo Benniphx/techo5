@@ -126,6 +126,10 @@ var (
 	levelSentSeq uint64
 )
 
+// stepMu keeps deviceStep, and the order its changes are sent to Android in, to one writer at a time:
+// a ring starting or ending works it out from mediaStep as the media step moves.
+var stepMu sync.Mutex
+
 // tellAndroid sends the step to the app after wait, unless a newer level has been sent by then.
 func tellAndroid(step int, wait time.Duration) {
 	levelMu.Lock()
@@ -151,6 +155,8 @@ func tellAndroid(step int, wait time.Duration) {
 // volumeChanged is the media step moving (Home Assistant, the buttons, mute): Android's level
 // follows at once, as the tablet's slider shows it.
 func volumeChanged(step int) {
+	stepMu.Lock()
+	defer stepMu.Unlock()
 	mediaStep.Store(int32(step))
 	d := deviceFor()
 	deviceStep.Store(int32(d))
@@ -159,7 +165,9 @@ func volumeChanged(step int) {
 
 // followRing is the write loop's word, every period, on whether a ring or a chime is sounding and at
 // what step. When that moves Android's level, the music's gain is worked out again against the new
-// one from this period on, and Android is told androidLag later, when these samples are heard.
+// one from this period on. A raise is sent androidLag later, when these samples are heard; a drop at
+// once, so the samples still on their way, scaled for the louder level, come out quieter for a moment
+// rather than the music coming back at its own gain over a level still raised for the ring.
 func (p *Player) followRing(on bool, step int) {
 	need := 0
 	if on {
@@ -168,14 +176,21 @@ func (p *Player) followRing(on bool, step int) {
 	if int(ringStep.Swap(int32(need))) == need {
 		return
 	}
+	stepMu.Lock()
+	defer stepMu.Unlock()
 	d := deviceFor()
-	if int(deviceStep.Swap(int32(d))) == d {
+	was := int(deviceStep.Swap(int32(d)))
+	if was == d {
 		return
 	}
 	if p.sink.Load() == nil {
 		p.volume.Store(math.Float32bits(gainForStep(p.Output(), int(p.step.Load()))))
 	}
-	tellAndroid(d, androidLag)
+	wait := androidLag
+	if d < was {
+		wait = 0
+	}
+	tellAndroid(d, wait)
 }
 
 // MediaService is empty: nothing has to be stopped to play.

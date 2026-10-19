@@ -129,3 +129,36 @@ func androidTold(heard func() []string, want string) bool {
 	}
 	return false
 }
+
+// ringOver starts a ring at 25 over music at 3 and waits for its raise to reach Android.
+func ringOver(t *testing.T, heard func() []string) (*Player, []byte) {
+	t.Helper()
+	p := &Player{}
+	p.SetVolume(3)
+	p.bellStep.Store(25)
+	p.ringing.Store(true)
+	buf := make([]byte, period*Channels*2)
+	p.fill(buf)
+	raise := fmt.Sprintf("volume 25 %d", VolumeSteps)
+	for i := 0; i < 100 && last(heard()) != raise; i++ {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if last(heard()) != raise {
+		t.Fatalf("ringing at 25, Android was told %q, want %q", last(heard()), raise)
+	}
+	return p, buf
+}
+
+// A ring's raise reaches Android androidLag after the samples scaled for it, but the drop when it ends
+// goes at once: the music is back at its own gain from that period on, and over a level still raised
+// for the ring it would be played out loud.
+func TestARingEndReachesAndroidAtOnce(t *testing.T) {
+	heard := androidHears(t)
+	androidLag = 60 * time.Millisecond
+	p, buf := ringOver(t, heard)
+	p.Ringing(false, 25)
+	p.fill(buf)
+	if want := fmt.Sprintf("volume 3 %d", VolumeSteps); last(heard()) != want {
+		t.Errorf("as the ring ended Android was told %q, want %q at once", last(heard()), want)
+	}
+}
