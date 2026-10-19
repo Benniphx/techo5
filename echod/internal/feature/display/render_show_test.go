@@ -184,6 +184,9 @@ func TestShowScenesDraw(t *testing.T) {
 			sheet: settings{cat: catConnections, wifiName: "Home", address: "192.168.1.50", wifiOK: true}},
 		"settings-connections-sc-off": {now: at, phase: "idle", showSheet: true, bt: btaudio.State{Available: true, Remembered: "Speaker"},
 			sheet: settings{cat: catConnections, wifiName: "Home", address: "192.168.1.50", wifiOK: true, btSCOff: true, cardScroll: 1000}},
+		// The custom colors editor: a strip of swatches for each part of the theme, sized to the screen.
+		"settings-colors": {now: at, phase: "idle", showSheet: true,
+			sheet: settings{cat: catDisplay, colors: true}},
 		"settings-display-mid": {now: at, phase: "idle", showSheet: true,
 			sheet: settings{cat: catDisplay, brightness: 70, cardScroll: 420}},
 		"settings-display-end": {now: at, phase: "idle", showSheet: true,

@@ -203,19 +203,20 @@ func (r *renderer) bevel(rect image.Rectangle, fill color.RGBA, raised bool) {
 }
 
 // swatchStrip draws a ctlSwatches row's colors for one role of the theme, the one in force ringed in
-// the text color; a tap on one picks it.
+// the text color; a tap on one picks it. Sized in the Show 5's pixels and scaled to the screen.
 func (r *paint) swatchStrip(row settingRow, right, cy, top int) {
-	const d, gap = 28, 6
+	d, gap, k := r.s(28), r.s(6), r.sk()
 	x0 := right - swatchCount*d - (swatchCount-1)*gap
 	in := current().colors[row.role]
+	rad := float64(d) / 2
 	for i := range swatchCount {
 		c := swatch(row.role, i)
 		cx, cyf := float64(x0+i*(d+gap)+d/2), float64(cy)
-		r.aaDisc(cx, cyf+1.5, d/2, lerp(c, color.RGBA{0, 0, 0, 255}, 0.5)) // a little depth under it
-		r.aaDisc(cx, cyf, d/2, c)
-		r.aaRing(cx, cyf, d/2-0.5, 1, 0, 2*math.Pi, lerp(c, color.RGBA{255, 255, 255, 255}, 0.25))
+		r.aaDisc(cx, cyf+1.5*k, rad, lerp(c, color.RGBA{0, 0, 0, 255}, 0.5)) // a little depth under it
+		r.aaDisc(cx, cyf, rad, c)
+		r.aaRing(cx, cyf, rad-0.5*k, k, 0, 2*math.Pi, lerp(c, color.RGBA{255, 255, 255, 255}, 0.25))
 		if c == in {
-			r.aaRing(cx, cyf, d/2+4, 2.4, 0, 2*math.Pi, cream)
+			r.aaRing(cx, cyf, rad+4*k, 2.4*k, 0, 2*math.Pi, cream)
 		}
 		if row.id != "" {
 			x := x0 + i*(d+gap)
