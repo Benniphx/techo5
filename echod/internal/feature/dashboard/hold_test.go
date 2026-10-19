@@ -223,3 +223,16 @@ func TestThePicturesKeptAreFew(t *testing.T) {
 		t.Error("a picture that would not load was kept")
 	}
 }
+
+// A picture is counted at what its decoded image holds: a 16-bit one at 8 bytes a pixel.
+func TestShotBytesByKind(t *testing.T) {
+	r := image.Rect(0, 0, 10, 10)
+	for _, c := range []struct {
+		img  image.Image
+		want int64
+	}{{image.NewRGBA(r), 400}, {image.NewNRGBA64(r), 800}, {image.NewGray(r), 100}, {image.NewYCbCr(r, image.YCbCrSubsampleRatio420), 400}} {
+		if got := shotBytes(shot{img: c.img}); got != c.want {
+			t.Errorf("%T: %d bytes, want %d", c.img, got, c.want)
+		}
+	}
+}

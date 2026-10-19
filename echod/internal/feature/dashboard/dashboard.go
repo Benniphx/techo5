@@ -370,13 +370,13 @@ func (f *Feature) closeUnused() {
 	}
 	if f.drawn != nil && time.Since(f.drawnUsed) > unused {
 		d, f.drawn = f.drawn, nil
+		f.recent.empty() // nobody is looking: the memory is the device's again
 	}
 	f.mu.Unlock()
 	if s != nil {
 		s.close()
 	}
 	if d != nil {
-		f.recent.empty() // nobody is looking: the memory is the device's again
 		d.close()
 	}
 }

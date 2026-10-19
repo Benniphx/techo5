@@ -345,5 +345,16 @@ func shotBytes(sh shot) int64 {
 		return 0
 	}
 	b := sh.img.Bounds()
-	return int64(b.Dx()) * int64(b.Dy()) * 4
+	px := int64(b.Dx()) * int64(b.Dy())
+	// What the decoded image really holds: a 16-bit PNG no wider than the screen is kept as decoded,
+	// at 8 bytes a pixel, and counting it as 4 would let the cache hold twice its bound.
+	switch sh.img.(type) {
+	case *image.RGBA64, *image.NRGBA64:
+		return px * 8
+	case *image.Gray16:
+		return px * 2
+	case *image.Gray, *image.Alpha, *image.Paletted:
+		return px
+	}
+	return px * 4 // RGBA and NRGBA; YCbCr holds less, so it is overcounted, on the safe side
 }

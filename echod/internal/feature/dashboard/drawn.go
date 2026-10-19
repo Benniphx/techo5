@@ -379,9 +379,10 @@ func (s *session) got(key string, sh shot) {
 func (f *Feature) CloseDrawn() {
 	f.mu.Lock()
 	s := f.drawn
-	f.drawn = nil
-	f.mu.Unlock()
+	f.drawn, f.navTo = nil, ""
+	// Under f.mu, so a session asked for right after starts with the new generation.
 	f.recent.empty()
+	f.mu.Unlock()
 	if s != nil {
 		s.close()
 	}
@@ -397,9 +398,13 @@ func (f *Feature) Tap(a Action) {
 		f.mu.Unlock()
 		if err := config.Set().Dashboard().Path(path); err != nil {
 			slog.Warn("dashboard: going to a view failed", "err", err)
-			f.mu.Lock()
-			f.navTo = ""
-			f.mu.Unlock()
+			// A save that failed on the flash still changed the path in memory, and the view
+			// changes all the same: it is still a navigate unless the path did not move.
+			if config.Get().Dashboard.Path != path {
+				f.mu.Lock()
+				f.navTo = ""
+				f.mu.Unlock()
+			}
 		}
 		f.listBoards(config.Get().Dashboard)
 		f.Changed.Emit(struct{}{})
