@@ -137,6 +137,11 @@ type scene struct {
 	// popup is an event popped up over the screen (calendar_popup.go).
 	popup *hass.Event
 
+	// nextUp is the clock's next event, when one is coming up and the switch is on (render_nextup.go).
+	nextUp *nextUpCard
+	// nightDim is the screen turned down to the night light: the card drops its filled accent.
+	nightDim bool
+
 	// showCalendar is the calendar page, cal what it shows (render_calendar.go).
 	showCalendar bool
 
@@ -334,9 +339,15 @@ type renderer struct {
 	popupAt  image.Rectangle // an event's pop-up, the same way: a tap on it takes it down
 
 	// calHits are the calendar page's buttons, days and events as last drawn (render_calendar.go).
-	calMu        sync.Mutex
-	calHits      []calHit
-	calAgendaMax int // how far the agenda could scroll, in rows
+	calMu         sync.Mutex
+	calHits       []calHit
+	calAgendaMax  int      // how far the agenda could scroll, in rows
+	calTimeline   timeline // the day's hours, as they could be moved (render_calendar_time.go)
+	calAgendaStep int      // how many rows a swipe moves the agenda, as last drawn
+	// nextCardAt is the clock's next-up card, the same way as dateAt, and nextCardDay its event's day,
+	// which a tap there opens (render_nextup.go).
+	nextCardAt  image.Rectangle
+	nextCardDay time.Time
 
 	// weatherKept is the forecast page as last drawn, and weatherKey what it showed: while the sky
 	// moves the page is drawn twelve times a second, and the page itself changes once a minute.
@@ -467,6 +478,7 @@ func (r *renderer) draw(s scene) {
 	r.setTempAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
 	r.setNextAt(image.Rectangle{})
+	r.setNextCard(image.Rectangle{}, time.Time{})
 	// The camera page's controls are tappable only in a frame that draws them, from when it is done.
 	r.drawnSound, r.drawnTalk = image.Rectangle{}, image.Rectangle{}
 	defer r.publishCameraTaps()
@@ -645,23 +657,34 @@ func (r *renderer) draw(s scene) {
 			// a screen filled with warm color is worth more than the backlight on its own.
 			r.sunrisePage(s, s.sunrise, s.sunriseFace)
 		} else if s.slideshowScreensaver != nil {
-			r.slideshowScreensaverPage(s)
+			// Over a photo, captions and all, a light theme draws as a dark one would (onPhoto).
+			onPhoto(func() { r.slideshowScreensaverPage(s) })
 		} else if s.nowPlaying {
 			r.nowPlaying(s)
 		} else {
+			// walnut is read inside, so the patches are made of the palette onPhoto puts in force.
+			page := func() { r.readableOver(behind, walnut, slideshowWash, func() { r.bigClock(s) }) }
 			if s.slideshow != nil {
-				r.slideshowBackground(s.slideshow)
-				r.artWeather(s)
 				behind = s.slideshow
+				onPhoto(func() {
+					r.slideshowBackground(s.slideshow)
+					r.artWeather(s)
+					page()
+				})
+			} else {
+				page()
 			}
-			r.readableOver(behind, walnut, slideshowWash, func() { r.bigClock(s) })
 			if s.callButton {
 				r.callButtonDraw()
 			}
 		}
 	}
 	// The footer's words sit on the photo too, when there is one.
-	r.readableOver(behind, walnut, slideshowWash, func() { r.footer(s) })
+	if behind != nil {
+		onPhoto(func() { r.readableOver(behind, walnut, slideshowWash, func() { r.footer(s) }) })
+	} else {
+		r.footer(s)
+	}
 	if s.strip && s.phase == "idle" && s.sunrise == 0 {
 		r.musicStrip(s)
 	}
@@ -771,6 +794,14 @@ func (r *renderer) bigClock(s scene) {
 	// The glance strip takes the foot too, when there is news and nothing else is using it: a running
 	// timer is news enough on its own, and the music strip is where the hand already is.
 	glance := len(s.glance) > 0 && !timers && !s.strip
+	// The next-up card takes the strip's place when an event is coming up, the clock centered: the clock
+	// and the date move up clear of it.
+	card := s.nextUp != nil && len(s.glance) == 0 && !timers && !s.strip && !foot
+	if card {
+		glance = false
+		box, _ := r.nextUpRect(s)
+		base = min(base, box.Min.Y-r.s(102))
+	}
 	if glance {
 		base -= r.s(30)
 		if foot {
@@ -794,6 +825,9 @@ func (r *renderer) bigClock(s scene) {
 	}
 	if glance {
 		r.glanceStrip(s.glance, s.callButton)
+	}
+	if card {
+		r.drawNextUp(s)
 	}
 
 	r.weatherCorner(s)

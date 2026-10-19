@@ -229,5 +229,30 @@ class Stable122MergeTests(unittest.TestCase):
                                  "Native source conflicts with stable v1.2.22: " + relative)
 
 
+class Stable123ReadmeMergeTests(unittest.TestCase):
+    def test_actual_readme_merges_without_losing_native_disclosure(self):
+        root = Path(__file__).resolve().parents[1]
+        stable = "26db47269f17050fc389ccecbb036803180017de"
+        base = subprocess.check_output(["git", "merge-base", "HEAD", stable],
+                                       cwd=root, text=True).strip()
+        with tempfile.TemporaryDirectory() as directory:
+            native, original, upstream = [Path(directory) / name
+                                          for name in ("native", "base", "upstream")]
+            native.write_bytes((root / "README.md").read_bytes())
+            original.write_bytes(subprocess.check_output(
+                ["git", "show", base + ":README.md"], cwd=root))
+            upstream.write_bytes(subprocess.check_output(
+                ["git", "show", stable + ":README.md"], cwd=root))
+            merged = subprocess.run(["git", "merge-file", "-p", str(native),
+                                     str(original), str(upstream)],
+                                    capture_output=True, text=True, check=False)
+        self.assertEqual(merged.returncode, 0,
+                         "Native README conflicts with stable v1.2.23")
+        for retained in ("Two wake words, two assistants",
+                         "enabling Realtime sends audio to OpenAI",
+                         "requires a paid API account", "docs/native-realtime.md"):
+            self.assertIn(retained, merged.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

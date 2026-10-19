@@ -14,6 +14,10 @@ automation.
 > send the value that means "no opinion" (`0` for a number, an empty string for text) rather than
 > omitting it. Adding an argument to an existing action therefore breaks every automation already
 > calling it, which is why a new one arrives as a new action instead.
+>
+> That goes for the arguments marked *Can be empty* below as well: the action does without a value
+> for them, but they still have to be in the call, as `""` (or `0` for a number). Home Assistant
+> answers a call without one with `required key not provided`.
 
 ## Connect the device to Home Assistant
 
@@ -29,10 +33,11 @@ whatever paired the device, and isn't something you call from an automation afte
 >
 > Several other actions depend on this being set first: `home_show_camera` and
 > `home_show_camera_sound`, `home_weather`, `home_cameras`' automatic camera list (when called with
-> no `cameras`), `home_slideshow`, and the Radio Browser stations in `home_radio`. They all fetch
-> in the background, so the action itself succeeds either way. Without the token they show or offer
-> nothing, and the camera actions open the view with `hass: no access configured` on it in place of
-> the picture.
+> `cameras` empty), `home_slideshow`, Home Assistant's Radio Browser lists on the Radio page, and the
+> player's star. They all fetch in the background, so the action itself succeeds either way. Without
+> the token they show or offer nothing, and the camera actions open the view with
+> `hass: no access configured` on it in place of the picture. The radio lists are the exception: the
+> device then asks radio-browser.info itself, when its place is set on the setup page.
 >
 > The URL must be Home Assistant's local IP address. The device calls it directly rather than
 > through Home Assistant's own connection to the device, it can't look up `.local` names like
@@ -158,7 +163,7 @@ Assistant is down.
 
 A time of day: `7:30`, `07:30`, `19:30:00`, `7:30 pm`, `7:30pm`, `3 pm`, or `3pm`.
 
-### days (Optional)
+### days (Can be empty)
 
 *string*
 
@@ -166,7 +171,7 @@ Which days it repeats on. One of `once` (the default — rings once and turns it
 (or `every day`, `everyday`), `weekdays`, `weekends`, or a comma- or space-separated list of days,
 matched by prefix: `mon,wed,fri`, `tue thu`.
 
-### label (Optional)
+### label (Can be empty)
 
 *string*
 
@@ -382,11 +387,11 @@ A time of day, in the same formats as `alarm_set`'s `time`, or a time from now: 
 happens once. It must be less than a day away: for tomorrow at the same time or later, give a time
 of day instead.
 
-### days (Optional)
+### days (Can be empty)
 
 *string*
 
-Same as `alarm_set`'s `days`. Leave it out, or use `once`, for a time from now. For a one-off on a particular day, give the day instead: `today`, `tomorrow`, or a date written
+Same as `alarm_set`'s `days`. Leave it empty, or use `once`, for a time from now. For a one-off on a particular day, give the day instead: `today`, `tomorrow`, or a date written
 `2026-09-29`. A day whose time has already gone by is refused.
 
 ### label (Required)
@@ -395,7 +400,7 @@ Same as `alarm_set`'s `days`. Leave it out, or use `once`, for a time from now. 
 
 What to say, such as `Take the medication`. A reminder with nothing to say is refused.
 
-### ring_on (Optional)
+### ring_on (Can be empty)
 
 *string*
 
@@ -765,7 +770,7 @@ Deletes every device alarm at the given time. Fails if none is found.
 
 Same formats as `alarm_set`'s `time`.
 
-### label (Optional)
+### label (Can be empty)
 
 *string*
 
@@ -857,7 +862,7 @@ How long: `10 minutes`, `1 hour and 30 minutes`, `90 seconds`, `in 20 minutes`, 
 `00:10:00` (what Home Assistant's duration selector gives), `1:30` (hours and minutes), or a bare
 number, which is minutes. At most 24 hours.
 
-### label (Optional)
+### label (Can be empty)
 
 *string*
 
@@ -904,7 +909,7 @@ paused timer is listed as `running: false` in `alarms_list`, shows in the device
 as `Bread paused (4:05 left)` after the running ones (as do Assist's timers paused by voice), and
 stays paused across a restart. A timer that has just run out is left to ring rather than paused.
 Pausing a paused timer, or resuming a running one, changes nothing. Timers set by voice through Home
-Assistant's Assist are paused and resumed by voice, and these actions refuse them. So far it has been tried off the device only, not on a device.
+Assistant's Assist are paused and resumed by voice, and these actions refuse them.
 
 ### id (Required)
 
@@ -927,7 +932,6 @@ In YAML, refer to these actions as `esphome.<node>_timer_add` and `esphome.<node
 Gives one of the device's own timers more time, or less, whether it is running or paused. Taking off
 more than the timer has left is refused (cancel it instead), as is going past 24 hours or changing a
 timer that has just run out, which is left to ring. Assist's timers are changed by voice, as above.
-So far it has been tried off the device only, not on a device.
 
 ### id (Required)
 
@@ -1013,7 +1017,7 @@ In YAML, refer to this action as `esphome.<node>_home_cameras`.
 
 Sets the list of cameras offered on the device's Cameras page and by voice ("show the front door").
 
-### cameras (Optional)
+### cameras (Can be empty)
 
 *string*
 
@@ -1024,7 +1028,7 @@ camera.front_door=Front door,camera.deck=Deck
 ```
 
 The `=Display Name` half can be left off, in which case the entity ID is used with its `camera.`
-prefix stripped. Left out entirely, the device instead lists every camera entity Home Assistant
+prefix stripped. Left empty (`""`), the device instead lists every camera entity Home Assistant
 has, refreshed every 10 minutes — this needs `home_assistant` to be set up first.
 
 ```yaml
@@ -1083,7 +1087,7 @@ Puts up to six cameras on the screen at once, two or three across, each refreshe
 about once a second, or as often as fetching the others allows. A tap on one puts that camera up on
 its own, live where Live camera video is on; a tap on the strip at the top or the foot closes the
 grid. The cameras' own sound is not played in the grid. The same grid is the **All cameras** row at
-the top of the Cameras drawer, when there are two cameras or more. So far it has been tried off the device only, not on a device.
+the top of the Cameras drawer, when there are two cameras or more.
 
 ### cameras (Required)
 
@@ -1681,7 +1685,7 @@ In YAML, refer to this action as `esphome.<node>_dashboard_path`.
 Which dashboard the screen shows, as its path in Home Assistant's address bar. The device's
 **Dashboard to show** list sets the same thing, and is usually easier. See [Dashboards](dashboards.md).
 
-### path (Optional)
+### path (Can be empty)
 
 `lovelace/0`, `dashboard-kitchen/lights`, `energy`, … Empty is the Rooms dashboard when drawn, and
 the default dashboard when streamed.
@@ -1783,7 +1787,7 @@ In YAML, refer to this action as `esphome.<node>_home_weather`.
 Sets which weather forecast the device's clock/idle screen shows. Screen devices only. Needs
 `home_assistant` set up first, or no forecast will show.
 
-### entity (Optional)
+### entity (Can be empty)
 
 *string*
 
@@ -1852,45 +1856,57 @@ Sample scripts, for stream addresses, Radio Browser and TuneIn stations, are und
 
 > **Good to know**
 >
-> Favorites (`stations`) play through a Home Assistant script over the device's normal API
-> connection, not through `home_assistant`. The Radio Browser stations near your home, shown
-> alongside your favorites, do use `home_assistant` — without it, that part of the list is empty.
+> - Favorites (`stations`) play through the script in `service`, which the device calls over its
+>   ESPHome connection, not through `home_assistant`. That needs **Allow the device to perform Home
+>   Assistant actions** turned on in the device's ESPHome entry (Configure). Without it, picking a
+>   favorite does nothing, and nothing on the device says why.
+> - The Radio Browser stations near your home, shown alongside your favorites, come through
+>   `home_assistant`. Without it, the device asks radio-browser.info itself, for stations near the
+>   place set on its setup page, and plays them itself.
+> - Call this once. The device keeps the wiring, and follows the entities from then on; call it again
+>   only to change something. Every argument goes in the call, as `""` for the ones you leave out.
+> - The device only reads `now`. Your play script, or an automation, has to set it to the station's
+>   name each time one starts. When the device cannot name a stream itself, which is most of the
+>   time, it is the name shown while a station plays and the name the player's star saves.
+> - The star on the player calls a script named `script.radio_favorite_add_station`, with one field,
+>   `station`, through `home_assistant`. There is an example under [Radio](install.md#radio) in the
+>   install guide.
 
-### stations (Optional)
+### stations (Can be empty)
 
 *string*
 
 A comma-separated list of `input_select` entities, each one a station or preset to offer on the
 Radio page. Up to 20.
 
-### now (Optional)
+### now (Can be empty)
 
 *string*
 
 An entity whose state names whatever is currently playing, shown on the Radio page and the idle
 screen while it's live.
 
-### service (Optional)
+### service (Can be empty)
 
 *string*
 
 The script or action that actually plays a station when one is picked on the device.
 
-### field (Optional)
+### field (Can be empty)
 
 *string*
 
 The name of the argument `service` expects the chosen station in. Defaults to `station` if left
 blank.
 
-### speaker_field (Optional)
+### speaker_field (Can be empty)
 
 *string*
 
 The name of the argument `service` expects this device's media player in. Defaults to `speaker` if
 left blank.
 
-### speaker (Optional)
+### speaker (Can be empty)
 
 *string*
 
@@ -1996,6 +2012,30 @@ data:
   source: "media-source://media_source/local/Photos"
 ```
 
+The source that is already showing, given again, reads it again: the device gathers its photos afresh
+(subfolders too, unless **Include subfolders** is off) and shows the next photo from the new list
+within half a minute, without clearing the source first. The photo up stays on the screen until the
+next one is ready, so the screen does not go dark in between. This works the same for a Home
+Assistant folder, an Immich album or library, and the device's own photos. Use it after something
+outside fills or changes the folder; on its own the device reads the list again every hour.
+A slideshow in order carries on from the photo up when it is still in the folder. Given again while
+the photo the last re-read brought up is still showing, the folder is read again but that photo
+keeps its time, so a script that asks after each photo it copies in changes the photo once, not each
+time.
+
+An automation that reads the folder again once a script has put new photos in it and said so over
+MQTT:
+
+```yaml
+triggers:
+  - trigger: mqtt
+    topic: photos/ready
+actions:
+  - action: esphome.office_home_slideshow
+    data:
+      source: "media-source://media_source/local/Photos"
+```
+
 ## List saved voice recordings
 
 In YAML, refer to this action as `esphome.<node>_recordings`.
@@ -2027,7 +2067,7 @@ there are and call again for each one. This action answers with data; call it wi
 
 One of the recording IDs `recordings` returned.
 
-### page (Optional)
+### page (Can be 0)
 
 *integer*
 
@@ -2346,11 +2386,11 @@ and silence.
 > Quiet hours are respected: inside them an announcement is shown and not sounded. Alarms, timers
 > and calls are not announcements and are not affected.
 
-### text (Optional)
+### text (Can be empty)
 
 *string*
 
-What to say. Leave it out, or pass an empty string, to record instead.
+What to say. Pass an empty string to record instead.
 
 ```yaml
 action: esphome.office_announce_house

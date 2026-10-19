@@ -125,7 +125,19 @@ type slideshowState struct {
 	trouble   string
 	fails     int
 	waitUntil time.Time
+
+	// rush is how far a re-read of the source (rereadSlideshow) has cut the photo's time short:
+	// rushAsked from the re-read until the look it made due shows a photo, rushShown while that photo is
+	// up, and rushNone once a photo takes over at its own time.
+	rush int
 }
+
+// The states of slideshowState.rush.
+const (
+	rushNone = iota
+	rushAsked
+	rushShown
+)
 
 // PhotoCaption is when and where a photo on the screen was taken (Slideshow.Caption), for the screen to
 // write over it: a photo alone, or one half of a pair. Either of When and Place may be missing.
@@ -364,8 +376,14 @@ func (f *Feature) ChooseSlideshowOverlay(overlay string) {
 }
 
 // SetSlideshowSource sets which media source to show photos from, from the home_slideshow action or
-// the screen's folder list.
+// the screen's folder list. The source already showing is read again (rereadSlideshow) rather than
+// left as it is, which is what a folder whose photos have changed wants (#180).
 func (f *Feature) SetSlideshowSource(source string) {
+	if source != "" && source == config.Get().Home.Slideshow.Source {
+		f.rereadSlideshow()
+		slog.Info("home: slideshow source read again", "source", source)
+		return
+	}
 	if id, ok := strings.CutPrefix(source, ImmichAlbumPrefix); ok {
 		// The album's name is kept with its id, to name it without asking the server. Not known yet (the
 		// list not fetched since a restart, or the album set from Home Assistant), the name of the album
@@ -382,6 +400,38 @@ func (f *Feature) SetSlideshowSource(source string) {
 	}
 	f.changeSlideshow(func(s *config.Slideshow) { s.Source = source })
 	slog.Info("home: slideshow source", "source", source)
+}
+
+// rereadSlideshow gathers the source's photos again on the slideshow's next look, and makes that look
+// due now, for a folder something outside has just filled with new photos (#180). Until then the device
+// trusts the list it has for browseEvery, so new photos took up to an hour to show, and setting the same
+// source again changed nothing: the way round was to clear the source and set it again, which put the
+// screen's photo out in between. It is forgetSlideshowList (photos.go, for a photo sent to the device)
+// with the next look brought forward rather than left to the photo's time.
+//
+// Every kind of source the slideshow shows from goes the same way, since gathering is what reads each
+// one: a Home Assistant media source folder (and its subfolders), Immich, and the device's own photos.
+// The photo up stays up while the new list is gathered and its first photo fetched, and the new one
+// takes over from it as any next photo does, so the screen is never dark between them. A gathering
+// already under way is of the list before: the generation moves on, so what it finds is not kept.
+//
+// The photo's time is cut short once for a run of re-reads: a script that copies photos in one at a time
+// and asks after each would otherwise change the photo every half minute. A re-read asked while the
+// look it made due is still to come, or while the photo that look put up is up, still reads the list
+// again, for that photo's next look, and leaves its time as it is. A slideshow in order keeps its place
+// in the list read again (keepGathered), and the photos ahead still in it.
+func (f *Feature) rereadSlideshow() {
+	f.mu.Lock()
+	f.slideshowGen++
+	f.slideshow.browsed = time.Time{}
+	// A fresh start, as a new source gets: a folder that was empty or unreadable may not be any more.
+	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
+	if f.slideshow.image != nil && f.slideshow.rush == rushNone {
+		f.slideshow.at = time.Now().Add(-slideshowEveryMax) // due now
+		f.slideshow.rush = rushAsked
+	}
+	f.mu.Unlock()
+	f.Changed.Emit(struct{}{})
 }
 
 // nameImmichAlbum asks Immich for its albums, to name the album id chosen without its name known.
@@ -436,7 +486,13 @@ func (f *Feature) nameImmichAlbumSoon(id string) {
 
 // keepGathered keeps photos gathered for the slideshow, unless its source has changed since the
 // gathering began (gen): a gathering takes as long as five minutes.
-func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media) bool {
+//
+// A slideshow in order (inOrder) carries on from the photo up when that photo is in the list gathered:
+// the next is the one after it there, and the photos ahead (a pair's wide ones) that are still in it
+// stay ahead. Read again for a folder that has had photos added (#180), or after browseEvery, it went
+// back to the first photo every time. A photo up that is not in the new list, or a shuffled slideshow,
+// starts the list from its beginning.
+func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media, inOrder bool) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// The source as well as the generation: the source is read before the generation is, and a change
@@ -444,7 +500,19 @@ func (f *Feature) keepGathered(gen uint64, source string, photos []hass.Media) b
 	if f.slideshowGen != gen || config.Get().Home.Slideshow.Source != source {
 		return false
 	}
-	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx, f.slideshow.ahead = photos, time.Now(), 0, nil
+	idx, ahead := 0, []string(nil)
+	if n := len(f.slideshow.shown); inOrder && n > 0 {
+		in := func(id string) int { return slices.IndexFunc(photos, func(m hass.Media) bool { return m.ID == id }) }
+		if i := in(f.slideshow.shown[n-1]); i >= 0 {
+			idx = i + 1
+			for _, id := range f.slideshow.ahead {
+				if in(id) >= 0 {
+					ahead = append(ahead, id)
+				}
+			}
+		}
+	}
+	f.slideshow.children, f.slideshow.browsed, f.slideshow.idx, f.slideshow.ahead = photos, time.Now(), idx, ahead
 	f.slideshow.trouble, f.slideshow.fails, f.slideshow.waitUntil = "", 0, time.Time{}
 	return true
 }
@@ -742,6 +810,11 @@ func (f *Feature) advanceSlideshow() {
 			}
 			f.slideshow.prev, f.slideshow.image, f.slideshow.at = f.slideshow.image, img, time.Now()
 			f.slideshow.shown, f.slideshow.captions = ids, caps
+			if f.slideshow.rush == rushAsked {
+				f.slideshow.rush = rushShown // the photo a re-read brought forward gets its whole time
+			} else {
+				f.slideshow.rush = rushNone
+			}
 			f.slideshow.fails, f.slideshow.trouble = 0, ""
 			f.mu.Unlock()
 			f.Changed.Emit(struct{}{})
@@ -868,7 +941,7 @@ func (f *Feature) nextSlideshowChild(h config.Slideshow) (string, bool) {
 		if !h.InOrder {
 			rand.Shuffle(len(photos), func(i, j int) { photos[i], photos[j] = photos[j], photos[i] })
 		}
-		if !f.keepGathered(gen, h.Source, photos) {
+		if !f.keepGathered(gen, h.Source, photos, h.InOrder) {
 			return "", false // the source changed while it was gathered: the next look gathers the new one
 		}
 		slog.Info("home: slideshow photos", "count", len(photos), "subfolders", !h.TopOnly, "shuffled", !h.InOrder)

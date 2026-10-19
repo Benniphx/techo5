@@ -304,6 +304,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveCalendarLink(r)
 	case "calendar-remove":
 		problem = removeCalendarLink(r)
+	case "calendar-look":
+		problem = saveCalendarLook(r)
 	case "adopt":
 		if _, err := api.Get().OpenAdoption(); err != nil {
 			problem = "could not open the device to a Home Assistant: " + err.Error()
@@ -436,6 +438,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	case "weather":
 		placeSection(w, token)
 		calendarLinksSection(w, token)
+		calendarLookSection(w, token)
 	case "privacy":
 		lockSection(w, token)
 		camStreamSection(w, token)
@@ -613,8 +616,6 @@ func stationsSection(w http.ResponseWriter, token string) {
 	 <p><button type="submit">Save stations</button></p></form></fieldset>`)
 }
 
-// saveStations takes the rows the form posted, in the order they were in. Names and addresses come
-// back as two lists of the same length, one row each.
 // playRow plays the row whose Play button was pressed, with the name and address as they stand in
 // the form. A row with nothing in it is a press on the spare row at the bottom, which is somebody
 // asking for nothing.
@@ -640,17 +641,25 @@ func playRow(r *http.Request) string {
 	return ""
 }
 
+// saveStations takes the rows the form posted, in the order they were in. Names and addresses come
+// back as two lists of the same length, one row each. A row whose name was cleared on a station
+// already kept is left out, whatever its address still says: that is how the note under the form
+// says a station is taken out. A new address typed without a name is a mistake, and said to be.
 func saveStations(r *http.Request) string {
 	names, urls := r.PostForm["name"], r.PostForm["url"]
 	if len(names) != len(urls) {
 		return "that form did not arrive whole"
 	}
+	kept := map[string]bool{}
+	for _, s := range home.OwnStations() {
+		kept[s.URL] = true
+	}
 	var list []config.Station
 	for i := range names {
 		name, u := strings.TrimSpace(names[i]), strings.TrimSpace(urls[i])
 		switch {
-		case name == "" && u == "":
-			continue // an empty row is one that was never filled in, or one being taken out
+		case name == "" && (u == "" || kept[u]):
+			continue // a row never filled in, or one being taken out
 		case name == "":
 			return "a station needs a name as well as an address"
 		case u == "":

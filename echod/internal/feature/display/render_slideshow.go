@@ -4,7 +4,6 @@ package display
 
 import (
 	"image"
-	"image/color"
 	"image/draw"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -19,7 +18,7 @@ const slideshowWash = 90
 
 // slideshowBackground draws a Background-mode photo full-bleed, then the wash over it.
 func (r *renderer) slideshowBackground(img *image.RGBA) {
-	r.washed.lay(r.dst, img, color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash})
+	r.washed.lay(r.dst, img, washOf(walnut, slideshowWash))
 }
 
 // artWeather is the rain, snow, storm or fog moving over the weather art, when it is the picture.
@@ -44,7 +43,7 @@ func (r *renderer) slideshowScreensaverPage(s scene) {
 		return
 	}
 	// Washed as the background is, and kept for the second when it is the weather art (washedArt).
-	r.washed.lay(r.dst, s.slideshowScreensaver, color.RGBA{walnut.R, walnut.G, walnut.B, slideshowWash})
+	r.washed.lay(r.dst, s.slideshowScreensaver, washOf(walnut, slideshowWash))
 	r.artWeather(s)
 	r.readableOver(s.slideshowScreensaver, walnut, slideshowWash, func() {
 		r.photoCaptions(s.slideshowCaptions)
