@@ -20,11 +20,10 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
-// Here is whether this device plays videos: the Show does.
-const Here = true
-
 func init() {
-	component.Register(component.Device, Get(), component.Order(39))
+	if Here {
+		component.Register(component.Device, Get(), component.Order(39))
+	}
 	media.KeepWhileHeld(TrackName)
 }
 

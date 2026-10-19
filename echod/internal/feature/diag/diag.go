@@ -125,12 +125,17 @@ func (d *Diag) Entities() []esphome.Entity {
 		d.cached, d.free, d.purge, d.restart,
 		d.temperature, d.radioTemp, d.cores, d.coresOnline, d.load, d.memory, d.booted, d.lux,
 		d.roomLevel, d.roomFloor,
-		d.tls, d.ip, d.color, d.signal, d.rxRate, d.txRate, d.ads,
+		d.tls, d.ip, d.color, d.signal, d.rxRate, d.txRate,
 		d.testPlayback, d.interval, d.minCores,
 	}
+	// What the BLE radio hears, where the daemon has the radio (bluetooth.Here).
+	if bluetooth.Here {
+		out = append(out, d.ads)
+	}
 	// adbd is Android's. On the Linux image there is none to reach, and the saved setting is read by
-	// the Android daemon the unit falls back to, where it would open root adb to the network.
-	if layout.OnAndroid() {
+	// the Android daemon the unit falls back to, where it would open root adb to the network. A panel
+	// has no firewall of its own to open it in (adbHere).
+	if layout.OnAndroid() && adbHere {
 		out = append(out, d.adb)
 	}
 	if d.lensCover != nil {
@@ -650,14 +655,14 @@ func (d *Diag) Restore(c config.Config) {
 
 	// The chain is empty after a reboot but not after an echod restart, so the rule is put back or
 	// taken away rather than either being assumed.
-	if !layout.OnAndroid() {
+	if !layout.OnAndroid() || !adbHere {
 		// Off the Linux image the switch is not offered; one saved on before is cleared, so the Fire OS
-		// fallback does not open adb to the network from this file.
+		// fallback does not open adb to the network from this file. Nor on a panel.
 		if c.Diag.RemoteADB {
 			if err := config.Set().Diag().RemoteADB(false); err != nil {
 				slog.Error("clearing remote adb failed", "err", err)
 			} else {
-				slog.Warn("remote adb was saved on; cleared, since this is not Android")
+				slog.Warn("remote adb was saved on; cleared, since this device does not offer it")
 			}
 		}
 	} else if err := d.reachable(c.Diag.RemoteADB); err == nil {

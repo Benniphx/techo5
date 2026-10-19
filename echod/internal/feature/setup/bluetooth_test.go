@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 )
 
 // The Connections tab's Bluetooth section shows Secure Connections as it is, says what turning it off
@@ -18,6 +19,13 @@ func TestTheBluetoothSection(t *testing.T) {
 		w := httptest.NewRecorder()
 		bluetoothSection(w, "tok")
 		return w.Body.String()
+	}
+	// A panel leaves the radio to Android, and offers no section at all.
+	if !btaudio.Get().SecureConnectionsHere() {
+		if p := page(); p != "" {
+			t.Errorf("a device without the setting showed a Bluetooth section: %s", p)
+		}
+		return
 	}
 	p := page()
 	if !strings.Contains(p, `name="sc" value="yes" style="width:auto" checked`) ||

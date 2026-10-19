@@ -70,6 +70,14 @@ func (c *fakeController) commands() []string {
 	return slices.Clone(c.calls)
 }
 
+// scOffered has the setting offered for one test, as on an Echo: these test how it is applied, which
+// a panel (where Android has the radio, so it is never offered) does not do.
+func scOffered(t *testing.T) {
+	here := secureConnHere
+	secureConnHere = func() bool { return true }
+	t.Cleanup(func() { secureConnHere = here })
+}
+
 func testSC(c *fakeController) *secureConn {
 	s := newSecureConn()
 	s.run, s.have = c.run, func() bool { return true }
@@ -143,6 +151,7 @@ func TestReadSC(t *testing.T) {
 
 // Only a controller with Secure Connections, set otherwise than the setting, is touched.
 func TestSecureConnectionsOnlyWhenSupportedAndDifferent(t *testing.T) {
+	scOffered(t)
 	for name, c := range map[string]*fakeController{
 		"already on":  {supported: true, on: true, powered: true},
 		"unsupported": {supported: false, powered: true},
@@ -182,6 +191,7 @@ func TestSecureConnectionsOnlyWhenSupportedAndDifferent(t *testing.T) {
 
 // A controller that was powered is powered again whatever fails in between.
 func TestSecureConnectionsPowerComesBack(t *testing.T) {
+	scOffered(t)
 	c := &fakeController{supported: true, on: true, powered: true, failSC: true}
 	if changed, err := testSC(c).apply(context.Background(), false); changed || err == nil {
 		t.Errorf("sc refused: changed %v err %v", changed, err)
@@ -199,6 +209,7 @@ func TestSecureConnectionsPowerComesBack(t *testing.T) {
 
 // hci0 coming up has the setting applied once it has settled; a change is applied straight away.
 func TestSecureConnectionsAppliedOnAdapterUp(t *testing.T) {
+	scOffered(t)
 	c := &fakeController{supported: true, on: true, powered: true}
 	s := testSC(c)
 	var mu sync.Mutex

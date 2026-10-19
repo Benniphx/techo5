@@ -81,8 +81,11 @@ func (f *Feature) Entities() []esphome.Entity {
 	if sshAvailable() {
 		out = append(out, f.ssh)
 	}
+	if webPages && cameraPage {
+		out = append(out, f.camera)
+	}
 	if webPages {
-		out = append(out, f.camera, f.screen, f.talk, f.lockSw)
+		out = append(out, f.screen, f.talk, f.lockSw)
 	}
 	return out
 }
