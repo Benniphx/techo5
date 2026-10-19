@@ -639,8 +639,8 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
 
 **Speaker gain** is an optional amplifier boost on Show 5 2nd gen units with a TI TAS5805M.
 It appears beside the speaker controls in Settings → **Sound**, on the setup page under
-**Sound & Voice**, and in Home Assistant's **Playback** configuration. Units with another
-amplifier do not offer it. The setting is saved and restored before audio starts, including
+**Speaker and voice**, and in Home Assistant's **Playback** configuration. Other Show units
+do not offer it. The setting is saved and restored before audio starts, including
 after reboots and software updates.
 
 The default is **0 dB**, the amplifier's normal gain. Choose 0 to reset it, or raise it in
@@ -651,8 +651,8 @@ that happens; +6 dB is a setting limit, not a guarantee of clean output on every
 
 On the **Echo Dot (2nd gen) and the Echo (2nd gen)** the same setting raises the speaker driver
 in the audio chip, in Home Assistant's **Playback** configuration and on the setup page (the Dot
-has no screen). It is off (0 dB) by default. +3 to +6 dB is louder at the top of the volume
-range. It applies to the speaker only: the headphone jack and Bluetooth speakers are not changed.
+has no screen). It is off (0 dB) by default. Each dB is added at every volume step, most
+noticeable near the top. It applies to the speaker only: the headphone jack and Bluetooth speakers are not changed.
 High settings can distort, and they make the wake word harder to catch over loud music, since
 the music reaching the microphones is louder too.
 
