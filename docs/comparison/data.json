@@ -3782,9 +3782,9 @@
     "https://github.com/jxlarrea/kiosk-satellite/commits/main"
    ],
    "releases": [
-    "2026.10.30, 2026-10-19; 299 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags)",
+    "2026.10.31, 2026-10-19; 300 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags)",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.30"
+    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.31"
    ],
    "license": [
     "App: CC BY-NC-ND 4.0 plus plugin exception; plugin SDK and plugins repo: Apache-2.0",
@@ -4599,7 +4599,7 @@
     "https://github.com/HuskerMinion/techo5/commits/main"
    ],
    "releases": [
-    "v1.2.23 (2026-10-18), 115 releases incl. 1 pre-release; Dot dot-v1.0.22 (83, 1 pre); Spot spot-v1.1.21 (91, 1 pre)",
+    "v1.2.24 (2026-10-19), 116 releases incl. 1 pre-release; Dot dot-v1.0.23 (84, 1 pre); Spot spot-v1.1.22 (92, 1 pre)",
     "",
     "https://github.com/HuskerMinion/techo5/releases"
    ],
@@ -5040,7 +5040,7 @@
    ],
    "device-camera-entity": [
     "Yes",
-    "Show 8 gen 2 camera not listed working",
+    "",
     "https://github.com/HuskerMinion/techo5/blob/v1.2.23/README.md#why-techo5"
    ],
    "device-camera-stream": [
@@ -5370,7 +5370,7 @@
    ],
    "privacy-indicators": [
     "Partly",
-    "camera off with mute; Show's camera dot only during RTSP streaming",
+    "camera off with mute; Show's camera dot for RTSP and camera pages, not HA views",
     "https://github.com/HuskerMinion/techo5/blob/v1.2.23/docs/setup.md#recording-this-devices-camera"
    ],
    "no-telemetry": [
