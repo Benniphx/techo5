@@ -247,6 +247,10 @@ Linux kernel patches for the Echo Show 8 2nd gen, tools/linux/athena/kernel
   Bluetooth firmware, from linux-firmware, is not linked into the kernel: it ships as separate
   files in the boot image's ramdisk (lib/firmware), under MediaTek's own license, whose text
   (LICENCE.mediatek) is in the ramdisk with them.
+  Releases ship it as Linux 6.18.56 for arm64 in techo5-boot-athena-<version>.img; its source is
+  published with each release as linux-6.18.56-techo5-athena-<version>-source.tar.xz. The panel
+  picker, src/panel/panel-athena-select.c (GPL-2.0), is TECHO5's own: it chooses the unit's screen
+  from the name the bootloader passes.
 
 Linux kernel for the Skylight Calendar 15, tools/linux/skylight/kernel
   Releases ship Linux 6.18.56 for arm64 in techo5-boot-skylight-<version>.img and the installer
@@ -271,8 +275,15 @@ BusyBox, https://busybox.net (GPL-2.0)
   stores as /bin/busybox.static (PID 1's interpreter): Alpine Linux's busybox-static package (armv7,
   busybox-static-1.37.0-r31 from Alpine v3.24), unmodified. Its source is
   https://busybox.net/downloads/busybox-1.37.0.tar.bz2 with Alpine's build files and patches,
-  https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/busybox. The images say so in
-  a SOURCES file beside it.
+  https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/busybox. The Skylight's
+  installer and bench images say so in a SOURCES file beside it.
+
+Alpine Linux packages
+  The root filesystems and the athena and Skylight stores are built from Alpine Linux v3.24 packages,
+  unmodified, each under its own license (several GPL, among them e2fsprogs, wireless-tools and
+  busybox-extras). The images' package list is tools/linux/packages-rootfs.txt (and each store's
+  mkstore.sh); their sources are Alpine's, https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable,
+  with the source archives at https://dl-cdn.alpinelinux.org/alpine/v3.24/.
 
 echod (dependency)
   github.com/miekg/dns — BSD 3-Clause License

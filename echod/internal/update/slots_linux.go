@@ -87,8 +87,8 @@ func installRootfs(ctx context.Context, m Manifest, progress func(float32), phas
 			// Said where Home Assistant's update card and the screen show it, not only in a log: the
 			// usual reason is a store that never grew past the size it was installed at (#192).
 			return fmt.Errorf("update: the store has no room for the new slot (%w). If it never grew after "+
-				"the install (STORE=/store slotctl status, /data/techo5-linux/grow.log), grow it from TWRP: "+
-				"docs/install-athena.md, \"The store did not grow\"", err)
+				"the install (STORE=/store slotctl status, /data/techo5-linux/grow.log), grow it as your device's "+
+				"install guide says (the Show 8 2nd gen's from TWRP: docs/install-athena.md, \"The store did not grow\")", err)
 		}
 		return fmt.Errorf("update: slotctl install: %w: %s", err, out)
 	}
