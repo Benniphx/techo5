@@ -54,6 +54,11 @@ type Sensor struct {
 
 	dev  *input.Device
 	poll poller // athena on mainline and the Skylight instead of dev
+
+	// pollStop ends the Run polling poll, and pollDone is closed once it has: Close waits for that
+	// before it closes the sensor, so a reading under way never meets a closed bus.
+	pollStop context.CancelFunc
+	pollDone chan struct{}
 }
 
 // poller is a sensor read every period rather than one that reports by itself.
@@ -129,9 +134,14 @@ func (s *Sensor) seed(abs func(code uint16) (input.AbsInfo, error)) (float64, bo
 func (s *Sensor) Close() error {
 	s.mu.Lock()
 	p, dev := s.poll, s.dev
-	s.poll, s.dev = nil, nil
+	stop, done := s.pollStop, s.pollDone
+	s.poll, s.dev, s.pollStop, s.pollDone = nil, nil, nil, nil
 	s.mu.Unlock()
 	if p != nil {
+		if stop != nil {
+			stop()
+			<-done
+		}
 		return p.close()
 	}
 	_ = os.WriteFile(misc+"/alsactive", []byte("0"), 0o644)
@@ -146,12 +156,23 @@ var errNotOpen = errors.New("ambient: the sensor is not open")
 
 // Run reads until ctx is canceled. The read blocks in the kernel, so cancellation closes the node
 // from the side and lets the read fail. What it reads is taken once, at the start: a Close that comes
-// first, or while it runs, leaves it nothing to read rather than a nil sensor.
+// first, or while it runs, leaves it nothing to read rather than a nil sensor; a polled sensor is only
+// closed once the poll has stopped.
 func (s *Sensor) Run(ctx context.Context) error {
 	s.mu.Lock()
 	p, dev := s.poll, s.dev
+	var done chan struct{}
+	if p != nil {
+		// Under the same lock as p is taken: a Close from now on stops this poll before closing p.
+		var stop context.CancelFunc
+		ctx, stop = context.WithCancel(ctx)
+		defer stop()
+		done = make(chan struct{})
+		s.pollStop, s.pollDone = stop, done
+	}
 	s.mu.Unlock()
 	if p != nil {
+		defer close(done)
 		return s.runPoll(ctx, p)
 	}
 	if dev == nil {
