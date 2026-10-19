@@ -930,12 +930,12 @@ What to know before turning them on:
 
 ### The nearest device answers
 
-**Nearest device answers** (a switch of the device's in Home Assistant, under its configuration; off
-on a new device). With two devices in earshot, Home Assistant answers whichever reaches it first,
+**Nearest device answers** (a switch of the device's in Home Assistant, under its configuration; on
+by default, and it does nothing until the devices share a house word). With two devices in earshot, Home Assistant answers whichever reaches it first,
 which is the faster one and not always the one you spoke to. With this on, a device that hears its
 wake word tells the others how clearly it heard it and waits a moment to hear from them, and only
-the one that heard it best answers. The others go back to listening without a sound. Turn it on on
-every device that should take part; they need the same house word, set on each device's setup page,
+the one that heard it best answers. The others go back to listening without a sound. It is on on
+every device unless you turn it off; they need the same house word, set on each device's setup page,
 which signs what they tell each other so nothing else on the network can silence them. Make it a long
 phrase, 16 characters or more: anything on the network that hears the devices can try words until one
 fits. The house word is case-sensitive: it has to match exactly, capitals included. When another device refuses this one's

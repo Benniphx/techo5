@@ -202,10 +202,10 @@ func (n *Nearest) Name() string { return "nearest device" }
 func (n *Nearest) Entities() []esphome.Entity { return []esphome.Entity{n.on, n.window, n.offset} }
 
 func (n *Nearest) Restore(c config.Config) {
-	n.set(c.Nearest.On)
+	n.set(c.Nearest.Enabled())
 	n.window.Set(float32(c.Nearest.Window() / time.Millisecond))
 	n.offset.Set(float32(c.Nearest.Offset))
-	slog.Info("restored", "what", n.on.ObjectID, "using", c.Nearest.On)
+	slog.Info("restored", "what", n.on.ObjectID, "using", c.Nearest.Enabled())
 }
 
 // set turns taking part on or off. The loudness is measured from now on, so it has learned the room by
