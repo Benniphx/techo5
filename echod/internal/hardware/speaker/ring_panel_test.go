@@ -12,6 +12,10 @@ import (
 // roomGain is the device's own volume on top of what is written: on a panel, Android's level.
 func roomGain() float64 { return float64(curve(int(deviceStep.Load()))) }
 
+// roomShare is how far apart two levels may be, as a share of them, beyond a step of a sample: 1% on a
+// panel, where one level is scaled in software and the other by Android.
+const roomShare = 0.01
+
 // androidHears records what the app is told, at once rather than androidLag later, for one test.
 func androidHears(t *testing.T) func() []string {
 	t.Helper()

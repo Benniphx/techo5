@@ -38,11 +38,11 @@ func rang(t *testing.T, mediaStep, bellStep int, media, chime int16, ringing boo
 	return out
 }
 
-// near allows for the rounding to a sample: a step of it, or 1% where the samples are loud enough
-// that a level scaled in software and one scaled by the device round apart by more.
+// near allows for the rounding to a sample: a step of it, or on a panel a share of the level
+// (roomShare), where a level scaled in software and one scaled by the device round apart by more.
 func near(a, b float64) bool {
 	d := math.Abs(a - b)
-	return d <= 1 || d <= 0.01*math.Max(math.Abs(a), math.Abs(b))
+	return d <= 1 || d <= roomShare*math.Max(math.Abs(a), math.Abs(b))
 }
 
 // The reason the ring has a level of its own: music turned all the way down must not take the alarm
