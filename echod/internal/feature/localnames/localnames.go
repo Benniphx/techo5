@@ -10,11 +10,13 @@ package localnames
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"maps"
 	"net"
 	neturl "net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -38,9 +40,21 @@ var (
 	every = 5 * time.Minute
 	soon  = 15 * time.Second
 
-	// resolve is lib/localname's, or a test's.
-	resolve = localname.Resolve
+	// resolve and onOwnNetwork are lib/localname's, or a test's.
+	resolve      = localname.ResolveAll
+	onOwnNetwork = localname.OnOwnNetwork
 )
+
+// pick is the address to keep for a name from what it answered (got, the device's own networks
+// first): the one known while it is still among them, unless the known one is on none of the device's
+// networks and another is. A second responder answering for the name, or one with a stale address,
+// does not move Home Assistant away from where it is.
+func pick(known net.IP, got []net.IP) net.IP {
+	if known != nil && slices.ContainsFunc(got, known.Equal) && (onOwnNetwork(known) || !onOwnNetwork(got[0])) {
+		return known
+	}
+	return got[0]
+}
 
 type Feature struct{}
 
@@ -48,19 +62,24 @@ func (*Feature) Name() string { return "local names" }
 
 // Run looks a new name up at once (within soon of it being given), and each again every few
 // minutes. An address found stays written while its name goes unanswered: a responder that misses a
-// question now and then must not take Home Assistant away with it.
+// question now and then must not take Home Assistant away with it. Nor does another address for it,
+// while the one written is still among those answered (pick); a change is logged as a warning.
 func (*Feature) Run(ctx context.Context) error {
 	if target, err := os.Readlink(hostsLink); err != nil || target != hostsFile {
 		slog.Debug("local names: the hosts file is not this device's to write", "file", hostsLink)
 		<-ctx.Done()
 		return nil
 	}
-	known := map[string]net.IP{}
+	known := map[string]net.IP{} // by the name in lowercase, as it is asked for
 	asked := map[string]time.Time{}
 	warned := map[string]bool{} // said once per name, not every turn it goes unanswered
+	written := map[string]net.IP{}
 	for {
-		want := names()
-		written := maps.Clone(known)
+		given := names()
+		want := map[string]bool{}
+		for name := range given {
+			want[strings.ToLower(name)] = true
+		}
 		for name := range known {
 			if !want[name] {
 				delete(known, name)
@@ -73,7 +92,7 @@ func (*Feature) Run(ctx context.Context) error {
 				continue
 			}
 			lctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-			ip, err := resolve(lctx, name)
+			ips, err := resolve(lctx, name)
 			cancel()
 			if err != nil {
 				if known[name] == nil && !warned[name] {
@@ -82,15 +101,30 @@ func (*Feature) Run(ctx context.Context) error {
 				}
 				continue // asked again at the next turn, soon
 			}
-			if !ip.Equal(known[name]) {
+			ip := pick(known[name], ips)
+			switch {
+			case known[name] == nil:
 				slog.Info("local names: found", "name", name, "address", ip.String())
+			case !ip.Equal(known[name]):
+				// Said louder: everything this device asks of Home Assistant goes there now.
+				slog.Warn("local names: the address changed", "name", name, "was", known[name].String(),
+					"now", ip.String(), "answered", fmt.Sprint(ips))
 			}
 			known[name], asked[name], warned[name] = ip, time.Now(), false
 		}
-		if !maps.EqualFunc(written, known, func(a, b net.IP) bool { return a.Equal(b) }) {
-			if err := localname.WriteHosts(hostsFile, known); err != nil {
+		// Each name as it was given, and in lowercase (localname.WriteHosts).
+		hosts := map[string]net.IP{}
+		for name := range given {
+			if ip := known[strings.ToLower(name)]; ip != nil {
+				hosts[name] = ip
+			}
+		}
+		if !maps.EqualFunc(written, hosts, func(a, b net.IP) bool { return a.Equal(b) }) {
+			if err := localname.WriteHosts(hostsFile, hosts); err != nil {
 				slog.Error("local names: writing the hosts file", "err", err)
-				clear(known) // written again at the next turn
+				clear(written) // written again at the next turn
+			} else {
+				written = hosts
 			}
 		}
 		select {
@@ -101,7 +135,7 @@ func (*Feature) Run(ctx context.Context) error {
 	}
 }
 
-// names are the .local hosts in the addresses this device was given.
+// names are the .local hosts in the addresses this device was given, as they were given.
 func names() map[string]bool {
 	out := map[string]bool{}
 	for _, raw := range []string{hass.Get().Address(), config.Get().MusicAssistant.URL} {
@@ -109,7 +143,7 @@ func names() map[string]bool {
 		if err != nil {
 			continue
 		}
-		if h := strings.ToLower(u.Hostname()); localname.IsLocal(h) {
+		if h := strings.TrimSuffix(u.Hostname(), "."); localname.IsLocal(h) {
 			out[h] = true
 		}
 	}

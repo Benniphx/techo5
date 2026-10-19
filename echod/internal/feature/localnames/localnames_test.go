@@ -33,7 +33,13 @@ func fakeHosts(t *testing.T) (file string) {
 func fakeResolve(t *testing.T, f func(name string) (net.IP, error)) {
 	t.Helper()
 	was := resolve
-	resolve = func(_ context.Context, name string) (net.IP, error) { return f(name) }
+	resolve = func(_ context.Context, name string) ([]net.IP, error) {
+		ip, err := f(name)
+		if err != nil {
+			return nil, err
+		}
+		return []net.IP{ip}, nil
+	}
 	t.Cleanup(func() { resolve = was })
 }
 

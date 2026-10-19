@@ -38,9 +38,68 @@ func IsLocal(host string) bool {
 	return strings.HasSuffix(h, ".local") && net.ParseIP(h) == nil
 }
 
-// Resolve asks the network for host's IPv4 address over multicast DNS. It finds a name on this
-// network only: a router passes multicast DNS from another one only if it is set to.
+// interfaceAddrs are the device's own addresses, with their networks. A variable for the tests.
+var interfaceAddrs = net.InterfaceAddrs
+
+// ownNetworks are the IPv4 networks the device is on.
+func ownNetworks() []*net.IPNet {
+	addrs, _ := interfaceAddrs()
+	var out []*net.IPNet
+	for _, a := range addrs {
+		if n, ok := a.(*net.IPNet); ok && n.IP.To4() != nil && !n.IP.IsLoopback() {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// OnOwnNetwork is whether ip is on one of the networks the device itself is on.
+func OnOwnNetwork(ip net.IP) bool {
+	for _, n := range ownNetworks() {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// usable is whether an answer can be a host on the network: not loopback, unspecified, multicast,
+// link-local or a broadcast address, the whole network's or one of the device's own networks'. A
+// responder that answers with one of those is wrong, and writing it would only send Home Assistant's
+// traffic nowhere.
+func usable(ip net.IP) bool {
+	ip4 := ip.To4()
+	if ip4 == nil || ip4.IsLoopback() || ip4.IsUnspecified() || ip4.IsMulticast() || ip4.IsLinkLocalUnicast() ||
+		ip4.Equal(net.IPv4bcast) {
+		return false
+	}
+	for _, n := range ownNetworks() {
+		if ones, bits := n.Mask.Size(); bits == 32 && ones < 31 && n.Contains(ip4) {
+			last := make(net.IP, 4)
+			for i := range last {
+				last[i] = n.IP.To4()[i] | ^n.Mask[i]
+			}
+			if ip4.Equal(last) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Resolve asks the network for host's IPv4 address over multicast DNS: the first of ResolveAll.
 func Resolve(ctx context.Context, host string) (net.IP, error) {
+	ips, err := ResolveAll(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	return ips[0], nil
+}
+
+// ResolveAll asks the network for host's IPv4 addresses over multicast DNS, and gives every usable one
+// in the first answer that has any, those on one of the device's own networks first. It finds a name
+// on this network only: a router passes multicast DNS from another one only if it is set to.
+func ResolveAll(ctx context.Context, host string) ([]net.IP, error) {
 	name := dns.Fqdn(strings.ToLower(host))
 	conn, to, err := listen()
 	if err != nil {
@@ -86,10 +145,23 @@ func Resolve(ctx context.Context, host string) (net.IP, error) {
 		if m.Unpack(buf[:n]) != nil || !m.Response {
 			continue // the questions on the group, its own among them
 		}
+		var mine, other []net.IP
 		for _, rr := range append(m.Answer, m.Extra...) {
-			if a, ok := rr.(*dns.A); ok && strings.EqualFold(a.Hdr.Name, name) {
-				return a.A, nil
+			a, ok := rr.(*dns.A)
+			if !ok || !strings.EqualFold(a.Hdr.Name, name) ||
+				slices.ContainsFunc(mine, a.A.Equal) || slices.ContainsFunc(other, a.A.Equal) {
+				continue
 			}
+			switch {
+			case !usable(a.A):
+			case OnOwnNetwork(a.A):
+				mine = append(mine, a.A)
+			default:
+				other = append(other, a.A)
+			}
+		}
+		if len(mine)+len(other) > 0 {
+			return append(mine, other...), nil
 		}
 	}
 }
@@ -106,6 +178,10 @@ const base = "127.0.0.1\tlocalhost localhost.localdomain\n::1\t\tlocalhost local
 
 // WriteHosts replaces the hosts file at path with localhost and names, each name's address beside it.
 // Through a file next to it and a rename, so a program reading it never sees half of one.
+//
+// A name is written in lowercase and, when it was given otherwise, as it was given too: musl finds a
+// name in the hosts file only as it is asked for, capitals and all, and a program asks for the name
+// in the address it was given.
 func WriteHosts(path string, names map[string]net.IP) error {
 	var b strings.Builder
 	b.WriteString(base)
@@ -115,7 +191,12 @@ func WriteHosts(path string, names map[string]net.IP) error {
 	}
 	slices.Sort(keys)
 	for _, k := range keys {
-		fmt.Fprintf(&b, "%s\t%s\n", names[k], strings.TrimSuffix(strings.ToLower(k), "."))
+		given := strings.TrimSuffix(k, ".")
+		line := strings.ToLower(given)
+		if given != line {
+			line += " " + given
+		}
+		fmt.Fprintf(&b, "%s\t%s\n", names[k], line)
 	}
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".hosts-")
 	if err != nil {
