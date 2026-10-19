@@ -680,3 +680,6 @@ func lumaGrid(raw []byte, w, h int) []uint8 {
 	}
 	return out
 }
+
+// v4l2Board: the Spot's camera is never the V4L2 one.
+func v4l2Board() (bool, bool) { return false, false }

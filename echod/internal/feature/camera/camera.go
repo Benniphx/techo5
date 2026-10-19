@@ -122,12 +122,8 @@ func (f *Feature) stream(w http.ResponseWriter, r *http.Request) {
 	defer release()
 	const boundary = "techo5frame"
 	frames := make(chan *camera.Frame, 1)
-	cancel := camera.Get().Frames.Listen(func(fr *camera.Frame) {
-		select {
-		case frames <- fr:
-		default: // the client is slower than the sensor: skip, never queue
-		}
-	})
+	// The client is slower than the sensor: skip, never queue, but end on the newest frame.
+	cancel := camera.Get().ListenLatest(frames)
 	defer cancel()
 	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary="+boundary)
 	w.Header().Set("Cache-Control", "no-store")

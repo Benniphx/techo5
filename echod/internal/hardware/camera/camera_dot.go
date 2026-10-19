@@ -52,3 +52,5 @@ func (c *Camera) Running() bool                                { return false }
 func (f *Frame) Full() *image.RGBA                             { return f.RGBA }
 func (f *Frame) Image() *image.RGBA                            { return f.RGBA }
 func (f *Frame) Luma(w, h int) []uint8                         { return nil }
+func (f *Frame) Blank() bool                                   { return false }
+func (c *Camera) ListenLatest(chan *Frame) (cancel func())     { return func() {} }

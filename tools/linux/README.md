@@ -228,7 +228,9 @@ volume; a tap is the action button.
 The camera is driven from userspace through the ISP driver's register windows; the code is
 `echod/internal/hardware/camera` and the map, with the dead ends, is docs/camera-research.md.
 (The probe tools that got there, camprobe and camframe, were removed once the package worked;
-they are in the history before 2026-09-16 evening.) `hardware/camera` streams on demand with
+they are in the history before 2026-09-16 evening. Today's `echod/cmd/camprobe` is another tool,
+the bench check for the 2nd gen Show 8's V4L2 camera; its kernel drivers are in
+tools/linux/athena/kernel.) `hardware/camera` streams on demand with
 auto-exposure and `feature/camera` serves
 the ESPHome camera entity Home Assistant creates on its own, plus `http://<device>:8181/camera.jpg`
 and `/camera.mjpeg` while Camera web access is on (with the camera stream's login, or a browser the

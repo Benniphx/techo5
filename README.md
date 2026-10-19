@@ -498,6 +498,9 @@ table are photos from Wikimedia Commons; who took each one, and its license, is 
   [on XDA](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-show-8-2nd-gen-2021-athena.4804958/).
 - The mainline Linux kernel, and everyone who brought the MT8183 into it for its Chromebooks: the
   2nd gen Show 8's kernel is built on their work.
+- [vpavlin/mt8183-camera](https://github.com/vpavlin/mt8183-camera) (Václav Pavlín): cameras on MT8183
+  Chromebooks with no ISP firmware, on BayLibre's and MediaTek's sensor interface and CAMSV drivers.
+  The 2nd gen Show 8's camera runs on those drivers; its OV13855 register tables are Rockchip's.
 - [@proffalken](https://github.com/proffalken): the
   [step-by-step install from Linux](https://gist.github.com/proffalken/377ae50146affe1886dddaaacb87926b)
   that [Getting started](docs/getting-started.md) and the cross-platform installers are based on.

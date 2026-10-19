@@ -148,12 +148,7 @@ func (f *Feature) pump(c *esphome.Conn) {
 	}
 	defer release()
 	frames := make(chan *camera.Frame, 1)
-	cancel := camera.Get().Frames.Listen(func(fr *camera.Frame) {
-		select {
-		case frames <- fr:
-		default:
-		}
-	})
+	cancel := camera.Get().ListenLatest(frames)
 	defer cancel()
 	last := time.Time{}
 	for {
@@ -168,7 +163,8 @@ func (f *Feature) pump(c *esphome.Conn) {
 		}
 		select {
 		case fr := <-frames:
-			if time.Since(last) < streamEvery {
+			// The black frame of a sensor that stopped always goes: no other follows it.
+			if time.Since(last) < streamEvery && !fr.Blank() {
 				continue
 			}
 			jpg, err := encode(fr)

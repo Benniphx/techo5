@@ -475,12 +475,9 @@ func (f *Feature) localFrames() {
 	defer release()
 	dst := image.NewRGBA(image.Rect(0, 0, cameraFrameH*camera.Width/camera.Height, cameraFrameH))
 	frames := make(chan *camera.Frame, 1)
-	cancel := camera.Get().Frames.Listen(func(fr *camera.Frame) {
-		select {
-		case frames <- fr:
-		default:
-		}
-	})
+	// The newest frame replaces one still waiting (see ListenLatest): dropping the new one instead
+	// kept a stale picture on screen when the sensor stopped for the mute or the lens cover.
+	cancel := camera.Get().ListenLatest(frames)
 	defer cancel()
 	for {
 		f.mu.Lock()

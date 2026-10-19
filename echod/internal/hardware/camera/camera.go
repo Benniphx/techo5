@@ -58,7 +58,11 @@ type sensorSpec struct {
 	outW, outH int  // one pixel per Bayer cell: the live view and the stream
 	minShut    int  // shortest exposure the driver takes, in lines
 	frameLines int  // shutter lines that fit a frame at the sensor's own rate
+	maxShut    int  // the longest shutter the exposure loop asks for
+	blackCap   int  // the most taken as black, on the summed-green scale (blackFor)
+	pedestal   int  // the sensor's black level a pixel, taken off before white balance
 	blueFirst  bool // the first pixel of each cell is blue, not red
+	v4l2       bool // driven through V4L2 on a mainline kernel (camera_v4l2.go)
 }
 
 // hasOV9734 is whether this board carries the OV9734 rather than the OV02B10.
@@ -66,12 +70,39 @@ func hasOV9734() bool { return layout.Checkers() || layout.Crown() }
 
 func pickSensor(ov9734 bool) sensorSpec {
 	if ov9734 {
-		return sensorSpec{w: 1280, h: 720, outW: 640, outH: 360, minShut: 1, frameLines: 798, blueFirst: true}
+		return sensorSpec{w: 1280, h: 720, outW: 640, outH: 360, minShut: 1, frameLines: 798, maxShut: 4000,
+			blackCap: 64, blueFirst: true}
 	}
-	return sensorSpec{w: 1600, h: 1200, outW: 800, outH: 600, minShut: 4, frameLines: 1200}
+	return sensorSpec{w: 1600, h: 1200, outW: 800, outH: 600, minShut: 4, frameLines: 1200, maxShut: 4000,
+		blackCap: 64}
 }
 
-var sensor = pickSensor(hasOV9734())
+// athenaSensor is the 2nd gen Show 8's OmniVision OV13855 in its 2x2 binned mode: 2112x1568 at 30
+// frames a second, the first pixel of each cell blue (BGGR). A frame is 3209 lines, and the driver
+// lets the shutter run to 8 short of that; a longer one would need a longer frame, which the driver
+// does not make on its own, so the loop stops there and takes the rest from gain. Its black level is
+// 64 a pixel (the darkest 0.1% of a dim room read 64 on every channel, 2026-10-19).
+var athenaSensor = sensorSpec{w: 2112, h: 1568, outW: 1056, outH: 784, minShut: 4, frameLines: 3200,
+	maxShut: 3200, blackCap: 144, pedestal: 64, blueFirst: true, v4l2: true}
+
+func boardSensor() sensorSpec {
+	if layout.AthenaMainline() {
+		return athenaSensor
+	}
+	return pickSensor(hasOV9734())
+}
+
+var sensor = boardSensor()
+
+// v4l2Board is whether this board's camera is the V4L2 one, and whether its chain is there. A 2nd
+// gen Show 8 on Amazon's own kernel has neither path TECHO5 knows (its MT8183 ISP is not the
+// MT8163's this file programs), so it answers here too, with no camera.
+func v4l2Board() (bool, bool) {
+	if layout.Athena() && !sensor.v4l2 {
+		return true, false
+	}
+	return sensor.v4l2, sensor.v4l2 && v4l2Available()
+}
 
 // Width and Height are the frames handed out.
 var Width, Height = sensor.outW, sensor.outH
@@ -231,6 +262,7 @@ type device struct {
 	mva            uint32
 	mclk           [3]uint32
 	sensorOpen     bool
+	v              *v4l2Cam // the mainline kernel's chain (athena); none of the above is used then
 
 	// Exposure control: what is set on the sensor now, and frames to wait before judging it.
 	shutter, gain int
@@ -240,6 +272,16 @@ type device struct {
 func open() (*device, error) {
 	d := &device{isp: -1, sens: -1, ion: -1}
 	var err error
+	if sensor.v4l2 {
+		if d.v, err = openV4L2(); err != nil {
+			return nil, err
+		}
+		// A middling exposure to start from, as below.
+		d.shutter, d.gain = 1600, 128
+		d.v.exposure(d.shutter, d.gain)
+		d.settle = aeDelay
+		return d, nil
+	}
 	if d.isp, err = syscall.Open("/dev/camera-isp", syscall.O_RDWR, 0); err != nil {
 		return nil, fmt.Errorf("open camera-isp: %w", err)
 	}
@@ -335,19 +377,19 @@ func (d *device) setFeature(id uint32, v uint64) {
 // first — up to a frame at the sensor's rate — then gain, then longer shutters at the cost of
 // frame rate, then the rest of the gain.
 const (
-	aeTarget   = 290  // mean of the 10-bit frame to aim for: a lit room, no clipping to speak of
-	aeDelay    = 3    // frames between changes: a new exposure takes two frames to show
-	aeMaxShut  = 4000 // beyond this the frame rate drops under 5 a second
-	aeMinGain  = 64   // 1x
-	aeMidGain  = 384  // 6x, before trading frame rate
-	aeMaxGain  = 992  // the driver's ceiling, 15.5x
-	aeDeadband = 6    // no change inside target ± this
+	aeTarget   = 290 // mean of the 10-bit frame to aim for: a lit room, no clipping to speak of
+	aeDelay    = 3   // frames between changes: a new exposure takes two frames to show
+	aeMinGain  = 64  // 1x
+	aeMidGain  = 384 // 6x, before trading frame rate
+	aeMaxGain  = 992 // the driver's ceiling, 15.5x
+	aeDeadband = 6   // no change inside target ± this
 )
 
 // The shortest exposure the sensor takes and the lines that fit one of its frames: its own.
 var (
 	aeMinShut = sensor.minShut
 	aeFrame   = sensor.frameLines
+	aeMaxShut = sensor.maxShut // on the Show 5, beyond 4000 the frame rate drops under 5 a second
 )
 
 func (d *device) autoExpose(bayer []byte) {
@@ -381,24 +423,33 @@ func (d *device) autoExpose(bayer []byte) {
 	case want <= float64(aeMaxShut*aeMidGain):
 		shutter, gain = int(want/aeMidGain), aeMidGain
 	default:
-		shutter, gain = aeMaxShut, int(want/aeMaxShut)
+		shutter, gain = aeMaxShut, int(want/float64(aeMaxShut))
 	}
 	shutter = min(max(shutter, aeMinShut), aeMaxShut)
 	gain = min(max(gain, aeMinGain), aeMaxGain)
 	if shutter == d.shutter && gain == d.gain {
 		return
 	}
-	if shutter != d.shutter {
-		d.setFeature(featShutter, uint64(shutter))
-	}
-	if gain != d.gain {
-		d.setFeature(featGain, uint64(gain))
+	switch {
+	case d.v != nil:
+		d.v.exposure(shutter, gain)
+	default:
+		if shutter != d.shutter {
+			d.setFeature(featShutter, uint64(shutter))
+		}
+		if gain != d.gain {
+			d.setFeature(featGain, uint64(gain))
+		}
 	}
 	slog.Debug("camera exposure", "mean", mean, "shutter", shutter, "gain", gain)
 	d.shutter, d.gain, d.settle = shutter, gain, aeDelay
 }
 
 func (d *device) close() {
+	if d.v != nil {
+		d.v.close()
+		return
+	}
 	if d.cam != nil {
 		d.cam.mask(regTgVfCon, 1, 0) // view finder off
 	}
@@ -602,6 +653,10 @@ func teardownCSI2(s, ana *mmio) {
 // with interrupts masked; on every tick the DMA is aimed at the next slot, so the one it just
 // left is whole and stays untouched for slots-1 more periods.
 func (d *device) stream(stop chan struct{}, frame func(bayer []byte)) {
+	if d.v != nil {
+		d.v.stream(stop, frame)
+		return
+	}
 	cam := d.cam
 	cur := 0
 	cam.wr(regImgoBase, d.mva)
@@ -707,9 +762,12 @@ func sample(raw []byte, step int) tone {
 	}
 	n := float64(taken)
 	t := tone{gainR: 1, gainB: 1, white: 1, gamma: gammaNormal}
-	avgR, avgG, avgB := float64(sumR)*2/n, float64(sumG)/n, float64(sumB)*2/n
+	// On the summed scale, less the sensor's own black: with it left in, every channel looks alike in
+	// a dim room and the gains stay near 1 whatever the cast.
+	ped := float64(2 * sensor.pedestal)
+	avgR, avgG, avgB := float64(sumR)*2/n-ped, float64(sumG)/n-ped, float64(sumB)*2/n-ped
 	if avgR > 1 && avgB > 1 {
-		// Quantised so a steady scene keeps asking for the tables it already has.
+		// Quantized so a steady scene keeps asking for the tables it already has.
 		t.gainR = math.Round(avgG/avgR*256) / 256
 		t.gainB = math.Round(avgG/avgB*256) / 256
 	}
@@ -892,6 +950,9 @@ func lumaGrid(raw []byte, w, h int) []uint8 {
 		for gx := range w {
 			x := (2*gx + 1) * Width / (2 * w)
 			g := px(row0, 2*x+1) + px(row1, 2*x) // 11 bits
+			// Less the sensor's black level, so a dark room reads as dark on every sensor:
+			// presence and the palm gesture judge texture against the mean.
+			g -= min(g, uint16(2*sensor.pedestal))
 			out[gy*w+gx] = uint8(min(g>>3, 255))
 		}
 	}
