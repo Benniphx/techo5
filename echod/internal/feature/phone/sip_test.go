@@ -1,6 +1,13 @@
 package phone
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"net"
+	"testing"
+
+	"github.com/emiago/sipgo/sip"
+)
 
 // A call is rung for only when it came from the provider: the listener is on the home network, and on
 // a panel nothing in front of it keeps anyone else's INVITE out.
@@ -24,6 +31,49 @@ func TestOnlyTheProviderRings(t *testing.T) {
 	} {
 		if got := fromProvider(c.server, c.source); got != c.want {
 			t.Errorf("a call from %q with the provider at %q: rung %v, want %v", c.source, c.server, got, c.want)
+		}
+	}
+}
+
+// The provider's addresses are remembered, from each lookup and from the registrations it accepted,
+// and a call is checked against them when the lookup fails: a name server that is down when the call
+// arrives does not refuse the provider's call.
+func TestTheProviderIsRememberedWhenTheLookupFails(t *testing.T) {
+	p := newProvider("sip.provider.example")
+	answer := []net.IPAddr{{IP: net.ParseIP("192.0.2.10")}}
+	var down error
+	p.lookup = func(context.Context, string) ([]net.IPAddr, error) { return answer, down }
+
+	if !p.from("192.0.2.10:5061") {
+		t.Fatal("a call from the address the lookup gave was refused")
+	}
+	answer = []net.IPAddr{{IP: net.ParseIP("192.0.2.11")}}
+	if !p.from("192.0.2.10:5061") {
+		t.Error("the provider moved, and a call from where it was looked up before was refused")
+	}
+
+	reg := sip.NewResponse(sip.StatusOK, "OK")
+	reg.AppendHeader(&sip.CSeqHeader{SeqNo: 2, MethodName: sip.REGISTER})
+	reg.SetSource("198.51.100.4:5061")
+	p.registered(reg)
+	other := sip.NewResponse(sip.StatusOK, "OK")
+	other.AppendHeader(&sip.CSeqHeader{SeqNo: 3, MethodName: sip.OPTIONS})
+	other.SetSource("203.0.113.9:5061")
+	p.registered(other)
+
+	answer, down = nil, errors.New("no name server")
+	for _, c := range []struct {
+		source string
+		want   bool
+	}{
+		{"192.0.2.10:5061", true},
+		{"192.0.2.11:5060", true},
+		{"198.51.100.4:40000", true}, // the registration's far side
+		{"203.0.113.9:5061", false},  // answered something other than a REGISTER
+		{"192.0.2.99:5061", false},
+	} {
+		if got := p.from(c.source); got != c.want {
+			t.Errorf("with the lookup down, a call from %s: rung %v, want %v", c.source, got, c.want)
 		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/emiago/diago"
@@ -28,6 +29,7 @@ type line struct {
 	acct Account
 	ua   *sipgo.UserAgent
 	dg   *diago.Diago
+	prov *provider
 	tran string // "tls" or "udp"
 	port int
 }
@@ -46,15 +48,15 @@ var providerCiphers = []uint16{
 }
 
 // open signs nothing in yet: it builds the user agent and starts answering what arrives on it.
-// incoming is called for every call offered by the provider (fromProvider), on its own goroutine, and
-// the call lasts as long as it runs.
+// incoming is called for every call offered by the provider (provider.admits), on its own goroutine,
+// and the call lasts as long as it runs.
 func open(ctx context.Context, acct Account, incoming func(*diago.DialogServerSession)) (*line, error) {
 	host, err := localAddr(acct.Server)
 	if err != nil {
 		return nil, err
 	}
 
-	l := &line{acct: acct, tran: "tls", port: 5061}
+	l := &line{acct: acct, prov: newProvider(acct.Server), tran: "tls", port: 5061}
 	if acct.Plain {
 		l.tran, l.port = "udp", 5060
 	}
@@ -71,6 +73,11 @@ func open(ctx context.Context, acct Account, incoming func(*diago.DialogServerSe
 		return nil, err
 	}
 	l.ua = ua
+	if checkCallSource {
+		// The provider's side of the registration is where its calls come from, so its address is
+		// remembered from each registration it accepts.
+		ua.TransportLayer().OnMessage(l.prov.registered)
+	}
 
 	tr := diago.Transport{Transport: l.tran, BindHost: host}
 	if !acct.Plain {
@@ -87,11 +94,12 @@ func open(ctx context.Context, acct Account, incoming func(*diago.DialogServerSe
 	}
 
 	// The listener is on the home network, so anything there can send it an INVITE. An Echo's firewall
-	// lets in only the provider's side of the registration; a panel has no firewall of its own, so the
-	// check is made here, on every device: a call is only rung for when it came from the provider.
+	// lets in only the provider's side of the registration; a panel has no firewall of its own, so on a
+	// panel the check is made here (checkCallSource): a call is only rung for when it came from the
+	// provider.
 	offered := func(d *diago.DialogServerSession) {
 		from := d.InviteRequest.MessageData.Source()
-		if !fromProvider(acct.Server, from) {
+		if !l.prov.admits(from) {
 			slog.Warn("phone: refused a call that did not come from the provider", "from", from)
 			_ = d.Respond(sip.StatusForbidden, "Forbidden", nil)
 			return
@@ -166,11 +174,31 @@ func localAddr(server string) (string, error) {
 // providerLookup bounds the lookup of the provider's addresses when a call comes in.
 const providerLookup = 5 * time.Second
 
-// fromProvider is whether a request's source, the address it arrived from (host:port), is one of the
-// provider's: an address the server's name resolves to, looked up when the call arrives so a provider
-// that moves is still recognized. A call over TLS arrives on the registration's own connection, and
-// one over UDP from the server the registration went to.
-func fromProvider(server, source string) bool {
+// provider is where calls may come from: the addresses the server's name resolves to, looked up when
+// the call arrives so a provider that moves is still recognized, and every address it has been seen at
+// before, in earlier lookups and as the far side of a registration it accepted. When the lookup fails
+// those are what a call is checked against, so a broken name server does not refuse the provider.
+type provider struct {
+	server string
+	lookup func(ctx context.Context, host string) ([]net.IPAddr, error)
+
+	mu    sync.Mutex
+	known map[string]bool // net.IP.String of each address seen
+}
+
+func newProvider(server string) *provider {
+	return &provider{server: server, lookup: net.DefaultResolver.LookupIPAddr, known: map[string]bool{}}
+}
+
+// admits is whether a call offered from source is rung for. Only a panel checks (checkCallSource).
+func (p *provider) admits(source string) bool {
+	return !checkCallSource || p.from(source)
+}
+
+// from is whether a request's source, the address it arrived from (host:port), is one of the
+// provider's. A call over TLS arrives on the registration's own connection, and one over UDP from the
+// server the registration went to.
+func (p *provider) from(source string) bool {
 	host, _, err := net.SplitHostPort(source)
 	if err != nil {
 		return false
@@ -179,22 +207,47 @@ func fromProvider(server, source string) bool {
 	if ip == nil {
 		return false
 	}
-	if s := net.ParseIP(server); s != nil {
+	if s := net.ParseIP(p.server); s != nil {
 		return s.Equal(ip)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), providerLookup)
 	defer cancel()
-	addrs, err := net.DefaultResolver.LookupIPAddr(ctx, server)
+	addrs, err := p.lookup(ctx, p.server)
 	if err != nil {
-		slog.Warn("phone: looking up the provider for a call", "server", server, "err", err)
-		return false
+		slog.Warn("phone: looking up the provider for a call, going by where it was seen before", "server", p.server, "err", err)
 	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	for _, a := range addrs {
-		if a.IP.Equal(ip) {
-			return true
-		}
+		p.known[a.IP.String()] = true
 	}
-	return false
+	return p.known[ip.String()]
+}
+
+// registered remembers the far side of a registration the provider accepted. It is shown every
+// message the user agent receives, so it keeps to a REGISTER's 200.
+func (p *provider) registered(msg sip.Message) {
+	res, ok := msg.(*sip.Response)
+	if !ok || res.StatusCode != sip.StatusOK {
+		return
+	}
+	if cseq := res.CSeq(); cseq == nil || cseq.MethodName != sip.REGISTER {
+		return
+	}
+	host, _, err := net.SplitHostPort(res.Source())
+	if err != nil {
+		return
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		p.mu.Lock()
+		p.known[ip.String()] = true
+		p.mu.Unlock()
+	}
+}
+
+// fromProvider is provider.from for a provider not seen before.
+func fromProvider(server, source string) bool {
+	return newProvider(server).from(source)
 }
 
 func throwawayCert() (tls.Certificate, error) {
