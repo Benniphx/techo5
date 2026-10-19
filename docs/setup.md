@@ -813,7 +813,9 @@ To set it up, open the setup page, **Sound & Voice**, **Voice assistant**:
    is English).
 3. **Chat model endpoint**, and **Model** and **Key** if the server needs them. The key is never
    shown again; **Remove the key** clears it.
-4. **Web search**, if you want it: the SearXNG server's address.
+4. **Web search**, if you want it: the SearXNG server's address. **Page reader**, if you want that
+   too: a [page reader](../tools/page-reader/README.md)'s address, for pages that have no text until
+   their scripts run, like a store's hours.
 5. **Anything the assistant should know**: a name, a tone, or what the house wants it to know.
 6. **Save**. All three servers are needed, or the page says so and keeps what you had.
 

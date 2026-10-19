@@ -103,6 +103,7 @@ func servers(c Config) []ServerChange {
 		{What: "The assistant's text to speech", New: c.Brain.TTS},
 		{What: "The assistant's chat model", New: c.Brain.LLM},
 		{What: "The assistant's web search", New: c.Brain.Search},
+		{What: "The assistant's page reader", New: c.Brain.Reader},
 		{What: "The dashboard server", New: c.Dashboard.Server},
 		{What: "Music Assistant", New: c.MusicAssistant.URL},
 		{What: "Immich", New: c.Home.Immich.Server},

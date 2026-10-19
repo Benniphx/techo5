@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -246,6 +247,51 @@ func readPage(addr, want string) (string, error) {
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return "", fmt.Errorf("%q is not a web address", addr)
 	}
+	page, err := fetchPage(u)
+	var text, data string
+	if err == nil {
+		text, data = readable(page)
+	}
+	// A page that is all scripts, or a site that turns away a plain request, is read again by the page
+	// reader, a browser. Only a page that answered: one this device would not connect to (pageClient)
+	// is not handed to something that might.
+	var answered *pageStatus
+	if r := config.Get().Brain.Reader; r != "" && ((err == nil && len(text) < thinPage) || errors.As(err, &answered)) {
+		if h, rerr := renderPage(r, u); rerr != nil {
+			slog.Info("assistant: the page reader could not read it", "host", u.Host, "err", rerr)
+		} else if t, d := readable(h); len(t) > len(text) {
+			text, data, err = t, d, nil
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	if text == "" && data == "" {
+		return "the page has no text to read (it may only fill itself in with scripts); try another result", nil
+	}
+	// The data has the room the text leaves, and some always: a schedule's text beats its data, but a
+	// page filled in by scripts often has only the data it gives search engines.
+	room := min(len(data), max(pageChars-len(text), pageChars/6))
+	text = pick(text, want, pageChars-room)
+	if data != "" {
+		text = strings.TrimSpace(text + "\n\nThe page's own data:\n" + clip(data, room))
+	}
+	return "The page says (answer only from this; if it does not say, read another result):\n" + text, nil
+}
+
+// thinPage is less text than a page that says anything has: a page that fills itself in with
+// scripts has its title, a "loading", and the cookie notice.
+const thinPage = 500
+
+// pageStatus is a page that answered, but not with the page.
+type pageStatus struct {
+	host, status string
+}
+
+func (e *pageStatus) Error() string { return e.host + " answered " + e.status }
+
+// fetchPage is a page as it comes, from the internet only (pageClient).
+func fetchPage(u *url.URL) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
@@ -260,25 +306,36 @@ func readPage(addr, want string) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%s answered %s", u.Host, resp.Status)
+		return "", &pageStatus{u.Host, resp.Status}
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, pageMax))
+	return string(b), err
+}
+
+// renderPage is a page as a browser ends up with it, from the page reader (config.Brain.Reader): on
+// this house's network like the search server, so webClient, and its own firewall keeps its browser
+// on the internet (tools/page-reader).
+func renderPage(reader string, u *url.URL) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(reader, "/")+"/read?"+url.Values{"url": {u.String()}}.Encode(), nil)
 	if err != nil {
 		return "", err
 	}
-	text, data := readable(string(b))
-	if text == "" && data == "" {
-		return "the page has no text to read (it may only fill itself in with scripts); try another result", nil
+	resp, err := readerClient.Do(req)
+	if err != nil {
+		return "", errors.New("the page reader did not answer")
 	}
-	// The data has the room the text leaves, and some always: a schedule's text beats its data, but a
-	// page filled in by scripts often has only the data it gives search engines.
-	room := min(len(data), max(pageChars-len(text), pageChars/6))
-	text = pick(text, want, pageChars-room)
-	if data != "" {
-		text = strings.TrimSpace(text + "\n\nThe page's own data:\n" + clip(data, room))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("the page reader answered %s", resp.Status)
 	}
-	return "The page says (answer only from this; if it does not say, read another result):\n" + text, nil
+	b, err := io.ReadAll(io.LimitReader(resp.Body, pageMax))
+	return string(b), err
 }
+
+// readerClient waits for a browser: loading a page and its scripts takes seconds.
+var readerClient = &http.Client{Timeout: 30 * time.Second}
 
 // pageText is a page's readable text: its main content when it marks one, without scripts, menus,
 // headers, footers, sidebars and cookie notices, a line for each block. A sports site's schedule page is
