@@ -71,6 +71,16 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 📷 **The Echo Show 8 2nd gen's camera works** (v1.2.24). Live on its own screen, a Home Assistant
+  camera, and everything else the other Shows do with theirs (presence, person detection, gestures,
+  your recorder). It's off while the device is muted or the shutter is closed. It comes with a new
+  kernel, which the device installs on its own as a trial and puts back if it doesn't come up right.
+  Also: a **Bluetooth Secure Connections** switch for phones that pair and then drop a second later
+  ([#183](https://github.com/HuskerMinion/techo5/issues/183)); on the Dot, AirPlay recovers when it
+  stops showing up after the first use
+  ([techo5-dot#14](https://github.com/HuskerMinion/techo5-dot/issues/14)); and the camera's
+  `/camera.jpg` and `/camera.mjpeg` pages now ask for the camera password and light the green dot
+  while they're watched.
 - 📅 **A calendar for the wall** (v1.2.23). The calendar's new look: a day and a week on their hours,
   a cleaner month, Coming up with each day's weather, event icons, countdowns, a filter for which
   calendars a screen shows, and the next event at the foot of the clock, each with its own switch
