@@ -54,7 +54,7 @@ It started on the Show 5, which is where the name comes from.
 
 Every other device amonet opens is a Fire tablet. No Echo made after 2021 has a public unlock.
 
-How it compares with EchoLocal, EchoMuse, Kiosk Satellite and View Assist:
+How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and View Assist:
 [docs/comparison.md](docs/comparison.md).
 
 <p align="center">
