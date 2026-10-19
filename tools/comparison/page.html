@@ -109,9 +109,16 @@ button.star:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
   </div>
 
   <section class="picker" aria-labelledby="pickTitle">
-    <h2 id="pickTitle">What device do you have?</h2>
+    <h2 id="pickTitle">What devices do you have?</h2>
     <div class="chips" id="devChips"></div>
-    <p id="devNote" class="muted">Pick one to see only the projects that list it.</p>
+    <div class="toolbar" id="devMode" hidden>
+      <span class="label">Show projects that list</span>
+      <div class="chips">
+        <button class="chip" data-mode="all" aria-pressed="true">All of them</button>
+        <button class="chip" data-mode="any" aria-pressed="false">Any of them</button>
+      </div>
+    </div>
+    <p id="devNote" class="muted">Pick one or more to see only the projects that list them.</p>
   </section>
 
   <div class="toolbar"><span class="label">Section</span><div class="chips" id="secChips"></div></div>
@@ -163,18 +170,32 @@ const feat = R.filter(r => !r.fact), facts = R.filter(r => r.fact);
 const DV = D.devices.list, DC = D.devices.cells;
 const DEVWORD = { yes: "Supported", lineage: "With another OS first", progress: "In progress", no: "Not supported", unknown: "Not found" };
 const dev = (k, id) => DC[k][id] || ["unknown", "", ""];
-const st = { sec: "All", hide: new Set(), diff: false, sel: null, dev: "", star: new Set(), starOnly: false };
-const shown = () => P.filter(p => !st.hide.has(p.key) && (!st.dev || ["yes", "lineage", "progress"].includes(dev(p.key, st.dev)[0])));
+const st = { sec: "All", hide: new Set(), diff: false, sel: null, dev: new Set(), mode: "all", star: new Set(), starOnly: false };
+const lists = (k, id) => ["yes", "lineage", "progress"].includes(dev(k, id)[0]);
+const fits = k => !st.dev.size || [...st.dev][st.mode === "all" ? "every" : "some"](id => lists(k, id));
+const shown = () => P.filter(p => !st.hide.has(p.key) && fits(p.key));
+const short = id => DV.find(x => x.id === id).name.replace(/^Echo /, "");
+const lower = w => w.replace(/^./, c => c.toLowerCase());
 
 function devChips() {
   document.getElementById("devChips").innerHTML = [["", "Any device"], ...DV.map(d => [d.id, d.name])].map(([id, n]) =>
-    `<button class="chip" aria-pressed="${st.dev === id}" data-dev="${esc(id)}">${esc(n)}</button>`).join("");
+    `<button class="chip" aria-pressed="${id ? st.dev.has(id) : !st.dev.size}" data-dev="${esc(id)}">${esc(n)}</button>`).join("");
+  document.getElementById("devMode").hidden = st.dev.size < 2;
+  document.querySelectorAll("[data-mode]").forEach(b => b.setAttribute("aria-pressed", b.dataset.mode === st.mode));
   const el = document.getElementById("devNote");
-  if (!st.dev) { el.textContent = "Pick one to see only the projects that list it."; return; }
-  const d = DV.find(x => x.id === st.dev), ps = shown();
+  if (!st.dev.size) { el.textContent = "Pick one or more to see only the projects that list them."; return; }
+  const ids = [...st.dev], ps = shown();
+  if (ids.length === 1) {
+    const d = DV.find(x => x.id === ids[0]);
+    el.textContent = ps.length
+      ? `${d.name}: ${ps.map(p => `${p.name} (${lower(DEVWORD[dev(p.key, d.id)[0]])})`).join(", ")}. The others don't list it.`
+      : `None of the projects list the ${d.name}.`;
+    return;
+  }
+  const what = st.mode === "all" ? "all of them" : "at least one of them";
   el.textContent = ps.length
-    ? `${d.name}: ${ps.map(p => `${p.name} (${DEVWORD[dev(p.key, st.dev)[0]].replace(/^./, c => c.toLowerCase())})`).join(", ")}. The others don't list it.`
-    : `None of the projects list the ${d.name}.`;
+    ? `Projects that list ${what}: ${ps.map(p => p.name).join(", ")}. Each column header shows every picked device: green supported, amber with another OS first, blue in progress, gray not listed.`
+    : `No project lists ${what}.` + (st.mode === "all" ? " Try Any of them." : "");
 }
 function chips() {
   document.getElementById("secChips").innerHTML = ["All", ...SECS].map(s =>
@@ -185,7 +206,9 @@ function chips() {
 function table() {
   const ps = shown();
   let h = `<thead><tr><th class="feat">Feature</th>` + ps.map(p => `<th>${esc(p.name)}` +
-    (st.dev ? `<span class="dev pill d-${esc(dev(p.key, st.dev)[0])}">${esc(DEVWORD[dev(p.key, st.dev)[0]])}</span>` : "") + `</th>`).join("") + "</tr></thead><tbody>";
+    (st.dev.size === 1 ? [...st.dev].map(id => `<span class="dev pill d-${esc(dev(p.key, id)[0])}">${esc(DEVWORD[dev(p.key, id)[0]])}</span>`).join("")
+      : [...st.dev].map(id => `<span class="dev pill d-${esc(dev(p.key, id)[0])}" title="${esc(short(id))}: ${esc(DEVWORD[dev(p.key, id)[0]])}">${esc(short(id))}</span>`).join("")) +
+    `</th>`).join("") + "</tr></thead><tbody>";
   let any = false;
   for (const s of SECS) {
     if (st.sec !== "All" && st.sec !== s) continue;
@@ -239,7 +262,11 @@ document.addEventListener("click", e => {
   if (!t) return;
   if (t.id === "starClear") { st.star.clear(); stars(); table(); }
   else if (t.dataset.star) { st.star.has(t.dataset.star) ? st.star.delete(t.dataset.star) : st.star.add(t.dataset.star); stars(); table(); }
-  else if (t.dataset.dev !== undefined) { st.dev = t.dataset.dev; devChips(); table(); }
+  else if (t.dataset.dev !== undefined) {
+    if (!t.dataset.dev) st.dev.clear();
+    else st.dev.has(t.dataset.dev) ? st.dev.delete(t.dataset.dev) : st.dev.add(t.dataset.dev);
+    devChips(); table();
+  } else if (t.dataset.mode) { st.mode = t.dataset.mode; devChips(); table(); }
   else if (t.dataset.dk) devDetail(t.dataset.dk, t.dataset.dd);
   else if (t.dataset.sec) { st.sec = t.dataset.sec; chips(); table(); }
   else if (t.dataset.proj) {
