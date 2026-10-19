@@ -274,7 +274,7 @@ func (u *Firmware) Channel() update.Channel {
 // keeps reporting what it knew rather than blanking the card.
 func (u *Firmware) Check(ctx context.Context) {
 	if !update.Published() {
-		askApp()
+		askApp(false)
 		return
 	}
 	channel := u.Channel()
@@ -324,7 +324,7 @@ func (u *Firmware) command(cmd esphome.UpdateCommand) {
 // not from Home Assistant, which has no way to name one.
 func (u *Firmware) Install(ctx context.Context) {
 	if !update.Published() {
-		askApp() // a panel's app installs whatever newer build its check finds
+		askApp(true) // a panel's app installs a newer build if its release server has one
 		return
 	}
 	u.busy.Add(1)

@@ -12,8 +12,19 @@ import (
 )
 
 // askApp has the panel app look for an update: the app carries this daemon and is updated as a whole,
-// from the release server it was built for, and installs what it finds by itself.
-func askApp() { panelctl.Tell("update check") }
+// from the release server it was built for. A check only reports what the server offers ("update
+// check"); an install looks again and installs a newer build if there is one ("update install"), which
+// is Home Assistant's Install, or the night's automatic install (autoLoop) when that is switched on.
+func askApp(install bool) {
+	if install {
+		tellApp("update install")
+		return
+	}
+	tellApp("update check")
+}
+
+// tellApp is the control line, set apart so a test can read what the app is asked.
+var tellApp = panelctl.Tell
 
 // The app answers every check, and each new connection, with "update <running> [offered]": the app's
 // versions, which are this daemon's too (build-apk.sh stamps the same one into both).
