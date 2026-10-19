@@ -13,7 +13,7 @@ import (
 
 func TestIsLocal(t *testing.T) {
 	for host, want := range map[string]bool{
-		"homeassistant.local": true, "HomeAssistant.LOCAL.": true, "ha.lan": false,
+		"homeassistant.local": true, "HomeAssistant.LOCAL.": true, "homeassistant.example": false,
 		"192.0.2.20": false, "local": false, "": false, "my.local.example.com": false,
 	} {
 		if IsLocal(host) != want {
@@ -62,7 +62,7 @@ func answerAll(t *testing.T, name string, ips []net.IP, skip int) (asked func() 
 			r := new(dns.Msg)
 			r.SetReply(&q)
 			// A record for something else first, as a busy responder may send.
-			r.Answer = append(r.Answer, &dns.A{Hdr: dns.RR_Header{Name: "other.local.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 120}, A: net.IPv4(10, 0, 0, 9)})
+			r.Answer = append(r.Answer, &dns.A{Hdr: dns.RR_Header{Name: "other.local.", Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 120}, A: net.IPv4(198, 51, 100, 9)})
 			if q.Question[0].Name == dns.Fqdn(name) {
 				for _, ip := range ips {
 					r.Answer = append(r.Answer, &dns.A{Hdr: dns.RR_Header{Name: dns.Fqdn(name), Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 120}, A: ip})
