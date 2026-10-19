@@ -90,8 +90,10 @@ The bigger changes of September and October 2026. Every release lists the rest.
   HD 8 (10th gen), a Galaxy Tab S6 Lite and a Meta Portal (2nd gen); other Android 8.0+ tablets may
   work. [TECHO5 Panel](https://github.com/HuskerMinion/techo5-panel), [docs/panel.md](docs/panel.md)
 - 🗣️ **Also in v1.3.0.** Nearest device answers is now on by default, also on devices where it had
-  been turned off. The Show 8 (both generations) draws some controls larger to fit its screen. An
-  athena unit installed with `--force-panel` gets that panel's driver through the kernel update.
+  been turned off. The Show 8 (both generations) draws some controls larger to fit its screen. The
+  Show 8 2nd gen's kernel now picks its screen from the name the bootloader passes, so a unit
+  installed with `--force-panel` gets its own screen's driver with the kernel update (ten screens
+  known; only the BOE ILI9881C one tried on a unit).
 - 📷 **The Echo Show 8 2nd gen's camera works** (v1.2.24). Live on its own screen, a Home Assistant
   camera, and everything else the other Shows do with theirs (presence, person detection, gestures,
   your recorder). It's off while the device is muted or the shutter is closed. It comes with a new
