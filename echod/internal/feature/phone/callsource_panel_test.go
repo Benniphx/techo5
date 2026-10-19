@@ -31,12 +31,13 @@ func TestAPanelRefusesACallFromElsewhere(t *testing.T) {
 
 // Anything on the home network can send the panel's listener a REGISTER's 200 it never asked for, so
 // one does not make its sender the provider: that sender's INVITE is still refused. The provider here
-// is localhost, and the stranger another loopback address.
+// is 127.0.0.1, named by its address (localhost can resolve to ::1 first, which would put the listener
+// on IPv6), and the stranger another loopback address.
 func TestAPanelDoesNotTakeAStrangersRegisterOKForTheProvider(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	rang := make(chan string, 4)
-	l, err := open(ctx, Account{Server: "localhost", Username: "panel", Password: "x", Plain: true}, func(d *diago.DialogServerSession) {
+	l, err := open(ctx, Account{Server: "127.0.0.1", Username: "panel", Password: "x", Plain: true}, func(d *diago.DialogServerSession) {
 		rang <- d.InviteRequest.MessageData.Source()
 		_ = d.Respond(sip.StatusBusyHere, "Busy Here", nil)
 	})
