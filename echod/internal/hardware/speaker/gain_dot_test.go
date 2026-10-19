@@ -95,8 +95,8 @@ func (m *pathGainWrites) SetInt(name string, v uint32) error {
 	return nil
 }
 
-// A change is written at once while the speaker plays, kept for later on the jack or before Start,
-// and a failed write leaves the gain as it was.
+// A change is written at once while the speaker plays, and kept for later on the jack, before Start,
+// or after a write that failed.
 func TestSpeakerGainOnTheDotIsWrittenWithThePath(t *testing.T) {
 	if !GainAvailable() || !GainPossible() {
 		t.Fatal("the Dot's codec gain is always there")
@@ -137,10 +137,14 @@ func TestSpeakerGainOnTheDotIsWrittenWithThePath(t *testing.T) {
 		t.Fatalf("before Start: err %v, wrote %v, kept %d", err, m.levels, p.gainDB)
 	}
 
+	// A write that fails keeps the gain all the same, for the speaker's next path.
 	held = true
 	m.fail = errors.New("write failed")
-	if err := p.SetSpeakerGain(6); !errors.Is(err, m.fail) || p.gainDB != 0 {
+	if err := p.SetSpeakerGain(6); err != nil || p.gainDB != 6 {
 		t.Fatalf("a failed write: err %v, kept %d", err, p.gainDB)
+	}
+	if got := driverLevel(t, p.path(OutputSpeaker)); got != 12 {
+		t.Fatalf("the next path after a failed write: level %d, want 12", got)
 	}
 	m.fail = nil
 	if err := p.SetSpeakerGain(7); err == nil || len(m.levels) != 1 {

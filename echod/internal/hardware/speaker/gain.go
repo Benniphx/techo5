@@ -3,6 +3,7 @@ package speaker
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -235,20 +236,22 @@ var heldPathMixer = func(p *Player) pathGainMixer {
 // for every path written from now on (Player.path), and written at once if the speaker is the output
 // and the mixer is held. On the jack, or before Start, it waits for the speaker's path to be written.
 // gainDB is changed under pathMu as well as gainMu, so a path being written reads one value or the
-// other, never half of a change.
+// other, never half of a change. It is kept first: a write that fails now is said in the log, and the
+// gain still goes on with the speaker's next path, as it would have from the jack.
 func (p *Player) setPathGain(db int) error {
 	p.gainMu.Lock()
 	defer p.gainMu.Unlock()
 	p.pathMu.Lock()
 	defer p.pathMu.Unlock()
+	p.gainDB = db
 	if m := heldPathMixer(p); m != nil && p.out == OutputSpeaker && !p.draining {
 		for _, c := range speakerGainControls(db) {
 			if err := m.SetInt(c.name, uint32(c.level)); err != nil {
-				return err
+				slog.Warn("speaker gain: writing it now failed; it goes on with the next path", "db", db, "err", err)
+				break
 			}
 		}
 	}
-	p.gainDB = db
 	return nil
 }
 
