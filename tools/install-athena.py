@@ -36,8 +36,9 @@ recovery). Each step is checked before the next:
                boot image's tuning slot; the boot image's id recomputed
   5. write     asked once; only then are system and boot unmounted if TWRP had them mounted, and
                written: system, then boot (mainline only), each read back from the flash and compared
-               by sha256. Before this nothing on the unit changes: userdata is only mounted, and
-               read-only when TWRP has not mounted it already
+               by sha256; the store on system is then grown to fill its partition, from TWRP (Amazon's
+               kernel refuses to grow it once it runs: #192). Before this nothing on the unit changes:
+               userdata is only mounted, and read-only when TWRP has not mounted it already
   6. settings  name, Home Assistant key, SSH key and Wi-Fi (added to the unit's saved networks) into
                userdata/techo5
   7. boot      restart into TECHO5; the first boot grows the store to fill the partition, then slot a
@@ -817,6 +818,27 @@ def unmount(adb, n):
              '   and run this again' % (WRITABLE[n], ', '.join(still)))
 
 
+# The marker grow_store's script prints when the store was grown and checked clean.
+GROWN = 'T5-STORE-GROWN'
+
+
+def grow_store(adb):
+    """Grow the store just written to fill its partition, here in TWRP, with nothing mounted. The first
+    boot grows it online otherwise, but Amazon's 4.4 kernel flags the filesystem with errors as it
+    mounts it, and then refuses the online grow at every boot: a unit left at the image's 200 MiB could
+    never take an update (#192). Not done (TWRP without the tools, or the resize failing) leaves it to
+    the first boot as before."""
+    d = dev(SYSTEM)
+    out = adb.sh('command -v e2fsck >/dev/null && command -v resize2fs >/dev/null || { echo no-tools; exit; }; '
+                 'e2fsck -fy %s >/dev/null 2>&1; [ $? -le 1 ] || { echo e2fsck-failed; exit; }; '
+                 'resize2fs %s >/dev/null 2>&1 || { echo resize-failed; exit; }; '
+                 'e2fsck -fn %s >/dev/null 2>&1 && echo %s' % (d, d, d, GROWN))
+    if GROWN in out:
+        note('store grown to fill %s, and checked clean' % d)
+    else:
+        note('the store was not grown here (%s); the first boot grows it' % (out.strip() or 'no answer'))
+
+
 def write_partition(adb, parts, n, image, want):
     """An image onto partition n, through TWRP's RAM disk, read back from the flash."""
     size = os.path.getsize(image)
@@ -1164,6 +1186,7 @@ def main(argv=None):
     step('write the system partition')
     tries = write_partition(adb, parts, SYSTEM, image, want)
     note('%s written and read back from the flash (sha256 matches%s)' % (dev(SYSTEM), '' if tries == 1 else ', second try'))
+    grow_store(adb)
     if mainline:
         step('write the boot partition')
         tries = write_partition(adb, parts, BOOT, boot_image, boot_want)

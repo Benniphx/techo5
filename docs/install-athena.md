@@ -167,11 +167,12 @@ letter. Only do that after checking the tables: the speaker-config 0 table must 
 driver uses for 0 (table A), the other for 1. Please open an issue with the Fire OS version and the
 hashes so the next release knows them.
 
-## The store fills the partition on the first boot
+## The store fills the partition
 
 The image is only as big as its contents (about 200 MB), so it writes in seconds. The `system`
-partition is 3 GB, and a second slot needs that room. At every boot, before anything else writes to
-the store, `/init` runs `slotctl grow` on the `system` partition:
+partition is 3 GB, and a second slot needs that room. Since v1.2.24 the installer grows the store to
+fill it right after writing it, from TWRP, with nothing mounted. As a second chance, at every boot,
+before anything else writes to the store, `/init` runs `slotctl grow` on the `system` partition:
 
 - It does nothing once the store fills the partition, so in practice it runs once.
 - It grows the filesystem online with `resize2fs`, with the root remounted read-write for the moment
@@ -189,6 +190,28 @@ reinstall.
 
 The eMMC is `mmcblk0` under TECHO5's kernel and `mmcblk1` under Amazon's and TWRP's. The partition
 numbers are the same.
+
+### The store did not grow
+
+A unit installed before v1.2.24 on **Amazon's kernel** (`--kernel amazon`) may never have grown: that
+kernel marks the store as having errors each time it mounts it, so the online grow is refused at every
+boot, and `e2fsck` from TWRP doesn't help for long ([#192](https://github.com/HuskerMinion/techo5/issues/192)).
+The store stays at about 200 MB, and an update fails with "the store has no room for the new slot"
+(`tar: write error: No space left on device` in the log). `STORE=/store slotctl status` shows the size,
+and `/data/techo5-linux/grow.log` says why it wasn't grown.
+
+Grow it once from TWRP, with nothing mounted (thanks to the reporter of #192 for working this out):
+
+```
+adb shell e2fsck -fy /dev/block/mmcblk1p21
+adb shell resize2fs /dev/block/mmcblk1p21
+adb shell e2fsck -fn /dev/block/mmcblk1p21
+adb reboot
+```
+
+The last `e2fsck` should report the filesystem clean. Afterwards the store is about 3 GB and updates
+install again. Units installed with v1.2.24's installer or later are grown this way by the installer,
+and the store image it writes no longer gives Amazon's kernel the reason to flag it.
 
 ## Updates
 

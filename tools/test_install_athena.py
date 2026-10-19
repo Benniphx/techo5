@@ -463,6 +463,20 @@ class SimulatedTWRP(unittest.TestCase):
     def mainline_args(self):
         return ['--image', self.store, '--boot', self.boot]
 
+    def test_store_grown_after_written(self):
+        # #192: the store is grown from TWRP once written and read back, before the boot partition
+        # and the reboot; a grow that cannot be done says so and leaves it to the first boot.
+        u = self.unit()
+        out, err = self.install(u, *self.mainline_args())
+        self.assertIsNone(err, out)
+        system = next(i for i, c in enumerate(u.log) if 'of=/dev/block/mmcblk1p21' in c)
+        boot = next(i for i, c in enumerate(u.log) if 'of=/dev/block/mmcblk1p20' in c)
+        grow = [i for i, c in enumerate(u.log) if 'resize2fs /dev/block/mmcblk1p21' in c]
+        self.assertTrue(grow and system < grow[0] < boot, u.log)
+        # The simulated partition holds no real ext4: the grow is not done, and that is said.
+        self.assertIn('the store was not grown here', out)
+        self.assertTrue(u.rebooted)
+
     def test_mainline_install(self):
         u = self.unit()
         out, err = self.install(u, *self.mainline_args())

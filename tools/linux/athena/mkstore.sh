@@ -131,9 +131,12 @@ inodes=$(( files * 13 / 10 + 4096 ))
 say "contents ${used} MiB, $files entries; filesystem ${size} MiB, $inodes inodes"
 mkdir -p "$(dirname "$OUT")"
 rm -f "$OUT"
+# lazy_itable_init=0: every inode table written and marked zeroed. Amazon's 4.4 kernel flags a store
+# with one left to zero ("marked as needing zeroing") as having errors each time it mounts it, and then
+# refuses to grow it, so a unit on that kernel stayed at this size and could not take an update (#192).
 mke2fs -q -t ext4 -b 4096 -I 256 -N "$inodes" -L "$LABEL" -m 0 \
 	-O none,ext_attr,resize_inode,dir_index,filetype,extent,sparse_super,large_file,huge_file,uninit_bg,dir_nlink,extra_isize \
-	-E root_owner=0:0 -d "$R" "$OUT" "${size}M"
+	-E root_owner=0:0,lazy_itable_init=0 -d "$R" "$OUT" "${size}M"
 # The nodes the kernel opens before /init has mounted /dev.
 printf 'cd /dev
 mknod console c 5 1
