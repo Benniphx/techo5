@@ -19,17 +19,19 @@ table. Anything else stops it before anything is written. Each step is checked b
   1. checks    adb sees one Skylight running stock Android; the firmware is in KNOWN_FIRMWARE; adb root;
                the board (RK3566, the touch controller where the 150-CAL has it, the screen's size when
                the device tree shows it); the eMMC's size; the partition table is the stock one, both
-               copies; the Wi-Fi and Bluetooth firmware are on the vendor partition; /cache has room
-  2. backup    the whole eMMC (about 15.6 GB) and its two boot areas over `adb exec-out`, into
+               copies; the Wi-Fi and Bluetooth firmware are on the vendor partition
+  2. images    the installer image, TECHO5's boot image and the store image: the release's, checked
+               against its signed manifest, or yours (--installer, --boot, --store); the new partition
+               table, made from the unit's own (tools/linux/skylight/install/mkgpt.py); room on /cache
+               for the set
+  3. backup    the whole eMMC (about 15.6 GB) and its two boot areas over `adb exec-out`, into
                backups/skylight-<serial>/, with the sha256 of the stream; every partition Android does
-               not have mounted read-write is read again on the unit and must match. Without a verified
-               backup nothing is written (--backup points at one made before)
-  3. firmware  the unit's own Wi-Fi and Bluetooth firmware, copied into the backup folder. It is the
+               not have mounted read-write is read again on the unit and must match. The backup notes
+               the eMMC's CID and is only taken for that chip. Without a verified backup nothing is
+               written (--backup points at one made before)
+  4. firmware  the unit's own Wi-Fi and Bluetooth firmware, copied into the backup folder. It is the
                vendor's, so it never goes into a release or the repository: it goes back onto this unit
                only, into TECHO5's store, during the install
-  4. images    the installer image, TECHO5's boot image and the store image: the release's, checked
-               against its signed manifest, or yours (--installer, --boot, --store); the new partition
-               table, made from the unit's own (tools/linux/skylight/install/mkgpt.py)
   5. confirm   says exactly what is erased and how to go back, and asks once
   6. stage     the set onto /cache/techo5-install, each file checked on the unit; the installer image
                into recovery, read back; then `adb reboot recovery`
