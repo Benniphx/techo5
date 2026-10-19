@@ -756,7 +756,8 @@ t5_bt_again() {
 	# secureconn.go), since a power cycle for Secure Connections in the middle would undo it.
 	echo $g > /run/techo5-bt-again.busy
 	t5_bt_again_pass $g
-	[ "$(cat /run/techo5-bt-again 2>/dev/null)" = "$g" ] && rm -f /run/techo5-bt-again.busy
+	# A newer pass has written its own number in it: that one removes it.
+	[ "$(cat /run/techo5-bt-again.busy 2>/dev/null)" = "$g" ] && rm -f /run/techo5-bt-again.busy
 	return 0
 }
 

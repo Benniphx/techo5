@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"net"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -43,8 +44,12 @@ var (
 var pausedFor = 10 * time.Minute
 
 // routeToGroup is whether an ask can leave at all: with Wi-Fi down there is no route to the group,
-// and an outage is not avahi failing.
+// and an outage is not avahi failing. Linux keeps the route of a link that lost its carrier until the
+// address goes, so wlan0's own state is asked first where there is one.
 func routeToGroup() bool {
+	if st, err := os.ReadFile("/sys/class/net/wlan0/operstate"); err == nil && strings.TrimSpace(string(st)) != "up" {
+		return false
+	}
 	c, err := net.DialUDP("udp4", nil, mdnsGroup)
 	if err != nil {
 		return false

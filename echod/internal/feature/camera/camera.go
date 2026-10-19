@@ -67,12 +67,17 @@ func cameraOpen() bool { return config.Get().Security.Camera && camera.Available
 // a picture to send: a request refused for the mute or the lens cover lights nothing.
 func guarded(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// The generation before the login: a login saved while this one is checked ends it too.
+		gen := camstream.PageGen()
 		if !camstream.PageAllowed(w, r) {
 			return
 		}
-		h(w, r)
+		h(w, r.WithContext(context.WithValue(r.Context(), pageGenKey{}, gen)))
 	}
 }
+
+// pageGenKey carries the page generation guarded read into the handler.
+type pageGenKey struct{}
 
 func encode(f *camera.Frame) ([]byte, error) {
 	return encodeImage(f.Image())
@@ -122,8 +127,11 @@ func (f *Feature) stream(w http.ResponseWriter, r *http.Request) {
 	}
 	defer release()
 	defer camstream.PageWatching()()
-	// A new login or the lens cover ends the stream (camstream.PageGen).
-	gen := camstream.PageGen()
+	// A new login or the lens cover ends the stream (camstream.PageGen), counted from before the login.
+	gen, ok := r.Context().Value(pageGenKey{}).(uint64)
+	if !ok {
+		gen = camstream.PageGen()
+	}
 	const boundary = "techo5frame"
 	frames := make(chan *camera.Frame, 1)
 	// The client is slower than the sensor: skip, never queue, but end on the newest frame.

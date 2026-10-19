@@ -406,6 +406,11 @@ func (f *Feature) pump(frames <-chan frame, stop <-chan struct{}) {
 		case <-stop:
 			return
 		case <-due:
+			select {
+			case <-stop: // both ready: stopping wins
+				return
+			default:
+			}
 			develop, held, due = held, nil, nil
 		case next, ok := <-frames:
 			if !ok {

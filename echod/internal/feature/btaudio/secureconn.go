@@ -44,8 +44,9 @@ const (
 	scSettle = 12 * time.Second
 
 	// busyFor caps the wait for t5_bt_again's marker (/run/techo5-bt-again.busy): it retries the
-	// class for up to a minute on a Spot that is slow to take it.
-	busyFor = 90 * time.Second
+	// class for up to a minute on a Spot that is slow to take it, and a pass whose every btmgmt runs
+	// into its 5 s timeout takes about 140 s.
+	busyFor = 150 * time.Second
 
 	// The btmgmt timeouts techo5-lib.sh uses: 3 s to read, 5 s to set.
 	btmgmtRead = 3 * time.Second
