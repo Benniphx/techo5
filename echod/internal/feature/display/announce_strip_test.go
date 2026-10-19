@@ -27,9 +27,10 @@ func TestWhereATapEndsAnAnnouncement(t *testing.T) {
 			t.Errorf("%s: got %v, want %v", c.what, got, c.want)
 		}
 	}
-	// A wider panel draws the strip larger, twice over at 1920 across, and a tap follows it there.
+	// A larger panel draws the strip larger: the Skylight's 1920 by 1080 by its height, 2.25 times
+	// over, so it covers the date line whole; a tap follows it there.
 	const sw, sh = 1920, 1080
-	top := sh - 2*(announceInset+announceBar)
+	top := sh - (announceInset+announceBar)*9/4
 	if !onAnnounceStrip(sw/2, top+2, sw, sh) || onAnnounceStrip(sw/2, top-4, sw, sh) {
 		t.Errorf("on a 1920 by 1080 panel the strip's top should be at %d", top)
 	}

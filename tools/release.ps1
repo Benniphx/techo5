@@ -211,7 +211,7 @@ function Test-Image([string]$Path, [string[]]$NoFile = @(), [switch]$EmptyKeys) 
     if ($LASTEXITCODE -ne 0) { throw "$Path carries what no published image may (check-image.py)" }
 }
 if ($AthenaImage) { Test-Image $AthenaImage }
-# The Shows' rootfs (and the Spot's, released with -Rootfs) is published too.
+# The Shows' rootfs is published too.
 if ($Rootfs) { Test-Image $Rootfs }
 
 # The Skylight: its three images and the kernel's source from one release, with its rootfs. install-skylight.py

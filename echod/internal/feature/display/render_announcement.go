@@ -105,10 +105,15 @@ func announceBox(w, h int) image.Rectangle {
 // stripPaint scales the strip's height, inset and lines: by the panel's width, as the renderer scales
 // everything else, but a tenth less on a 16:10 panel (the Show 8's 1280 by 800). Its clock's date line
 // sits lower on the screen than on the wider panels, and the strip at the full scale came within a few
-// pixels of it. The text on it is the renderer's own, at the full scale.
+// pixels of it. On a 16:9 panel (the Skylight's 1920 by 1080) it goes by the height, so it covers the
+// date line whole, as on the Show 5, instead of cutting it in half. The text on it is the renderer's
+// own, at the full scale.
 func stripPaint(w, h int) *paint {
 	if h*16 >= w*10 {
 		return &paint{sNum: w * 9, sDen: drawnFor * 10}
+	}
+	if h*16 >= w*9 { // 16:9, the Skylight: by height, so it covers its lower date line whole
+		return &paint{sNum: h, sDen: drawnFor / 2}
 	}
 	return &paint{sNum: w, sDen: drawnFor}
 }
