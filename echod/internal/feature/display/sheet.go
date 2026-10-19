@@ -137,10 +137,17 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			settingRow{id: "musicstrip", label: "Now playing", sub: "Full page, or a strip over the clock", kind: ctlChoice, value: stripOptionText()},
 			settingRow{id: "follow", label: "Now playing follows", sub: "Another speaker's music, while this one is quiet", kind: ctlChoice, value: followText(st.demo)},
 			settingRow{id: "lyrics", label: "Lyrics", sub: "The words in time, looked up at LRCLIB", kind: ctlToggle, on: home.LyricsOn()},
-			settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()},
 		)
+		// Calls, Assist and the turn screen need a microphone: a screen without one leaves them out.
+		if hasMicrophone() {
+			rows = append(rows, settingRow{id: "callbutton", label: "Call button", sub: "On the home screen: devices and contacts", kind: ctlToggle, on: callButton.Load()})
+		}
 		if hasClockTap {
-			rows = append(rows, settingRow{id: "clocktap", label: "Tap on the clock", sub: "Start Assist, open the dashboard or the deck, or nothing", kind: ctlChoice, value: clockTaps[clockTapIndex()].label})
+			sub := "Start Assist, open the dashboard or the deck, or nothing"
+			if !hasMicrophone() {
+				sub = "Open the dashboard or the deck, or nothing"
+			}
+			rows = append(rows, settingRow{id: "clocktap", label: "Tap on the clock", sub: sub, kind: ctlChoice, value: clockTapChoices()[clockTapIndex()].label})
 		}
 		rows = append(rows,
 			settingRow{label: "Weather", kind: ctlHeading},
@@ -155,7 +162,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			settingRow{id: "camtime", label: "Camera time", sub: "How long a camera opened here stays up", kind: ctlChoice, value: cameraTimes[cameraTimeIndex()].label},
 			settingRow{id: "answertime", label: "Answer time", sub: "How long an answer stays up; a tap clears it", kind: ctlChoice, value: answerTimes[answerTimeIndex()].label},
 		)
-		if hasEqualizer {
+		if hasEqualizer && hasMicrophone() {
 			rows = append(rows, settingRow{id: "turnstyle", label: "Turn screen", sub: "Classic, or a wave or bars that move with the voice", kind: ctlChoice, value: turnStyles[turnStyleIndex()].label})
 		}
 		return withPresence(rows), ""
@@ -179,19 +186,33 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 				sub:  "0 dB is normal; boosts can distort, especially with more bass",
 				kind: ctlStepper, value: gainText(media.Get().SpeakerGain())})
 		}
+		// Without a microphone there is no voice to set up and no intercom to turn away: only the
+		// sounds for timers are left of the Voice group.
+		if hasMicrophone() {
+			rows = append(rows, []settingRow{
+				{label: "Voice", kind: ctlHeading},
+				{id: "mic", label: "Microphone", sub: "The mute button does this too", kind: ctlToggle, on: !st.muted, value: mic},
+				{id: "wakeword", label: "Wake word", kind: ctlChoice, value: st.wakeWord},
+				{id: "wakesens", label: "Wake word threshold", sub: "Higher wakes by mistake less often", kind: ctlStepper,
+					value: fmt.Sprintf("%.2f", config.Get().Wake.Slot(0).Threshold)},
+				{id: "waketone", label: "Wake sound", kind: ctlChoice, value: config.Get().Wake.Slot(0).Tone.Label()},
+				voiceRow(),
+				{id: "hasounds", label: "Home Assistant sounds", sub: "For muting and timers", kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds},
+			}...)
+		} else {
+			rows = append(rows,
+				settingRow{label: "Sounds", kind: ctlHeading},
+				settingRow{id: "hasounds", label: "Home Assistant sounds", sub: "For timers", kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds})
+		}
 		rows = append(rows, []settingRow{
-			{label: "Voice", kind: ctlHeading},
-			{id: "mic", label: "Microphone", sub: "The mute button does this too", kind: ctlToggle, on: !st.muted, value: mic},
-			{id: "wakeword", label: "Wake word", kind: ctlChoice, value: st.wakeWord},
-			{id: "wakesens", label: "Wake word threshold", sub: "Higher wakes by mistake less often", kind: ctlStepper,
-				value: fmt.Sprintf("%.2f", config.Get().Wake.Slot(0).Threshold)},
-			{id: "waketone", label: "Wake sound", kind: ctlChoice, value: config.Get().Wake.Slot(0).Tone.Label()},
-			voiceRow(),
-			{id: "hasounds", label: "Home Assistant sounds", sub: "For muting and timers", kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds},
 			{label: "Quiet", kind: ctlHeading},
 			{id: "quiet", label: "Quiet hours", sub: quietSub(), kind: ctlChoice, value: quietValue()},
 			{id: "sleep", label: "Sleep timer", sub: sleepSub(), kind: ctlChoice, value: sleepValue()},
-			{id: "dnd", label: "Do not disturb", sub: "Intercom calls from other rooms are turned away", kind: ctlToggle, on: config.Get().Home.DoNotDisturb},
+		}...)
+		if hasMicrophone() {
+			rows = append(rows, settingRow{id: "dnd", label: "Do not disturb", sub: "Intercom calls from other rooms are turned away", kind: ctlToggle, on: config.Get().Home.DoNotDisturb})
+		}
+		rows = append(rows, []settingRow{
 			{label: "Music", kind: ctlHeading},
 			{id: "sendspin", label: "Music Assistant player", sub: "Play music in sync with other rooms", kind: ctlToggle, on: st.sendspin},
 		}...)

@@ -76,6 +76,9 @@ func init() {
 // hasEqualizer is whether this screen offers the Wave and Bars turn screens (render_turn_spot.go).
 const hasEqualizer = true
 
+// hasMicrophone: the Spot always has its microphones (the Show's is render_welcome.go).
+var hasMicrophone = func() bool { return true }
+
 const (
 	// volumeShow is how long the level stays up after it last moved.
 	volumeShow = 2 * time.Second

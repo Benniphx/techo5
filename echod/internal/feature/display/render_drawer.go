@@ -44,10 +44,11 @@ func (p *paint) drawerSeg() int  { return p.s(drawerSegBase) }
 
 var drawerTabs = []string{"Cameras", "Radio", "Announce", "Call"}
 
-// shownTabs are the tabs this screen offers: no Call tab where there is no microphone to talk with.
+// shownTabs are the tabs this screen offers: no Announce or Call tab where there is no microphone to
+// talk with.
 func shownTabs() []string {
 	if !hasMicrophone() {
-		return drawerTabs[:drawerCall]
+		return drawerTabs[:drawerAnnounce]
 	}
 	return drawerTabs
 }
