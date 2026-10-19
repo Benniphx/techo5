@@ -805,10 +805,16 @@ with Home Assistant's MCP server.
 
 ### A wake word of your own
 
-Any microWakeWord model works, from a collection like
+Most microWakeWord models work, from a collection like
 [TaterTotterson/microWakeWords](https://github.com/TaterTotterson/microWakeWords) or one you train
 yourself ([training-wake-word.md](training-wake-word.md) covers how, other languages too). Each comes as two files, a `.json` and a `.tflite` with the same name (for example
 `echo.json` and `echo.tflite`).
+
+Not every one does: the device runs microWakeWord models with its own small engine, which doesn't
+have every operation ESPHome's does yet. A model built with extra layers, such as `ADD` or
+`AVERAGE_POOL_2D`, is refused when you add it, with the operation named
+([#190](https://github.com/HuskerMinion/techo5/issues/190)). A model that works with ESPHome's
+`micro_wake_word` may still be one of these.
 
 The quickest way is the device's setup page:
 

@@ -255,7 +255,10 @@ func microGraph(m *tflite.Model, size int) error {
 				return fmt.Errorf("it has more than %d operators", microMaxOperators)
 			}
 			if !microOps[o.Op] {
-				return fmt.Errorf("operator %d is %s, which microWakeWord models do not use", i, o.Op)
+				// The operation first, by name: its place in the graph (i) means nothing to the
+				// person adding the model (#190).
+				return fmt.Errorf("it uses %s, which this device's microWakeWord engine does not run "+
+					"(operator %d); some models made for ESPHome need it", o.Op, i)
 			}
 			// CALL_ONCE runs another subgraph to set up the first. Anywhere else, or pointed back at
 			// the first, it would call itself without end.
