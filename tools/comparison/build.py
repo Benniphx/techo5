@@ -55,6 +55,7 @@ def markdown(d):
     facts = [r for r in R if r["fact"]]
     first = d["sections"][0]
     o = []
+    o.append("![](comparison/banner.jpg)\n")
     o.append("# Comparison\n")
     o.append(f"""People often ask how the projects that bring Echo devices and other screens to Home Assistant
 compare. This page lists what each one covers. It isn't a ranking: each project is good work with

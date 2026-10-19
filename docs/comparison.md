@@ -1,3 +1,5 @@
+![](comparison/banner.jpg)
+
 # Comparison
 
 People often ask how the projects that bring Echo devices and other screens to Home Assistant
