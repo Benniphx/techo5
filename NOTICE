@@ -247,3 +247,48 @@ Linux kernel patches for the Echo Show 8 2nd gen, tools/linux/athena/kernel
   Bluetooth firmware, from linux-firmware, is not linked into the kernel: it ships as separate
   files in the boot image's ramdisk (lib/firmware), under MediaTek's own license, whose text
   (LICENCE.mediatek) is in the ramdisk with them.
+
+Linux kernel for the Skylight Calendar 15, tools/linux/skylight/kernel
+  Releases ship Linux 6.18.56 for arm64 in techo5-boot-skylight-<version>.img and the installer
+  image techo5-installer-skylight-<version>.img, under the GPL-2.0. Its source is published with each
+  release as linux-6.18.56-techo5-skylight-<version>-source.tar.xz: the kernel.org tree with the board
+  files, the panel driver and the build's configuration (techo5-skylight.config) in it.
+  The board device tree, rk3566-skylight-cal150.dts ((GPL-2.0+ OR MIT), like the kernel's Rockchip
+  trees), is TECHO5's, with its PMIC layout following rk3566-bigtreetech-cb2.dtsi and its display path
+  rk3566-pinetab2.dtsi from the kernel's own tree. Its values, and the panel driver's
+  (panel-skylight-cal150.c, GPL-2.0) 38 bridge init writes and timing, are taken from the unit's stock
+  device tree.
+  The Wi-Fi and Bluetooth firmware is not shipped: each unit's own goes into its store at install,
+  from its vendor partition.
+
+Light sensor, echod/internal/hardware/ambient/em3071x.go
+  The Everlight EM3071X's register addresses and the value that switches it on are the ones Rockchip's
+  GPL-2.0 driver uses (drivers/input/sensors/lsensor/ls_em3071x.c in Rockchip's kernel). They are
+  facts about the chip; the Go code that uses them is TECHO5's own, written fresh.
+
+BusyBox, https://busybox.net (GPL-2.0)
+  The Skylight's installer and bench images carry it as bin/busybox, and the Skylight and athena
+  stores as /bin/busybox.static (PID 1's interpreter): Alpine Linux's busybox-static package (armv7,
+  busybox-static-1.37.0-r31 from Alpine v3.24), unmodified. Its source is
+  https://busybox.net/downloads/busybox-1.37.0.tar.bz2 with Alpine's build files and patches,
+  https://gitlab.alpinelinux.org/alpine/aports/-/tree/3.24-stable/main/busybox. The images say so in
+  a SOURCES file beside it.
+
+echod (dependency)
+  github.com/miekg/dns — BSD 3-Clause License
+  Copyright (c) 2009, The Go Authors. Extensions copyright (c) 2011, Miek Gieben. All rights reserved.
+  Multicast DNS questions for .local names (lib/localname). Redistribution and use in source and
+  binary forms, with or without modification, are permitted provided that the copyright notice,
+  this list of conditions and the following disclaimer are retained, and that neither the name of
+  the copyright holder nor the names of its contributors are used to endorse or promote products
+  derived from this software without specific prior written permission. THIS SOFTWARE IS PROVIDED BY
+  THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DAMAGES
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE.
+
+echod (dependency)
+  github.com/libp2p/zeroconf/v2 — MIT License
+  Copyright (c) 2016 Stefan Smarzly, Copyright (c) 2014 Oleksandr Lobunets
+  Finding other TECHO5 devices and the deck's computers, and being found by Music Assistant, over
+  mDNS (feature/announce, feature/deck, feature/sendspin). The MIT License's text is as above, under
+  EchoLocal.
