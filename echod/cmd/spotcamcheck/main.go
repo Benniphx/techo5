@@ -2,25 +2,27 @@
 
 // Command spotcamcheck is a camera check for an Echo Spot whose camera gives no frames. It runs the
 // daemon's own sequence (hardware/camera/camera_spot.go) for the GC0312 on its parallel bus, then
-// reports what moved: the sensor's system registers, the receiver's registers before and after,
-// whether the TG frame counter ticks, the same with the pixel clock edge and sync polarities
-// swapped, and with the sensor's test pattern. A frame that arrives is saved as a gray PNG.
+// reports what moved: the receiver's registers before and after, the frame size the receiver
+// measured, and whether the TG frame counter ticks, then the same with the pixel clock edge and the
+// sync polarities swapped. A frame that arrives is saved as a gray PNG: a picture of the room.
 //
 //	spotcamcheck [-out /tmp/spotcam-check]
 //
 // The daemon must not be using the camera while it runs; the check refuses to start if another
-// process holds /dev/camera-isp. It writes the report to stdout and <out>.txt.
+// process holds the camera's devices. It writes the report to stdout and <out>.txt as it goes, and
+// ignores Ctrl-C and a dropped SSH session for the 15 s it runs, so the camera is always powered off.
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"image"
 	"image/png"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -43,11 +45,8 @@ const (
 	nrFeature   = 15
 	socketSub   = 2
 
-	featShutter     = 3004
-	featGain        = 3006
-	featSetRegister = 3009
-	featGetRegister = 3010
-	featTestPattern = 3037
+	featShutter = 3004
+	featGain    = 3006
 
 	ispMagic   = 'k'
 	nrIspReset = 0
@@ -132,7 +131,6 @@ type variant struct {
 	pclkInv       uint32 // TG1_PH_CNT PADCLK_INV
 	hpol, vpol    uint32 // SENINF1_MUX sync polarities
 	topCtrl       uint32 // SENINF_TOP_CTRL bits 8..11
-	pattern       bool
 	shutter, gain int
 }
 
@@ -143,8 +141,6 @@ var variants = []variant{
 	{name: "VSYNC inverted", vpol: 1, topCtrl: 1 << 10, shutter: 400, gain: 96},
 	{name: "both syncs inverted", hpol: 1, vpol: 1, topCtrl: 1 << 10, shutter: 400, gain: 96},
 	{name: "pixel clock select on", topCtrl: 1<<10 | 1<<8, shutter: 400, gain: 96},
-	// Last: the feature number is MediaTek's usual one but not checked against this kernel.
-	{name: "test pattern", topCtrl: 1 << 10, shutter: 400, gain: 96, pattern: true},
 }
 
 type checker struct {
@@ -160,14 +156,24 @@ func main() {
 	prefix := flag.String("out", "/tmp/spotcam-check", "file prefix for the report and any frames")
 	flag.Parse()
 
-	var report bytes.Buffer
-	out := io.MultiWriter(os.Stdout, &report)
+	// Stopped half way, the sensor would stay powered and the DMA running into a freed buffer.
+	signal.Ignore(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+
+	out := io.Writer(os.Stdout)
+	f, ferr := os.Create(*prefix + ".txt")
+	if ferr != nil {
+		fmt.Println("the report will not be saved:", ferr)
+	} else {
+		out = io.MultiWriter(os.Stdout, f)
+	}
 	err := run(out, *prefix)
 	if err != nil {
 		fmt.Fprintln(out, "stopped:", err)
 	}
-	if werr := os.WriteFile(*prefix+".txt", report.Bytes(), 0o644); werr == nil {
+	if f != nil {
+		f.Close()
 		fmt.Println("\nreport saved to", *prefix+".txt")
+		fmt.Println("Any .png saved next to it is a picture of the room: look before sharing it.")
 	}
 	if err != nil {
 		os.Exit(1)
@@ -197,7 +203,7 @@ func run(out io.Writer, prefix string) error {
 	return nil
 }
 
-// camHolders lists the processes other than this one with /dev/camera-isp open.
+// camHolders lists the processes other than this one with the camera's devices open.
 func camHolders() []string {
 	var who []string
 	self := fmt.Sprint(os.Getpid())
@@ -208,7 +214,7 @@ func camHolders() []string {
 		if pid == self || seen[pid] {
 			continue
 		}
-		if t, err := os.Readlink(fd); err == nil && t == "/dev/camera-isp" {
+		if t, err := os.Readlink(fd); err == nil && (t == "/dev/camera-isp" || t == "/dev/kd_camera_hw") {
 			seen[pid] = true
 			comm, _ := os.ReadFile("/proc/" + pid + "/comm")
 			who = append(who, strings.TrimSpace(string(comm))+" ("+pid+")")
@@ -274,13 +280,17 @@ func (c *checker) allocBuffers() error {
 	cfg := heapNew[ionMMData]()
 	*cfg = ionMMData{Config: ionMMConfig{Handle: a.Handle, ModuleID: m4uPortIMGO}}
 	cc := ionCustom{Cmd: 1, Arg: ptr32(cfg)}
-	if err := ioctl(c.ion, ioc(3, 'I', 6, unsafe.Sizeof(cc)), unsafe.Pointer(&cc)); err != nil {
+	err = ioctl(c.ion, ioc(3, 'I', 6, unsafe.Sizeof(cc)), unsafe.Pointer(&cc))
+	runtime.KeepAlive(cfg)
+	if err != nil {
 		return fmt.Errorf("ion config buffer: %w", err)
 	}
 	phys := heapNew[ionSysData]()
 	*phys = ionSysData{SysCmd: 1, Phys: ionSysGetPhysP{Handle: a.Handle}}
 	cc = ionCustom{Cmd: 0, Arg: ptr32(phys)}
-	if err := ioctl(c.ion, ioc(3, 'I', 6, unsafe.Sizeof(cc)), unsafe.Pointer(&cc)); err != nil {
+	err = ioctl(c.ion, ioc(3, 'I', 6, unsafe.Sizeof(cc)), unsafe.Pointer(&cc))
+	runtime.KeepAlive(phys)
+	if err != nil {
 		return fmt.Errorf("ion get phys: %w", err)
 	}
 	if phys.Phys.PhyAddr == 0 {
@@ -309,6 +319,8 @@ func (c *checker) feature(id uint32, v uint64) (uint64, error) {
 	*size = uint32(len(para))
 	ctl := [4]uint32{socketSub, id, ptr32(para), ptr32(size)}
 	err := ioctl(c.sens, ioc(3, sensMagic, nrFeature, 16), unsafe.Pointer(&ctl[0]))
+	runtime.KeepAlive(para)
+	runtime.KeepAlive(size)
 	var r uint64
 	for i := range para {
 		r |= uint64(para[i]) << (8 * i)
@@ -316,18 +328,22 @@ func (c *checker) feature(id uint32, v uint64) (uint64, error) {
 	return r, err
 }
 
-// sensorReg reads one GC0312 register through the driver (MSDK_SENSOR_REG_INFO_STRUCT: address, data).
-func (c *checker) sensorReg(addr uint32) (uint32, error) {
-	r, err := c.feature(featGetRegister, uint64(addr))
-	return uint32(r >> 32), err
-}
-
-func (c *checker) powerOn() error {
+// powerOn starts the master clock (the PLL, then the TG1 divider the sensor's MCLK pin runs from:
+// without it the sensor answers its id read with 0) and opens the sensor on the sub socket. A
+// failure stops the clock again.
+func (c *checker) powerOn(padInv uint32) (err error) {
 	mclk := heapNew[[3]uint32]()
 	*mclk = [3]uint32{1, 1, 0}
 	if err := ioctl(c.sens, ioc(3, sensMagic, nrSetMCLK, 12), unsafe.Pointer(&mclk[0])); err != nil {
 		return fmt.Errorf("SET_MCLK_PLL: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			mclk[0] = 0
+			ioctl(c.sens, ioc(3, sensMagic, nrSetMCLK, 12), unsafe.Pointer(&mclk[0]))
+		}
+	}()
+	c.setMCLK1(padInv)
 	idx := heapNew[[2]uint32]()
 	*idx = [2]uint32{socketSub << 16, 0}
 	if err := ioctl(c.sens, ioc(3, sensMagic, nrSetDriver, 8), unsafe.Pointer(&idx[0])); err != nil {
@@ -419,29 +435,23 @@ func (c *checker) setupParallel(v variant) {
 // try powers the sensor, sets the receiver up one way, and watches for 2 s.
 func (c *checker) try(i int, v variant) error {
 	fmt.Fprintf(c.out, "\n=== %d: %s ===\n", i+1, v.name)
-	if err := c.powerOn(); err != nil {
+	if err := c.powerOn(v.pclkInv); err != nil {
 		return err
 	}
 	defer c.powerOff()
-	if i == 0 {
-		c.sensorRegs()
-	}
-	c.setMCLK1(v.pclkInv)
 	c.setupISP()
 	c.setupParallel(v)
 	window, config := heapNew[[256]byte](), heapNew[[256]byte]()
 	ctl := heapNew[[4]uint32]()
 	*ctl = [4]uint32{socketSub, 0, ptr32(window), ptr32(config)}
-	if err := ioctl(c.sens, ioc(3, sensMagic, nrControl, 16), unsafe.Pointer(&ctl[0])); err != nil {
+	err := ioctl(c.sens, ioc(3, sensMagic, nrControl, 16), unsafe.Pointer(&ctl[0]))
+	runtime.KeepAlive(window)
+	runtime.KeepAlive(config)
+	if err != nil {
 		return fmt.Errorf("sensor control: %w", err)
 	}
 	c.feature(featShutter, uint64(v.shutter))
 	c.feature(featGain, uint64(v.gain))
-	if v.pattern {
-		if _, err := c.feature(featTestPattern, 1); err != nil {
-			fmt.Fprintln(c.out, "test pattern:", err)
-		}
-	}
 	clear(c.buf)
 	before := c.snap()
 	c.cam.wr(0x4300, c.mva)
@@ -465,8 +475,12 @@ func (c *checker) try(i int, v variant) error {
 			nz++
 		}
 	}
-	fmt.Fprintf(c.out, "TG frame ticks in 2 s: %d (about 60 is right); buffer mean %d, nonzero bytes %d of %d\n",
+	fmt.Fprintf(c.out, "TG frame ticks in 2 s: %d (a working Spot: about 31); buffer mean %d, nonzero bytes %d of %d\n",
 		ticks, sum/frameBytes, nz, frameBytes)
+	// SENINF1's line counter: pixels a line in the high half, lines a frame in the low (a working
+	// Spot: 640 x 480). Zero means no sync or pixel clock reached the receiver.
+	m := c.sen.rd(0x0134)
+	fmt.Fprintf(c.out, "receiver measured %d pixels x %d lines\n", m>>16, m&0xffff)
 	c.changed(before, after)
 	if i == 0 {
 		c.dump("set up with the daemon's settings, after 2 s")
@@ -478,26 +492,6 @@ func (c *checker) try(i int, v variant) error {
 		}
 	}
 	return nil
-}
-
-// sensorRegs reads the GC0312's system registers (0xf0..0xff, the same on every page). The first
-// read is the chip id at 0xf0, which is read-only: if the feature number is not this kernel's
-// register read, nothing else is asked.
-func (c *checker) sensorRegs() {
-	fmt.Fprint(c.out, "sensor registers 0xf0..0xff:")
-	if id, err := c.sensorReg(0xf0); err != nil || id&0xff != 0xb3 {
-		fmt.Fprintf(c.out, " not readable here (0xf0 gave %#x, %v)\n", id, err)
-		return
-	}
-	for a := uint32(0xf0); a <= 0xff; a++ {
-		v, err := c.sensorReg(a)
-		if err != nil {
-			fmt.Fprintf(c.out, " read failed: %v", err)
-			break
-		}
-		fmt.Fprintf(c.out, " %02x=%02x", a, v&0xff)
-	}
-	fmt.Fprintln(c.out)
 }
 
 type region struct {
