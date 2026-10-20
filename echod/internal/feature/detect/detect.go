@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
@@ -41,9 +42,13 @@ type Detect struct {
 	stop   *esphome.Number
 
 	// loading is held for a whole load, so a refresh (wakeword.Refresh) and a selection take turns, and
-	// asked is what the latest one was asked for, which is what a refresh loads again.
-	loading sync.Mutex
-	asked   []string
+	// asked is what the latest one was asked for, which is what a refresh loads again. refreshing keeps
+	// a run of connects from queueing refreshes behind it, and lib is the library, wake.Lib() unless a
+	// test says otherwise.
+	loading    sync.Mutex
+	asked      []string
+	refreshing atomic.Bool
+	lib        *wake.Library
 
 	// score is the last wake's peak, for setting the threshold by: see newScoreEntity.
 	score *esphome.Sensor
@@ -281,13 +286,51 @@ func (d *Detect) load(ids []string) []string {
 	return d.loadLocked(ids)
 }
 
-// refresh loads what the latest selection asked for again, so a model Home Assistant replaced is
-// downloaded and used. What runs is told to the turn as at start-up; Home Assistant has not changed
-// its selection, so there is nothing to tell it.
+// refresh swaps in the models Home Assistant replaced under the ids that are running. The new file is
+// fetched first, and only a slot whose model arrived is cleared and loaded again: the engine keeps a
+// slot that already runs the id as it is, and a download that failed leaves the old model listening.
 func (d *Detect) refresh() {
+	if !d.refreshing.CompareAndSwap(false, true) {
+		return
+	}
+	defer d.refreshing.Store(false)
+
 	d.loading.Lock()
 	defer d.loading.Unlock()
-	voice.Get().SetActiveWakeWords(d.loadLocked(d.asked))
+
+	accepted, ok := d.refreshLocked()
+	// Home Assistant has not changed its selection, so it is not told; the turn is, if what runs moved.
+	if turn := voice.Get(); ok && !slices.Equal(accepted, turn.ActiveWakeWords()) {
+		turn.SetActiveWakeWords(accepted)
+	}
+}
+
+// refreshLocked is refresh under the lock, reporting what runs after it and whether anything changed.
+func (d *Detect) refreshLocked() ([]string, bool) {
+	// Asked again here: a selection that came first has already fetched what it needed.
+	fresh := d.library().Refetch(d.library().Stale())
+	if len(fresh) == 0 {
+		return nil, false
+	}
+	for slot, id := range d.asked {
+		if slices.Contains(fresh, id) {
+			d.engine.Clear(slot)
+		}
+	}
+	accepted := d.loadLocked(d.asked)
+	for _, id := range fresh {
+		if !slices.Contains(accepted, id) {
+			slog.Error("a replaced wake word would not load; its slot is off until a word is chosen", "id", id)
+		}
+	}
+	return accepted, true
+}
+
+func (d *Detect) library() *wake.Library {
+	if d.lib != nil {
+		return d.lib
+	}
+	return wake.Lib()
 }
 
 func (d *Detect) loadLocked(ids []string) []string {
@@ -296,7 +339,7 @@ func (d *Detect) loadLocked(ids []string) []string {
 
 	// A selection may name a model Home Assistant is offering but this device has never had, so the
 	// library is asked rather than a list captured at boot: this is where a new word arrives.
-	models := wake.Lib().Ensure(ids)
+	models := d.library().Ensure(ids)
 
 	var accepted []string
 	var loaded []int
@@ -320,7 +363,7 @@ func (d *Detect) loadLocked(ids []string) []string {
 		accepted = append(accepted, m.ID)
 		loaded = append(loaded, slot)
 	}
-	wake.Lib().Loaded(accepted)
+	d.library().Loaded(accepted)
 
 	// Only the slots that took a wake word are waited on. A selection that loaded nothing has nothing to
 	// warm up, so the ring goes back to what it was showing rather than animating for a device that is
