@@ -44,7 +44,7 @@ func (d *Display) closeAlert() { d.alertUntil = time.Time{} }
 func (d *Display) alertUp() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return time.Now().Before(d.alertUntil) && d.view.Phase == "idle"
+	return time.Now().Before(d.alertUntil) && pageIdle(d.view.Phase)
 }
 
 // alertScene fills in the alerts every page may show (the badge, the pills), and the page when up.

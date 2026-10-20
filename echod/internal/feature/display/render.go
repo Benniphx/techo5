@@ -45,6 +45,7 @@ type scene struct {
 	now     time.Time
 	phase   string  // idle, listening, thinking, replying, lingering
 	eq      *eqView // a turn's bars, when turns are drawn as the equalizer
+	cue     string  // a turn's phase, when turns are a cue over the page and phase is idle (turn_cue.go)
 	heard   string
 	reply   string
 	since   time.Time
@@ -469,6 +470,7 @@ func (r *renderer) draw(s scene) {
 		r.shapes = alertOverlay{} // the alert shapes' picture is the page's size: kept only while the rain map is up
 	}
 	r.videoOver = image.Rectangle{}
+	r.setCaptionsAt(image.Rectangle{}) // until a frame draws them (render_cue.go)
 	// A video is over everything it is not covered by (video.go decides which), the night clock
 	// included, and has no header: the picture is the screen.
 	if s.showVideo {
@@ -478,6 +480,9 @@ func (r *renderer) draw(s scene) {
 	r.zmu.Lock()
 	r.videoZones = nil
 	r.zmu.Unlock()
+	// A cue turn goes over the page it was on, the night clock included, when that page is one to be
+	// looked at rather than answered (render_cue.go).
+	defer r.turnCue(s)
 	r.artDrawn = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setTempAt(image.Rectangle{})

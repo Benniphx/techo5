@@ -30,7 +30,9 @@ const (
 )
 
 // equalizerOn is whether turns are drawn as the equalizer, on a device that has it.
-func equalizerOn() bool { return hasEqualizer && turnStyles[turnStyleIndex()].value != "" }
+func equalizerOn() bool {
+	return hasEqualizer && turnStyles[turnStyleIndex()].value != "" && !cueOn()
+}
 
 // waveOn is whether the equalizer is drawn as the wave rather than the bars.
 func waveOn() bool { return turnStyles[turnStyleIndex()].value == "wave" }

@@ -557,10 +557,18 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   Dutch, Portuguese or Russian, and English for *Match all* or *English*. It also picks which words
   the screen listens for. It doesn't change what the assistant understands or says, and the rest of
   the screen stays in English.
-- **Turn screen**: how a voice request looks. **Classic** is the words, **Wave** is glowing lines,
-  **Bars** is an LED-style equalizer, **VU meters** are two moving-needle meters, **Orb** is a ball of
-  light (cool while it listens, violet while it thinks, warm while it answers) and **HAL 9000** is the
-  computer's red eye, all moving with the voice. This one is on the Spot too.
+- **Turn screen**: how a voice request looks. This one is on the Spot too. **Classic** is the words,
+  **Wave** is glowing lines, **Bars** is an LED-style equalizer, **VU meters** are two moving-needle
+  meters, **Orb** is a ball of light (cool while it listens, violet while it thinks, warm while it
+  answers) and **HAL 9000** is the computer's red eye, all moving with the voice. **Cue light** leaves
+  the screen as it is (the clock, the dashboard, the music, the photos, the night clock) and shows the
+  request as a light along the top edge instead, with a microphone on it while the device listens: it
+  breathes while the device listens, runs while it thinks and stays on while it answers. On the Spot
+  it's the rim. **Cue and captions** adds what was heard and the answer as captions at the bottom of
+  the screen, up to four lines (three on the Spot), cut with "…" if the answer is longer. The screen
+  under a cue keeps working: a tap there does what it always does, and a tap on the captions puts
+  them away. Stop a request by voice or with the stop word. A page with buttons to answer (a call, a
+  ringing alarm, the settings, a camera) gets no captions over it.
 - **Timers** (Show; **Timers on the clock** in Home Assistant): how running timers show on the clock.
   **Line** is the soonest under the date with a thin bar, as before. **Ring** is a ring for each (up
   to three) that empties as it runs, and on the Analog style a wedge on the dial from the minute hand

@@ -68,6 +68,10 @@ type paint struct {
 	mediaPages        int // the pages of favorites the sheet has
 	mediaSpeakerPages int // and of speakers
 
+	// captionsAt is where a cue turn's captions were drawn in the frame last drawn, under zmu: empty
+	// while there are none (turn_cue.go).
+	captionsAt image.Rectangle
+
 	// sNum and sDen scale this screen's fixed sizes against the panel the layout was drawn for. The
 	// Echo Show 5 is that panel and stays 1:1; the Show 8 is 4:3 of it across.
 	//

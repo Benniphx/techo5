@@ -1000,7 +1000,7 @@ func (d *Display) gesture(g touch.Gesture) {
 	// tap to put it away, at the night light's level. Only its taps: a swipe still opens nothing over
 	// the night and a long press still lifts the night light. The calendar takes every finger, as by
 	// day (calendarUp, which this holds mu for).
-	calUp := time.Now().Before(d.calUntil) && d.view.Phase == "idle"
+	calUp := time.Now().Before(d.calUntil) && pageIdle(d.view.Phase)
 	askedAtNight := glowing && d.askedUp(time.Now()) && (g.Kind == touch.Tap || calUp)
 	d.mu.Unlock()
 	if glowing && !dashAtNight && !askedAtNight {
@@ -1202,6 +1202,12 @@ func (d *Display) gesture(g touch.Gesture) {
 		return
 	}
 
+	// A cue turn's captions over the deck, the dashboard, the music or the clock: a tap on them puts
+	// them away, and anywhere else is the page's (turn_cue.go).
+	if d.captionsTap(g) {
+		return
+	}
+
 	// The deck: every finger is its while it is up.
 	if d.deckShowing() {
 		d.deckGesture(g)
@@ -1291,7 +1297,7 @@ func (d *Display) gesture(g touch.Gesture) {
 	case touch.Tap:
 		d.mu.Lock()
 		weatherUp := time.Now().Before(d.weatherUntil)
-		idle := d.view.Phase == "idle"
+		idle := pageIdle(d.view.Phase) // under a cue the page is up, and the tap is its (turn_cue.go)
 		d.mu.Unlock()
 		// A finished turn's words: a tap puts them away. It used to start another turn, which is not
 		// what a hand put on an answer to clear it means.
@@ -1520,7 +1526,7 @@ func (d *Display) gesture(g touch.Gesture) {
 		// way out: the drawer has closed on this swipe since long before there was a page to put away,
 		// because while it is in every finger belongs to drawerGesture.
 		d.mu.Lock()
-		sheet, showing, idle := d.sheet, d.showingPlaying, d.view.Phase == "idle"
+		sheet, showing, idle := d.sheet, d.showingPlaying, pageIdle(d.view.Phase)
 		d.mu.Unlock()
 		_, camera := home.Get().Camera()
 		if sheet || camera || !idle || !showing {
@@ -1542,7 +1548,7 @@ func (d *Display) gesture(g touch.Gesture) {
 // light before an alarm), no sheet, camera view or finished turn's words over it.
 func (d *Display) styleSwipe() bool {
 	d.mu.Lock()
-	sheet, idle, up := d.sheet, d.view.Phase == "idle", d.clockUp
+	sheet, idle, up := d.sheet, pageIdle(d.view.Phase), d.clockUp
 	d.mu.Unlock()
 	_, camera := home.Get().Camera()
 	return styleSwipeOn() && idle && up && !sheet && !camera && d.onClock() && !d.answerUp(time.Now())
@@ -2260,7 +2266,7 @@ func (d *Display) Run(ctx context.Context) error {
 }
 
 // frame draws what the moment calls for and says how long until the next one is due.
-func (d *Display) frame() time.Duration {
+func (d *Display) frame() (next time.Duration) {
 	d.videoPainting, d.vp.dark = false, false
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
@@ -2460,6 +2466,9 @@ func (d *Display) frame() time.Duration {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
+	if cueOn() {
+		s.cue, s.phase, s.heard, s.reply = cueTurn(s.phase, s.heard, s.reply, captionsOn())
+	}
 	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
 		s.eq = eqFor(s.phase, nightNow(now), now)
 		s.eq.wave = waveOn()
@@ -2645,11 +2654,14 @@ func (d *Display) frame() time.Duration {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
 	}
+	wait := home.Get().SlideshowIdleTimeout()
 	d.mu.Lock()
 	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock
 	if !boring {
 		d.slideshowIdleSince = time.Time{}
-	} else if d.slideshowIdleSince.IsZero() {
+	} else if d.slideshowIdleSince.IsZero() || (s.cue != "" && now.Sub(d.slideshowIdleSince) < wait) {
+		// A turn under a cue is somebody at the screen, as any turn is: the screensaver's wait starts
+		// again from it. One already up stays up under the light, as any page under a cue does.
 		d.slideshowIdleSince = now
 	}
 	idleSince := d.slideshowIdleSince
@@ -2658,7 +2670,7 @@ func (d *Display) frame() time.Duration {
 	if boring && s.sunrise == 0 && !s.redClock && len(s.glance) == 0 {
 		s.nextUp = d.nextUp.card(s.style.style(), now)
 	}
-	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
+	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= wait {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
 		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {
 			if art, fx := sceneArt(now, d.r.w, d.r.h); art != nil {
@@ -2702,6 +2714,11 @@ func (d *Display) frame() time.Duration {
 		d.deckDrawn = key
 	}
 	d.r.draw(s)
+	if light, _ := cueOver(s); light && cueLit(s.cue) {
+		// The cue's light breathes and runs over whatever page is up; a page that moves faster (a
+		// photo changing, rain falling) keeps its own pace.
+		defer func() { next = min(next, cueFrame) }()
+	}
 	unskinned(d.dev, s.redClockFace())
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)

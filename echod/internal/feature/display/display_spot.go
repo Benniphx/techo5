@@ -812,6 +812,11 @@ func (d *Display) gesture(g touch.Gesture) {
 		d.menuGesture(g)
 		return
 	}
+	// A cue turn's captions over the dashboard, the music or the clock: a tap on them puts them away,
+	// and anywhere else is the face's (turn_cue.go).
+	if d.captionsTap(g) {
+		return
+	}
 	d.mu.Lock()
 	dashUp := d.dashShowing
 	d.mu.Unlock()
@@ -918,7 +923,7 @@ func (d *Display) gesture(g touch.Gesture) {
 		// Across the clock face, the next clock style or the one before: only on the face itself, not
 		// while a turn is on or its words are up, nor over the screensaver or the light before an alarm.
 		d.mu.Lock()
-		idle, up := d.view.Phase == "idle", d.clockUp
+		idle, up := pageIdle(d.view.Phase), d.clockUp
 		d.mu.Unlock()
 		if !idle || !up || d.answerUp(time.Now()) || !styleSwipeOn() {
 			return
@@ -1334,7 +1339,7 @@ func (d *Display) Run(ctx context.Context) error {
 	}
 }
 
-func (d *Display) frame() time.Duration {
+func (d *Display) frame() (next time.Duration) {
 	d.videoPainting, d.vp.dark = false, false
 	now := time.Now()
 	if d.dev != nil {
@@ -1484,6 +1489,9 @@ func (d *Display) frame() time.Duration {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
+	if cueOn() {
+		s.cue, s.phase, s.heard, s.reply = cueTurn(s.phase, s.heard, s.reply, captionsOn())
+	}
 	if equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {
 		s.eq = eqFor(s.phase, nightNow(now), now)
 		s.eq.wave = waveOn()
@@ -1613,16 +1621,19 @@ func (d *Display) frame() time.Duration {
 			s.slideshowTrouble = home.Get().SlideshowTrouble()
 		}
 	}
+	wait := home.Get().SlideshowIdleTimeout()
 	d.mu.Lock()
 	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock
 	if !boring {
 		d.slideshowIdleSince = time.Time{}
-	} else if d.slideshowIdleSince.IsZero() {
+	} else if d.slideshowIdleSince.IsZero() || (s.cue != "" && now.Sub(d.slideshowIdleSince) < wait) {
+		// A turn under a cue is somebody at the screen, as any turn is: the screensaver's wait starts
+		// again from it. One already up stays up under the light, as any page under a cue does.
 		d.slideshowIdleSince = now
 	}
 	idleSince := d.slideshowIdleSince
 	d.mu.Unlock()
-	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= home.Get().SlideshowIdleTimeout() {
+	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= wait {
 		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
 		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {
 			if art, fx := sceneArt(now, side, side); art != nil {
@@ -1690,6 +1701,11 @@ func (d *Display) frame() time.Duration {
 		}
 	}
 
+	if cueFace(s) && cueLit(s.cue) {
+		// The cue's rim breathes and runs over whatever face is up; a face that moves faster keeps
+		// its own pace.
+		defer func() { next = min(next, cueFrame) }()
+	}
 	switch {
 	case turning || (s.menuOpen && d.isSpinning()):
 		return dialFrame

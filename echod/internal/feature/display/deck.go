@@ -72,7 +72,7 @@ func (d *Display) closeDeck() {
 func (d *Display) deckShowing() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.deckUp && d.deckOnScreen && d.view.Phase == "idle"
+	return d.deckUp && d.deckOnScreen && pageIdle(d.view.Phase)
 }
 
 // onClock is whether the clock itself is the page: not now playing, not the weather.
@@ -89,7 +89,8 @@ func deckFrameKey(s scene, ringing, calling bool) string {
 	// it up is not the unchanged deck: otherwise the dialog is skipped while the deck is still there
 	// to take the taps that dismiss it, and the screen looks normal while ignoring every touch.
 	if !s.showDeck || s.showVideo || s.showVideoAsk || s.showVolume || ringing || calling || s.setupAsking || s.showAnnouncement ||
-		s.showReminder || s.showNotification || s.popup != nil || s.bt.Pairing || s.pin.open || s.redClock || s.announceRecording || s.updateActive {
+		s.showReminder || s.showNotification || s.popup != nil || s.bt.Pairing || s.pin.open || s.redClock || s.announceRecording || s.updateActive ||
+		s.cue != "" {
 		return ""
 	}
 	// The colors too: the deck is drawn in the theme's, and a change from the setup page (a custom
