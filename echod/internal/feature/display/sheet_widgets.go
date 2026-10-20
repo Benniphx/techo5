@@ -897,6 +897,18 @@ func (r *paint) pillButton(right, cy int, label string, style buttonStyle) int {
 	return b.Min.X
 }
 
+// labelButton draws the program's button in b, a pill as tall as the box, with label centered in it.
+// For a box a page has measured for itself; pillButton measures its own.
+func (r *paint) labelButton(b image.Rectangle, label string, style buttonStyle) {
+	r.buttonLabel(b, label, r.buttonFace(b, float64(b.Dy())/2, style))
+}
+
+// buttonLabel writes label centered in b in the sheet's button face, on pillButton's baseline.
+func (r *paint) buttonLabel(b image.Rectangle, label string, col color.RGBA) {
+	face := r.faces().button
+	r.text(face, label, b.Min.X+(b.Dx()-r.width(face, label))/2, b.Min.Y+b.Dy()/2+r.s(8), col)
+}
+
 // icon is a category's line drawing, about 26 Show 5 pixels across (k scales it to the panel),
 // centered on (cx, cy).
 func (r *paint) icon(c category, cx, cy int, col color.RGBA) {
