@@ -58,7 +58,7 @@ func gainAnswer(err error) (ok, sure bool) {
 // A card that could not be opened yet is asked again next time.
 var GainAvailable = func() bool {
 	if gainOnPath {
-		return true // the codec's own driver gain, on every board of the build (paths_dot.go)
+		return true // the gain goes with the path: the Dot codec's driver gain, athena's amplifier volume
 	}
 	gainSeen.mu.Lock()
 	defer gainSeen.mu.Unlock()

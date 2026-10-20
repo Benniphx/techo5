@@ -5,6 +5,7 @@ package speaker
 import (
 	"math"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -130,7 +131,46 @@ func boardInit() []kctl {
 	return showInit(rt5616())
 }
 
-var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: "Master Playback Volume", level: 110})
+var athenaMainlineInit = append(athenaMainlineRoutes, kctl{name: athenaMaster, level: athenaMasterUnity})
+
+// athenaMaster is the upstream tas5805m driver's digital volume, one level per channel, both written
+// alike. Its table (tas5805m_volume) makes 110 0 dB and each step 1 dB, the same scale as the Show 5's
+// TAS5805M control (gain.go), under another name and with two channels.
+const (
+	athenaMaster      = "Master Playback Volume"
+	athenaMasterUnity = 110
+)
+
+// gainOnPath is whether the Speaker gain setting goes with the speaker's path rather than to the Show
+// 5's TAS5805M control (gain.go): on athena's mainline kernel it does, as the amplifier's digital
+// volume. initSequence writes that volume at 0 dB on every start, Reopen and Close, so a gain written
+// once beside it would be lost on the next Reopen; written with the path, it follows every one. The
+// Skylight's "Master Playback Volume" is another chip's and is never touched.
+var gainOnPath = layout.AthenaMainline()
+
+// withSpeakerGain is seq, out's path, with the Speaker gain in it: on athena's mainline kernel the
+// amplifier's digital volume at db dB over 0 dB, written after initSequence's 0 dB. Kept to 0 to
+// config.SpeakerGainMax (+6 dB). Elsewhere, and on any output but the speaker, seq as it is.
+//
+// The echo reference needs nothing for it: it is made from what the speaker sent (softRef), ahead of
+// the amplifier, so it neither grows nor clips with it. The echo at the microphones grows by db, as on
+// the Dot (paths_dot.go). Amazon's DSP tuning in the amplifier is left as it is.
+func withSpeakerGain(seq []kctl, out Output, db int) []kctl {
+	if !gainOnPath || out != OutputSpeaker {
+		return seq
+	}
+	return append(slices.Clone(seq), speakerGainControls(db)...)
+}
+
+// speakerGainControls is what a change of the Speaker gain writes while the speaker plays: athena's
+// amplifier volume alone, as withSpeakerGain puts it in the speaker's path. Nothing on other boards.
+func speakerGainControls(db int) []kctl {
+	if !gainOnPath {
+		return nil
+	}
+	db = max(0, min(db, config.SpeakerGainMax))
+	return []kctl{{name: athenaMaster, level: int32(athenaMasterUnity + db)}}
+}
 
 var skylightInit = []kctl{
 	{name: "Playback Mux", value: "HP"},

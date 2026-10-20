@@ -675,7 +675,8 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
 
 ## 7. Voice
 
-**Speaker gain** is an optional amplifier boost on Show 5 2nd gen units with a TI TAS5805M.
+**Speaker gain** is an optional amplifier boost on Show 5 2nd gen units with a TI TAS5805M,
+and on the Show 8 2nd gen, whose TAS5805M takes the same 1 dB steps on both channels.
 It appears beside the speaker controls in Settings → **Sound**, on the setup page under
 **Speaker and voice**, and in Home Assistant's **Playback** configuration. Other Show units
 do not offer it. The setting is saved and restored before audio starts, including
