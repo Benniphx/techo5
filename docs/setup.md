@@ -37,8 +37,11 @@ Calendar can also take a `.local` name like `homeassistant.local`: it looks the 
 Dot and the Echo 2nd gen can't, and on a panel it works only where Android looks `.local` names up.
 An external or Nabu Casa address does not work on any of them.
 
-If a photo folder says **Couldn't open this folder**, or a camera shows `hass: no access configured`,
-this step is missing or the address is wrong.
+If a photo folder says **Couldn't open this folder**, the line under it says why: *Home Assistant
+isn't set up here* is this step missing, *Address not found* a name the device can't look up (give the
+IP address), *Can't reach Home Assistant* a wrong address or port, and *Home Assistant refused the
+token* a token that was deleted or mistyped. A camera that shows `hass: no access configured` is this
+step missing too. A panel needs this step like any other device.
 
 Also turn on **Allow the device to perform Home Assistant actions** on the device's ESPHome entry
 (Configure), as in [Getting started](getting-started.md#after-installing-every-device).
