@@ -1,6 +1,10 @@
-//go:build dot
+//go:build dot || panel
 
-// Package camera is the front camera; the Dot has none.
+// Package camera is the front camera. The Dot has none, and neither has a panel: a tablet's camera is
+// Android's, and the app hands none to the daemon. A panel leaves the Echo camera out altogether rather
+// than asking at run time, because a tablet on the Echo Show 5's MediaTek chip (the 8th gen Fire HD 8)
+// has the same /dev/camera-isp and /dev/kd_camera_hw nodes, and the daemon took it for a Show's camera
+// and failed to open it.
 package camera
 
 import (
@@ -40,6 +44,12 @@ func Get() *Camera {
 func Available() bool { return false }
 
 var errNone = errors.New("no camera on this device")
+
+// ErrNeedsReboot is never returned here; it is the Shows' (camera_common.go).
+var ErrNeedsReboot = errors.New("the camera is held off")
+
+// Unwedged never fires here.
+var Unwedged hook.Hook[struct{}]
 
 func (c *Camera) Acquire() (func(), error)                     { return nil, errNone }
 func (c *Camera) AcquireSlow() (func(), error)                 { return nil, errNone }
