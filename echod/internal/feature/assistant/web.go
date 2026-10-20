@@ -313,8 +313,8 @@ func fetchPage(u *url.URL) (string, error) {
 }
 
 // renderPage is a page as a browser ends up with it, from the page reader (config.Brain.Reader): on
-// this house's network like the search server, so webClient, and its own firewall keeps its browser
-// on the internet (tools/page-reader).
+// this house's network like the search server, so readerClient, which may reach it, and not
+// pageClient; its own firewall keeps its browser on the internet (tools/page-reader).
 func renderPage(reader string, u *url.URL) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -617,9 +617,11 @@ var clutterWords = map[string]bool{"cookie": true, "cookies": true, "consent": t
 // neverClutter are the elements that hold the whole page, whatever their class says ("has-nav").
 var neverClutter = map[string]bool{"html": true, "body": true, "main": true, "article": true}
 
-// clutter is whether an element is a page's menus, notices or ads rather than what it is about. One
-// with the page's heading in it is kept, whatever its class: a wrapper named for its menu holds more.
-func clutter(n *html.Node) bool {
+// clutter is whether an element is a page's menus, notices or ads rather than what it is about. A
+// class word alone does not make a wrapper clutter: "with-sidebar" or "ad-free" can hold the whole
+// page, so one that holds the page's heading, its main part, an article or a table, or most of the
+// text being read (total, its length) is kept.
+func clutter(n *html.Node, total func() int) bool {
 	if neverClutter[n.Data] {
 		return false
 	}
@@ -630,10 +632,42 @@ func clutter(n *html.Node) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
 	}) {
 		if clutterWords[w] {
-			return find(n, "h1") == nil
+			return !holdsContent(n) && 2*rawLen(n) <= total()
 		}
 	}
 	return false
+}
+
+// holdsContent is whether an element has the page's heading, main part, an article or a table in it.
+func holdsContent(n *html.Node) bool {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type != html.ElementNode {
+			continue
+		}
+		switch c.Data {
+		case "h1", "main", "article", "table":
+			return true
+		}
+		if strings.EqualFold(attr(c, "role"), "main") || holdsContent(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// rawLen is how much text an element has, scripts and styles aside, before anything is dropped.
+func rawLen(n *html.Node) int {
+	if n.Type == html.TextNode {
+		return len(strings.TrimSpace(n.Data))
+	}
+	if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style" || n.Data == "noscript" || n.Data == "template") {
+		return 0
+	}
+	l := 0
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		l += rawLen(c)
+	}
+	return l
 }
 
 func hasAttr(n *html.Node, key string) bool {
@@ -658,10 +692,17 @@ func find(n *html.Node, tag string) *html.Node {
 }
 
 func textOf(n *html.Node) string {
+	total := -1
+	totalLen := func() int {
+		if total < 0 {
+			total = rawLen(n)
+		}
+		return total
+	}
 	var b strings.Builder
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
-		if n.Type == html.ElementNode && (skipped[n.Data] || clutter(n)) {
+		if n.Type == html.ElementNode && (skipped[n.Data] || clutter(n, totalLen)) {
 			return
 		}
 		if n.Type == html.TextNode {

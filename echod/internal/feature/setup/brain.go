@@ -77,7 +77,8 @@ func brainSection(w http.ResponseWriter, token string) {
 	 <label for="reader">Page reader</label>
 	 <input id="reader" name="reader" value="%s" placeholder="http://192.168.1.20:8891" autocomplete="off">
 	 <p class="note">Optional: a browser that reads pages that fill themselves in with scripts, like a
-	  store's hours (TECHO5's tools/page-reader). Used only when a page has no text as it comes.</p>
+	  store's hours (TECHO5's tools/page-reader). Used only when a page has almost no text as it comes,
+	  or the site turns the device away with an error.</p>
 	 <label for="prompt">Anything the assistant should know</label>
 	 <textarea id="prompt" name="prompt" rows="3" maxlength="2000">%s</textarea>
 	 <p><button type="submit">Save</button></p></form></fieldset>`,

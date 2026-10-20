@@ -106,6 +106,35 @@ func TestPageTextDropsNoticesNotTheContent(t *testing.T) {
 	}
 }
 
+// A wrapper named for what sits beside the content holds the content: it is not dropped with its name.
+func TestPageTextKeepsAWrapperNamedForItsSidebar(t *testing.T) {
+	page := `<html><body><div id="page" class="ad-free">
+	<div class="with-sidebar layout">
+	 <div class="content"><h2>Store hours</h2><p>Open Monday to Friday, 9 AM to 6 PM.</p>
+	  <p>Closed on Sundays and holidays. Curbside pickup until 5 PM.</p>
+	  <section><p>The pharmacy opens at 10 AM on Saturdays, and the bakery at 7 AM every day.</p></section></div>
+	 <div class="sidebar"><a>Related</a></div>
+	</div>
+	<div class="ad"><p>Buy now</p></div>
+	</div></body></html>`
+	got := pageText(page)
+	for _, want := range []string{"Store hours", "9 AM to 6 PM", "Closed on Sundays", "pharmacy opens at 10 AM"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"Related", "Buy now"} {
+		if strings.Contains(got, not) {
+			t.Errorf("kept %q in:\n%s", not, got)
+		}
+	}
+	// A table is the content, whatever its wrapper is called.
+	if got := pageText(`<body><div class="has-sidebar"><table><tr><td>Game 1</td><td>7 PM</td></tr></table></div><p>` +
+		strings.Repeat("Other words. ", 40) + `</p></body>`); !strings.Contains(got, "Game 1") {
+		t.Errorf("dropped the table:\n%s", got)
+	}
+}
+
 // A page built by scripts has no text, but it says what it is about to search engines.
 func TestReadableKeepsTheStructuredData(t *testing.T) {
 	page := `<html><head><meta name="description" content="Store hours and directions.">

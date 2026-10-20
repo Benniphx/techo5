@@ -863,7 +863,8 @@ alarms and reminders; stop what is ringing or playing; set the volume; find, pla
 stations; play music from Music Assistant, once one is set up on the device; call another device in
 the house; read the device's calendars and the weather, here or somewhere else; and put the
 forecast, the rain map or the calendar on the screen. It remembers the conversation for five minutes,
-for a follow-up.
+for a follow-up. The town set under **Where this device is** goes into what the model is told, so
+its answers and web searches are about your town unless you name another place.
 
 With a [SearXNG](https://github.com/searxng/searxng) server's address it can also look things up on
 the web, like scores, news or opening hours, and read the pages it finds. SearXNG needs its JSON
@@ -879,8 +880,9 @@ To set it up, open the setup page, **Sound & Voice**, **Voice assistant**:
 3. **Chat model endpoint**, and **Model** and **Key** if the server needs them. The key is never
    shown again; **Remove the key** clears it.
 4. **Web search**, if you want it: the SearXNG server's address. **Page reader**, if you want that
-   too: a [page reader](../tools/page-reader/README.md)'s address, for pages that have no text until
-   their scripts run, like a store's hours.
+   too: a [page reader](../tools/page-reader/README.md)'s address. A page is read through it when it
+   has almost no text as it comes (it fills itself in with scripts, like a store's hours) or the site
+   answers with an error, as some do to anything that is not a browser.
 5. **Anything the assistant should know**: a name, a tone, or what the house wants it to know.
 6. **Save**. All three servers are needed, or the page says so and keeps what you had.
 
