@@ -9,17 +9,22 @@ import "math"
 // output samples that are kept ever computed. Drawing straight lines between neighboring samples
 // instead folds the images of everything above a few kHz back into the treble as tones that are no
 // harmonic of anything: a 10 kHz tone at 44.1 kHz came out with a ghost at 13.9 kHz only 21 dB under
-// it, heard as grit on cymbals and sibilants. Here those images are about 74 dB down.
+// it, heard as grit on cymbals and sibilants. Here those images are more than 70 dB down.
 //
-// The filter's cutoff sits at the lower rate's Nyquist frequency, with convertTaps taps for every
-// sample at the higher rate, so the transition band is the same few kHz either way.
+// The filter's cutoff sits at the slower rate's Nyquist frequency, with convertTaps taps for every
+// sample at the slower rate, so the transition band is as wide in Hz either way.
+//
+// The arithmetic is whole numbers: 16-bit samples against coefficients scaled by 1<<shift, summed in
+// 32 bits. The Spot's cores ran the same filter in float32 at half the speed.
 type Converter struct {
 	up, down int // to/g and from/g
 	channels int
-	// phases[p] is the branch for an output that falls p/up of the way past its newest input.
-	phases [][]float32
+	// phases[p] is the branch for an output that falls p/up of the way past its newest input, stored
+	// oldest input first so it runs forwards against the history window.
+	phases [][]int32
+	shift  uint
 	// hist is, per channel, the last k inputs twice over, newest last (as in Upsampler).
-	hist [][]float32
+	hist [][]int32
 	at   int
 	// phase is where the next output falls past the newest input, in 1/up of an input sample.
 	phase int
@@ -28,9 +33,17 @@ type Converter struct {
 }
 
 const (
-	// convertTaps is the filter length per sample of the faster side: a transition band 5.5/48 of that
-	// rate wide (about 5 kHz at 44.1 or 48 kHz), so flat to about 19.5 kHz, centered on the cutoff.
-	convertTaps = 48
+	// convertTaps is the filter length per sample of the slower rate: a transition band 5.5/32 of
+	// that rate wide, centered on the cutoff. From 44.1 kHz that is flat to about 18.3 kHz and stopped
+	// from 25.8: an image that lands between those folds above 20 kHz, so nothing audible is left of
+	// any of them. Every tap is paid for on every output sample: on the Spot, 48 taps in float32 cost
+	// 7.6 % of a core while music played, these 32 in whole numbers 1.7 %, straight lines 0.55 %.
+	convertTaps = 32
+
+	// convertGain is 0.5 dB of headroom. Straight lines never went past the input's own peaks; a
+	// filter overshoots the peaks between samples that music mastered to full scale carries, and
+	// would clip them.
+	convertGain = 0.944
 
 	// convertMostPhases bounds the table: up is 160 for 44.1 kHz and 640 for 11.025, the worst of
 	// the usual rates. A rate with no small ratio to the output gets no converter (NewConverter).
@@ -49,24 +62,40 @@ func NewConverter(from, to, channels int) *Converter {
 		return nil
 	}
 	// Taps per phase: convertTaps per input sample when going up, scaled by the ratio going down so
-	// the band stays as wide in Hz.
+	// the band stays as wide in Hz. An even count, for dot's two sums.
 	k := convertTaps
 	if from > to {
-		k = (convertTaps*from + to - 1) / to
+		k = ((convertTaps*from+to-1)/to + 1) &^ 1
 	}
 	// The prototype runs at up*from; its cutoff is half the slower rate, and its gain up makes up for
 	// the zeros the upsampling would have put between the inputs.
-	h := lowpass(up*k, 0.5*float64(min(from, to))/float64(up*from), float64(up))
-	c := &Converter{up: up, down: down, channels: channels}
+	h := lowpass(up*k, 0.5*float64(min(from, to))/float64(up*from), float64(up)*convertGain)
+
+	// The scale is as fine as the sums allow: a full-scale input against the branch with the most
+	// weight in it must stay inside 32 bits.
+	var most float64
 	for p := range up {
-		branch := make([]float32, k)
+		var sum float64
+		for i := range k {
+			sum += math.Abs(float64(h[p+i*up]))
+		}
+		most = max(most, sum)
+	}
+	shift := uint(15)
+	for shift > 8 && 32768*most*float64(int(1)<<shift) >= 0.99*math.MaxInt32 {
+		shift--
+	}
+
+	c := &Converter{up: up, down: down, channels: channels, shift: shift}
+	for p := range up {
+		branch := make([]int32, k)
 		for i := range branch {
-			branch[i] = h[p+i*up]
+			branch[k-1-i] = int32(math.Round(float64(h[p+i*up]) * float64(int(1)<<shift)))
 		}
 		c.phases = append(c.phases, branch)
 	}
 	for range channels {
-		c.hist = append(c.hist, make([]float32, 2*k))
+		c.hist = append(c.hist, make([]int32, 2*k))
 	}
 	return c
 }
@@ -84,7 +113,7 @@ func (c *Converter) Run(in, out []int16) []int16 {
 	k := len(c.phases[0])
 	for f := 0; f+c.channels <= len(in); f += c.channels {
 		for ch := range c.channels {
-			x := float32(in[f+ch])
+			x := int32(in[f+ch])
 			c.hist[ch][c.at] = x
 			c.hist[ch][c.at+k] = x
 		}
@@ -94,13 +123,13 @@ func (c *Converter) Run(in, out []int16) []int16 {
 		}
 		for ; c.phase < c.up; c.phase += c.down {
 			branch := c.phases[c.phase]
+			if c.channels == 2 {
+				l, r := dot2(branch, c.hist[0][c.at:c.at+k], c.hist[1][c.at:c.at+k])
+				out = append(out, c.clip(l), c.clip(r))
+				continue
+			}
 			for ch := range c.channels {
-				win := c.hist[ch][c.at : c.at+k]
-				var y float32
-				for i, coef := range branch {
-					y += coef * win[k-1-i]
-				}
-				out = append(out, c.clip(y))
+				out = append(out, c.clip(dot(branch, c.hist[ch][c.at:c.at+k])))
 			}
 		}
 		c.phase -= c.up
@@ -108,16 +137,41 @@ func (c *Converter) Run(in, out []int16) []int16 {
 	return out
 }
 
-func (c *Converter) clip(y float32) int16 {
+// dot is the sum of h[i]*x[i] in two running sums: each add waits for the one before it, and two
+// chains keep the core busy where one leaves it idle.
+func dot(h, x []int32) int32 {
+	x = x[:len(h)]
+	var a, b int32
+	for i := 0; i+1 < len(h); i += 2 {
+		a += h[i] * x[i]
+		b += h[i+1] * x[i+1]
+	}
+	return a + b
+}
+
+// dot2 is dot on two channels at once, each coefficient loaded once for both.
+func dot2(h, x, y []int32) (int32, int32) {
+	x, y = x[:len(h)], y[:len(h)]
+	var a, b int32
+	for i, coef := range h {
+		a += coef * x[i]
+		b += coef * y[i]
+	}
+	return a, b
+}
+
+// clip rounds a sum back to a sample, half up, and holds it to full scale.
+func (c *Converter) clip(sum int32) int16 {
+	v := (sum + 1<<(c.shift-1)) >> c.shift
 	switch {
-	case y > math.MaxInt16:
+	case v > math.MaxInt16:
 		c.clipped++
 		return math.MaxInt16
-	case y < math.MinInt16:
+	case v < math.MinInt16:
 		c.clipped++
 		return math.MinInt16
 	}
-	return int16(math.Round(float64(y)))
+	return int16(v)
 }
 
 // Clipped counts output samples that came out past full scale: a filter overshoots a transient by a

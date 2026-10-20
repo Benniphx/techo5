@@ -52,10 +52,11 @@ func TestConverterKeepsTheTrebleClean(t *testing.T) {
 	for _, hz := range []float64{1000, 5000, 10000, 15000, 18000} {
 		ys := convertTone(44100, 48000, hz, 0.5, 44100, 4410)
 		amp, rest := toneAndRest(ys, 48000, hz, 200)
-		level := 20 * math.Log10(amp/(0.5*32767))
+		// The level is the 0.5 dB of headroom; at 18 kHz the transition band has begun.
+		level := 20*math.Log10(amp/(0.5*32767)) - 20*math.Log10(convertGain)
 		under := 20 * math.Log10(amp/math.Sqrt2/rest)
-		if math.Abs(level) > 0.1 {
-			t.Errorf("%.0f Hz came out at %+.2f dB", hz, level)
+		if most := map[bool]float64{true: 0.5, false: 0.1}[hz > 15000]; math.Abs(level) > most {
+			t.Errorf("%.0f Hz came out at %+.2f dB besides the headroom", hz, level)
 		}
 		if under < 70 {
 			t.Errorf("%.0f Hz: what the conversion added is only %.1f dB under the tone", hz, under)
@@ -95,7 +96,7 @@ func TestConverterKeepsTimeWhateverTheChunks(t *testing.T) {
 // 96 kHz comes down to 48: what is above 24 kHz would fold into the treble and is gone.
 func TestConverterDownStopsWhatWouldFold(t *testing.T) {
 	ys := convertTone(96000, 48000, 1000, 0.5, 96000, 9600)
-	if amp, _ := toneAndRest(ys, 48000, 1000, 200); math.Abs(20*math.Log10(amp/(0.5*32767))) > 0.1 {
+	if amp, _ := toneAndRest(ys, 48000, 1000, 200); math.Abs(20*math.Log10(amp/(0.5*32767*convertGain))) > 0.1 {
 		t.Errorf("1 kHz came out at %.4f of what went in", amp/(0.5*32767))
 	}
 	// 30 kHz would land on 18 kHz.
