@@ -286,6 +286,11 @@ type Display struct {
 	radioCue time.Time
 	radar    bool
 	radioSel int
+	// musicQuiet is how long the music on the face has been paused or stopped, and musicAway whether
+	// that has gone on past pausedAway: the clock comes back, and the face's taps go back to it, while
+	// the track stays held for play to pick up again.
+	musicQuiet quietTimer
+	musicAway  bool
 	// cameraSel is the camera list's middle row.
 	cameraSel int
 	// contactTop is the first contact the Call list shows.
@@ -862,7 +867,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			return
 		}
 	}
-	if d.showsNowPlaying() {
+	if d.musicFaceUp() {
 		switch g.Kind {
 		case touch.Tap:
 			if onDone(g.X, g.Y) {
@@ -1566,12 +1571,25 @@ func (d *Display) frame() (next time.Duration) {
 			s.sky = skyNow(weatherNow(s.weather, s.forecast, s.now))
 		}
 	}
-	s.nowPlaying = s.phase == "idle" && d.showsNowPlaying()
+	music := d.showsNowPlaying()
+	s.nowPlaying = s.phase == "idle" && music
 	if s.nowPlaying || (s.menuOpen && s.menuMode == modeRadio) {
 		s.radio = home.Get().Radio()
 		if s.radio.Followed {
 			s.playing, s.paused = s.radio.Playing, s.radio.Paused
 		}
+	}
+	// Music quiet for pausedAway gives the face back to the clock; playing again brings it back. The
+	// time runs through a turn, so a question asked while the music is paused does not bring the face
+	// back for another half minute after its answer.
+	d.mu.Lock()
+	away := d.musicQuiet.over(now, music, s.playing)
+	d.musicAway = away
+	d.mu.Unlock()
+	if away {
+		s.nowPlaying = false
+	}
+	if s.nowPlaying || (s.menuOpen && s.menuMode == modeRadio) {
 		if rows := radioRows(s.radio, s.playing || s.paused); s.radioSel >= len(rows) || s.radioSel < 0 {
 			s.radioSel = min(max(s.radioSel, 0), max(len(rows)-1, 0))
 			d.mu.Lock()

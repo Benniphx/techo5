@@ -394,8 +394,9 @@ captured login to the same page for a few minutes, and could see the pictures an
   device keeps the track paused or lets it go a few seconds after the phone stops sending, depending
   on the app, so an automation should go by the state rather than by how long a pause takes. A Music
   Assistant track paused or stopped while it played here stays named, with the state paused, for up to
-  half an hour from the pause, as Now Playing keeps it with play on it until **Done**, though the media
-  player reads idle meanwhile. Something else played to the device in that time is named while it
+  half an hour from the pause, held with play on it until **Done**, though the media player reads idle
+  meanwhile. The full Now Playing page puts itself away 30 seconds after the pause (see **Now playing**
+  under the screen settings). Something else played to the device in that time is named while it
   plays, and the paused track comes back once it ends. A video, and a followed player's song (below),
   are not named here. The Spot has no AirPlay or Spotify Connect, so those never show there. Anyone
   who can play to the device can put a title there, and the titles go into Home Assistant's history
@@ -529,7 +530,11 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 - **World clock places** (setup page, Screen & Photos tab): the World style's places, as time zone
   names with commas between them, like `America/Chicago, Europe/Paris, Asia/Tokyo`. Up to three; the
   Spot shows the first two. Leave it empty for New York, London and Tokyo.
-- **Answer time** and **Now playing** (the full page, or a strip over the clock).
+- **Answer time** and **Now playing** (the full page, or a strip over the clock). Once the music is
+  paused or stopped for 30 seconds, the full page goes by itself: to the strip when the setting uses
+  one, otherwise back to the clock (the Spot has no strip, so its clock face). The track is still held
+  for half an hour, so play picks it up again and the page comes back. A page you bring back while it
+  is paused, with the clock's word for the music or a tap on the strip's song, stays another 30 seconds.
 - **Theme** (Show): a preset, or **Custom colors** of your own. On the screen, tap a color for each part.
   On the setup page's Screen & Photos tab, **Themes**, each of the five colors has a color picker and a
   `#rrggbb` box; they start from the theme the screen wears now. **Match the accent** fills in the

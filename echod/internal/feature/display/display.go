@@ -351,6 +351,9 @@ type Display struct {
 	awayTrack   string
 	awayStation string
 	awayPlaying bool
+	// musicQuiet is how long the music on the page has been paused or stopped: past pausedAway the page
+	// puts itself away, as a swipe would, and playing again brings it back.
+	musicQuiet quietTimer
 
 	// strip is the music strip's setting in Home Assistant; stripKey/stripSince are the track the strip
 	// is timing and when it started, stripFullUntil a tap on the strip's song bringing the full page
@@ -1394,6 +1397,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			image.Pt(g.X, g.Y).In(d.r.playingButton()) {
 			d.mu.Lock()
 			d.away, d.awayTrack, d.awayStation, d.awayPlaying = false, "", "", false
+			d.musicQuiet.reopened(time.Now())
 			d.mu.Unlock()
 			d.wake()
 			return
@@ -1428,6 +1432,7 @@ func (d *Display) gesture(g touch.Gesture) {
 				d.mu.Lock()
 				d.stripFullUntil = time.Now().Add(stripFull)
 				d.away, d.awayTrack, d.awayStation, d.awayPlaying = false, "", "", false
+				d.musicQuiet.reopened(time.Now())
 				d.mu.Unlock()
 				d.wake()
 			}
@@ -1616,6 +1621,20 @@ func (d *Display) putAway(rd home.Radio, wanted, playing bool) bool {
 		d.awayPlaying = false
 	}
 	return true
+}
+
+// quietAway puts the page away once the music on it has been quiet for pausedAway, the way a swipe does
+// while nothing plays: putAway then keeps it away until the track plays again or another comes. Only a
+// page brought back by hand restarts the time (quietTimer.reopened), so setting it again each frame
+// while the time is over is the same as setting it once. The time runs on through a turn (music, not
+// only the idle page's wants), so a question asked while paused does not bring the page back for
+// another half minute after its answer.
+func (d *Display) quietAway(now time.Time, rd home.Radio, music, wants, playing bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.musicQuiet.over(now, music, playing) && wants {
+		d.away, d.awayTrack, d.awayStation, d.awayPlaying = true, rd.Title, rd.Now, false
+	}
 }
 
 // nowPlaying is whether the idle screen should be what is playing rather than the clock: something
@@ -2546,7 +2565,8 @@ func (d *Display) frame() (next time.Duration) {
 	}
 	// Whether the idle screen wants to be what is playing. It is asked even when the page has been put
 	// away, because the track is what brings it back, so the radio is read either way.
-	wants := (s.phase == "idle") && d.nowPlaying()
+	music := d.nowPlaying()
+	wants := (s.phase == "idle") && music
 	d.mu.Lock()
 	s.showDrawer, s.drawerTab, s.drawerScroll, s.drawerPick, s.pickScroll = d.drawer && !s.showSheet && !s.showCamera, d.drawerTab, d.drawerScroll, d.drawerPick, d.pickScroll
 	d.mu.Unlock()
@@ -2572,6 +2592,7 @@ func (d *Display) frame() (next time.Duration) {
 			s.playing, s.paused = s.radio.Playing, s.radio.Paused
 		}
 	}
+	d.quietAway(now, s.radio, music, wants, s.playing)
 	s.nowPlaying = wants && !d.putAway(s.radio, wants, s.playing)
 	d.mu.Lock()
 	// Not under the sunrise light, which draws no strip: taps on a strip nobody can see would still act.
