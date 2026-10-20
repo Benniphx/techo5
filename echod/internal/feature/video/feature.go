@@ -17,6 +17,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/netguard"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
@@ -543,7 +544,8 @@ func (f *Feature) Actions() []*esphome.Action {
 }
 
 // ownHost is whether host is one of the device's own addresses, which the kernel would carry over
-// loopback: a video is never fetched from the device itself.
+// loopback: a video is never fetched from the device itself. The addresses are netguard's, which on a
+// panel are the ones the app reports; its dialer refuses the same addresses again as it connects.
 func ownHost(host string) bool {
 	if strings.Contains(host, "%") {
 		return true // a zoned address is one of the device's own links (CheckURL refuses it first)
@@ -552,16 +554,7 @@ func ownHost(host string) bool {
 	if ip == nil {
 		return false
 	}
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return false
-	}
-	for _, a := range addrs {
-		if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
-			return true
-		}
-	}
-	return false
+	return netguard.OwnIP(ip)
 }
 
 // The package's own calls, which the DLNA renderer and the setup page use on every device.

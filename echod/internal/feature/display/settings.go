@@ -84,8 +84,12 @@ func slotName() string {
 	return strings.TrimSpace(string(b))
 }
 
-// address is the device's IPv4 address, which is how people find it on the network.
-func address() string {
+// address is the device's IPv4 address, which is how people find it on the network: the network
+// stack's, and on a panel the app's (address_panel.go). A variable, for tests.
+var address = stackAddress
+
+// stackAddress is the first IPv4 address of an interface that is up, as the network stack lists them.
+func stackAddress() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		return "-"
