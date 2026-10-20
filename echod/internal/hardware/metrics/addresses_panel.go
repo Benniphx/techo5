@@ -88,6 +88,17 @@ func reported(keep func(name string) bool) []net.IP {
 	return ips
 }
 
+// OwnAddresses is every address the app last reported on any interface, a USB tethering link's too:
+// the device's own, which netguard refuses to connect to. Addresses leaves tethering out only for
+// mDNS; it is the device's address all the same.
+func OwnAddresses() []net.IP {
+	var ips []net.IP
+	for _, i := range readInterfaces() {
+		ips = append(ips, i.addrs...)
+	}
+	return ips
+}
+
 // tethered is whether an interface is Android's USB tethering link (rndis0, usb0): it reaches only the
 // computer on the cable, and advertised over mDNS it would be an address nothing in the house can use,
 // as athena's RNDIS was (addresses_net.go). By name here: Android names them so, and the app reports

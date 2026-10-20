@@ -39,4 +39,15 @@ func TestTetheringIsNeverAdvertised(t *testing.T) {
 	if len(ifs) != 1 || ifs[0].Name != "wlan0" {
 		t.Errorf("MulticastInterfaces = %v, want only wlan0", ifs)
 	}
+	// Not advertised, but the device's own all the same.
+	own := OwnAddresses()
+	for _, want := range []string{"192.0.2.10", "192.0.2.129", "198.51.100.2"} {
+		found := false
+		for _, ip := range own {
+			found = found || ip.String() == want
+		}
+		if !found {
+			t.Errorf("OwnAddresses = %v, missing %s", own, want)
+		}
+	}
 }
