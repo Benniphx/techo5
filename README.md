@@ -47,7 +47,7 @@ It started on the Show 5, which is where the name comes from.
 | <img src="docs/images/badges/cronos.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 2nd gen** (2021, `cronos`) | C76N8S | this one | In daily use |
 | <img src="docs/images/badges/checkers.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 1st gen** (2019, `checkers`) | H23K37 | this one, same binary; hardware notes in [techo5-checkers](https://github.com/HuskerMinion/techo5-checkers) | In daily use |
 | <img src="docs/images/badges/crown.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 1st gen** (2019, `crown`) | C7H6N3 | this one, same binary | In daily use |
-| <img src="docs/images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | Working on two units |
+| <img src="docs/images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021, `athena`) | A8H3N2 | this one, same daemon on its own 64-bit mainline kernel; the story in [TECHO5 ATHENA](https://github.com/HuskerMinion/techo5-athena) | In daily use on two units |
 | <img src="docs/images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017, `rook`) | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | In daily use |
 | <img src="docs/images/badges/biscuit.png" alt="" width="36" align="absmiddle"> **Echo Dot, 2nd gen** (2016, `biscuit`) | RS03QR | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot) | In daily use |
 | <img src="docs/images/badges/radar.png" alt="" width="36" align="absmiddle"> **Echo, 2nd gen** (2017, `radar`) | XC56PY | [TECHO5 Dot](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen), same release and daemon | Working on one unit |
@@ -164,8 +164,9 @@ The bigger changes of September and October 2026. Every release lists the rest.
   [docs/install-athena.md](docs/install-athena.md)
 - 🌙 **The night clock on the Spot** (spot-v1.1.14). The Spot can show the Show's dim red night clock
   at night, or turn its screen off, instead of only dimming.
-- 🔊 **Speaker gain** (v1.2.15, Show 5 units with the TAS5805M amp). Up to +6 dB more, kept across
-  restarts. Thanks to [@OneWithNoFace](https://github.com/OneWithNoFace).
+- 🔊 **Speaker gain** (v1.2.15, Show 5 units with the TAS5805M amp; also the Show 8 2nd gen and the
+  Dot). Up to +6 dB more, kept across restarts. Thanks to
+  [@OneWithNoFace](https://github.com/OneWithNoFace).
 - 📱 **Your phone plays to the device** (v1.2.11 to v1.2.15). Pair a phone and play to the Show, Spot
   or Dot over Bluetooth; pause and play on either side reach the other. Thanks to
   [@tibole](https://github.com/tibole).
@@ -226,7 +227,7 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
   Assistant and night volume move the slider. If you use Spotify Connect, open an issue to say whether
   it works for you. [docs/setup.md](docs/setup.md#5-music)
 - 🔤 **Fonts, and fonts of your own** (v1.2.7). The Show and the Spot can draw their words in one of
-  eight other fonts instead of Go. A font file of your own fills in what those fonts lack, such as
+  nine other fonts instead of Go. A font file of your own fills in what those fonts lack, such as
   Korean, Chinese or Japanese song titles. [docs/setup.md](docs/setup.md#fonts-of-your-own)
 - 📍 **A fixed network address** (v1.2.7, Show and Spot). Set on the screen, the setup page or from
   Home Assistant. A new address is tried before it is kept. Thanks to
@@ -340,7 +341,7 @@ slot system, phone calls, and a minimal Alpine root filesystem in place of Andro
 | 🧠 **Voice without Home Assistant, if you want** | Instead of Assist, the device can use your own speech servers (Wyoming: faster-whisper and Piper) and a chat model (llama.cpp, Ollama or anything OpenAI-style). It sets timers and alarms, plays the radio and Music Assistant, changes the volume and calls other devices, and can look things up with SearXNG. Or answer a wake word with a realtime voice at OpenAI, xAI or Gemini, with your own key. [docs/setup.md](docs/setup.md#voice-without-home-assistant) |
 | 🔐 **Secure by default** | SSH is keys-only and off until you turn it on; keys arrive only through Home Assistant. The camera and screen web pages start closed, and a firewall lets in nothing on Wi-Fi but what the device serves. No password logins, not even in rescue. |
 | 🔄 **Updates that can't brick it** | Signed releases install over the air from Home Assistant's update card into the spare of two root filesystem slots, boot on trial, and fall back on their own if the new one doesn't settle. Follow the stable or the dev channel, and let it install on its own between 2 and 5 AM if you like. |
-| 📺 **A screen that's actually useful** | Clock and weather, the conversation as it happens, a glance strip of chips from Home Assistant along the foot of the clock, a calendar, now playing with song, cover art and lyrics, your Home Assistant dashboards, forecasts, a live rain radar, the National Weather Service's alerts (in the U.S.), live cameras from Home Assistant or go2rtc, up to six at once, notifications, timers and alarms, Wi-Fi setup, 13 themes, nine fonts, eight languages, and 12 clock styles you swipe between. Auto-brightness follows the room's light. |
+| 📺 **A screen that's actually useful** | Clock and weather, the conversation as it happens, a glance strip of chips from Home Assistant along the foot of the clock, a calendar, now playing with song, cover art and lyrics, your Home Assistant dashboards, forecasts, a live rain radar, the National Weather Service's alerts (in the U.S.), live cameras from Home Assistant or go2rtc, up to six at once, notifications, timers and alarms, Wi-Fi setup, 13 themes, ten fonts, eight languages, and 15 clock styles you swipe between. Auto-brightness follows the room's light. |
 | 📅 **A calendar on the screen** | Home Assistant's calendars, or any calendar's own iCal link: a day and a week on their hours, the month, Coming up with the weather, event icons and countdowns, pop-ups for the calendars you choose, and the next event under the clock. [docs/setup.md](docs/setup.md#calendar) |
 | 🖼️ **Your photos, three ways** | From anything Home Assistant's media library can browse (its media folder, network shares, Immich), from Immich directly (an album, favorites, dates, a person), or kept on the device from the setup page. Behind the clock or as a screensaver, whole photos with blurred sides, two tall ones side by side, with date and place. [docs/setup.md](docs/setup.md#2-photos) |
 | 🏠 **The whole house, even with Home Assistant down** | Announce to every device, in typed words or your own voice. Call one device from another, with an optional Drop In. Only the nearest device answers a wake word, on by default once the devices share a house word. Settings stay in step between the devices you pick. All of it goes device to device, signed with a house word you set. [docs/phone.md](docs/phone.md#calling-another-device-in-the-house), [docs/actions.md](docs/actions.md#announce-to-the-house) |
@@ -464,8 +465,8 @@ It finds the Show, asks what to call it and asks once before erasing anything (o
 the USB serial console, and prints where the Home Assistant key is kept. Later updates come from Home
 Assistant. Every step by hand, and the fixes for what can go wrong: **[docs/install.md](docs/install.md)**.
 
-> **Status:** in daily use on at least five 2nd gen Echo Show 5s, a 1st gen Show 5 and two 1st gen
-> Show 8s, plus the Spot and the Dot, and working on two 2nd gen Show 8s, an Echo 2nd gen and a
+> **Status:** in daily use on at least five 2nd gen Echo Show 5s, a 1st gen Show 5, two 1st gen
+> Show 8s and two 2nd gen Show 8s, plus the Spot and the Dot, and working on an Echo 2nd gen and a
 > Skylight Calendar 15. It's a hobby project, not a product: keep your backups, and expect rough edges.
 
 **Echo Show 5 1st gen (2019, `checkers`)** installs with the same command: the installer sees which
