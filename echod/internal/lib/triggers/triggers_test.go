@@ -162,6 +162,28 @@ func TestPortugueseLookalikes(t *testing.T) {
 	}
 }
 
+// Under Match all, English that holds another language's weather word is not the weather, and the
+// other language still asks for it.
+func TestEnglishInsideOtherLanguagesWords(t *testing.T) {
+	for _, heard := range []string{"what does the temporal lobe do", "call my neighbor", "how much storage is left",
+		"I never said that"} {
+		if AboutWeather(heard, MatchAll) {
+			t.Errorf("%q was taken as the weather under match all", heard)
+		}
+	}
+	for lang, heard := range map[string][]string{
+		"fr": {"Il va neiger demain ?", "Il a neigé ?", "Un orage ce soir ?", "Risque d'orage ?"},
+		"it": {"Domani ci sarà neve?", "Cade la neve?"},
+		"pt": {"Vai ter temporal?", "Vem temporal hoje?"},
+	} {
+		for _, h := range heard {
+			if !AboutWeather(h, lang) || !AboutWeather(h, MatchAll) {
+				t.Errorf("%q was not taken as the weather", h)
+			}
+		}
+	}
+}
+
 // The ways a Brazilian asks for the clock back.
 func TestPortugueseGoingHome(t *testing.T) {
 	for _, heard := range []string{"Volta pro início", "Volta pra tela inicial", "Mostra o relógio"} {
