@@ -20,6 +20,10 @@ func (s *Screen) Start(context.Context) error {
 		find, name = input.FindPrefix, "generic ft5x06"
 	}
 	dev, err := find(name)
+	if err != nil && layout.AthenaMainline() {
+		// The driver names module ids it knows by the panel instead: 0x43 is "EP0430M09"
+		dev, err = input.Find("EP0430M09")
+	}
 	if err != nil {
 		return fmt.Errorf("touch: %w", err)
 	}
