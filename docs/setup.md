@@ -35,7 +35,11 @@ talk to the device is not enough for this.
 Use Home Assistant's local IP address, as above with your own. A Show, a Spot or the Skylight
 Calendar can also take a `.local` name like `homeassistant.local`: it looks the name up itself. The
 Dot and the Echo 2nd gen can't, and on a panel it works only where Android looks `.local` names up.
-An external or Nabu Casa address does not work on any of them.
+Any address the device can reach on your own network works, including an `https://` name that your
+local DNS points at Home Assistant or a reverse proxy on the LAN, as long as its certificate is valid
+for that name (for a self-signed one, see "Home Assistant on HTTPS with its own certificate" in
+[getting-started.md](getting-started.md)). An address that only works from outside your home, such
+as a Nabu Casa URL, does not.
 
 If a photo folder says **Couldn't open this folder**, the line under it says why: *Home Assistant
 isn't set up here* is this step missing, *Address not found* a name the device can't look up (give the

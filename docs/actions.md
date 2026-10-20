@@ -39,9 +39,11 @@ whatever paired the device, and isn't something you call from an automation afte
 > `hass: no access configured` on it in place of the picture. The radio lists are the exception: the
 > device then asks radio-browser.info itself, when its place is set on the setup page.
 >
-> The URL must be Home Assistant's local address. The device calls it directly rather than
-> through Home Assistant's own connection to the device, so an external or Nabu Casa URL does not
-> work. Its IP address works everywhere. A `.local` name like `homeassistant.local` works on a Show, a
+> The URL must be an address the device can reach on your network. The device calls it directly
+> rather than through Home Assistant's own connection to the device, so an address that only works
+> from outside your home, such as a Nabu Casa URL, does not work. An `https://` name that your local
+> DNS points at Home Assistant or a reverse proxy on the LAN works, as long as its certificate is
+> valid for that name. Its IP address works everywhere. A `.local` name like `homeassistant.local` works on a Show, a
 > Spot and the Skylight Calendar, which look it up themselves, but not on the Dot or the Echo 2nd gen,
 > and on a panel only where Android looks `.local` names up.
 
