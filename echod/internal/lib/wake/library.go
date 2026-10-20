@@ -187,6 +187,29 @@ func (l *Library) Ensure(ids []string) []Model {
 	return l.Ours()
 }
 
+// Stale is the ids a slot is running from an old download: Home Assistant now offers a different model
+// under the same id. A selection is the only thing that downloads, and Home Assistant sends none when
+// its files change, so without this a new model sat unused until somebody chose another word and back.
+func (l *Library) Stale() []string {
+	l.muOwn.Lock()
+	running := slices.Clone(l.selecting)
+	l.muOwn.Unlock()
+
+	var stale []string
+	for _, id := range running {
+		o := l.offer(id)
+		if id == "" || o.URL == "" {
+			continue
+		}
+		// One that is not here yet is the selection's to fetch, and one sent from the setup page stays.
+		if m, ok := Find(l.Ours(), id); !ok || m.Uploaded || Have(l.dir, o) {
+			continue
+		}
+		stale = append(stale, id)
+	}
+	return stale
+}
+
 // Loaded is the selection over: ids is what the engine took of what Ensure was asked for. A model it
 // refused is in no slot, so it is free to be removed or replaced from the setup page again; it used to
 // count as in use until the next selection.

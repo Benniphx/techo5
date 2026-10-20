@@ -3,6 +3,7 @@ package detect
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -38,6 +39,11 @@ type Detect struct {
 	engine *Engine
 	busy   *wakeBusy
 	stop   *esphome.Number
+
+	// loading is held for a whole load, so a refresh (wakeword.Refresh) and a selection take turns, and
+	// asked is what the latest one was asked for, which is what a refresh loads again.
+	loading sync.Mutex
+	asked   []string
 
 	// score is the last wake's peak, for setting the threshold by: see newScoreEntity.
 	score *esphome.Sensor
@@ -245,6 +251,7 @@ func newDetect() *Detect {
 	// A selection both downloads models and lets go of the ones it replaced, so it is the one thing that
 	// moves either number the disk reports.
 	voice.Get().OnWakeWord(d.load, diag.Get().Measure)
+	wakeword.Refresh = d.refresh
 
 	ours := wake.Lib().Ours()
 	slog.Info("wake words installed", "count", len(ours),
@@ -269,6 +276,22 @@ func (d *Detect) Actions() []*esphome.Action { return d.clips.actions() }
 // is left out, so Home Assistant reverts that slot rather than showing a wake word the device is not
 // listening for.
 func (d *Detect) load(ids []string) []string {
+	d.loading.Lock()
+	defer d.loading.Unlock()
+	return d.loadLocked(ids)
+}
+
+// refresh loads what the latest selection asked for again, so a model Home Assistant replaced is
+// downloaded and used. What runs is told to the turn as at start-up; Home Assistant has not changed
+// its selection, so there is nothing to tell it.
+func (d *Detect) refresh() {
+	d.loading.Lock()
+	defer d.loading.Unlock()
+	voice.Get().SetActiveWakeWords(d.loadLocked(d.asked))
+}
+
+func (d *Detect) loadLocked(ids []string) []string {
+	d.asked = slices.Clone(ids)
 	d.busy.begin()
 
 	// A selection may name a model Home Assistant is offering but this device has never had, so the
