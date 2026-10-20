@@ -7,6 +7,7 @@ import (
 	"image"
 	"math"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -136,6 +137,9 @@ func tessCalls(t *testing.T) func() []component.Call {
 // there goes as the device's own action; a tap on a thermostat opens its controls; a tap on a locked
 // lock asks first, and the second unlocks it.
 func TestTesseraSheetsAndTheLock(t *testing.T) {
+	if !slices.Contains(dashboard.Modes(), config.DashboardTessera) {
+		t.Skip("no Tessera on this device: the dashboard is Off in that mode")
+	}
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
 	if err := config.Set().Dashboard().Mode(config.DashboardTessera); err != nil {
 		t.Fatal(err)
@@ -354,5 +358,22 @@ func TestTessFracOfNotANumber(t *testing.T) {
 		if got := tessFrac(c.v, c.lo, c.hi); got != c.want {
 			t.Errorf("tessFrac(%v, %v, %v) = %v, want %v", c.v, c.lo, c.hi, got, c.want)
 		}
+	}
+}
+
+// The top bar's date is in the screen language, like the clock's.
+func TestTesseraDateInTheScreensLanguage(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	t.Cleanup(func() { _ = config.Set().Screen().Language("") })
+	at := time.Date(2026, 9, 16, 14, 7, 0, 0, time.Local) // a Wednesday
+	date := tessera.BarItem{Kind: "date"}
+	if got := barText(date, at); got != "Wed, Sep 16" {
+		t.Errorf("English date = %q", got)
+	}
+	if err := config.Set().Screen().Language("de"); err != nil {
+		t.Fatal(err)
+	}
+	if got := barText(date, at); got != "Mi., 16. Sep." {
+		t.Errorf("German date = %q, want %q", got, "Mi., 16. Sep.")
 	}
 }

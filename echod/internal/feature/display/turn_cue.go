@@ -70,6 +70,13 @@ func cueWords(cue, heard, reply string) string {
 	return heard
 }
 
+// footControls says the page drew controls along its foot from y down: the captions go above them.
+func (r *paint) footControls(y int) {
+	if r.footAt == 0 || y < r.footAt {
+		r.footAt = y
+	}
+}
+
 // setCaptionsAt keeps where the captions were drawn, for a tap: empty for a frame with none.
 func (r *paint) setCaptionsAt(b image.Rectangle) {
 	r.zmu.Lock()

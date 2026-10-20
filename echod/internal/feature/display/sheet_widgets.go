@@ -47,6 +47,15 @@ type paint struct {
 	fc    *sheetFaces
 	round bool
 
+	// marked is a mark in a color that means something drawn in the frame being drawn: the header's
+	// "microphone off" pill, Talk red while live. The Show takes the skin's filter off for that frame
+	// (unskinned), so those keep their colors.
+	marked bool
+	// footAt is where the controls along the page's foot begin in the frame being drawn - the music
+	// strip, the Now Playing transport, the Tessera page's dots - and 0 with none there: a cue's
+	// captions sit above them (captions), so a tap on them does what it does.
+	footAt int
+
 	// font is the screen font the faces in use were made in (font.go), "" for Go, and fontGen the
 	// fonts of the owner's own when they were (lib/fonts.Generation).
 	font    string

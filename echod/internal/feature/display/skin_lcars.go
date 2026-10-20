@@ -50,6 +50,7 @@ func (r *renderer) lcarsFrame() {
 	if skin() != skinLCARS {
 		return
 	}
+	r.lcarsDrawn = true
 	edge := r.s(lcarsEdge)
 	arm := r.s(22)        // the elbows' upright, in the margin left of everything
 	bar := r.s(lcarsBarH) // the bars' height, above the weather and below the footer

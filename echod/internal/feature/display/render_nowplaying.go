@@ -110,6 +110,7 @@ func (r *renderer) transportRow(s scene) {
 	// a stream Music Assistant is carrying is paused and skipped by the server. A rule used to run across
 	// here as well; the buttons' own rim and shadow separate the footer now, and it read as clutter.
 	back, play, next := r.transportButtons()
+	r.footControls(play.Min.Y - r.s(10))
 	r.transportButton(back, "skip-previous", false)
 	if s.paused {
 		r.transportButton(play, "play", true)

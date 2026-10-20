@@ -25,6 +25,7 @@ func (r *paint) cameraControl(b image.Rectangle, label string, live bool) {
 	}
 	r.roundButton(b, float64(b.Dy())/2, talkLive)
 	r.buttonLabel(b, label, cream)
+	r.marked = true
 }
 
 // talkLabel is what the camera page's Talk control says for the view of entity: what a tap does, and

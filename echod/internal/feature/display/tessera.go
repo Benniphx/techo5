@@ -18,6 +18,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dashboard"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/tessera"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // The Tessera page: the layout the Tessera add-on sent (feature/tessera), drawn as the dashboard page
@@ -253,6 +254,7 @@ func (r *paint) tesseraPage(v tessera.View, on bool, page int, adj dashAdjusting
 	foot := r.s(dashSide)
 	if len(shown) > 1 && !p.Excluded {
 		foot = r.s(tessDotsH)
+		r.footControls(r.h - foot)
 		dot, gap := r.s(tessDot), r.s(14)
 		w := len(shown)*dot + (len(shown)-1)*gap
 		dx := (r.w - w) / 2
@@ -290,19 +292,25 @@ func (r *paint) tesseraPage(v tessera.View, on bool, page int, adj dashAdjusting
 	r.setDash(zones, r.h)
 }
 
+// barText is a top-bar item's words: the clock, date and age are the device's own, the date in the
+// screen language like the clock's.
+func barText(it tessera.BarItem, now time.Time) string {
+	switch it.Kind {
+	case "clock":
+		return clockText(now)
+	case "date":
+		return locale.ShortDate(now, screenLang())
+	case "ago":
+		return agoText(now.Sub(it.At))
+	}
+	return it.Text
+}
+
 // barItem draws one top-bar item ending at right, its words on base, and says how wide it is; with drawIt
 // false it only measures.
 func (r *paint) barItem(it tessera.BarItem, right, base int, pal dashPal, now time.Time, drawIt bool) int {
 	fc := r.faces()
-	text := it.Text
-	switch it.Kind {
-	case "clock":
-		text = clockText(now)
-	case "date":
-		text = now.Format("Mon, Jan 2")
-	case "ago":
-		text = agoText(now.Sub(it.At))
-	}
+	text := barText(it, now)
 	c := pal.sub
 	if hex, err := strconv.ParseUint(it.Color, 16, 32); err == nil && len(it.Color) == 6 {
 		c = color.RGBA{uint8(hex >> 16), uint8(hex >> 8), uint8(hex), 255}

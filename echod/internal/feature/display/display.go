@@ -2740,7 +2740,7 @@ func (d *Display) frame() (next time.Duration) {
 		// photo changing, rain falling) keeps its own pace.
 		defer func() { next = min(next, cueFrame) }()
 	}
-	unskinned(d.dev, s.redClockFace())
+	unskinned(d.dev, s.redClockFace() || d.r.marked)
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)
 	}

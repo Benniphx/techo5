@@ -436,9 +436,7 @@ func webChoices(d config.Dashboard) []config.DashboardChoice {
 
 // setMode applies a mode: a stream open in the old one is closed, and the page asks again.
 func (f *Feature) setMode(m config.DashboardMode) config.DashboardMode {
-	if !slices.Contains(Modes(), m) {
-		m = config.DashboardOff // a mode this device does not have, saved by another build
-	}
+	m = modeOf(m) // a mode this device does not have, saved by another build, is Off
 	if m != config.DashboardOff && m != config.DashboardTessera {
 		select { // turned on: the list is wanted now, not at the next look
 		case f.look <- struct{}{}:
@@ -468,13 +466,20 @@ func (f *Feature) SetServer(addr, key string) error {
 	return nil
 }
 
-// Mode is how the dashboard is shown, off included.
-func (f *Feature) Mode() config.DashboardMode { return config.Get().Dashboard.Mode }
+// Mode is how the dashboard is shown, off included. A mode this device does not have - Tessera
+// restored or imported on a Spot or a panel - is Off, as setMode settles it and Home Assistant shows it.
+func (f *Feature) Mode() config.DashboardMode { return modeOf(config.Get().Dashboard.Mode) }
+
+func modeOf(m config.DashboardMode) config.DashboardMode {
+	if !slices.Contains(Modes(), m) {
+		return config.DashboardOff
+	}
+	return m
+}
 
 // Idle is whether the dashboard stands in for the clock.
 func (f *Feature) Idle() bool {
-	d := config.Get().Dashboard
-	return d.Idle && d.Mode != config.DashboardOff
+	return config.Get().Dashboard.Idle && f.Mode() != config.DashboardOff
 }
 
 func (f *Feature) Actions() []*esphome.Action {

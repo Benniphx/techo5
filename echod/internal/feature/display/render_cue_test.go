@@ -15,6 +15,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/tessera"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/touch"
 )
@@ -94,10 +95,13 @@ func TestCuePreviews(t *testing.T) {
 		"dash":   {showDash: true, dashMode: config.DashboardDrawn, drawn: fourControls()},
 		"music": {nowPlaying: true, playing: true, weather: sky,
 			radio: home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}},
-		"night":  {redClock: true},
-		"muted":  {weather: sky, muted: true},
-		"setup":  {weather: sky, setupAsking: true},
-		"onebig": {weather: sky},
+		"strip": {weather: sky, strip: true, playing: true,
+			radio: home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}},
+		"tessera": {showDash: true, dashMode: config.DashboardTessera, tessera: tessera.Place(tessLayout(), 4, 2), tessOn: true},
+		"night":   {redClock: true},
+		"muted":   {weather: sky, muted: true},
+		"setup":   {weather: sky, setupAsking: true},
+		"onebig":  {weather: sky},
 	}
 	write := func(name string, img *image.RGBA) {
 		f, err := os.Create(filepath.Join(dir, name+".png"))
@@ -136,6 +140,7 @@ func TestCuePreviews(t *testing.T) {
 	t.Cleanup(func() { skinPreview = old; applyTheme(current()) })
 	draw("lcars", scene{weather: sky}, "listening", false)
 	draw("lcars", scene{weather: sky}, "replying", true)
+	draw("lcars-music", pages["music"], "listening", false)
 	skinPreview = skinHAL
 	applyTheme(current())
 	draw("hal", scene{weather: sky}, "listening", false)
@@ -228,7 +233,8 @@ func TestCueAtNightIsRed(t *testing.T) {
 }
 
 // The light, listening, has the microphone hanging from it, and under LCARS it is below the
-// console's top bar rather than along the edge where the bar's own color is.
+// console's top bar rather than along the edge where the bar's own color is - where that bar is drawn,
+// around the home clock; over the music there is none, and the band is along the edge.
 func TestCueLightPlace(t *testing.T) {
 	at := time.Date(2026, 10, 20, 9, 30, 0, 0, time.Local)
 	draw := func() *image.RGBA {
@@ -248,8 +254,59 @@ func TestCueLightPlace(t *testing.T) {
 	applyTheme(current())
 	t.Cleanup(func() { skinPreview = old; applyTheme(current()) })
 	r := newRenderer(image.NewRGBA(image.Rect(0, 0, showWide, showHigh)))
+	r.draw(scene{now: at, since: at, phase: "idle", cue: "replying"})
 	if top := r.cueTop(); top <= lcarsEdge+lcarsBarH {
 		t.Errorf("under LCARS the band starts at %d, inside the top bar", top)
+	}
+	r.draw(scene{now: at, since: at, phase: "idle", cue: "replying", nowPlaying: true, playing: true, radio: home.Radio{Now: "KXYZ", Title: "Song"}})
+	if top := r.cueTop(); top != 0 {
+		t.Errorf("under LCARS over the music the band starts at %d, below a bar that is not drawn", top)
+	}
+	if c := r.dst.RGBAAt(showWide/2, 1); c != amber {
+		t.Errorf("under LCARS over the music the top edge is %v, want the band's %v", c, amber)
+	}
+}
+
+// The captions sit above the controls along a page's foot - the music strip, the Now Playing
+// transport, the Tessera page's dots - so a tap on those still does what it does; with none, they go
+// to the screen's foot.
+func TestCaptionsSitAboveTheFootControls(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	at := time.Date(2026, 10, 20, 9, 30, 0, 0, time.Local)
+	radio := home.Radio{Now: "KXYZ 101.1", Title: "Take It Easy", Artist: "Eagles"}
+	for _, c := range []struct {
+		name string
+		s    scene
+		foot func(r *renderer) image.Rectangle
+	}{
+		{"the clock", scene{}, nil},
+		{"the music strip", scene{strip: true, playing: true, radio: radio}, func(r *renderer) image.Rectangle { return r.stripRect() }},
+		{"Now Playing", scene{nowPlaying: true, playing: true, radio: radio}, func(r *renderer) image.Rectangle {
+			back, _, next := r.transportButtons()
+			return back.Union(next).Union(r.doneButton()).Union(r.favButton())
+		}},
+		{"Tessera", scene{showDash: true, dashMode: config.DashboardTessera, tessera: tessera.Place(tessLayout(), 4, 2), tessOn: true},
+			func(r *renderer) image.Rectangle { return image.Rect(0, r.h-r.s(tessDotsH), r.w, r.h) }},
+	} {
+		c.s.now, c.s.since, c.s.phase, c.s.cue, c.s.reply = at, at, "idle", "replying", "Tomorrow will be sunny, with a high of 74."
+		r := newRenderer(image.NewRGBA(image.Rect(0, 0, showWide, showHigh)))
+		r.draw(c.s)
+		r.zmu.Lock()
+		capd := r.captionsAt
+		r.zmu.Unlock()
+		if capd.Empty() {
+			t.Errorf("%s: no captions", c.name)
+			continue
+		}
+		if c.foot == nil {
+			if capd.Max.Y != showHigh {
+				t.Errorf("%s: captions end at %d, not at the foot", c.name, capd.Max.Y)
+			}
+			continue
+		}
+		if f := c.foot(r); capd.Overlaps(f) {
+			t.Errorf("%s: captions %v over the controls at %v", c.name, capd, f)
+		}
 	}
 }
 

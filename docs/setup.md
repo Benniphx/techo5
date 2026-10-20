@@ -513,7 +513,9 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   the clock are the Show's. The theme and custom colors you chose, and your font when the skin has
   its own, are kept for when the skin is taken off, and their rows say so. The red night clock stays
   red under any skin, and on the Spot so do the muted ring and the camera's mark: while one of them is
-  up, the one-color skins' tint is off. **Pip-Boy** turns the screen into a green phosphor terminal: every screen in one
+  up, the one-color skins' tint is off. On the Show it's the same for the "microphone off" pill at the
+  top and the red Talk button while a camera's Talk is on: while either is on the screen, the tint is
+  off. **Pip-Boy** turns the screen into a green phosphor terminal: every screen in one
   green, in Go Mono, with faint scanlines and edges darker like an old tube's. Photos and cameras turn
   green too; a video plays in its own colors. **LCARS** is a starship console: black, with orange,
   peach, lavender and blue, the tall narrow Antonio font, and the console's frame of elbows and colored
@@ -532,7 +534,8 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   Spot shows the first two. Leave it empty for New York, London and Tokyo.
 - **Answer time** and **Now playing** (the full page, or a strip over the clock). Once the music is
   paused or stopped for 30 seconds, the full page goes by itself: to the strip when the setting uses
-  one, otherwise back to the clock (the Spot has no strip, so its clock face). The track is still held
+  one, otherwise back to the clock, or to the dashboard when **Dashboard when idle** is on (the Spot
+  has no strip, so its clock face). The track is still held
   for half an hour, so play picks it up again and the page comes back. A page you bring back while it
   is paused, with the clock's word for the music or a tap on the strip's song, stays another 30 seconds.
 - **Theme** (Show): a preset, or **Custom colors** of your own. On the screen, tap a color for each part.
@@ -570,10 +573,12 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   request as a light along the top edge instead, with a microphone on it while the device listens: it
   breathes while the device listens, runs while it thinks and stays on while it answers. On the Spot
   it's the rim. **Cue and captions** adds what was heard and the answer as captions at the bottom of
-  the screen, up to four lines (three on the Spot), cut with "…" if the answer is longer. The screen
-  under a cue keeps working: a tap there does what it always does, and a tap on the captions puts
-  them away. Stop a request by voice or with the stop word. A page with buttons to answer (a call, a
-  ringing alarm, the settings, a camera) gets no captions over it.
+  the screen, up to four lines (three on the Spot), cut with "…" if the answer is longer. They sit
+  above the music strip, the Now Playing buttons and the Tessera page's dots rather than over them.
+  The screen under a cue keeps working: a tap there does what it always does, and a tap on the
+  captions puts them away. Stop a request by voice or with the stop word. A page with buttons to
+  answer (a call, a ringing alarm, the settings, a camera) gets neither the light nor captions over
+  it.
 - **Timers** (Show; **Timers on the clock** in Home Assistant): how running timers show on the clock.
   **Line** is the soonest under the date with a thin bar, as before. **Ring** is a ring for each (up
   to three) that empties as it runs, and on the Analog style a wedge on the dial from the minute hand

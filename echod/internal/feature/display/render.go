@@ -287,6 +287,9 @@ type renderer struct {
 	// cornered is whether the day style in hand is drawn small in a corner at the foot (Clock
 	// position), for the frame in hand.
 	cornered bool
+	// lcarsDrawn is whether LCARS's frame, its top bar included, was drawn in the frame in hand: only
+	// around the home clock (lcarsFrame).
+	lcarsDrawn bool
 
 	// deckZones are the deck's buttons where they were last drawn, in order, read by the touch
 	// goroutine under zmu (render_deck.go).
@@ -457,6 +460,7 @@ func (r *renderer) useFont() {
 // simpler than tracking what changed.
 func (r *renderer) draw(s scene) {
 	r.useFont()
+	r.marked, r.footAt, r.lcarsDrawn = false, 0, false
 	defer r.streamingDot(s)  // over everything, the update overlay included: deferred first, drawn last
 	defer r.updateOverlay(s) // Draw update overlay at the end of frame using defer
 
@@ -1067,6 +1071,7 @@ func (r *renderer) header(s scene) {
 	x := (r.w - w) / 2
 	r.roundButton(image.Rect(x-pad, r.s(4), x+w+pad, r.s(32)), float64(r.s(14)), walnut)
 	r.text(r.tiny, line, x, r.s(25), amber)
+	r.marked = true
 }
 
 // playingWord is what the footer says about the music: empty when nothing is playing.

@@ -18,9 +18,10 @@ type skinPanel interface {
 }
 
 // unskinned takes the skin's filter off the panel for a frame drawn in colors that mean something,
-// when plain: the red night clock, red so as not to light the room, and on the Spot the red ring that
-// says the microphones are off and the mark that says the camera is on. The next frame's applySkin
-// puts the filter back.
+// when plain: the red night clock, red so as not to light the room; on the Show a frame with the header's
+// "microphone off" pill or Talk red while live (paint.marked); and on the Spot the red ring that says
+// the microphones are off and the mark that says the camera is on. The next frame's applySkin puts the
+// filter back.
 func unskinned(p skinPanel, plain bool) {
 	if plain && p != nil {
 		p.SetFilter("", nil)

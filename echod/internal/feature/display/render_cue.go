@@ -25,9 +25,11 @@ const (
 
 // cueOver is what of a cue goes over the page the frame drew. The light goes over a page that is there
 // to be looked at, a card or a strip on it included, since those are in the middle and along the foot;
-// the captions only where nothing else is at the foot. A page of its own with buttons on it, and the
-// pages a tap opened, get neither: they say what they are doing themselves, as they do under the other
-// turn screens, and the captions would be over what they take taps on.
+// the captions only where no card or strip of words is up. Over the controls along a page's foot - the
+// music strip, the Now Playing transport, the Tessera page's dots - the captions sit above them
+// (footAt), so those still take their taps. A page of its own with buttons on it, and the pages a tap
+// opened, get neither: they say what they are doing themselves, as they do under the other turn
+// screens, and the captions would be over what they take taps on.
 func cueOver(s scene) (light, words bool) {
 	if s.cue == "" {
 		return false, false
@@ -65,10 +67,11 @@ func cueColor(s scene, day color.RGBA) color.RGBA {
 	return day
 }
 
-// cueTop is where the band starts: the top edge, or under the console's top bar while LCARS is on,
-// where a band of the accent along the edge would be one more of its segments.
+// cueTop is where the band starts: the top edge, or under the console's top bar where LCARS drew it,
+// around the home clock, where a band of the accent along the edge would be one more of its segments.
+// Over the music, a dashboard or the photos there is no bar, and the band is along the edge.
 func (r *renderer) cueTop() int {
-	if skin() == skinLCARS {
+	if r.lcarsDrawn {
 		return r.s(lcarsEdge + lcarsBarH + 4)
 	}
 	return 0
@@ -130,7 +133,8 @@ func (r *renderer) cueMic(c color.RGBA, band image.Rectangle) {
 }
 
 // captions lays text over the foot of the page on a shaded strip, light on dark whatever the theme,
-// as words over a photo are; red over the night clock. A longer answer is cut after captionLines lines,
+// as words over a photo are; red over the night clock. Above the controls along the foot when the page
+// has them (footAt). A longer answer is cut after captionLines lines,
 // the last ending in an ellipsis, and a word too long for a line is cut the same way.
 func (r *renderer) captions(s scene, text string) {
 	width := r.w - 2*r.margin
@@ -143,8 +147,12 @@ func (r *renderer) captions(s scene, text string) {
 		lines[i] = r.clipTo(r.small, l, width)
 	}
 	lineH := r.s(42)
-	top := r.h - len(lines)*lineH - r.s(16)
-	strip := image.Rect(0, top, r.w, r.h)
+	bottom := r.h
+	if r.footAt > 0 {
+		bottom = r.footAt
+	}
+	top := bottom - len(lines)*lineH - r.s(16)
+	strip := image.Rect(0, top, r.w, bottom)
 	under := shade
 	if s.redClockFace() {
 		// Darker at night: red words over the red clock's digits are hard to tell apart.

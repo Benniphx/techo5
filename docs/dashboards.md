@@ -178,7 +178,7 @@ work. Not every kind of tile is drawn yet (see the end of this section).
 
 [Tessera](https://github.com/MaxGramser/homeassistant_espscreen) is a Home Assistant add-on that lays
 out pages of tiles in an editor and sends them to the screens it knows. The Echo Show can be one of
-those screens. Only the Show for now (the Skylight too), not the Spot.
+those screens. Only the Show for now (the Skylight too), not the Spot nor the Panel app.
 
 You need the Tessera add-on installed in Home Assistant.
 
