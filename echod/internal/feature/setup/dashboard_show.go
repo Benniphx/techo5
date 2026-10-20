@@ -46,7 +46,8 @@ func dashboardPanelSection(w http.ResponseWriter, token string) {
 	hidden(w, token, "dashpanel", "photos")
 	fmt.Fprint(w, `<label for="dashmode">Dashboard</label><select id="dashmode" name="mode">`)
 	for _, m := range dashboard.Modes() {
-		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, m, selected(m == d.Mode), html.EscapeString(m.Label()))
+		// The mode in force, as the dashboard reads it: one this device does not have is Off here too.
+		fmt.Fprintf(w, `<option value="%s"%s>%s</option>`, m, selected(m == dashboard.Get().Mode()), html.EscapeString(m.Label()))
 	}
 	fmt.Fprint(w, `</select>`)
 	if dashboard.HasTiles() {
