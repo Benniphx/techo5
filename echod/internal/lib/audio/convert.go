@@ -9,10 +9,10 @@ import "math"
 // output samples that are kept ever computed. Drawing straight lines between neighboring samples
 // instead folds the images of everything above a few kHz back into the treble as tones that are no
 // harmonic of anything: a 10 kHz tone at 44.1 kHz came out with a ghost at 13.9 kHz only 21 dB under
-// it, heard as grit on cymbals and sibilants. Here those images are more than 70 dB down.
+// it, heard as grit on cymbals and sibilants. Here the audible ones are more than 70 dB down.
 //
 // The filter's cutoff sits at the slower rate's Nyquist frequency, with convertTaps taps for every
-// sample at the slower rate, so the transition band is as wide in Hz either way.
+// sample at the slower rate, and more below 44.1 kHz (taps).
 //
 // The arithmetic is whole numbers: 16-bit samples against coefficients scaled by 1<<shift, summed in
 // 32 bits. The Spot's cores ran the same filter in float32 at half the speed.
@@ -33,12 +33,16 @@ type Converter struct {
 }
 
 const (
-	// convertTaps is the filter length per sample of the slower rate: a transition band 5.5/32 of
-	// that rate wide, centered on the cutoff. From 44.1 kHz that is flat to about 18.3 kHz and stopped
-	// from 25.8: an image that lands between those folds above 20 kHz, so nothing audible is left of
-	// any of them. Every tap is paid for on every output sample: on the Spot, 48 taps in float32 cost
-	// 7.6 % of a core while music played, these 32 in whole numbers 1.7 %, straight lines 0.55 %.
+	// convertTaps is the filter length per sample of the slower rate at 44.1 kHz and up: a
+	// transition band 5.5/32 of that rate wide, centered on the cutoff. From 44.1 kHz the images
+	// that get through it land between 22 and 26 kHz, and the ones above 24 fold to 22 to 24: all of
+	// them above 20 kHz, where nobody hears them. Every tap is paid for on every output sample: on
+	// the Spot, 48 taps in float32 cost 7.6 % of a core while music played, these 32 in whole numbers
+	// 1.7 %, straight lines 0.55 %.
 	convertTaps = 32
+
+	// convertAudible is the rate below which that transition band would reach down into the treble.
+	convertAudible = 44100
 
 	// convertGain is 0.5 dB of headroom. Straight lines never went past the input's own peaks; a
 	// filter overshoots the peaks between samples that music mastered to full scale carries, and
@@ -61,12 +65,7 @@ func NewConverter(from, to, channels int) *Converter {
 	if up > convertMostPhases {
 		return nil
 	}
-	// Taps per phase: convertTaps per input sample when going up, scaled by the ratio going down so
-	// the band stays as wide in Hz. An even count, for dot's two sums.
-	k := convertTaps
-	if from > to {
-		k = ((convertTaps*from+to-1)/to + 1) &^ 1
-	}
+	k := taps(from, to)
 	// The prototype runs at up*from; its cutoff is half the slower rate, and its gain up makes up for
 	// the zeros the upsampling would have put between the inputs.
 	h := lowpass(up*k, 0.5*float64(min(from, to))/float64(up*from), float64(up)*convertGain)
@@ -98,6 +97,20 @@ func NewConverter(from, to, channels int) *Converter {
 		c.hist = append(c.hist, make([]int32, 2*k))
 	}
 	return c
+}
+
+// taps is the length of each phase, an even count for dot's two sums. Per sample of the slower rate
+// it is convertTaps, and more below convertAudible in proportion, so the transition band narrows
+// with the rate: a 22.05 kHz station's images of its treble would otherwise land in the treble, a
+// 10 kHz tone's at 12.05 kHz only 25 dB under it. Going down it is scaled by the ratio, since the
+// filter runs at the input's rate.
+func taps(from, to int) int {
+	slower := min(from, to)
+	k := max(convertTaps, (convertTaps*convertAudible+slower-1)/slower)
+	if from > to {
+		k = (k*from + to - 1) / to
+	}
+	return (k + 1) &^ 1
 }
 
 func gcd(a, b int) int {

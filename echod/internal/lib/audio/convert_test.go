@@ -52,10 +52,10 @@ func TestConverterKeepsTheTrebleClean(t *testing.T) {
 	for _, hz := range []float64{1000, 5000, 10000, 15000, 18000} {
 		ys := convertTone(44100, 48000, hz, 0.5, 44100, 4410)
 		amp, rest := toneAndRest(ys, 48000, hz, 200)
-		// The level is the 0.5 dB of headroom; at 18 kHz the transition band has begun.
+		// The level is the 0.5 dB of headroom.
 		level := 20*math.Log10(amp/(0.5*32767)) - 20*math.Log10(convertGain)
 		under := 20 * math.Log10(amp/math.Sqrt2/rest)
-		if most := map[bool]float64{true: 0.5, false: 0.1}[hz > 15000]; math.Abs(level) > most {
+		if math.Abs(level) > 0.1 {
 			t.Errorf("%.0f Hz came out at %+.2f dB besides the headroom", hz, level)
 		}
 		if under < 70 {
@@ -133,6 +133,40 @@ func BenchmarkConverterOneSecond(b *testing.B) {
 	for b.Loop() {
 		for range 10 {
 			out = c.Run(in, out[:0])
+		}
+	}
+}
+
+// Slower stations keep their treble clean too: below 44.1 kHz the images of a tone near the top
+// land in the treble, and the filter is made longer to stop them.
+func TestConverterSlowerStationsStayClean(t *testing.T) {
+	for _, c := range []struct {
+		from int
+		hz   float64
+	}{{16000, 7000}, {22050, 10000}, {32000, 14000}, {11025, 4500}} {
+		ys := convertTone(c.from, 48000, c.hz, 0.5, c.from, c.from/10)
+		amp, rest := toneAndRest(ys, 48000, c.hz, 400)
+		if under := 20 * math.Log10(amp/math.Sqrt2/rest); under < 70 {
+			t.Errorf("%d Hz, %.0f Hz tone: what the conversion added is only %.1f dB under it", c.from, c.hz, under)
+		}
+	}
+}
+
+// One channel goes through dot, two through dot2: the same filter either way.
+func TestConverterMonoMatchesStereo(t *testing.T) {
+	mono, stereo := NewConverter(44100, 48000, 1), NewConverter(44100, 48000, 2)
+	in1, in2 := make([]int16, 4410), make([]int16, 2*4410)
+	for i := range in1 {
+		v := int16(12000 * math.Sin(2*math.Pi*3000*float64(i)/44100))
+		in1[i], in2[2*i], in2[2*i+1] = v, v, v
+	}
+	a, b := mono.Run(in1, nil), stereo.Run(in2, nil)
+	if 2*len(a) != len(b) {
+		t.Fatalf("%d mono frames, %d stereo", len(a), len(b)/2)
+	}
+	for i := range a {
+		if a[i] != b[2*i] || a[i] != b[2*i+1] {
+			t.Fatalf("frame %d: mono %d, stereo %d %d", i, a[i], b[2*i], b[2*i+1])
 		}
 	}
 }
