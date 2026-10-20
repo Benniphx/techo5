@@ -156,28 +156,40 @@ func main() {
 	prefix := flag.String("out", "/tmp/spotcam-check", "file prefix for the report and any frames")
 	flag.Parse()
 
-	// Stopped half way, the sensor would stay powered and the DMA running into a freed buffer.
-	signal.Ignore(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	// Stopped half way, the sensor would stay powered and the DMA running into a freed buffer. A
+	// dropped SSH session is a hang-up, or a broken pipe on the next line written.
+	signal.Ignore(syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGPIPE)
 
-	out := io.Writer(os.Stdout)
-	f, ferr := os.Create(*prefix + ".txt")
+	out := both{}
+	f, ferr := os.OpenFile(*prefix+".txt", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if ferr != nil {
 		fmt.Println("the report will not be saved:", ferr)
 	} else {
-		out = io.MultiWriter(os.Stdout, f)
+		out.file = f
 	}
 	err := run(out, *prefix)
 	if err != nil {
 		fmt.Fprintln(out, "stopped:", err)
 	}
 	if f != nil {
+		fmt.Fprintln(out, "\nreport saved to", *prefix+".txt")
 		f.Close()
-		fmt.Println("\nreport saved to", *prefix+".txt")
-		fmt.Println("Any .png saved next to it is a picture of the room: look before sharing it.")
 	}
+	fmt.Println("Any .png saved next to it is a picture of the room: look before sharing it.")
 	if err != nil {
 		os.Exit(1)
 	}
+}
+
+// both writes to the terminal and the report. A terminal that went away does not stop the report.
+type both struct{ file *os.File }
+
+func (b both) Write(p []byte) (int, error) {
+	os.Stdout.Write(p)
+	if b.file != nil {
+		return b.file.Write(p)
+	}
+	return len(p), nil
 }
 
 func run(out io.Writer, prefix string) error {
@@ -556,7 +568,7 @@ func (c *checker) changed(before, after map[string]uint32) {
 func savePNG(name string, raw []byte) error {
 	img := image.NewGray(image.Rect(0, 0, w, h))
 	copy(img.Pix, raw)
-	f, err := os.Create(name)
+	f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err
 	}
