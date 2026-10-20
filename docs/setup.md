@@ -582,6 +582,14 @@ Assistant.
   glance strip has nothing else to show. A tap opens its day.
 - **Weather in the calendar**: the forecast on the days.
 
+**Calendars from Home Assistant.** Every calendar Home Assistant already has is offered here, with
+nothing more to set up on the device: Google Calendar, CalDAV (iCloud and others), Microsoft 365, a
+Remote Calendar, its own Local Calendar, each a `calendar.` entity. Pick them under Settings →
+**Display** → **Calendar** → **Calendars**, or with the
+[`calendar_sources` action](actions.md#choose-the-calendars-shown). Each device keeps its own list, so a
+desk can show one person's calendar and the kitchen the family's. The device reads them with the
+token from [step 1](#1-give-the-device-access-to-home-assistant); no calendar password is ever on it.
+
 **Calendars from a link.** A calendar that isn't in Home Assistant can be added by its iCal
 address, on the setup page's **Weather & Calendar** tab, under **Calendars from a link**: a name and
 the address. Google Calendar has it under Settings, the calendar, **Secret address in iCal format**;
