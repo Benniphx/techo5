@@ -73,6 +73,12 @@ func TestFolderProblem(t *testing.T) {
 		{errors.New("hass: websocket auth: auth_invalid Invalid access token or password"), "Home Assistant refused the token"},
 		{fmt.Errorf("hass: websocket: %w", &net.OpError{Op: "dial", Net: "tcp", Err: errors.New("connection refused")}), "Can't reach Home Assistant"},
 		{errors.New("hass: media_source/browse_media: Unknown source directory."), "hass: media_source/browse_media: Unknown source directory."},
+		{errors.New("hass: GET /api/media_source: 401 Unauthorized"), "Home Assistant refused the token"},
+		{errors.New("hass: GET /api/media_source: 403 Forbidden"), "Home Assistant refused the token"},
+		// A port with 401 or 403 in it is not a status.
+		{fmt.Errorf("hass: websocket: %w", &net.OpError{Op: "dial", Net: "tcp", Addr: &net.TCPAddr{IP: net.IPv4(192, 0, 2, 7), Port: 8403},
+			Err: errors.New("connection refused")}), "Can't reach Home Assistant"},
+		{errors.New("hass: GET /api/x: 500 Internal Server Error (port 14013)"), "hass: GET /api/x: 500 Internal Server Error (port 14013)"},
 	} {
 		if got := folderProblem(c.err); got != c.want {
 			t.Errorf("folderProblem(%v) = %q, want %q", c.err, got, c.want)

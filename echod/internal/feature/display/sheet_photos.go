@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -193,13 +194,17 @@ func folderProblem(err error) string {
 		return "Home Assistant isn't set up here"
 	case errors.As(err, &dns):
 		return "Address not found: use its IP"
-	case strings.Contains(s, "auth_invalid") || strings.Contains(s, "401") || strings.Contains(s, "403"):
+	case strings.Contains(s, "auth_invalid") || refusedStatus.MatchString(s):
 		return "Home Assistant refused the token"
 	case errors.As(err, &nerr):
 		return "Can't reach Home Assistant"
 	}
 	return s
 }
+
+// refusedStatus is an HTTP status of 401 or 403 in an error, as "GET /api/...: 401 Unauthorized" has
+// it: a number standing alone, so a port like :8403 in an address is not taken for one.
+var refusedStatus = regexp.MustCompile(`(^|\s)40[13](\s|$)`)
 
 // folderChoice is a tap on the folder list's i'th line.
 func (d *Display) folderChoice(i int) {
