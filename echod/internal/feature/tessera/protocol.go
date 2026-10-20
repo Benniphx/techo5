@@ -705,7 +705,3 @@ func (r *Receiver) answer(status string) Answer {
 		TileSizes:   slices.Clone(r.caps.TileSizes),
 	}
 }
-
-func isError(status string) bool {
-	return len(status) >= len(errPrefix) && status[:len(errPrefix)] == errPrefix
-}
