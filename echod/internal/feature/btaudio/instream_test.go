@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/bluealsa"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/bluez"
 )
 
 // fakeStream is a phone's stream as read reads it: each read takes from the next step, at most what
@@ -128,6 +129,7 @@ func TestOnlyThePhoneWithTheSpeakerIsPlayed(t *testing.T) {
 		t.Fatalf("read ended with %v", err)
 	}
 
+	s = &inStream{item: "Bluetooth: Pixel"}
 	out := s.hand()
 	src.steps = [][]byte{data[:4095], data[4095:], data}
 	if err := s.read(ctx, src, 4, src.clock, func() {}); !errors.Is(err, io.EOF) {
@@ -147,6 +149,35 @@ func TestOnlyThePhoneWithTheSpeakerIsPlayed(t *testing.T) {
 	}
 	if len(got) != 2*4096 {
 		t.Errorf("the player got %d bytes, want the 8192 sent once handed", len(got))
+	}
+}
+
+// A source handed after the stream's reading is over has ended: the player is not left waiting on a
+// stream nothing reads.
+func TestASourceHandedAfterTheEndHasEnded(t *testing.T) {
+	s := &inStream{item: "Bluetooth: Pixel"}
+	src := &fakeStream{steps: stereo(3000, time.Second), now: time.Unix(1000, 0)}
+	if err := s.read(context.Background(), src, 4, src.clock, func() {}); !errors.Is(err, io.EOF) {
+		t.Fatalf("read ended with %v", err)
+	}
+	out := s.hand()
+	if s.out != nil {
+		t.Error("a stream no longer read keeps the player's source")
+	}
+	if n, err := out.Read(make([]byte, 16)); n != 0 || !errors.Is(err, io.EOF) {
+		t.Errorf("the source read %d, %v, want the end", n, err)
+	}
+}
+
+// A stream with no channels is not read: its frames would have no size.
+func TestAStreamOfNoChannelsIsRefused(t *testing.T) {
+	f := &Feature{}
+	if s, err := f.watch(nil, bluealsa.PCM{Rate: 44100}, bluez.Device{}); err == nil || s != nil {
+		t.Fatalf("watch took a stream of no channels: %v, %v", s, err)
+	}
+	s := &inStream{}
+	if err := s.read(context.Background(), &fakeStream{}, 0, time.Now, func() {}); err == nil {
+		t.Error("read took frames of no bytes")
 	}
 }
 

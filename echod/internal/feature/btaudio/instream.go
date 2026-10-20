@@ -5,6 +5,7 @@ package btaudio
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -40,11 +41,12 @@ type inStream struct {
 	// speaker a stream nothing reads any more.
 	ended atomic.Bool
 
-	mu    sync.Mutex
-	out   *phoneOut // the player's, while the phone has the speaker
-	plays media.PhonePlays
-	since time.Time // when it started playing, zero while it is not
-	fresh bool      // it started playing since the last look (look)
+	mu     sync.Mutex
+	out    *phoneOut // the player's, while the phone has the speaker
+	closed bool      // the reading is over: a source handed now has ended already
+	plays  media.PhonePlays
+	since  time.Time // when it started playing, zero while it is not
+	fresh  bool      // it started playing since the last look (look)
 }
 
 // look is what the speaker is chosen by: whether the phone is playing, since when, and whether it
@@ -60,6 +62,9 @@ func (s *inStream) look() heard {
 // watch opens p's stream and reads it until the phone goes (Close, or stop from refresh). When the
 // stream does not open, refresh tries again at its next look.
 func (f *Feature) watch(al *bluealsa.Client, p bluealsa.PCM, d bluez.Device) (*inStream, error) {
+	if p.Channels < 1 {
+		return nil, fmt.Errorf("a stream of %d channels", p.Channels)
+	}
 	src, err := al.OpenRead(p)
 	if err != nil {
 		return nil, err
@@ -98,12 +103,15 @@ func (s *inStream) read(ctx context.Context, src readSource, frame int, now func
 	defer func() {
 		s.mu.Lock()
 		out := s.out
-		s.out = nil
+		s.out, s.closed = nil, true
 		s.mu.Unlock()
 		if out != nil {
 			out.end()
 		}
 	}()
+	if frame < 1 {
+		return fmt.Errorf("a frame of %d bytes", frame)
+	}
 	buf := make([]byte, 4096-4096%frame+frame)
 	have := 0
 	for {
@@ -155,12 +163,18 @@ func (s *inStream) stale(p bluealsa.PCM) bool {
 	return s.ended.Load() || s.pcm.Rate != p.Rate || s.pcm.Channels != p.Channels
 }
 
-// hand gives the player a new source on what the phone sends, the one it had let go.
+// hand gives the player a new source on what the phone sends, the one it had let go. Once the
+// reading is over, the source it gets has ended already: nothing would end it later.
 func (s *inStream) hand() *phoneOut {
 	out := newPhoneOut()
 	s.mu.Lock()
 	old := s.out
-	s.out = out
+	if s.closed {
+		s.out = nil
+		out.end()
+	} else {
+		s.out = out
+	}
 	s.plays.Asked(false) // it has the speaker: not asked to pause any more
 	s.mu.Unlock()
 	if old != nil {
