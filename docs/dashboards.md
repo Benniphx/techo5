@@ -24,7 +24,7 @@ Everything is on the device's page in Home Assistant: **Settings → Devices & s
 your device. In the **Configuration** card (expand it if it ends in "+ N entities not shown"). The
 setup page's **Screen & Photos** tab has the same settings, except which dashboard to show:
 
-- **Dashboard**: *Off*, *Drawn on the device* or *Streamed*, and on the Show *Tessera*
+- **Dashboard**: *Off*, *Drawn on the device* or *Streamed*, and on the Show and the Panel app *Tessera*
   ([Tessera screens](#tessera-screens-preview)).
 - **Dashboard to show**: which dashboard, from a list of yours and their views. The list updates by
   itself within five minutes of a dashboard being added, renamed or removed. *Automatic* is the Rooms
@@ -178,7 +178,8 @@ work. Not every kind of tile is drawn yet (see the end of this section).
 
 [Tessera](https://github.com/MaxGramser/homeassistant_espscreen) is a Home Assistant add-on that lays
 out pages of tiles in an editor and sends them to the screens it knows. The Echo Show can be one of
-those screens. Only the Show for now (the Skylight too), not the Spot nor the Panel app.
+those screens, and so can the Skylight and a tablet with the Panel app. Not the Spot: Tessera has no
+layout for its round screen.
 
 You need the Tessera add-on installed in Home Assistant.
 
@@ -187,7 +188,9 @@ You need the Tessera add-on installed in Home Assistant.
    the entities Tessera looks for: **Tile settings**, **Screen firmware**, **Device name** and
    **Screen layout**.
 2. Open Tessera. The device is listed as a screen. Its grid is 4 by 2 on the Show 5, 4 by 3 on the
-   Show 8 and 5 by 3 on the Skylight.
+   Show 8 and 5 by 3 on the Skylight. On a tablet it follows the screen: 3 cells on the short side
+   (2 below 600 pixels) and as many on the long side as fit, so 4 by 3 on a 2560x1600 tablet. A
+   tablet's first start with Tessera on tells the add-on a Show 8's grid until the screen opens.
 3. Add tiles to its pages and save. **Tile settings** on the tessera device says *Synced* once the
    layout has arrived.
 4. Set **Dashboard** to *Tessera*. The layout is now the dashboard page: swipe in from the left edge

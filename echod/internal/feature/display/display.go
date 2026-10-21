@@ -2252,6 +2252,7 @@ func (d *Display) Start(context.Context) error {
 	d.mu.Unlock()
 	// A panel's canvas is only known now: photos and the rest are made at it from here on.
 	home.SetPanelSize(w, h)
+	tessera.SetPanelSize(w, h)
 	// The calendar's two switches that go by the panel's size are shown for this one from now on.
 	panelWide.Store(wideScreen(w, h))
 	d.lookChanged()

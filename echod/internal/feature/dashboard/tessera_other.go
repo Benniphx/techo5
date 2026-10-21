@@ -1,6 +1,6 @@
-//go:build !dot && (spot || panel)
+//go:build !dot && spot
 
 package dashboard
 
-// hasTessera is false on the Spot, whose round screen Tessera has no layout for, and on a panel.
+// hasTessera is false on the Spot, whose round screen Tessera has no layout for.
 const hasTessera = false

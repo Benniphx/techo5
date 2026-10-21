@@ -1,4 +1,4 @@
-//go:build !dot && !spot && !panel
+//go:build !dot && !spot
 
 package tessera
 
@@ -41,4 +41,23 @@ func sizes(g grid) []string {
 		}
 	}
 	return out
+}
+
+// gridForSize is the grid of a screen of any size, a panel's: the short side holds two cells below 600
+// pixels and three from there, and the long side as many again as its length allows, at most eight. It
+// gives the Shows' and the Skylight's grids for their sizes.
+func gridForSize(w, h int) grid {
+	short, long := h, w
+	if w < h {
+		short, long = w, h
+	}
+	across := 2
+	if short >= 600 {
+		across = 3
+	}
+	along := min(max(long*across/short, across), 8)
+	if w < h {
+		return grid{w, h, across, along}
+	}
+	return grid{w, h, along, across}
 }

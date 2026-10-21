@@ -1,4 +1,4 @@
-//go:build !dot && !spot && !panel
+//go:build !dot && !spot
 
 package tessera
 
@@ -159,7 +159,7 @@ func (t *Tessera) Restore(cfg config.Config) {
 	if !on {
 		return
 	}
-	g := gridFor(layout.Show8(), layout.Skylight())
+	g := screenGrid()
 	t.recv.takes(capabilities(g))
 	t.firmware.Set(firmwareClaim)
 	t.node.Set(layout.NodeName(cfg.Device.Name, mac()))
