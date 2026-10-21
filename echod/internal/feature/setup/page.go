@@ -513,10 +513,22 @@ func privacySection(w http.ResponseWriter) {
 		}
 		return "off"
 	}
+	// A panel has no SSH and no camera page at all (privacy_panel.go): "off" would send somebody
+	// looking for a switch that is not there.
+	ssh, camera, missing := onOff(s.SSH), onOff(s.Camera), ""
+	if !sshHere {
+		ssh = "not available on this device"
+	}
+	if !cameraWebHere {
+		camera = "not available on this device"
+	}
+	if !sshHere || !cameraWebHere {
+		missing = " " + notHereWhy
+	}
 	fmt.Fprintf(w, `<fieldset><legend>What is switched on</legend>
 	 <p style="margin:0">SSH: %s · Camera on the network: %s · Screen on the network: %s</p>
 	 <p class="note">Shown here, not changed here. Change them on the device's own screen, or in Home
-	  Assistant.</p></fieldset>`, onOff(s.SSH), onOff(s.Camera), onOff(s.Screen))
+	  Assistant.%s</p></fieldset>`, ssh, camera, onOff(s.Screen), missing)
 	fmt.Fprint(w, `<fieldset><legend>This page</legend>
 	 <p class="note" style="margin:0">It opens only after a press on the device, and closes itself when it
 	  is left alone. It is on your own network, without encryption. It never touches SSH keys or the
