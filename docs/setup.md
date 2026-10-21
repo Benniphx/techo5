@@ -529,6 +529,10 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 - **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
   switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
   **Tap on the clock** is *Nothing*, too.
+- **Swipe for volume**: on by default. Turn it off (setup page, Screen & Photos, or the switch in Home
+  Assistant) so a swipe up or down on the clock, now playing, the weather or the Bluetooth page leaves
+  the volume alone, for a screen that hands keep brushing. The volume buttons still work, and so do
+  the swipe down from the top for Settings and the swipe up from the bottom for the Deck.
 - **World clock places** (setup page, Screen & Photos tab): the World style's places, as time zone
   names with commas between them, like `America/Chicago, Europe/Paris, Asia/Tokyo`. Up to three; the
   Spot shows the first two. Leave it empty for New York, London and Tokyo.

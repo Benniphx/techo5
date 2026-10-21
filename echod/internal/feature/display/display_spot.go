@@ -11,9 +11,10 @@
 // a question about the weather.
 //
 // Touch: a tap starts or ends a turn (on a dark screen it only lights it); a swipe up or down is the
-// volume, a step per 60 pixels; a held finger opens the ring menu (menu_spot.go). While the menu is open
-// the touch screen follows every moving finger, so dragging round the ring turns the dial (or, for a
-// value, is a jog wheel), and a tap in the middle does the item at the top.
+// volume, a step per 60 pixels, while Swipe for volume is on; a held finger opens the ring menu
+// (menu_spot.go). While the menu is open the touch screen follows every moving finger, so dragging
+// round the ring turns the dial (or, for a value, is a jog wheel), and a tap in the middle does the
+// item at the top.
 //
 // The backlight: the panel shows almost nothing below about 120 of 255 and glares at 255, so a
 // brightness in percent spans backlightMin to the top. Through the night hours, 22:00 to 07:00 unless
@@ -153,6 +154,8 @@ type Display struct {
 	callBtn *esphome.Switch
 	// styleSwipeSw is Swipe between clock styles (style_swipe.go).
 	styleSwipeSw *esphome.Switch
+	// volumeSwipeSw is Swipe for volume (volume_swipe.go).
+	volumeSwipeSw *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
 	weatherFx *esphome.Switch
 	// muteRing is the muted ring drawn thin and dim, on or off (mutering_spot.go).
@@ -368,13 +371,15 @@ func build() *Display {
 	setup.SetScreen(&setup.ScreenChoices{Styles: clockStyleOptions(), Current: clockStyleIndex, Choose: d.setClockStyle,
 		Fonts: fonts.Names(), FontNow: fontIndex, ChooseFont: d.setFont,
 		OwnFonts: ownFonts, AddFont: d.addOwnFont, RemoveFont: d.removeOwnFont, MaxFont: fonts.MaxOwnFile,
-		Places: spotWorld, Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, IgnoreRoomLights: d.setRoomLightsIgnored})
+		Places: spotWorld, Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, VolumeSwipe: func(on bool) { setVolumeSwipe(d.volumeSwipeSw, on) },
+		IgnoreRoomLights: d.setRoomLightsIgnored})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
 	d.turnStyle = turnStyleSelect(d.wake)
 	d.skinSl = skinSelect(d.wake)
 	d.callBtn = callButtonSwitch(d.wake)
 	d.styleSwipeSw = styleSwipeSwitch()
+	d.volumeSwipeSw = volumeSwipeSwitch()
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.muteRing = muteRingSwitch(d.wake)
 	d.nightHours = nightHoursSelect(d)
@@ -443,7 +448,7 @@ func (d *Display) timerStyleSel() *esphome.Select { return nil }
 func (d *Display) skinSel() *esphome.Select { return d.skinSl }
 
 func (d *Display) Entities() []esphome.Entity {
-	return []esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.skinSl, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.fontSel,
+	return []esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.skinSl, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.volumeSwipeSw, d.fontSel,
 		d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel}
 }
 
@@ -461,6 +466,7 @@ func (d *Display) Restore(c config.Config) {
 	d.skinSl.Set(skins[skinIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
+	d.volumeSwipeSw.Set(!c.Screen.NoVolumeSwipe)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	setMuteRingSubtle(d.muteRing, c.Screen.MuteRingSubtle)
 	d.nightHoursChanged()
@@ -921,9 +927,9 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 		voice.Get().Action()
 	case touch.SwipeUp:
-		media.Get().Adjust(+1)
+		swipeVolume(+1)
 	case touch.SwipeDown:
-		media.Get().Adjust(-1)
+		swipeVolume(-1)
 	case touch.SwipeLeft, touch.SwipeRight:
 		// Across the clock face, the next clock style or the one before: only on the face itself, not
 		// while a turn is on or its words are up, nor over the screensaver or the light before an alarm.

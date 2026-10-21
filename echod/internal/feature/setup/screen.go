@@ -52,6 +52,8 @@ type ScreenChoices struct {
 
 	// Swipe sets Swipe between clock styles, telling Home Assistant.
 	Swipe func(bool)
+	// VolumeSwipe sets Swipe for volume, telling Home Assistant (#243).
+	VolumeSwipe func(bool)
 
 	// IgnoreRoomLights sets Screen ignores room light commands, telling Home Assistant (#179); nil
 	// leaves the box off the page.
@@ -136,6 +138,12 @@ func screenSection(w http.ResponseWriter, token string) {
 		// Only where there is a Tap on the clock to set (the Show).
 		fmt.Fprint(w, `<p class="note">Off whenever Tap on the clock is Nothing, too.</p>`)
 	}
+	volume := ""
+	if !config.Get().Screen.NoVolumeSwipe {
+		volume = " checked"
+	}
+	fmt.Fprintf(w, `<p><label><input type="checkbox" name="volumeswipe" value="yes" style="width:auto"%s> Swipe for
+	 volume: a swipe up or down on the clock turns the volume up or down</label></p>`, volume)
 	if len(s.Taps) > 0 {
 		fmt.Fprint(w, `<label for="clocktap">Tap on the clock</label><select id="clocktap" name="clocktap">`)
 		now := s.TapNow()
@@ -229,6 +237,13 @@ func saveScreen(r *http.Request) string {
 			s.Swipe(on)
 		} else if err := config.Set().Screen().NoStyleSwipe(!on); err != nil {
 			return "the swipe setting could not be saved"
+		}
+	}
+	if on := r.PostFormValue("volumeswipe") == "yes"; on == config.Get().Screen.NoVolumeSwipe {
+		if s.VolumeSwipe != nil {
+			s.VolumeSwipe(on)
+		} else if err := config.Set().Screen().NoVolumeSwipe(!on); err != nil {
+			return "the volume swipe setting could not be saved"
 		}
 	}
 	if s.IgnoreRoomLights != nil {

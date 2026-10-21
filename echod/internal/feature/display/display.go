@@ -146,6 +146,8 @@ type Display struct {
 	callBtn *esphome.Switch
 	// styleSwipeSw is Swipe between clock styles (style_swipe.go).
 	styleSwipeSw *esphome.Switch
+	// volumeSwipeSw is Swipe for volume (volume_swipe.go).
+	volumeSwipeSw *esphome.Switch
 	// nightTapSw is Tap lifts the night light (night_tap_show.go).
 	nightTapSw *esphome.Switch
 	// weatherFx is the weather page's sky moving, on or off (weatherfx.go).
@@ -456,7 +458,8 @@ func build() *Display {
 		Fonts: fonts.Names(), FontNow: fontIndex, ChooseFont: d.setFont,
 		OwnFonts: ownFonts, AddFont: d.addOwnFont, RemoveFont: d.removeOwnFont, MaxFont: fonts.MaxOwnFile,
 		Taps: clockTapOptions(), TapNow: clockTapIndex, ChooseTap: func(i int) { setClockTap(d.clockTap, i) }, Places: maxWorld,
-		Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, IgnoreRoomLights: d.setRoomLightsIgnored, Calendar: d.lookChoices(),
+		Swipe: func(on bool) { setStyleSwipe(d.styleSwipeSw, on) }, VolumeSwipe: func(on bool) { setVolumeSwipe(d.volumeSwipeSw, on) },
+		IgnoreRoomLights: d.setRoomLightsIgnored, Calendar: d.lookChoices(),
 		Themes: &setup.ThemeChoices{LightNow: lightThemeShown, Changed: d.themesChanged, Auto: hasLightSensor()}})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
@@ -467,6 +470,7 @@ func build() *Display {
 	d.clockTap = clockTapSelect()
 	d.callBtn = callButtonSwitch(d.wake)
 	d.styleSwipeSw = styleSwipeSwitch()
+	d.volumeSwipeSw = volumeSwipeSwitch()
 	d.nightTapSw = nightTapSwitch(d)
 	d.weatherFx = weatherAnimationSwitch(d.wake)
 	d.strip = stripSelect(d.wake)
@@ -565,7 +569,7 @@ func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
 	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
-		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
+		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.volumeSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 }
 
 // Restore lights the panel the way it was left. Before the framebuffer is opened: the backlight is
@@ -586,6 +590,7 @@ func (d *Display) Restore(c config.Config) {
 	d.clockTap.Set(clockTapChoices()[clockTapIndex()].label)
 	setCallButton(d.callBtn, c.Screen.CallButton)
 	d.styleSwipeSw.Set(!c.Screen.NoStyleSwipe)
+	d.volumeSwipeSw.Set(!c.Screen.NoVolumeSwipe)
 	d.nightTapSw.Set(c.Screen.NightTapLifts)
 	setWeatherAnimation(d.weatherFx, !c.Screen.WeatherStill)
 	d.strip.Set(stripOptions[stripIndex()])
@@ -1195,9 +1200,9 @@ func (d *Display) gesture(g touch.Gesture) {
 				bt.Choose(st.Devices[row].Address)
 			}
 		case touch.SwipeUp:
-			media.Get().Adjust(+1)
+			swipeVolume(+1)
 		case touch.SwipeDown:
-			media.Get().Adjust(-1)
+			swipeVolume(-1)
 		case touch.SwipeRight:
 			bt.SetPairing(false)
 		}
@@ -1501,13 +1506,14 @@ func (d *Display) gesture(g touch.Gesture) {
 		}
 	case touch.SwipeUp:
 		// From the bottom edge of the clock it is the deck, once there is one; anywhere else, and on the
-		// pages the clock's swipes also reach (now playing, the weather), it is the volume.
+		// pages the clock's swipes also reach (now playing, the weather), it is the volume, while Swipe for
+		// volume is on.
 		if d.fromBottomEdge(g.Y) && d.onClock() && d.openDeck() {
 			return
 		}
-		media.Get().Adjust(+1)
+		swipeVolume(+1)
 	case touch.SwipeDown:
-		// From the top edge it is the sheet; anywhere else it is the volume.
+		// From the top edge it is the sheet; anywhere else it is the volume, while Swipe for volume is on.
 		if g.Y < topEdge {
 			d.mu.Lock()
 			d.openedBy = image.Pt(g.X, g.Y)
@@ -1515,7 +1521,7 @@ func (d *Display) gesture(g touch.Gesture) {
 			d.showSheet(true)
 			return
 		}
-		media.Get().Adjust(-1)
+		swipeVolume(-1)
 	case touch.SwipeRight:
 		// From the left edge it brings the dashboard up, the drawer's gesture mirrored.
 		if d.r != nil && g.X < d.r.drawerEdge() && d.openDashboard() {

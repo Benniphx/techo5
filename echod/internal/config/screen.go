@@ -154,6 +154,10 @@ type Screen struct {
 	// this is set; display/style_swipe.go).
 	NoStyleSwipe bool `json:"no_style_swipe,omitempty"`
 
+	// NoVolumeSwipe stops a swipe up or down on the clock from changing the volume (on unless this is
+	// set; display/volume_swipe.go, #243).
+	NoVolumeSwipe bool `json:"no_volume_swipe,omitempty"`
+
 	// Font is the font the screen's words are drawn in: empty for Go, the screen's own, or one of the
 	// others lib/fonts offers ("inter", "comicneue", ...). One this build does not have is Go.
 	Font string `json:"font,omitempty"`
@@ -353,6 +357,10 @@ func (w ScreenWriter) MuteRingSubtle(v bool) error {
 
 func (w ScreenWriter) NoStyleSwipe(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NoStyleSwipe = v })
+}
+
+func (w ScreenWriter) NoVolumeSwipe(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NoVolumeSwipe = v })
 }
 
 func (w ScreenWriter) CallButton(v bool) error {
