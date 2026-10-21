@@ -102,6 +102,8 @@ type Detector struct {
 	sampleBuf   []int16
 	windowSize  int
 	stepSize    int
+	// techo5: the last inference's failure, kept for Err.
+	lastErr error
 
 	// OnInference, if non-nil, is called after each model inference with
 	// the invocation count, the raw uint8 probability (0-255), and the
@@ -203,9 +205,11 @@ func (d *Detector) runInference() bool {
 	}
 
 	if err := d.interp.SetInput(input); err != nil {
+		d.lastErr = err // techo5
 		return false
 	}
 	if err := d.interp.Invoke(); err != nil {
+		d.lastErr = err // techo5
 		return false
 	}
 
@@ -225,6 +229,10 @@ func (d *Detector) runInference() bool {
 
 	return d.isDetected()
 }
+
+// Err is why the last inference that failed did, or nil when none has. techo5: a model the engine
+// loads but cannot run scores nothing, and the caller checking it has no other way to tell.
+func (d *Detector) Err() error { return d.lastErr }
 
 func (d *Detector) isDetected() bool {
 	if d.invocations < d.cfg.SlidingWindowSize {

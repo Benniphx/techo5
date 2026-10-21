@@ -166,14 +166,16 @@ const (
 	MaxMicroFile = 4 << 20
 )
 
-// microOps is every operator the engine runs, which is every one the published models use. Anything
-// else the engine would refuse at the first inference; refusing it here says so at once.
+// microOps is every operator the engine runs: every one the published models use, and ADD,
+// AVERAGE_POOL_2D and MAX_POOL_2D, which models trained with residual connections or pooling use
+// (#190). Anything else the engine would refuse at the first inference; refusing it here says so at
+// once.
 var microOps = map[tflite.Op]bool{
 	tflite.OpCallOnce: true, tflite.OpVarHandle: true, tflite.OpReadVariable: true,
 	tflite.OpAssignVariable: true, tflite.OpReshape: true, tflite.OpConcatenation: true,
 	tflite.OpStridedSlice: true, tflite.OpConv2D: true, tflite.OpDepthwiseConv: true,
 	tflite.OpFullyConnected: true, tflite.OpLogistic: true, tflite.OpQuantize: true,
-	tflite.OpSplitV: true,
+	tflite.OpSplitV: true, tflite.OpAdd: true, tflite.OpAveragePool2D: true, tflite.OpMaxPool2D: true,
 }
 
 // microInput checks that a model reads as a microWakeWord model the engine can be trusted with, and
@@ -337,6 +339,10 @@ func runs(path string, cfg microwakeword.Config, frames int) (err error) {
 		silence[i] = make([]int8, featureDims)
 	}
 	det.ProcessFeatures(silence)
+	// A model the engine loads but cannot run (an operator's check fails) would score nothing ever after.
+	if err := det.Err(); err != nil {
+		return fmt.Errorf("the engine could not run the .tflite: %v", err)
+	}
 	return nil
 }
 
