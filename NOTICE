@@ -177,6 +177,13 @@ Person detection model (embedded in the daemon, Show and Spot)
   aeac6f39e5c7475cea20c54e86d41e3a38312546: an int8 MobileNet v1 trained on the Visual Wake Words
   dataset. Unchanged.
 
+Test pictures, echod/internal/feature/person/testdata (not shipped in any release)
+  person.gray and no_person.gray, TensorFlow Lite Micro's person detection test pictures
+  (tensorflow/lite/micro/examples/person_detection/testdata, https://github.com/tensorflow/tflite-micro
+  at commit cefb91622f507275fc6690f475ccec6650edd076), Copyright The TensorFlow Authors, Apache
+  License 2.0. Changes: converted from BMP to raw 96x96 gray, which the model is checked against; a
+  NOTICE beside them says how.
+
 Wake word models (in the root filesystem, /usr/share/techo5/models)
   okay_nabu, hey_jarvis, hey_mycroft, alexa — Apache License 2.0
   esphome/micro-wake-word-models, https://github.com/esphome/micro-wake-word-models, at commit

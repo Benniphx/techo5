@@ -679,13 +679,15 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   it, holding the button mutes like a tap. The 2nd gen Show 5 is not affected.
 - **Person detection** (Show and Spot, off by default; the **Person detection** switch in
   Home Assistant, which works only with Presence detection on): tells a person from anything else
-  that moves, such as a curtain, a pet or the light changing. While Presence has seen movement, a small
-  model looks at the camera's picture twice a second, as 96 by 96 shades of gray, on the device, and
-  Home Assistant gets a **Person** sensor (occupancy). It turns on when the last three looks score 0.6
-  or more on average, where 1 is surely a person, and stays on for a minute after the last time they
-  did. The model is TensorFlow's
-  person detection example: small enough for these processors, and a modest judge. It often misses a
-  person far from the camera or half out of the picture.
+  that moves, such as a curtain, a pet or the light changing, and can see somebody sitting still.
+  While it is on, a small model looks at the middle square of the camera's picture every second and a
+  half, whether anything moved or not, as 96 by 96 shades of gray, on the device, and Home Assistant
+  gets a **Person** sensor (occupancy). It turns on when the last three looks score 0.6 or more on
+  average, where 1 is surely a person, and stays on for a minute after the last time they did.
+  **Person confidence** (diagnostic, 0 to 100%) is that average; it is unknown while the switch is
+  off or the camera is not watching. The model is TensorFlow's person detection example: small
+  enough for these processors, and a modest judge. It often misses a person far from the camera or
+  half out of the picture.
   Nothing it sees is kept or sent.
 - **Gestures** (Show and Spot, off by default; the **Gestures** switch in Home
   Assistant): cover the camera with your palm, hand on or almost on the lens, for half a second to

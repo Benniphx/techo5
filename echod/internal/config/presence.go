@@ -17,7 +17,7 @@ type Presence struct {
 	// Gestures: a hand held over the camera stops a ring and is an event for Home Assistant.
 	Gestures bool `json:"gestures,omitempty"`
 
-	// Person: a model looks for a person in what moved (feature/person).
+	// Person: a model looks for a person in the camera's picture (feature/person).
 	Person bool `json:"person,omitempty"`
 }
 
