@@ -128,18 +128,20 @@ data:
   seconds: 60
 ```
 
-With **Live camera video** on (a switch of the device's in Home Assistant, under its configuration;
-off on a new device), a camera Home Assistant can stream (one that plays live in its own dashboard,
-from an RTSP camera or an integration with a stream) is shown as live video, decoded on the device from
-Home Assistant's HLS stream. Snapshots keep coming until the first moving frame, which takes a few
-seconds, more when Home Assistant still has to start the camera's stream. The picture is a few seconds
-behind the camera: HLS comes in parts a keyframe interval long. Other cameras, and any whose stream
-fails or that the device cannot decode (H.265, or a stream over 1080p), are shown from snapshots, a few
-a second, as with the switch off. A streamed camera's sound, when the view has one, comes from the same
-stream, decoded on the device: as far behind the camera as the picture, where the stream converted by
-Home Assistant and sent back was some twenty seconds. A stream with no sound in it falls back to Home
-Assistant's way. A camera's sub stream (often called *fluent* or *sub*) is the better choice: it is
-sharper than the panel needs anyway, starts sooner and costs less.
+With **Live camera video** on (a switch of the device's in Home Assistant, under its configuration; off
+on a new device), a camera Home Assistant can stream (one that plays live in its own dashboard, from an
+RTSP camera or an integration with a stream) is shown as live video, decoded on the device from Home
+Assistant's HLS stream. Snapshots keep coming until the first moving frame, which takes a few seconds,
+more when Home Assistant still has to start the camera's stream. The picture is a few seconds behind the
+camera: HLS comes in parts a keyframe interval long. Other cameras, and any whose stream fails or that
+the device cannot decode, are shown from snapshots, a few a second, as with the switch off. That's H.265
+on most devices, and any stream over 1080p. The Echo Show 8 2nd gen and the Skylight Calendar play H.265
+cameras live too (on TECHO5's own kernel): the Show 8 up to 1080p at 30 frames a second, the Skylight up
+to 720p at 30, so pick a camera's sub stream there. A streamed camera's sound, when the view has one,
+comes from the same stream, decoded on the device: as far behind the camera as the picture, where the
+stream converted by Home Assistant and sent back was some twenty seconds. A stream with no sound in it
+falls back to Home Assistant's way. A camera's sub stream (often called *fluent* or *sub*) is the better
+choice: it is sharper than the panel needs anyway, starts sooner and costs less.
 
 Where the image's decoder reads RTSP, a camera given an RTSP address for talking through it (below) is
 heard from that address instead: live, a word said at the device comes back out of it through a

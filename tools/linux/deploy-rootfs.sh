@@ -111,6 +111,20 @@ for c in fbprobe audioprobe rebootto btbridge; do cp "$ROOT/bin/$c-arm" "$STAGE/
 [ -e "$ROOT/bin/techo5-ffmpeg-arm" ] || { echo "bin/techo5-ffmpeg-arm is missing: build it with tools/linux/build-ffmpeg.sh (in WSL)" >&2; exit 1; }
 cp "$ROOT/bin/techo5-ffmpeg-arm" "$STAGE/bin/techo5-ffmpeg"
 echo "== ffmpeg: sha256 $(sha256sum "$ROOT/bin/techo5-ffmpeg-arm" | cut -d' ' -f1)"
+# athena and the Skylight carry the 64-bit build beside it (tools/linux/build-ffmpeg-arm64.sh in WSL: static,
+# with H.265, VP8 and VP9), which the daemon runs on their 64-bit kernels; an athena on Amazon's 32-bit
+# kernel keeps the one above. Not optional for them either, and checked for what it must be.
+board=$(sed -n 's/^T5_BOARD=//p' "${DEVICE_OVERLAY:-/nonexistent}/etc/techo5/device.conf" 2>/dev/null | tail -1)
+case "$board" in
+athena|skylight)
+	F64=$ROOT/bin/techo5-ffmpeg-arm64
+	[ -e "$F64" ] || { echo "bin/techo5-ffmpeg-arm64 is missing: build it with tools/linux/build-ffmpeg-arm64.sh (in WSL); the $board image carries it" >&2; exit 1; }
+	# An ELF64 for AArch64 (e_machine 183) with no interpreter: nothing of the 32-bit userspace can be linked.
+	[ "$(od -An -tx1 -j4 -N1 "$F64" | tr -d ' ')" = 02 ] && [ "$(od -An -tu2 -j18 -N2 "$F64" | tr -d ' ')" = 183 ] 		&& ! grep -q 'ld-musl-\|ld-linux-' "$F64" 		|| { echo "bin/techo5-ffmpeg-arm64 is not a static aarch64 binary: build it with tools/linux/build-ffmpeg-arm64.sh" >&2; exit 1; }
+	cp "$F64" "$STAGE/bin/techo5-ffmpeg64"
+	echo "== ffmpeg64: sha256 $(sha256sum "$F64" | cut -d' ' -f1)"
+	;;
+esac
 cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
 [ "$BUILD_TAGS" = spot ] && sed -i '/^shairport-sync/d' "$STAGE/tools/packages-rootfs.txt"
 # EXTRA_PACKAGES: Alpine packages a device needs on top of the list (athena: busybox-extras, for udhcpd).

@@ -143,6 +143,57 @@ if ($Rootfs -and $SkylightRootfs) {
         if ($sums[0] -ne $sums[1]) { throw "$Rootfs and $SkylightRootfs carry different usr/local/bin/techo5: build both from the same tree" }
     } finally { Remove-Item -Recurse -Force $cmp -ErrorAction SilentlyContinue }
 }
+# The video decoder. Every rootfs carries the same 32-bit ffmpeg as usr/local/bin/techo5-ffmpeg
+# (bin/techo5-ffmpeg-arm, tools/linux/build-ffmpeg.sh). athena's and the Skylight's also carry the same
+# static aarch64 build as usr/local/bin/techo5-ffmpeg64 (bin/techo5-ffmpeg-arm64,
+# tools/linux/build-ffmpeg-arm64.sh), with H.265, VP8 and VP9, which the daemon runs on their 64-bit
+# kernels; the Shows' rootfs never carries it.
+$ffWants = @()
+if ($Rootfs) { $ffWants += , @($Rootfs, $false) }
+if ($AthenaRootfs) { $ffWants += , @($AthenaRootfs, $true) }
+if ($SkylightRootfs) { $ffWants += , @($SkylightRootfs, $true) }
+if ($ffWants.Count) {
+    $ffDir = Join-Path ([System.IO.Path]::GetTempPath()) "techo5-ffmpeg-$PID"
+    try {
+        $ff32 = @{}; $ff64 = @{}
+        foreach ($w in $ffWants) {
+            $t, $want64 = $w
+            $d = Join-Path $ffDir ([guid]::NewGuid().ToString('n'))
+            New-Item -ItemType Directory -Force $d | Out-Null
+            $names = @(& tar -tzf $t) -replace '^\./', ''
+            if ($names -notcontains 'usr/local/bin/techo5-ffmpeg') { throw "$t has no usr/local/bin/techo5-ffmpeg: build it with bin/techo5-ffmpeg-arm (tools/linux/build-ffmpeg.sh)" }
+            & tar -xzf $t -C $d ./usr/local/bin/techo5-ffmpeg
+            if ($LASTEXITCODE -ne 0) { throw "${t}: usr/local/bin/techo5-ffmpeg could not be read" }
+            $ff32[$t] = (Get-FileHash -Algorithm SHA256 (Join-Path $d 'usr/local/bin/techo5-ffmpeg')).Hash
+            $has64 = $names -contains 'usr/local/bin/techo5-ffmpeg64'
+            if ($want64 -and -not $has64) { throw "$t has no usr/local/bin/techo5-ffmpeg64: build bin/techo5-ffmpeg-arm64 (tools/linux/build-ffmpeg-arm64.sh) before deploy-rootfs.sh" }
+            if (-not $want64 -and $has64) { throw "$t carries usr/local/bin/techo5-ffmpeg64, which only athena's and the Skylight's rootfs do" }
+            if (-not $want64) { continue }
+            & tar -xzf $t -C $d ./usr/local/bin/techo5-ffmpeg64
+            if ($LASTEXITCODE -ne 0) { throw "${t}: usr/local/bin/techo5-ffmpeg64 could not be read" }
+            $f = Join-Path $d 'usr/local/bin/techo5-ffmpeg64'
+            $b = [System.IO.File]::ReadAllBytes($f)
+            # An ELF64 for AArch64 (e_machine 183) with no program interpreter (PT_INTERP, 3): static, since
+            # nothing of the 32-bit userspace can be linked to it.
+            $elf = $b.Length -gt 64 -and $b[0] -eq 0x7f -and $b[1] -eq 0x45 -and $b[2] -eq 0x4c -and $b[3] -eq 0x46 -and $b[4] -eq 2 -and [BitConverter]::ToUInt16($b, 18) -eq 183
+            $interp = $false
+            if ($elf) {
+                $phoff = [BitConverter]::ToUInt64($b, 32); $phsize = [BitConverter]::ToUInt16($b, 54); $phnum = [BitConverter]::ToUInt16($b, 56)
+                for ($i = 0; $i -lt $phnum; $i++) { if ([BitConverter]::ToUInt32($b, [int]($phoff + $i * $phsize)) -eq 3) { $interp = $true } }
+            }
+            if (-not $elf -or $interp) { throw "$t carries a usr/local/bin/techo5-ffmpeg64 that is not a static aarch64 binary" }
+            # What the daemon looks for to know the decoders are in it (feature/video, proc.go).
+            $text = [System.Text.Encoding]::ASCII.GetString($b)
+            foreach ($m in @('Two slices reporting being the first in the same frame', 'Discarding interframe without a prior keyframe!', 'Invalid compressed header size')) {
+                if (-not $text.Contains($m)) { throw "$t carries a usr/local/bin/techo5-ffmpeg64 without H.265, VP8 or VP9 (no '$m')" }
+            }
+            $ff64[$t] = (Get-FileHash -Algorithm SHA256 $f).Hash
+        }
+        if (@($ff32.Values | Sort-Object -Unique).Count -gt 1) { throw "the rootfs tarballs carry different usr/local/bin/techo5-ffmpeg: build them all with the same bin/techo5-ffmpeg-arm" }
+        if (@($ff64.Values | Sort-Object -Unique).Count -gt 1) { throw "$AthenaRootfs and $SkylightRootfs carry different usr/local/bin/techo5-ffmpeg64: build both with the same bin/techo5-ffmpeg-arm64" }
+        foreach ($t in $ff64.Keys) { Write-Host "== ${t}: ffmpeg64 sha256 $($ff64[$t].ToLower())" }
+    } finally { Remove-Item -Recurse -Force $ffDir -ErrorAction SilentlyContinue }
+}
 # Each Show rootfs says which board it is for (etc/techo5/device.conf, T5_BOARD); the athena store
 # installs only athena's.
 if ($AthenaRootfs) {

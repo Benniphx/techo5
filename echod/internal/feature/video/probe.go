@@ -43,8 +43,8 @@ type Info struct {
 }
 
 // Usable codecs: what the image's ffmpeg decodes (tools/linux/build-ffmpeg.sh). H.265, VP8 and VP9 only
-// where they were built in (the 64-bit images' ffmpeg, build-ffmpeg-arm64.sh), which decodesHEVC and
-// decodesVPx say.
+// where they were built in (the static aarch64 ffmpeg athena's and the Skylight's images carry,
+// build-ffmpeg-arm64.sh, run on their 64-bit kernels), which decodesHEVC and decodesVPx say.
 var (
 	videoCodecs = map[string]bool{"h264": true, "mpeg4": true}
 	audioCodecs = map[string]bool{"aac": true, "aac_latm": true, "mp3": true, "mp3float": true, "opus": true, "ac3": true, "eac3": true}
