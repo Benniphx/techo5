@@ -489,7 +489,8 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 ### Clock and home screen
 
 - **Clock format**, **Clock position** and **Date color** (Date color on the Show only). Clock
-  position puts a smaller clock in a bottom corner, so a photo stays in view. Every style goes there
+  position puts a smaller clock at the foot of the screen, in a bottom corner or between them
+  (*Bottom left*, *Bottom center*, *Bottom right*), so a photo stays in view. Every style goes there
   except *Dashboard*, *Agenda* and *World*, which keep the whole screen. On the Spot, Clock position is
   *Center* or *Bottom*: the *Classic*, *Flip*, *LED*, *Sun* and *Glow* styles go small at the foot of
   the circle, and the others stay in the middle. Also in Home Assistant.

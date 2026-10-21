@@ -18,6 +18,7 @@ import (
 var clockPositions = []clockPosition{
 	{"Center", ""},
 	{"Bottom left", "bottom-left"},
+	{"Bottom center", "bottom-center"},
 	{"Bottom right", "bottom-right"},
 }
 
@@ -58,6 +59,8 @@ func clockAlign() (align int, foot bool) {
 	switch clockPositions[clockPositionIndex()].value {
 	case "bottom-left":
 		return -1, true
+	case "bottom-center":
+		return 0, true
 	case "bottom-right":
 		return 1, true
 	}

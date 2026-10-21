@@ -725,15 +725,15 @@ const volumeBarH = 110
 // optional suffix appended to the date line (an alarm note, on the ordinary idle page). Shared by
 // bigClock and the screensaver's normal-size overlay, which wants the clock alone.
 func (r *renderer) timeAndDate(now time.Time, base int, dateSuffix string) image.Rectangle {
-	return r.timeAndDateAt(now, base, dateSuffix, 0, 0)
+	return r.timeAndDateAt(now, base, dateSuffix, 0, 0, false)
 }
 
 // timeAndDateAt is timeAndDate lined up across as align says: -1 against left (a left edge), 0
 // centered, 1 against the right margin. Off center it is the compact clock, for a corner: the time at
 // the size of the weather's reading, the date close under it.
-func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, align, left int) image.Rectangle {
+func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, align, left int, compact bool) image.Rectangle {
 	clock, ampmFace, dateGap := r.clock, r.ampm, r.s(70)
-	if align != 0 {
+	if compact {
 		clock, ampmFace, dateGap = r.big, r.small, r.s(48)
 	}
 	hour := clockHM(now)
@@ -741,7 +741,7 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 	hw := r.width(clock, hour)
 	aw := r.width(ampmFace, ampm)
 	gap := r.s(18)
-	if align != 0 {
+	if compact {
 		gap = r.s(10)
 	}
 	if ampm == "" {
@@ -761,8 +761,8 @@ func (r *renderer) timeAndDateAt(now time.Time, base int, dateSuffix string, ali
 	r.text(ampmFace, ampm, x+hw+gap, base, dateColor(amber)) // a chosen date color takes the AM/PM with it
 
 	date := locale.LongDate(now, screenLang()) + dateSuffix
-	if room := r.w * cornerPct / 100; align != 0 && r.width(r.small, date) > room {
-		// In a corner, as wide as the other styles' corner box at most (styleDateIn): the day and month
+	if room := r.w * cornerPct / 100; compact && r.width(r.small, date) > room {
+		// At the foot, as wide as the other styles' corner box at most (styleDateIn): the day and month
 		// short first, so the alarm still fits, and cut only if that is not enough.
 		date = r.clipTo(r.small, locale.ShortDate(now, screenLang())+dateSuffix, room)
 	}
@@ -796,7 +796,7 @@ func (r *renderer) bigClock(s scene) {
 	align, foot := clockAlign()
 	base, timersAt := r.h/2+r.s(60), r.s(128)
 	if foot {
-		// The compact clock in a corner at the foot, the date clear of the footer's line.
+		// The compact clock at the foot, in a corner or between them, the date clear of the footer's line.
 		base, timersAt = r.h-r.s(106), r.s(96)
 	}
 	timers := timersAtFoot(s)
@@ -838,7 +838,7 @@ func (r *renderer) bigClock(s scene) {
 	if s.callButton && foot && align < 0 {
 		left = r.callButtonRect().Max.X + r.s(24)
 	}
-	r.setDateAt(r.timeAndDateAt(s.now, base, suffix, align, left).Inset(-r.s(16)))
+	r.setDateAt(r.timeAndDateAt(s.now, base, suffix, align, left, foot).Inset(-r.s(16)))
 	if timers {
 		r.timersFoot(s, base+timersAt)
 	}

@@ -83,9 +83,9 @@ type Screen struct {
 	// default five seconds, -1 until they are tapped away.
 	AnswerSeconds int `json:"answer_seconds,omitempty"`
 
-	// ClockPosition is where the home screen's clock sits: empty for the center, "bottom-left" or
-	// "bottom-right" on a Show, "bottom" on the Spot; DateColor the date's color, empty for the
-	// theme's (display/clock_position.go, clock_layout.go).
+	// ClockPosition is where the home screen's clock sits: empty for the center, "bottom-left",
+	// "bottom-center" or "bottom-right" on a Show, "bottom" on the Spot; DateColor the date's color,
+	// empty for the theme's (display/clock_position.go, clock_layout.go).
 	ClockPosition string `json:"clock_position,omitempty"`
 	DateColor     string `json:"date_color,omitempty"`
 

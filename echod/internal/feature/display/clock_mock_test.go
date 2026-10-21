@@ -61,7 +61,7 @@ func TestMockClockCorners(t *testing.T) {
 				mockSave(t, out, name+"-timer", img)
 			}
 		}
-		mockSheet(t, out, panel.name+"-sheet", tiles, 3)
+		mockSheet(t, out, panel.name+"-sheet", tiles, len(clockPositions))
 	}
 }
 

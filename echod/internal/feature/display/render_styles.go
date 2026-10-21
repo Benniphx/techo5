@@ -650,8 +650,8 @@ func cornerStyle(style string) bool {
 // cornerPct is the share of the width a style gets in a corner, the most of it the date may take.
 const cornerPct = 44
 
-// cornerBox is the box a style is drawn in at the foot, in the corner align says: the left (clear of
-// the Call button) or the right, its foot where the whole screen's box ends. The dial and the binary
+// cornerBox is the box a style is drawn in at the foot, where align says: the left corner (clear of
+// the Call button), the middle or the right corner, its foot where the whole screen's box ends. The dial and the binary
 // lights are wide for their height, so theirs is narrower, to keep them clear of the middle.
 func (r *renderer) cornerBox(s scene, style string, align, bottom int) image.Rectangle {
 	pct := cornerPct
@@ -668,6 +668,9 @@ func (r *renderer) cornerBox(s scene, style string, align, bottom int) image.Rec
 	}
 	w, h := r.w*pct/100, r.s(190)
 	x := r.w - r.margin - w
+	if align == 0 {
+		x = (r.w - w) / 2
+	}
 	if align < 0 {
 		x = r.margin
 		if s.callButton {
