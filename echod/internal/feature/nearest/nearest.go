@@ -35,6 +35,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/voice"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/mic"
@@ -108,10 +109,14 @@ type Nearest struct {
 	wakeWord  func(slot int) string
 	score     func() float64
 	hears     func() bool
-	peers     func() []announce.Peer
-	fanout    func(peers []announce.Peer, mine *pending)
-	now       func() time.Time
-	after     func(d time.Duration, f func())
+	// onCall is whether a call is up here and lets the wake word through (phone.WakeAllowed): a wake word
+	// heard during one is most likely for this device, the one somebody wants to hang up, so its claim
+	// leads by onCallLead. Only then: a device on a call that does not take wake words claims as any other.
+	onCall func() bool
+	peers  func() []announce.Peer
+	fanout func(peers []announce.Peer, mine *pending)
+	now    func() time.Time
+	after  func(d time.Duration, f func())
 
 	mu      sync.Mutex
 	enabled bool
@@ -158,10 +163,11 @@ func build() *Nearest {
 			}
 			return ""
 		},
-		score: func() float64 { return mic.Get().Standout(heard) },
-		hears: layout.HasMicrophone,
-		peers: announce.Peers,
-		now:   time.Now,
+		score:  func() float64 { return mic.Get().Standout(heard) },
+		hears:  layout.HasMicrophone,
+		onCall: func() bool { return phone.Get().Busy() && phone.Get().WakeAllowed() },
+		peers:  announce.Peers,
+		now:    time.Now,
 		after: func(d time.Duration, f func()) {
 			time.AfterFunc(d, func() { safe.Go("nearest device decision", f) })
 		},
@@ -271,7 +277,7 @@ func (n *Nearest) Woke(slot int) {
 	window := c.Nearest.Window()
 	mine := &pending{
 		claim: claim{From: c.Device.Name, Turn: newTurn(), Word: n.wakeWord(slot),
-			Score: n.score() + float64(c.Nearest.Offset)},
+			Score: n.score() + float64(c.Nearest.Offset) + n.callBonus()},
 		at:     at,
 		window: window,
 	}
@@ -329,6 +335,19 @@ func (n *Nearest) decide(slot int, mine *pending) {
 			"waited", n.now().Sub(mine.at).Round(time.Millisecond))
 		n.woke(slot, mine.at)
 	}
+}
+
+// onCallLead is added to a claim from a device on a call, in the same dB of standout the claims are
+// made of. Enough to win a word another device heard about as well, the call being what somebody most
+// likely meant; not so much that a word somebody said to a device in another room, and heard faintly
+// here, goes to the call.
+const onCallLead = 6
+
+func (n *Nearest) callBonus() float64 {
+	if n.onCall != nil && n.onCall() {
+		return onCallLead
+	}
+	return 0
 }
 
 // bestSince is the best claim from another device since from, and whether it beats mine. Called with

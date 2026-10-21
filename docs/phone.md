@@ -50,8 +50,8 @@ diagnostics can read, and never in an image or a release.
 | | |
 |---|---|
 | **Place a call** | `esphome.<device>_phone_call` with `number`: a phone number (`15551234567`) or another account's extension. Spaces, dashes and a leading `+` are dropped. |
-| **Answer** | The action button on a Dot, a tap on a Show or Spot, the **Answer call** button in Home Assistant, or `esphome.<device>_phone_answer`. |
-| **Decline or hang up** | The same button again, a sideways swipe on the Spot, **Decline** / **Hang up** on the Show, the **Hang up** button, or `esphome.<device>_phone_hangup`. |
+| **Answer** | The action button on a Dot, a tap on a Show or Spot, the **Answer call** button in Home Assistant, `esphome.<device>_phone_answer`, or by voice with **Wake word during calls** on (below). |
+| **Decline or hang up** | The same button again, a sideways swipe on the Spot, **Decline** / **Hang up** on the Show, the **Hang up** button, `esphome.<device>_phone_hangup`, the hang-up word, or by voice with **Wake word during calls** on (below). |
 | **Say something into a call** | `assist_satellite.announce` on the same device while a call is up: the message plays in the room and goes into the call. |
 
 ### Contacts on a screen
@@ -69,8 +69,95 @@ An empty `contacts` clears the list. Like the login, the numbers are kept in the
 on the device.
 
 While a call rings or is up, the wake word is ignored (the far end talking through the speaker is not
-someone in the room), and music and other sounds pause for it. A ringing call lights the Show's and
+someone in the room), unless **Wake word during calls** is on (below). Music and other sounds pause
+for a call. A ringing call lights the Show's and
 the Spot's screen and pulses the Dot's ring green.
+
+### A hang-up word
+
+Choose a word in **Hang-up word** (the device's microphone settings in Home Assistant) and saying it
+during a call hangs the call up, or declines one ringing here. It is heard on the device, so it works
+with Home Assistant down. It is **None**, off, until chosen. The list has **Stop**, which has the stop
+word do it, and every wake word the device has but the ones chosen as wake words, so one of your own
+("hang up", say) can do it, added the way a wake word of your own is (setup.md).
+
+- A call being placed is never ended this way, only one ringing here or one that is up.
+- It is not acted on while the other party is talking, or for a moment after: their voice comes out
+  of the speaker. Wait for a gap.
+- A talk through a camera is not ended this way, and neither is a call while the device is making a
+  sound of its own (an announcement, the assistant's answer, a chime): the word in it is the device's.
+- With **Stop**, an alarm or timer ringing during the call is stopped first, and the next "stop" hangs
+  up. "Stop" comes up in conversation, so it can hang up by mistake; a word of your own that does not
+  come up is less likely to. It is heard at **Stop word threshold**, and does nothing with the stop word
+  turned off (that threshold at its top).
+- Another word is listened for only while a call rings or is up, at **Hang-up word threshold**, a wake
+  word's 0.85 until set. Higher hears it less often, by mistake or not.
+- During a call the stop word and the hang-up word are held to their full threshold, without the
+  allowance words get while the speaker plays; the stop word gets it back over a ring.
+- A word of your own chosen here can't be removed on the setup page or by **Purge cache** while it is
+  the hang-up word, and the setting can't be changed through the device's remote API or by restoring
+  settings from a file.
+
+### Answering and hanging up by voice
+
+Turn on **Wake word during calls** and the wake word opens a turn while a call rings here or is up, as
+it does at any other time. What it does is Home Assistant's: an automation like the one below answers
+or hangs up the call on the device that heard it. The call carries on while you speak, both ways.
+
+- A wake word heard while the other party was talking, or for a moment after, is ignored: their voice
+  comes out of the speaker. Wait for a gap.
+- A call being placed (still ringing out) is ended with the button, not by voice.
+- The device on the call answers a wake word another device nearby heard about as well, but not one
+  another device heard clearly better, which was somebody talking to that one.
+- While the turn listens, the other party is not played in the room, so they cannot speak into it.
+  They are heard again once it has heard you.
+- A call ringing here keeps ringing once the turn is over, if it has not been answered.
+- The stop word does not open a turn during a call: it stops an alarm or timer, or hangs up if it is
+  the hang-up word. In a turn opened during a call it cancels the turn and leaves the call up.
+
+Two more switches decide how the turn sounds:
+
+| | |
+|---|---|
+| **Assistant replies go into calls** | The assistant's answer is sent to the other party as well as played in the room. Off, only the room hears it, and the other party hears a moment of quiet. Either way the room's microphones are not sent while the answer plays, so it does not reach them a second time through the speaker. Announcements go into the call either way, over the room. |
+| **Hear the call under the assistant** | The other party keeps playing, quieter, under the chime and the answer. Off, they are not heard in the room until the answer is over. |
+
+All three are off unless chosen. Home Assistant's own wake word engine (**Wake word on Home Assistant**)
+stays off during a call: only the device's own wake word is heard then.
+
+```yaml
+alias: TECHO5 - answer or hang up a call by voice
+mode: parallel
+triggers:
+  - trigger: conversation
+    command:
+      - "answer [the] [phone] [call]"
+      - "pick up"
+    id: answer
+  - trigger: conversation
+    command:
+      - "hang up"
+      - "end [the] call"
+    id: hangup
+conditions:
+  - "{{ device_entities(trigger.device_id) | select('search', 'phone_hangup') | list | count > 0 }}"
+actions:
+  - action: "esphome.{{ device_attr(trigger.device_id, 'name') | slugify }}_phone_{{ trigger.id }}"
+  - set_conversation_response: ""
+```
+
+The condition passes only for a TECHO5 device with a phone, as the automations in actions.md check
+theirs, so a request from another satellite does not reach for an action it does not have. The empty
+response keeps the assistant from talking over the call it just answered, or into the room after
+hanging up.
+
+### Both at once
+
+The hang-up word and **Wake word during calls** can both be on. A word of your own such as "hang up",
+heard in a turn, cancels the turn and hangs up, so "Okay Nabu, hang up" ends the call on the device
+whether the word or Home Assistant hears it first. While the assistant's answer is playing the hang-up
+word is not acted on, so an answer that says it does not end the call. "Stop" in a turn only cancels
+the turn.
 
 ## Events
 

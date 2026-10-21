@@ -93,11 +93,14 @@ type State struct {
 }
 
 type Phone struct {
-	status, peer     *esphome.TextSensor
-	answer, hangup   *esphome.Button
-	dropIn, dnd      *esphome.Switch
-	ringSound        *esphome.Select
-	ringLED, callLED *led.Claim
+	status, peer   *esphome.TextSensor
+	answer, hangup *esphome.Button
+	dropIn, dnd    *esphome.Switch
+	// callWake, callReplies and callUnderlay are what a turn during a call may do: config.Home's
+	// CallWake, CallReplies and CallUnderlay.
+	callWake, callReplies, callUnderlay *esphome.Switch
+	ringSound                           *esphome.Select
+	ringLED, callLED                    *led.Claim
 
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
@@ -146,6 +149,12 @@ func build() *Phone {
 		OnCommand: p.SetRingSound,
 	}
 	p.dnd.OnCommand = p.SetDoNotDisturb
+	p.callWake = callSwitch("wake_word_during_calls", "Wake word during calls", "mdi:account-voice",
+		config.Set().Home().CallWake)
+	p.callReplies = callSwitch("assistant_replies_into_calls", "Assistant replies go into calls",
+		"mdi:account-voice", config.Set().Home().CallReplies)
+	p.callUnderlay = callSwitch("hear_call_under_assistant", "Hear the call under the assistant",
+		"mdi:phone-in-talk", config.Set().Home().CallUnderlay)
 	web.Handle(intercomPath, "", intercomOpen, p.intercomIn)
 	p.hangup.OnPress = func() { p.Hangup() }
 	p.ringLED = led.Get().Claim(led.PriorityAlarm)
@@ -158,15 +167,92 @@ func build() *Phone {
 func (p *Phone) Name() string { return "phone" }
 
 func (p *Phone) Entities() []esphome.Entity {
-	return []esphome.Entity{p.status, p.peer, p.answer, p.hangup, p.dropIn, p.dnd, p.ringSound}
+	return []esphome.Entity{p.status, p.peer, p.answer, p.hangup, p.dropIn, p.dnd, p.ringSound,
+		p.callWake, p.callReplies, p.callUnderlay}
 }
 
-// Restore puts the intercom's two switches and the call ring back the way they were left.
+// Restore puts the intercom's two switches, the call ring and what a turn during a call may do back
+// the way they were left.
 func (p *Phone) Restore(c config.Config) {
 	p.dropIn.Set(c.Home.DropIn)
 	p.ringSound.Set(RingSounds[RingSoundIndex()])
 	p.dnd.Set(c.Home.DoNotDisturb)
+	p.callWake.Set(c.Home.CallWake)
+	p.callReplies.Set(c.Home.CallReplies)
+	p.callUnderlay.Set(c.Home.CallUnderlay)
 }
+
+// callSwitch is one of the switches for what a turn during a call may do, saved by save.
+func callSwitch(id, name, icon string, save func(bool) error) *esphome.Switch {
+	sw := &esphome.Switch{Base: esphome.Base{ObjectID: id, Name: name, Icon: icon, Category: esphome.CategoryConfig}}
+	sw.OnCommand = func(on bool) {
+		if err := save(on); err != nil {
+			slog.Error("phone: saving a setting", "setting", id, "err", err)
+			return
+		}
+		sw.Set(on)
+		slog.Info("setting changed", "setting", id, "using", on)
+	}
+	return sw
+}
+
+// WakeAllowed reports whether the wake word may open a turn now, as far as the phone is concerned: no
+// call, or with Wake word during calls on, one ringing here (to answer it by voice) or one that is up
+// while the far end was not talking just then (their wake word comes out of the speaker too). Not a
+// call being placed: what comes back while it rings out is the far end's.
+func (p *Phone) WakeAllowed() bool {
+	return WakeAllowedIn(p.State().Phase, config.Get().Home.CallWake, p.FarEndTalking())
+}
+
+// WakeAllowedIn is WakeAllowed for a phase, the Wake word during calls setting, and whether the far end
+// was talking, so what reads them all can decide without reading them twice.
+func WakeAllowedIn(phase Phase, callWake, farEnd bool) bool {
+	switch phase {
+	case Idle:
+		return true
+	case Ringing:
+		return callWake
+	case Talking:
+		return callWake && !farEnd
+	}
+	return false
+}
+
+// Answerable reports whether a call in phase can be answered or hung up by voice: one ringing here, or
+// one that is up. Not one being placed, which ends with the button: what comes back while it rings out
+// is the far end's, and an automation calling for help places one that must not end on a word.
+func Answerable(phase Phase) bool { return phase == Ringing || phase == Talking }
+
+// FarEndTalking reports whether the other party was talking a moment ago, through the speaker: a word
+// heard then may be theirs rather than somebody's in the room.
+func (p *Phone) FarEndTalking() bool { return farEndTalking(time.Now()) }
+
+// ReplyStarted says a turn's reply has started playing here, and returns what to call once it and its
+// echo are over. Only a reply begun while a call is up counts: while one plays, the call sends the reply
+// alone, or silence, in place of the room (uplink). One already playing when a call is answered leaves
+// the call alone, rather than holding its uplink until the reply ends.
+func (p *Phone) ReplyStarted() (done func()) {
+	if !p.Busy() {
+		return func() {}
+	}
+	repliesPlaying.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { repliesPlaying.Add(-1) }) }
+}
+
+// TurnListening says a turn has started listening here, and returns what to call when it stops. While
+// any turn listens, a call holds the far end back from the room (playFarEnd).
+func (p *Phone) TurnListening() (done func()) {
+	turnsListening.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { turnsListening.Add(-1) }) }
+}
+
+// Replying reports whether a turn's reply is playing here now, or its echo is still dying away.
+func (p *Phone) Replying() bool { return repliesPlaying.Load() > 0 }
+
+// RepliesIntoCall reports whether a turn's reply goes into the call as well as the room.
+func RepliesIntoCall() bool { return config.Get().Home.CallReplies }
 
 // SetDropIn lets intercom calls connect by themselves, or has them ring again.
 func (p *Phone) SetDropIn(on bool) {
