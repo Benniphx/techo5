@@ -169,7 +169,7 @@ func Bundle() string {
 	}, "\n"))
 
 	section("settings", settingsSummary(c))
-	section("network", networkSummary(ctx))
+	section("network", networkSection(ctx))
 	// The log is where this device's own start script puts it, which is not the same file on all of
 	// them, and not under StateDir on any; a panel's is in memory (daemonLog): an empty log section is
 	// the one thing a bundle cannot be missing, since it is what somebody asked for the bundle to see.
