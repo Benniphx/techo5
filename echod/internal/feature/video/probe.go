@@ -97,7 +97,7 @@ func reach(codec string) string {
 	if name == "" {
 		name = codec
 	}
-	most, size, px := coresMost[codec], "1080p", float64(1920*1080)
+	most, size, px := coresMost[codec], "1080p", float64(p1080) // the size coresMost counts in
 	if math.Round(most/px) < 25 {
 		size, px = "720p", p720
 	}

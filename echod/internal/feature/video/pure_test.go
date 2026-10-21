@@ -311,6 +311,10 @@ func TestWhatFFmpegSaysIsRead(t *testing.T) {
 	if _, err := ParseProbe(pic("vp9 (Profile 0)", "3840x2160", "60")); err == nil {
 		t.Error("vp9 4K60 held to 1080p120 played")
 	}
+	// And says the 120 it is held to, not 121 (1088 lines counted against 1080).
+	if _, err := ParseProbe(pic("vp9 (Profile 0)", "1920x1080", "144")); err == nil || !strings.Contains(err.Error(), "VP9 up to 1080p at 120 frames a second") {
+		t.Errorf("vp9 1080p144 held to 1080p120 gave %v", err)
+	}
 	if _, err := ParseProbe(strings.Replace(probeMP4, "h264 (High)", "av1 (Main)", 1)); err == nil ||
 		!strings.Contains(err.Error(), "H.264, H.265, VP8, VP9 and MPEG-4 only") {
 		t.Errorf("av1 gave %v", err)
