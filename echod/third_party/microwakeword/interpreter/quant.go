@@ -12,7 +12,9 @@ type QuantMultiplier struct {
 // QuantizeMultiplier decomposes a float64 scale into a fixed-point
 // multiplier (Q0.31 format) and an exponent shift.
 func QuantizeMultiplier(realMultiplier float64) QuantMultiplier {
-	if realMultiplier == 0 {
+	// techo5: a model's scale that is not a finite number would keep the halving below going forever
+	// (Inf) or never end it (NaN): it multiplies by nothing instead.
+	if realMultiplier == 0 || math.IsInf(realMultiplier, 0) || math.IsNaN(realMultiplier) {
 		return QuantMultiplier{0, 0}
 	}
 	sign := 1
