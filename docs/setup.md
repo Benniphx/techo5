@@ -494,6 +494,9 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   except *Dashboard*, *Agenda* and *World*, which keep the whole screen. On the Spot, Clock position is
   *Center* or *Bottom*: the *Classic*, *Flip*, *LED*, *Sun* and *Glow* styles go small at the foot of
   the circle, and the others stay in the middle. Also in Home Assistant.
+- **Weather position** (on the Show): *Top left*, where the weather has always been, or *Top right*.
+  At the top right, a weather alert's badge sits beside it (the weather shortens to the temperature and
+  its icon to make room) and a Corner timer goes under it. Also in Home Assistant.
 - **Clock style**: how the clock looks all day. *Classic*, *Big*, *Flip*, *LED*, *Analog*, *Words*
   (the time in words), *Sun* (the sun's path from sunrise to sunset), *Dashboard* (the next events
   and the week's weather), *Binary* (the time in lights, one column per digit, counted 1, 2, 4, 8

@@ -165,6 +165,7 @@ var registered = []string{
 	"screen_dashboard_view",
 	"screen_font",
 	"screen_date_color",
+	"screen_weather_position",
 	"screen_ignores_room_lights",
 	"screen_language",
 	"screen_light_theme",

@@ -230,7 +230,8 @@ func (r *renderer) pillTapped(p image.Point) int {
 
 // alertBadge is the clock's word that something is in force: the most severe alert's name, and how
 // many more, in its color at the top right, with a warning mark. It keeps clear of the header's
-// "microphone off" pill in the middle.
+// "microphone off" pill in the middle. With the weather at the top right it sits beside the weather,
+// or under it when the room beside it is too little for a word.
 func (r *renderer) alertBadge(s scene) {
 	here := s.alerts.Here
 	if len(here) == 0 {
@@ -247,10 +248,16 @@ func (r *renderer) alertBadge(s scene) {
 	if s.muted {
 		left = (r.w+r.width(r.tiny, "microphone off"))/2 + r.s(14) + r.s(12)
 	}
+	top := r.badgeTop()
+	if r.weatherRight {
+		right = r.weatherLeft - r.s(16)
+		if right-left-mark-r.s(28)-r.width(r.tiny, more) < r.width(r.tiny, "Wind…") {
+			right, top = r.w-r.margin, r.weatherFoot
+		}
+	}
 	room := right - left - mark - r.s(28)
 	label := r.clipTo(r.tiny, a.Event, room-r.width(r.tiny, more)) + more
 	w := r.width(r.tiny, label) + mark + r.s(28)
-	top := r.badgeTop()
 	b := image.Rect(right-w, top, right, top+h)
 	r.roundButton(b, float64(h)/2, a.Color)
 	ink := inkOn(a.Color)
@@ -264,6 +271,13 @@ func (r *renderer) alertBadge(s scene) {
 	r.alertMu.Lock()
 	r.badgeAt = b
 	r.alertMu.Unlock()
+}
+
+// alertBadgeAt is where the clock's alert badge was drawn in this frame, or empty.
+func (r *renderer) alertBadgeAt() image.Rectangle {
+	r.alertMu.Lock()
+	defer r.alertMu.Unlock()
+	return r.badgeAt
 }
 
 // badgeTapped is whether p is on the clock's alert badge.

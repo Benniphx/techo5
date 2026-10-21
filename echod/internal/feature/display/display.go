@@ -135,8 +135,9 @@ type Display struct {
 	// camTime is how long a camera opened from the screen stays up, and answerTime how long a turn's
 	// words do once it is over.
 	camTime    *esphome.Select
-	clockPos   *esphome.Select // Clock position, and dateCol Date color (clock_layout.go)
+	clockPos   *esphome.Select // Clock position, dateCol Date color and weatherPos Weather position (clock_layout.go)
 	dateCol    *esphome.Select
+	weatherPos *esphome.Select
 	answerTime *esphome.Select
 	turnStyle  *esphome.Select
 	timerStyle *esphome.Select
@@ -467,7 +468,7 @@ func build() *Display {
 		Themes: &setup.ThemeChoices{LightNow: lightThemeShown, Changed: d.themesChanged, Auto: hasLightSensor()}})
 	d.camTime = cameraTimeSelect()
 	d.answerTime = answerTimeSelect()
-	d.clockPos, d.dateCol = clockLayoutSelects(d.wake)
+	d.clockPos, d.dateCol, d.weatherPos = clockLayoutSelects(d.wake)
 	d.turnStyle = turnStyleSelect(d.wake)
 	d.timerStyle = timerStyleSelect(d.wake)
 	d.skinSl = skinSelect(d.wake)
@@ -572,7 +573,7 @@ func (d *Display) skinSel() *esphome.Select { return d.skinSl }
 func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
-	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.camTime, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
+	return append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.weatherPos, d.camTime, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.volumeSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 }
 
@@ -588,6 +589,7 @@ func (d *Display) Restore(c config.Config) {
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)
 	d.dateCol.Set(dateColors[dateColorIndex()].label)
+	d.weatherPos.Set(weatherPositions[weatherPositionIndex()].label)
 	d.turnStyle.Set(turnStyles[turnStyleIndex()].label)
 	d.timerStyle.Set(timerStyles[timerStyleIndex()].label)
 	d.skinSl.Set(skins[skinIndex()].label)

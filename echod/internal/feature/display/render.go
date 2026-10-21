@@ -321,6 +321,14 @@ type renderer struct {
 	// forecast too. Under weatherMu, like weatherAt.
 	tempAt image.Rectangle
 
+	// weatherRight is this frame having drawn the weather at the top right (Weather position): the alert
+	// badge goes beside it, from the middle to weatherLeft (under it, from weatherFoot, when there is no
+	// room), and a Corner timer in the row under that, so together they take no more of the corner than
+	// the badge and the timer did. The drawing goroutine's alone.
+	weatherRight bool
+	weatherLeft  int
+	weatherFoot  int
+
 	// cameraSoundAt is where the camera page's sound control was drawn in the frame last drawn, for a
 	// tap there to silence the sound rather than take the view down; empty when there was no control to
 	// draw. Under the same lock and for the same reason as weatherAt.
@@ -488,6 +496,7 @@ func (r *renderer) draw(s scene) {
 	// looked at rather than answered (render_cue.go).
 	defer r.turnCue(s)
 	r.artDrawn = false
+	r.weatherRight = false
 	r.setWeatherAt(image.Rectangle{})
 	r.setTempAt(image.Rectangle{})
 	r.setDateAt(image.Rectangle{})
@@ -853,30 +862,65 @@ func (r *renderer) bigClock(s scene) {
 	r.alertBadge(s)
 }
 
-// weatherCorner is the weather where it has always been, top left, with the drawing of it that the
-// forecast page has had all along. The icon is read before the words are: a glance at the corner of
-// a clock is not reading, and the screen already knew how to draw it.
+// weatherCorner is the weather at the top of the home screen, in the corner Weather position says:
+// the top left, where it has always been, or the top right.
 func (r *renderer) weatherCorner(s scene) {
+	r.weatherCornerAt(s, weatherOnRight())
+}
+
+// weatherCornerAt is the weather in a top corner, with the drawing of it that the forecast page has
+// had all along. The icon is read before the words are: a glance at the corner of a clock is not
+// reading, and the screen already knew how to draw it. On the right the icon takes the outer edge,
+// as it does on the left, and the HAL 9000 skin's eye keeps its corner, the weather just inside it.
+func (r *renderer) weatherCornerAt(s scene, right bool) {
 	w := s.weather
 	if w.Temp == "" && w.Condition == "" {
 		return
 	}
 	line := w.Temp
-	if c := conditionWords(w.Condition); c != "" {
+	// At the top right with an alert, the temperature alone, so the alert's badge fits beside it: the
+	// icon still says what the sky is doing.
+	short := right && len(s.alerts.Here) > 0 && w.Temp != ""
+	if c := conditionWords(w.Condition); c != "" && !short {
 		if line != "" {
 			line += "  ·  "
 		}
 		line += c
 	}
-	x, mark, mid := r.margin, r.s(weatherMark), r.margin+r.s(15)
-	if w.Condition != "" && conditionWords(w.Condition) != "" {
-		r.weatherIcon(w.Condition, r.margin+mark/2, mid, mark)
-		r.over.note(image.Rect(r.margin, mid-mark/2, r.margin+mark, mid+mark/2))
-		x += mark + r.s(14)
+	mark, mid := r.s(weatherMark), r.margin+r.s(15)
+	if right {
+		// On the badges' row, so the Corner timer's row under it stays clear of the icon.
+		mid = min(mid, r.badgeTop()+r.s(20))
 	}
-	r.text(r.small, line, x, r.margin+r.s(26), dim)
+	icon := w.Condition != "" && conditionWords(w.Condition) != ""
+	lw := r.width(r.small, line)
+	width := lw
+	if icon {
+		width += mark + r.s(14)
+	}
+	left := r.margin
+	if right {
+		edge := r.w - r.margin
+		if eye := r.halEyeAt(s); !eye.Empty() {
+			edge = eye.Min.X - r.s(16)
+		}
+		left = edge - width
+	}
+	x, ix := left, left // where the words start, and the icon
+	if icon {
+		if right {
+			ix = left + lw + r.s(14)
+		} else {
+			x += mark + r.s(14)
+		}
+		r.weatherIcon(w.Condition, ix+mark/2, mid, mark)
+		r.over.note(image.Rect(ix, mid-mark/2, ix+mark, mid+mark/2))
+	}
+	r.text(r.small, line, x, mid+r.s(11), dim)
 	// A tap on it opens the forecast: the icon and the words, with a finger's room around them.
-	r.setWeatherAt(image.Rect(r.margin, mid-mark/2, x+r.width(r.small, line), mid+mark/2).Inset(-r.s(14)))
+	r.setWeatherAt(image.Rect(left, mid-mark/2, left+width, mid+mark/2).Inset(-r.s(14)))
+	r.weatherRight = right
+	r.weatherLeft, r.weatherFoot = left, mid+mark/2+r.s(10)
 }
 
 func (r *renderer) setDateAt(b image.Rectangle) {

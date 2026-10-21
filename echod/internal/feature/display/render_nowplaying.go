@@ -20,7 +20,7 @@ func (r *renderer) nowPlaying(s scene) {
 	r.background(rd)
 
 	r.cornerClockDated(s)
-	r.weatherCorner(s)
+	r.weatherCornerAt(s, false) // the time has the top right here
 
 	station := rd.Now
 	if station == "" {

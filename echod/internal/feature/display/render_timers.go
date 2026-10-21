@@ -208,7 +208,8 @@ func (r *renderer) timerBanner(s scene, y int) {
 }
 
 // timerCorner is a small badge at the top right: a ring for the soonest timer, its time, and how many
-// more. Under the alert badge when there is one, and under the HAL 9000 skin's eye.
+// more. Under the alert badge when there is one, under the weather when that is at the top right, and
+// under the HAL 9000 skin's eye.
 func (r *renderer) timerCorner(s scene, on bool) {
 	run := runningTimers(s)
 	if !on || len(run) == 0 {
@@ -223,6 +224,13 @@ func (r *renderer) timerCorner(s scene, on bool) {
 	top := r.badgeTop()
 	if len(s.alerts.Here) > 0 {
 		top += h + r.s(10)
+	}
+	if r.weatherRight {
+		// The second row, where it goes under an alert, and under the badge if that went under the weather.
+		top = max(top, r.badgeTop()+h+r.s(10))
+		if b := r.alertBadgeAt(); !b.Empty() {
+			top = max(top, b.Max.Y+r.s(10))
+		}
 	}
 	if eye := r.halEyeAt(s); !eye.Empty() {
 		top = max(top, eye.Max.Y+r.s(10))

@@ -88,6 +88,9 @@ type Screen struct {
 	// empty for the theme's (display/clock_position.go, clock_layout.go).
 	ClockPosition string `json:"clock_position,omitempty"`
 	DateColor     string `json:"date_color,omitempty"`
+	// WeatherPosition is where the home screen's weather sits: empty for the top left, "top-right"
+	// (display/clock_layout.go). The Show's only.
+	WeatherPosition string `json:"weather_position,omitempty"`
 
 	// ClockStyle is how the home screen's clock looks all day: empty for the classic face, or "big",
 	// "flip", "led", "analog", "words", "sun", "dashboard", "binary", "world", "agenda", "glow", "nixie",
@@ -329,6 +332,10 @@ func (w ScreenWriter) WorldClocks(v []string) error {
 
 func (w ScreenWriter) DateColor(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.DateColor = v })
+}
+
+func (w ScreenWriter) WeatherPosition(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.WeatherPosition = v })
 }
 
 func (w ScreenWriter) AnswerSeconds(v int) error {
