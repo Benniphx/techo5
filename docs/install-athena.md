@@ -28,9 +28,9 @@ On TECHO5's kernel:
 
 Known limits:
 
-- **Only one screen is tested: the ILI9881C panel with BOE glass.** Amazon built this model with
-  several panels. TECHO5's kernel has the others' settings too, but they haven't been tried on a
-  unit yet. The installer checks which one your unit has (see [Which screen](#which-screen)).
+- **Two screens are tested: the ILI9881C panel with BOE glass, and the JD9365 with KD/HSD glass.**
+  Amazon built this model with several panels. TECHO5's kernel has the others' settings too, but they
+  haven't been tried on a unit yet. The installer checks which one your unit has (see [Which screen](#which-screen)).
 - The light sensor works but its lux values aren't calibrated yet.
 - The microphone beamformer is off; the microphones are used without it.
 
@@ -120,12 +120,13 @@ loader tells the kernel which one the unit has: by name in its framebuffer entry
 and with `jd936x_id=` on the command line, whose low digit is the panel. TECHO5's kernel picks the
 panel's settings from that at boot, so one kernel covers every unit.
 
-Only one has been tested on a unit: the **ILI9881C with BOE glass** (`jd936x_id=0x36`, the boot
-loader's name `ili9881c_wxga_dsi_vdo_st_boe`). The others:
+Two have been tested on units: the **ILI9881C with BOE glass** (`jd936x_id=0x36`, the boot
+loader's name `ili9881c_wxga_dsi_vdo_st_boe`) and the **JD9365 with KD/HSD glass** (`jd936x_id=0x31`,
+`jd936x_wxga_dsi_vdo_athena_st_kd_hsd`, reported in #187). All of them:
 
 | `jd936x_id` low digit | Boot loader's name | Panel |
 |---|---|---|
-| 1 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd` | JD9365, KD/HSD glass |
+| 1 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd` | JD9365, KD/HSD glass (tested) |
 | 2 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd_new` | JD9365, KD/HSD glass (new) |
 | 3 | `jd936x_wxga_dsi_vdo_athena_st_kd_hsd_proto` or `ili9881c_wxga_dsi_vdo_st_kd_hsd` | JD9365 or ILI9881C, KD/HSD glass |
 | 4 | `jd936x_wxga_dsi_vdo_athena_st_boe` | JD9365, BOE glass |
@@ -137,7 +138,7 @@ loader's name `ili9881c_wxga_dsi_vdo_st_boe`). The others:
 | a | `ili9881c_wxga_dsi_vdo_st_kd_inx_o` | ILI9881C, KD/INX glass |
 
 The installer reads both in TWRP (`/proc/cmdline` and the device tree) and goes on by itself only on
-the tested panel. On one of the others it stops and says which panel it found: add `--force-panel`
+a tested panel. On one of the others it stops and says which panel it found: add `--force-panel`
 to try it, with `--wifi` and `--ssh-key` too, so you can still reach the unit if its screen stays
 dark (without a screen there's no other way to set up Wi-Fi). On a panel it doesn't know, or when it can't tell, it stops too. To check by hand:
 

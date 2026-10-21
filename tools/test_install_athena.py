@@ -426,9 +426,12 @@ class Panel(unittest.TestCase):
         self.assertIn('ILI9881C', inst.check_panel(0x36, 'ili9881c_wxga_dsi_vdo_st_boe', False))
         self.assertIn('ILI9881C', inst.check_panel(0x36, None, False))
         self.assertIn('ILI9881C', inst.check_panel(None, 'ili9881c_wxga_dsi_vdo_st_boe', False))
+        # The JD9365 with KD/HSD glass, tested by a user (#187), goes on by itself too.
+        self.assertIn('tested on', inst.check_panel(0x31, None, False))
+        self.assertIn('JD9365, KD/HSD glass', inst.check_panel(0x31, 'jd936x_wxga_dsi_vdo_athena_st_kd_hsd', False))
 
     def test_others_refused(self):
-        for pid, name in ((0x31, None), (0x34, 'jd936x_wxga_dsi_vdo_athena_st_boe'), (0x38, None),
+        for pid, name in ((0x32, None), (0x34, 'jd936x_wxga_dsi_vdo_athena_st_boe'), (0x38, None),
                           (0x36, 'ili9881c_wxga_dsi_vdo_st_inx'), (None, None)):
             with self.assertRaisesRegex(Fail, 'kernel amazon'):
                 inst.check_panel(pid, name, False)
@@ -440,7 +443,7 @@ class Panel(unittest.TestCase):
         said = inst.check_panel(0x35, 'jd936x_wxga_dsi_vdo_athena_st_boe_new', True)
         self.assertIn('JD9365, BOE glass (new)', said)
         self.assertIn('--force-panel', said)
-        self.assertIn('JD9365, KD/HSD glass', inst.check_panel(0x31, None, True))
+        self.assertIn('JD9365, KD/HSD glass (new)', inst.check_panel(0x32, None, True))
         self.assertIn('ILI9881C, KD/HSD glass', inst.check_panel(0x33, 'ili9881c_wxga_dsi_vdo_st_kd_hsd', True))
 
     def test_which(self):
@@ -453,7 +456,7 @@ class Panel(unittest.TestCase):
         self.assertEqual(which, inx, 'the kernel goes by the name')
         self.assertIn('disagree', doubt)
         which, doubt = inst.panel_which(0x36, 'some_other_dsi_panel')
-        self.assertEqual(which, inst.PANEL_TESTED, 'the kernel falls back to the nibble')
+        self.assertEqual(which, 'ili9881c_wxga_dsi_vdo_st_boe', 'the kernel falls back to the nibble')
         self.assertIn('does not know', doubt)
         self.assertEqual(inst.panel_which(0x3b, None), (None, None))
         self.assertEqual(inst.panel_which(None, None), (None, None))
@@ -575,7 +578,7 @@ class SimulatedTWRP(unittest.TestCase):
         self.assertEqual(u.changed(), [20, 21])
 
     def test_other_panel_refused(self):
-        for kw in ({'cmdline': 'jd936x_id=0x31', 'lk_panel': 'jd936x_wxga_dsi_vdo_athena_st_kd_hsd'},
+        for kw in ({'cmdline': 'jd936x_id=0x32', 'lk_panel': 'jd936x_wxga_dsi_vdo_athena_st_kd_hsd_new'},
                    {'cmdline': '', 'lk_panel': None}):
             u = self.unit(**kw)
             out, err = self.install(u, *self.mainline_args())
@@ -583,7 +586,7 @@ class SimulatedTWRP(unittest.TestCase):
             self.assertEqual(u.changed(), [])
             self.assertFalse(any('dd if=' in c for c in u.log), 'nothing read before the panel check')
             shutil.rmtree(os.path.join(self.tmp, 'unit'))
-        u = self.unit(cmdline='jd936x_id=0x31', lk_panel=None)
+        u = self.unit(cmdline='jd936x_id=0x32', lk_panel=None)
         out, err = self.install(u, '--force-panel', '--dry-run', *self.mainline_args())
         self.assertIsNone(err, out)
         self.assertIn('--force-panel', out)

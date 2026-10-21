@@ -26,8 +26,9 @@ recovery). Each step is checked before the next:
 
   1. checks    adb sees an athena in TWRP; its partition table is the one this installer knows (boot
                p20, system p21, userdata p23, the unlock's tee1_real and lk_real where they belong);
-               for the mainline kernel, the screen is the one it is tested on (ILI9881C, BOE
-               glass), or another it has tables for and --force-panel is given
+               for the mainline kernel, the screen is one it is tested on (ILI9881C with BOE
+               glass, JD9365 with KD/HSD glass), or another it has tables for and --force-panel is
+               given
   2. backup    every partition but cache and userdata, the boot0 and boot1 areas too, into
                backups/<serial>/partitions/, each checked against the unit's own sha256 (skipped when a
                backup is already there)
@@ -151,7 +152,7 @@ SLOT_MAX = SLOT_SIZE - SLOT_HEAD
 
 # The screens TECHO5's mainline kernel has tables for, by LK's name for each: (jd936x_id vendor nibble,
 # or None where both controllers use it; what to call it). The kernel picks the unit's own at boot
-# (panel-athena-select.c). Only the tested one is installed without --force-panel.
+# (panel-athena-select.c). Only the tested ones are installed without --force-panel.
 PANELS = {
     'ili9881c_wxga_dsi_vdo_st_boe': (6, 'ILI9881C, BOE glass'),
     'ili9881c_wxga_dsi_vdo_st_kd_hsd': (None, 'ILI9881C, KD/HSD glass'),
@@ -165,7 +166,8 @@ PANELS = {
     'jd936x_wxga_dsi_vdo_athena_st_boe_new': (5, 'JD9365, BOE glass (new)'),
     'jd936x_wxga_dsi_vdo_athena_st_inx': (7, 'JD9365, INX glass'),
 }
-PANEL_TESTED = 'ili9881c_wxga_dsi_vdo_st_boe'
+# The screens tested on units: ILI9881C with BOE glass on ours, JD9365 with KD/HSD glass by a user (#187).
+PANELS_TESTED = ('ili9881c_wxga_dsi_vdo_st_boe', 'jd936x_wxga_dsi_vdo_athena_st_kd_hsd')
 
 
 def image_name(version):
@@ -642,8 +644,8 @@ def check_panel(panel_id, lk_name, force):
     """Refuses the mainline kernel on a screen it isn't tested on, unless forced. Returns what to say about it."""
     said = 'jd936x_id=%s, LK panel %s' % ('0x%02x' % panel_id if panel_id is not None else '?', lk_name or '?')
     which, doubt = panel_which(panel_id, lk_name)
-    if which == PANEL_TESTED and not doubt:
-        return 'screen: %s (%s), the one TECHO5\'s kernel is tested on' % (PANELS[which][1], said)
+    if which in PANELS_TESTED and not doubt:
+        return 'screen: %s (%s), one TECHO5\'s kernel is tested on' % (PANELS[which][1], said)
     reach = ('give --wifi and --ssh-key too, so the unit can be reached if the screen stays dark; "Which '
              'screen" in\n   docs/install-athena.md has the way back')
     if which:
