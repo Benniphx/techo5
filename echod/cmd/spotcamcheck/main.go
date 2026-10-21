@@ -237,7 +237,7 @@ func camHolders() []string {
 
 func (c *checker) open() error {
 	var err error
-	if c.isp, err = syscall.Open("/dev/camera-isp", syscall.O_RDWR, 0); err != nil {
+	if c.isp, err = syscall.Open("/dev/camera-isp", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		return fmt.Errorf("open camera-isp: %w", err)
 	}
 	if c.cam, err = mapWindow(c.isp, ispBase, ispLen); err != nil {
@@ -249,7 +249,7 @@ func (c *checker) open() error {
 	if c.mipi, err = mapWindow(c.isp, mipiBase, mipiLen); err != nil {
 		return err
 	}
-	if c.sens, err = syscall.Open("/dev/kd_camera_hw", syscall.O_RDWR, 0); err != nil {
+	if c.sens, err = syscall.Open("/dev/kd_camera_hw", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		return fmt.Errorf("open kd_camera_hw: %w", err)
 	}
 	return c.allocBuffers()
@@ -272,7 +272,7 @@ func (c *checker) close() {
 
 func (c *checker) allocBuffers() error {
 	var err error
-	if c.ion, err = syscall.Open("/dev/ion", syscall.O_RDWR, 0); err != nil {
+	if c.ion, err = syscall.Open("/dev/ion", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		return fmt.Errorf("open ion: %w", err)
 	}
 	size := (frameBytes + 4095) &^ 4095
@@ -309,7 +309,7 @@ func (c *checker) allocBuffers() error {
 		return fmt.Errorf("ion gave no device address for the IMGO port")
 	}
 	c.mva = phys.Phys.PhyAddr
-	fd, err := syscall.Open("/proc/m4u", syscall.O_RDWR, 0)
+	fd, err := syscall.Open("/proc/m4u", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("open /proc/m4u: %w", err)
 	}

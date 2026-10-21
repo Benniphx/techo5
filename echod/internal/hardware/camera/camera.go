@@ -282,7 +282,7 @@ func open() (*device, error) {
 		d.settle = aeDelay
 		return d, nil
 	}
-	if d.isp, err = syscall.Open("/dev/camera-isp", syscall.O_RDWR, 0); err != nil {
+	if d.isp, err = syscall.Open("/dev/camera-isp", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		return nil, fmt.Errorf("open camera-isp: %w", err)
 	}
 	if d.cam, err = mapWindow(d.isp, ispBase, ispLen); err != nil {
@@ -297,7 +297,7 @@ func open() (*device, error) {
 		d.close()
 		return nil, err
 	}
-	if d.sens, err = syscall.Open("/dev/kd_camera_hw", syscall.O_RDWR, 0); err != nil {
+	if d.sens, err = syscall.Open("/dev/kd_camera_hw", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		d.close()
 		return nil, fmt.Errorf("open kd_camera_hw: %w", err)
 	}
@@ -481,7 +481,7 @@ func (d *device) close() {
 // allocBuffers takes slots frames from ION and resolves the IMGO device address.
 func (d *device) allocBuffers() error {
 	var err error
-	if d.ion, err = syscall.Open("/dev/ion", syscall.O_RDWR, 0); err != nil {
+	if d.ion, err = syscall.Open("/dev/ion", syscall.O_RDWR|syscall.O_CLOEXEC, 0); err != nil {
 		return fmt.Errorf("open ion: %w", err)
 	}
 	size := slots * frameBytes
@@ -523,7 +523,7 @@ func (d *device) allocBuffers() error {
 
 // m4uConfig puts the IMGO M4U port into translated mode (MTK_M4U_T_CONFIG_PORT on /proc/m4u).
 func m4uConfig(port int32) error {
-	fd, err := syscall.Open("/proc/m4u", syscall.O_RDWR, 0)
+	fd, err := syscall.Open("/proc/m4u", syscall.O_RDWR|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return fmt.Errorf("open /proc/m4u: %w", err)
 	}
