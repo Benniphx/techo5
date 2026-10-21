@@ -21,13 +21,14 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
 )
 
 // ONVIF, as little of it as lets a recorder that adds cameras by ONVIF add this one: the device and media
 // services on the web port (8181), one profile, its stream (the RTSP above) and, with Camera web access on,
-// its snapshot. The same login as the stream, given as a WS-Security UsernameToken digest. No discovery:
-// the camera is added by its address. No PTZ, events, imaging or settings: there is nothing to turn, and the
-// device is set up from Home Assistant.
+// its snapshot. The same login as the stream, given as a WS-Security UsernameToken digest. Found by
+// WS-Discovery (discovery.go) or added by its address. No PTZ, events, imaging or settings: there is
+// nothing to turn, and the device is set up from Home Assistant.
 
 const (
 	devicePath = "/onvif/device_service"
@@ -130,7 +131,7 @@ func (f *Feature) onvif(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	body, ok := f.answer(op, env.Body.Inner.ProfileToken, requestHost(r))
+	body, ok := f.answer(op, env.Body.Inner.ProfileToken, requestHost(r), r.URL.Path == mediaPath)
 	if !ok {
 		fault(w, http.StatusBadRequest, "ter:ActionNotSupported", op+" is not offered")
 		return
@@ -139,7 +140,7 @@ func (f *Feature) onvif(w http.ResponseWriter, r *http.Request) {
 }
 
 // answer is an operation's response body, or false for one not offered.
-func (f *Feature) answer(op, profile, host string) (string, bool) {
+func (f *Feature) answer(op, profile, host string, media bool) (string, bool) {
 	deviceURL := "http://" + net.JoinHostPort(host, strconv.Itoa(web.Port)) + devicePath
 	mediaURL := "http://" + net.JoinHostPort(host, strconv.Itoa(web.Port)) + mediaPath
 	streamURL := "rtsp://" + net.JoinHostPort(host, Port) + Path
@@ -169,6 +170,13 @@ func (f *Feature) answer(op, profile, host string) (string, bool) {
 <tds:Version><tt:Major>2</tt:Major><tt:Minor>0</tt:Minor></tds:Version></tds:Service>
 </tds:GetServicesResponse>`, true
 	case "GetServiceCapabilities":
+		if media {
+			return `<trt:GetServiceCapabilitiesResponse><trt:Capabilities SnapshotUri="` +
+				strconv.FormatBool(config.Get().Security.Camera) + `" Rotation="false">` +
+				`<trt:ProfileCapabilities MaximumNumberOfProfiles="1"/>` +
+				`<trt:StreamingCapabilities RTPMulticast="false" RTP_TCP="true" RTP_RTSP_TCP="true"/>` +
+				`</trt:Capabilities></trt:GetServiceCapabilitiesResponse>`, true
+		}
 		return `<tds:GetServiceCapabilitiesResponse><tds:Capabilities><tds:Network/><tds:Security UsernameToken="true"/>
 <tds:System/></tds:Capabilities></tds:GetServiceCapabilitiesResponse>`, true
 	case "GetDeviceInformation":
@@ -177,10 +185,29 @@ func (f *Feature) answer(op, profile, host string) (string, bool) {
 			`</tds:FirmwareVersion><tds:SerialNumber>` + serialNumber(config.Get().Device.Name) +
 			`</tds:SerialNumber><tds:HardwareId>TECHO5</tds:HardwareId></tds:GetDeviceInformationResponse>`, true
 	case "GetScopes":
-		return `<tds:GetScopesResponse>` + scope("onvif://www.onvif.org/type/video_encoder") +
-			scope("onvif://www.onvif.org/Profile/Streaming") +
-			scope("onvif://www.onvif.org/name/"+strings.ReplaceAll(config.Get().Device.Name, " ", "_")) +
-			`</tds:GetScopesResponse>`, true
+		var b strings.Builder
+		for _, sc := range scopes() {
+			b.WriteString(scope(sc))
+		}
+		return `<tds:GetScopesResponse>` + b.String() + `</tds:GetScopesResponse>`, true
+	case "GetHostname":
+		// The name the device answers to on the network (mDNS, ESPHome), not its display name.
+		return `<tds:GetHostnameResponse><tds:HostnameInformation><tt:FromDHCP>false</tt:FromDHCP><tt:Name>` +
+			hostname(config.Get().Device.Name, mac()) + `</tt:Name></tds:HostnameInformation></tds:GetHostnameResponse>`, true
+	case "GetNetworkInterfaces":
+		// Home Assistant keys an ONVIF camera on the address here.
+		addr := strings.Trim(host, "[]")
+		prefix, fixed := ipv4Setting(addr)
+		from := "FromDHCP"
+		if fixed {
+			from = "Manual"
+		}
+		return `<tds:GetNetworkInterfacesResponse><tds:NetworkInterfaces token="wlan0"><tt:Enabled>true</tt:Enabled>
+<tt:Info><tt:Name>wlan0</tt:Name><tt:HwAddress>` + mac() + `</tt:HwAddress><tt:MTU>1500</tt:MTU></tt:Info>
+<tt:IPv4><tt:Enabled>true</tt:Enabled><tt:Config><tt:` + from + `><tt:Address>` + html.EscapeString(addr) +
+			`</tt:Address><tt:PrefixLength>` + strconv.Itoa(prefix) + `</tt:PrefixLength></tt:` + from + `><tt:DHCP>` +
+			strconv.FormatBool(!fixed) + `</tt:DHCP></tt:Config></tt:IPv4>
+</tds:NetworkInterfaces></tds:GetNetworkInterfacesResponse>`, true
 	case "GetProfiles":
 		return `<trt:GetProfilesResponse>` + profileXML("trt:Profiles") + `</trt:GetProfilesResponse>`, true
 	case "GetProfile":
@@ -205,6 +232,30 @@ func (f *Feature) answer(op, profile, host string) (string, bool) {
 <tt:Timeout>PT0S</tt:Timeout></trt:MediaUri></trt:GetSnapshotUriResponse>`, true
 	}
 	return "", false
+}
+
+// hostname is the device's name on the network, as mDNS and ESPHome have it (layout.SlugOr): "Kitchen
+// Echo" is kitchen-echo. One DNS label, so at most 63 characters.
+func hostname(name, mac string) string {
+	h := layout.SlugOr(name, mac)
+	return strings.TrimRight(h[:min(len(h), 63)], "-")
+}
+
+// ipv4Setting is the prefix length of the device's address addr, as the interface that has it says (24
+// when none does), and whether the address is a fixed one rather than DHCP's (lib/wifi).
+func ipv4Setting(addr string) (prefix int, fixed bool) {
+	prefix = 24
+	if ip := net.ParseIP(addr); ip != nil {
+		if as, err := net.InterfaceAddrs(); err == nil {
+			for _, a := range as {
+				if n, ok := a.(*net.IPNet); ok && n.IP.Equal(ip) {
+					prefix, _ = n.Mask.Size()
+					break
+				}
+			}
+		}
+	}
+	return prefix, wifi.AddressSupported() && wifi.LoadAddress().Fixed
 }
 
 func scope(s string) string {
