@@ -22,7 +22,8 @@ import (
 // own volume: bluez-alsa scales the source's audio by the source's own level (SoftVolume), a change
 // of that level never sets the device's volume (phoneSlider), and the device's volume is never handed
 // to the source (tellPhone). Turned either way while a source plays, the stream playing here is
-// switched over at once (applyVolumeMode), and any look after that would put it right as well.
+// switched over at once (applyVolumeMode), and any look after that would put it right as well, as it
+// does a stream bluez-alsa lost the mode of (a bluez-alsa restart).
 
 // pcmSetter is the part of bluez-alsa a stream's volume mode is set through; a test stands in for it.
 type pcmSetter interface {
@@ -42,9 +43,33 @@ func sliderSets(shared bool, level, last int, known, ours bool) bool {
 	return shared && sliderMove(level, last, known, ours)
 }
 
-// modeStale is whether a stream's volume mode has to be set again: it was never set (applied false),
-// or was set the other way (was) from what the setting says now (shared).
-func modeStale(was, applied, shared bool) bool { return !applied || was != shared }
+// volMode is the volume mode put on a stream, and when.
+type volMode struct {
+	shared bool
+	at     time.Time
+}
+
+// modeSettle is how long after a mode is put on a stream bluez-alsa is given to say it took it: until
+// then a look may still have the stream from before.
+const modeSettle = 5 * time.Second
+
+// modeStale is whether a stream's volume mode has to be put on again at now: it never was (applied
+// false), it was put on the other way (m) from what the setting says now (shared), or bluez-alsa's
+// own state for it (soft, whether it scales the audio) says otherwise, once it has had time to say.
+func modeStale(m volMode, applied, shared, soft bool, now time.Time) bool {
+	if !applied || m.shared != shared {
+		return true
+	}
+	return soft == shared && now.Sub(m.at) >= modeSettle
+}
+
+// putMode puts on p the volume mode the setting says as it is put on, one at a time, so a switch
+// turned quickly back and forth leaves the stream as the switch ended up, not as a turn in between.
+func (f *Feature) putMode(al pcmSetter, p bluealsa.PCM) {
+	f.modeMu.Lock()
+	defer f.modeMu.Unlock()
+	f.volumeMode(al, p, bluetoothSetsVolume(), volumeNow())
+}
 
 // volumeMode sets p's volume mode. Shared, bluez-alsa leaves the audio as it comes and the phone is
 // handed the device's volume step as its level; not shared, bluez-alsa scales the audio by the
@@ -52,18 +77,26 @@ func modeStale(was, applied, shared bool) bool { return !applied || was != share
 // only a later change counts as the slider moving.
 func (f *Feature) volumeMode(al pcmSetter, p bluealsa.PCM, shared bool, step int) {
 	path := string(p.Path)
+	// Put on again the same way (bluez-alsa did not keep it), a failure has been said once already.
+	f.mu.Lock()
+	m, applied := f.volModes[path]
+	f.mu.Unlock()
+	warn := slog.Warn
+	if applied && m.shared == shared {
+		warn = slog.Debug
+	}
 	if err := al.SetSoftVolume(p, !shared); err != nil {
 		if shared {
-			slog.Warn("bluetooth: leaving a phone's audio unscaled", "err", err)
+			warn("bluetooth: leaving a phone's audio unscaled", "err", err)
 		} else {
-			slog.Warn("bluetooth: having a phone's level scale its own audio", "err", err)
+			warn("bluetooth: having a phone's level scale its own audio", "err", err)
 		}
 	}
 	level := p.Level()
 	if shared {
 		level = levelFor(step)
 		if err := al.SetLevel(p, level); err != nil {
-			slog.Warn("bluetooth: handing a phone the volume", "err", err)
+			warn("bluetooth: handing a phone the volume", "err", err)
 		}
 	}
 	f.mu.Lock()
@@ -73,7 +106,7 @@ func (f *Feature) volumeMode(al pcmSetter, p bluealsa.PCM, shared bool, step int
 	} else {
 		delete(f.ours, path)
 	}
-	f.shared[path] = shared
+	f.volModes[path] = volMode{shared: shared, at: time.Now()}
 	f.mu.Unlock()
 }
 
@@ -105,10 +138,9 @@ func (f *Feature) receivingPCMs() (*bluealsa.Client, []bluealsa.PCM) {
 
 // applyVolumeMode puts the stream playing here into the mode the setting says now, as the switch turns.
 func (f *Feature) applyVolumeMode() {
-	shared := bluetoothSetsVolume()
 	al, pcms := f.receivingPCMs()
 	for _, p := range pcms {
-		f.volumeMode(al, p, shared, volumeNow())
+		f.putMode(al, p)
 	}
 }
 

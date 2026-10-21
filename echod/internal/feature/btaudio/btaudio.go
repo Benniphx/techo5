@@ -186,10 +186,12 @@ type Feature struct {
 	// (sliderMove): a short while, since most phones say nothing back, and a press after it always
 	// counts.
 	ours map[string]time.Time
-	// shared is, for each received stream, whether its volume was last made the device's (true) or
-	// left to scale its own audio (false), by PCM path: a look puts right a stream whose mode is not
-	// what Bluetooth sets the volume says now (volumeMode).
-	shared map[string]bool
+	// volModes is, for each received stream by PCM path, the volume mode last put on it and when: its
+	// volume made the device's, or left to scale its own audio. A look puts right a stream whose mode
+	// is not what Bluetooth sets the volume says now, or that bluez-alsa no longer has (volumeMode).
+	// modeMu puts one mode on at a time, each read from the setting as it is put on (putMode).
+	volModes map[string]volMode
+	modeMu   sync.Mutex
 	// levelTo hands the device's volume step to the one goroutine that tells the phone (tellPhone), the
 	// latest only, so two steps in quick succession reach the phone in order.
 	levelTo chan int
@@ -265,7 +267,7 @@ func build() *Feature {
 		kept:       map[string]*time.Timer{},
 		levels:     map[string]int{},
 		ours:       map[string]time.Time{},
-		shared:     map[string]bool{},
+		volModes:   map[string]volMode{},
 		hushed:     map[string]time.Time{},
 		levelTo:    make(chan int, 1),
 		linked:     map[string]bool{},
@@ -600,6 +602,7 @@ func (f *Feature) refresh() {
 			f.streams[path] = s
 			f.mu.Unlock()
 		}
+		s.seen(p) // its level and volume mode as they are now, for phoneSlider and give
 		l := s.look()
 		// Seen starting, not found running: at the daemon's start, or a phone connecting, a stream
 		// already running can be one held open for silence; a phone that plays is heard doing so.
@@ -671,7 +674,7 @@ func (f *Feature) refresh() {
 	}
 	if cur := m.Receiving(); cur != "" && cur != give {
 		if s := streams[cur]; s != nil {
-			f.phoneSlider(al, s.pcm)
+			f.followSlider(al, s)
 		}
 	}
 
@@ -831,7 +834,7 @@ func (f *Feature) give(al *bluealsa.Client, s *inStream) {
 		"codec", s.pcm.Codec, "rate", s.pcm.Rate, "channels", s.pcm.Channels)
 	media.ReceiverControl(s.item, f.control(s.dev.Path, displayName(s.dev)))
 	media.Get().PlayReceived(s.item, s.hand(), s.pcm.Rate, s.pcm.Channels)
-	f.oneVolume(al, s.pcm)
+	f.oneVolume(al, s.latest())
 }
 
 // A phone playing here has one volume, the device's: its slider is the device's volume, as on any
@@ -874,7 +877,7 @@ func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 			}
 		})
 	})
-	f.volumeMode(al, p, bluetoothSetsVolume(), volumeNow())
+	f.putMode(al, p)
 }
 
 // echoing is whether a level read from the stream at path at now may be the phone saying back the
@@ -944,10 +947,10 @@ func sliderMove(level, last int, known, ours bool) bool {
 func (f *Feature) phoneSlider(al pcmSetter, p bluealsa.PCM) {
 	shared := bluetoothSetsVolume()
 	f.mu.Lock()
-	was, applied := f.shared[string(p.Path)]
+	m, applied := f.volModes[string(p.Path)]
 	f.mu.Unlock()
-	if modeStale(was, applied, shared) {
-		f.volumeMode(al, p, shared, volumeNow())
+	if modeStale(m, applied, shared, p.SoftVolume, time.Now()) {
+		f.putMode(al, p)
 		return
 	}
 	level := p.Level()
@@ -959,6 +962,16 @@ func (f *Feature) phoneSlider(al pcmSetter, p bluealsa.PCM) {
 	if !sliderSets(shared, level, last, known, ours) {
 		return
 	}
+	sliderTo(level)
+}
+
+// followSlider is a look's turn at the phone that has the speaker: its stream as this look found it,
+// never the copy taken when it was opened, whose level is the one it started with (#245).
+func (f *Feature) followSlider(al pcmSetter, s *inStream) { f.phoneSlider(al, s.latest()) }
+
+// sliderTo sets the device's volume to the step for a phone's level. A raise stops where night volume
+// says (media.CapRaise). A variable for the tests.
+var sliderTo = func(level int) {
 	m := media.Get()
 	from, to := m.Volume(), stepFor(level)
 	if to > from {

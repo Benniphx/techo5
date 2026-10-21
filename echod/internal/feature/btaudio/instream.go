@@ -34,6 +34,8 @@ import (
 // inStream is a connected phone's received stream, read by watch.
 type inStream struct {
 	item string
+	// pcm is the stream as it was when it was opened: its format. What changes as it plays, its level and
+	// whether bluez-alsa scales it, is in now.
 	pcm  bluealsa.PCM
 	dev  bluez.Device
 	stop context.CancelFunc
@@ -47,6 +49,27 @@ type inStream struct {
 	plays  media.PhonePlays
 	since  time.Time // when it started playing, zero while it is not
 	fresh  bool      // it started playing since the last look (look)
+	// now is the stream as the last look found it (seen), for its level: bluez-alsa hands out copies,
+	// and the one taken when it was opened keeps the level it had then.
+	now    bluealsa.PCM
+	nowSet bool
+}
+
+// seen notes the stream as a look found it.
+func (s *inStream) seen(p bluealsa.PCM) {
+	s.mu.Lock()
+	s.now, s.nowSet = p, true
+	s.mu.Unlock()
+}
+
+// latest is the stream as the last look found it, or as it was opened before any look.
+func (s *inStream) latest() bluealsa.PCM {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.nowSet {
+		return s.now
+	}
+	return s.pcm
 }
 
 // look is what the speaker is chosen by: whether the phone is playing, since when, and whether it
