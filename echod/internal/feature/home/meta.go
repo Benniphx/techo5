@@ -200,6 +200,7 @@ func layoutArt(b []byte, logo bool, what string) (*image.RGBA, *image.RGBA, erro
 	if err != nil {
 		return nil, nil, err
 	}
+	artW, artH := artSize()
 	dst := image.NewRGBA(image.Rect(0, 0, artW, artH))
 	sb := src.Bounds()
 	sw, sh := sb.Dx(), sb.Dy()

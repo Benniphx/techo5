@@ -131,7 +131,8 @@ func (f *Feature) ShowGrid(entities []string, d time.Duration) error {
 
 	slog.Info("camera grid up", "cameras", len(cells), "for", d)
 	cols, rows := GridLayout(len(cells))
-	w, h := cameraFrameW/cols, cameraFrameH/rows
+	fw, fh := cameraFrameSize()
+	w, h := fw/cols, fh/rows
 	for i, c := range cells {
 		f.spawn(func() { f.gridFrames(ctx, gen, i, c.Entity, w, h) })
 	}

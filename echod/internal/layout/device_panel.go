@@ -119,8 +119,9 @@ func Checkers() bool { return false }
 
 func Crown() bool { return false }
 
-// Show8 is false: a panel's canvas is whatever size the app asked for (hardware/screen), and camera
-// frames and photos are fetched at the Show 5's size and scaled to it.
+// Show8 is false: a panel's canvas is whatever size the app asked for (hardware/screen), and the
+// display tells home that size once the screen has opened (home.SetPanelSize), so camera frames,
+// photos, the now-playing picture and the rain map are made at it rather than at a board's.
 func Show8() bool { return false }
 
 // Athena is false: a panel is not the 2nd gen Show 8, on either kernel, so main's athena paths

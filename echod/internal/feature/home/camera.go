@@ -473,7 +473,8 @@ func (f *Feature) localFrames() {
 		return
 	}
 	defer release()
-	dst := image.NewRGBA(image.Rect(0, 0, cameraFrameH*camera.Width/camera.Height, cameraFrameH))
+	_, fh := cameraFrameSize()
+	dst := image.NewRGBA(image.Rect(0, 0, fh*camera.Width/camera.Height, fh))
 	frames := make(chan *camera.Frame, 1)
 	// The newest frame replaces one still waiting (see ListenLatest): dropping the new one instead
 	// kept a stale picture on screen when the sensor stopped for the mute or the lens cover.
@@ -534,7 +535,8 @@ func (f *Feature) snapshot(entity string) (*image.RGBA, error) {
 		b, err = reolinkSnap(entity)
 	case isGo2RTC(entity):
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		b, err = go2rtcSnap(ctx, entity, cameraFrameW)
+		fw, _ := cameraFrameSize()
+		b, err = go2rtcSnap(ctx, entity, fw)
 		cancel()
 	default:
 		b, err = hass.Get().Fetch("/api/camera_proxy/" + entity)
@@ -552,9 +554,10 @@ func (f *Feature) snapshot(entity string) (*image.RGBA, error) {
 // fitFrame scales a picture to fit the panel, keeping its shape.
 func fitFrame(src image.Image) *image.RGBA {
 	sw, sh := src.Bounds().Dx(), src.Bounds().Dy()
-	w, h := cameraFrameW, sh*cameraFrameW/sw
-	if h > cameraFrameH {
-		w, h = sw*cameraFrameH/sh, cameraFrameH
+	fw, fh := cameraFrameSize()
+	w, h := fw, sh*fw/sw
+	if h > fh {
+		w, h = sw*fh/sh, fh
 	}
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Src, nil)

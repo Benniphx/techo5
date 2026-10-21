@@ -10,7 +10,9 @@ import "github.com/HuskerMinion/techo5/echod/internal/layout"
 //
 // Variables rather than constants because one build serves all four screens and the board is only
 // known at run time. That is also why this file no longer covers the Dot: the board predicates only
-// exist where there is a board to tell apart, and the Dot keeps its own copy in panel_dot.go.
+// exist where there is a board to tell apart, and the Dot keeps its own copy in panel_dot.go. A TECHO5
+// Panel has no board to go by: these are only where it starts, until its screen says its own size
+// (SetPanelSize, size.go). Read them through slideshowSize and the rest there.
 var (
 	// cameraFrameW and H are the size frames are scaled to fit.
 	cameraFrameW, cameraFrameH = panelSize()

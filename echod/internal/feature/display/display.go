@@ -319,6 +319,10 @@ type Display struct {
 	// nextUp is the clock's next-up card as last worked out (render_nextup.go), by the frame loop alone.
 	nextUp nextUpKept
 
+	// The slideshow's photo and the now-playing picture, scaled to the screen when home made them at
+	// another size (screen_sized.go).
+	bgSized, saverSized, artSized screenSized
+
 	// The deck page (deck.go): up while deckUp, on deckPage, with deckPress the press being shown.
 	deckUp    bool
 	deckPage  int
@@ -2244,6 +2248,8 @@ func (d *Display) Start(context.Context) error {
 	d.mu.Lock()
 	d.wide = w > 1000 || h > 1000
 	d.mu.Unlock()
+	// A panel's canvas is only known now: photos and the rest are made at it from here on.
+	home.SetPanelSize(w, h)
 	// The calendar's two switches that go by the panel's size are shown for this one from now on.
 	panelWide.Store(wideScreen(w, h))
 	d.lookChanged()
@@ -2594,6 +2600,7 @@ func (d *Display) frame() (next time.Duration) {
 	}
 	if (s.showDrawer && s.drawerTab == drawerRadio) || wants {
 		s.radio = home.Get().Radio()
+		s.radio.Art = d.artSized.of(s.radio.Art, d.r.w, d.r.h)
 		if s.radio.Followed {
 			s.playing, s.paused = s.radio.Playing, s.radio.Paused
 		}
@@ -2671,7 +2678,7 @@ func (d *Display) frame() (next time.Duration) {
 		// The weather art only where it will be seen: not under the night clock or the light before an
 		// alarm, which take the whole screen, where composing it each second is work for nothing.
 		artSeen := !s.redClock && s.sunrise == 0
-		s.slideshow = home.Get().SlideshowBackground()
+		s.slideshow = d.bgSized.of(home.Get().SlideshowBackground(), d.r.w, d.r.h)
 		if home.Get().SlideshowMode() == config.SlideshowBackground && artSeen {
 			if art, fx := sceneArt(now, d.r.w, d.r.h); art != nil {
 				s.slideshow, s.artFx = art, fx
@@ -2698,7 +2705,7 @@ func (d *Display) frame() (next time.Duration) {
 		s.nextUp = d.nextUp.card(s.style.style(), now)
 	}
 	if boring && !idleSince.IsZero() && now.Sub(idleSince) >= wait {
-		s.slideshowScreensaver = home.Get().SlideshowScreensaverPhoto()
+		s.slideshowScreensaver = d.saverSized.of(home.Get().SlideshowScreensaverPhoto(), d.r.w, d.r.h)
 		if home.Get().SlideshowMode() == config.SlideshowScreensaver && !s.redClock && s.sunrise == 0 {
 			if art, fx := sceneArt(now, d.r.w, d.r.h); art != nil {
 				s.slideshowScreensaver, s.artFx = art, fx
