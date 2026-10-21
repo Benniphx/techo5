@@ -591,9 +591,10 @@ func (f *Feature) refetchShown(ids []string, whole bool) {
 		return
 	}
 	f.mu.Lock()
-	if !slices.Equal(f.slideshow.shown, ids) || config.Get().Home.Slideshow.WholePhoto != whole {
+	if !slices.Equal(f.slideshow.shown, ids) || config.Get().Home.Slideshow.WholePhoto != whole ||
+		img.Rect.Size() != image.Pt(slideshowSize()) {
 		f.mu.Unlock()
-		return // moved on, or changed back, while this one was fetched
+		return // moved on, changed back, or the screen's size changed, while this one was fetched
 	}
 	f.slideshow.prev, f.slideshow.image = f.slideshow.image, img
 	f.slideshow.at = time.Now() // the time per photo starts again too: it is a new look at it

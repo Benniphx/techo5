@@ -351,7 +351,8 @@ func (f *Feature) buildRadarAt(lat, lon float64) error {
 	r.mu.Lock()
 	made := make(map[string]RadarFrame, len(past))
 	for _, p := range past {
-		if fr, ok := r.made[p.key]; ok {
+		// Only frames at today's size: one built before the screen said its size may land here late.
+		if fr, ok := r.made[p.key]; ok && fr.Image.Rect.Size() == image.Pt(radarSize()) {
 			made[p.key] = fr
 		}
 	}

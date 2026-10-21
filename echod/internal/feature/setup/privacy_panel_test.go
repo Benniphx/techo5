@@ -11,7 +11,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
-// A panel's setup page says SSH and the camera page are not on this device, rather than "off" and to
+// A panel's setup page says SSH and Camera on the network are not on this device, rather than "off" and to
 // change them somewhere they cannot be changed (techo5-panel#1).
 func TestAPanelSaysSSHIsNotHere(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))

@@ -9,5 +9,5 @@ const (
 	sshHere       = false
 	cameraWebHere = false
 
-	notHereWhy = "SSH and the camera page are not part of TECHO5 Panel: Android runs the tablet and its camera."
+	notHereWhy = "SSH and Camera on the network are not part of TECHO5 Panel: Android runs the tablet and its camera."
 )
