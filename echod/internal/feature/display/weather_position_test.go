@@ -57,3 +57,33 @@ func TestWeatherPositionTopRight(t *testing.T) {
 		}
 	}
 }
+
+// Muted with no alert, the header's "microphone off" pill shares the top row with the weather at the
+// top right: the weather shortens to the temperature rather than run under it.
+func TestWeatherTopRightClearsTheMicrophonePill(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	previewFont(t)
+	t.Cleanup(func() {
+		_ = config.Set().Screen().ClockStyle("")
+		_ = config.Set().Screen().WeatherPosition("")
+	})
+	if err := config.Set().Screen().WeatherPosition("top-right"); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 9, 16, 14, 7, 38, 0, time.Local)
+	for _, st := range []string{styleClassic, styleBig, styleFlip} {
+		if err := config.Set().Screen().ClockStyle(st); err != nil {
+			t.Fatal(err)
+		}
+		for _, panel := range []struct {
+			name       string
+			wide, high int
+		}{{"show5", showWide, showHigh}, {"show8", show8Wide, show8High}, {"skylight", skylightWide, skylightHigh}} {
+			r := newRenderer(image.NewRGBA(image.Rect(0, 0, panel.wide, panel.high)))
+			r.draw(scene{now: at, phase: "idle", muted: true, weather: home.Weather{Condition: "partlycloudy", Temp: "72°"}})
+			if w := r.weatherAt.Inset(r.s(14)); w.Empty() || w.Min.X < r.micPillRight() {
+				t.Errorf("%s %s: the weather at %v runs under the pill, which ends at %d", panel.name, st, w, r.micPillRight())
+			}
+		}
+	}
+}

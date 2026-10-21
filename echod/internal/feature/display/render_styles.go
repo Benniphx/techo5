@@ -240,6 +240,8 @@ func (r *renderer) analogStyle(s scene, box image.Rectangle) {
 			r.weatherIcon(s.weather.Condition, x+mark/2, wy-r.s(12), mark)
 			ix += mark + r.s(14)
 		}
+		// Clipped like the date: a long condition (French, Russian) ran off the screen.
+		line = r.clipTo(r.small, line, box.Max.X-ix)
 		r.text(r.small, line, ix, wy, dim)
 		r.setWeatherAt(image.Rect(x, wy-r.s(40), ix+r.width(r.small, line), wy+r.s(14)))
 	}

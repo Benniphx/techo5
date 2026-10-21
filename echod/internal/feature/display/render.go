@@ -877,34 +877,45 @@ func (r *renderer) weatherCornerAt(s scene, right bool) {
 	if w.Temp == "" && w.Condition == "" {
 		return
 	}
-	line := w.Temp
 	// At the top right with an alert, the temperature alone, so the alert's badge fits beside it: the
 	// icon still says what the sky is doing.
 	short := right && len(s.alerts.Here) > 0 && w.Temp != ""
-	if c := conditionWords(w.Condition); c != "" && !short {
-		if line != "" {
-			line += "  ·  "
-		}
-		line += c
-	}
 	mark, mid := r.s(weatherMark), r.margin+r.s(15)
 	if right {
 		// On the badges' row, so the Corner timer's row under it stays clear of the icon.
 		mid = min(mid, r.badgeTop()+r.s(20))
 	}
 	icon := w.Condition != "" && conditionWords(w.Condition) != ""
-	lw := r.width(r.small, line)
-	width := lw
-	if icon {
-		width += mark + r.s(14)
-	}
-	left := r.margin
-	if right {
-		edge := r.w - r.margin
-		if eye := r.halEyeAt(s); !eye.Empty() {
-			edge = eye.Min.X - r.s(16)
+	var line string
+	var lw, width, left int
+	for {
+		line = w.Temp
+		if c := conditionWords(w.Condition); c != "" && !short {
+			if line != "" {
+				line += "  ·  "
+			}
+			line += c
 		}
-		left = edge - width
+		lw = r.width(r.small, line)
+		width = lw
+		if icon {
+			width += mark + r.s(14)
+		}
+		left = r.margin
+		if right {
+			edge := r.w - r.margin
+			if eye := r.halEyeAt(s); !eye.Empty() {
+				edge = eye.Min.X - r.s(16)
+			}
+			left = edge - width
+		}
+		// Muted, the header's "microphone off" pill is on this row too: the temperature alone when the
+		// whole line would run under it.
+		if right && s.muted && !short && w.Temp != "" && left < r.micPillRight()+r.s(12) {
+			short = true
+			continue
+		}
+		break
 	}
 	x, ix := left, left // where the words start, and the icon
 	if icon {
