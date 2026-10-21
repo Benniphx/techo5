@@ -663,9 +663,11 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
 
 - **Presence detection** (Show and Spot, off by default; Settings → Display → Presence, or the
   **Presence detection** switch in Home Assistant): the camera notices somebody moving near the device.
-  Home Assistant gets a **Presence** sensor (occupancy) for automations, and **Screen off when nobody
-  is near** (5 minutes to start with, or Never) puts the screen out once the room has been empty that
-  long and lights it again when somebody comes near. Never at night, and never during a conversation,
+  Home Assistant gets a **Motion** sensor (motion) for automations. It sees movement, not somebody
+  sitting still, and turns off 90 seconds after the last movement. It was named Presence before; on
+  a device already set up its entity ID still ends in `_presence`, so automations keep working.
+  **Screen off when nobody is near** (5 minutes to start with, or Never) puts the screen out once the
+  room has been empty that long and lights it again when somebody comes near. Never at night, and never during a conversation,
   a call, an alarm or with the settings open. Nothing the camera sees is kept or sent: a couple of
   times a second the newest frame is compared with the last as a small grid of brightness, on the
   device. The mute button and the lens shutter stop it, and then the screen is left as it is. On a

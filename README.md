@@ -260,7 +260,7 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
   words in time with the music, from the free LRCLIB database, for Music Assistant, DLNA and followed
   players. [docs/setup.md](docs/setup.md#5-music)
 - 👀 **Presence detection** (v1.0.0). The Show's and the Spot's camera can notice somebody near: a
-  Presence sensor for Home Assistant, and the screen goes out when the room has been empty a while and
+  Motion sensor for Home Assistant, and the screen goes out when the room has been empty a while and
   comes back as you walk up. On the device only, nothing kept; off by default.
   [docs/setup.md](docs/setup.md#presence-and-gestures)
 - ✋ **Cover the camera to stop an alarm** (v1.0.0). With Gestures on, a palm over the
