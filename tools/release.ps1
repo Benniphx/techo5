@@ -118,6 +118,9 @@ if (($AthenaImage -and -not $AthenaBoot) -or ($AthenaBoot -and -not $AthenaImage
 # publish. Each unit mounts its own (tools/linux/rootfs/etc/techo5/boot.sh).
 foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
     if (& tar -tzf $t | Where-Object { $_ -match '^(\./)?vendor/.' } | Select-Object -First 1) { throw "$t carries a vendor tree; build it without VENDOR_TGZ" }
+    # Nor a development kernel's modules and firmware (mkrootfs.sh's inputs/kernel.tar.gz): a released
+    # rootfs has an empty lib/firmware and no lib/modules.
+    if (& tar -tzf $t | Where-Object { $_ -match '^(\./)?lib/(modules|firmware)/.' } | Select-Object -First 1) { throw "$t carries kernel modules or firmware; build it without inputs/kernel.tar.gz" }
 }
 # The plain -Rootfs is the one every Show without a rootfs of its own updates from: a board's own
 # (T5_BOARD in its device.conf, from the athena or Skylight overlay), or one carrying a kernel for the
@@ -262,8 +265,17 @@ function Test-Image([string]$Path, [string[]]$NoFile = @(), [switch]$EmptyKeys) 
     if ($LASTEXITCODE -ne 0) { throw "$Path carries what no published image may (check-image.py)" }
 }
 if ($AthenaImage) { Test-Image $AthenaImage }
-# The Shows' rootfs is published too.
+# The Shows' rootfs is published too, and athena's.
 if ($Rootfs) { Test-Image $Rootfs }
+if ($AthenaRootfs) { Test-Image $AthenaRootfs }
+# Every Show rootfs carries the echo canceller and Spotify Connect: deploy-rootfs.sh copies them only when
+# bin/ has them, so a worktree without the prebuilts copied in would ship without either.
+foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
+    $names = @(& tar -tzf $t) -replace '^\./', ''
+    foreach ($b in 'techo5-aec', 'techo5-librespot') {
+        if ($names -notcontains "usr/local/bin/$b") { throw "$t has no usr/local/bin/${b}: copy bin/$b-arm into bin/ before building" }
+    }
+}
 
 # The Skylight: its three images and the kernel's source from one release, with its rootfs. install-skylight.py
 # takes the installer, boot and store images from one release, and a kernel is published only with its

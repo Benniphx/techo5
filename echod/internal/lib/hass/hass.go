@@ -402,6 +402,14 @@ func (c *Client) Address() string {
 	return u.Scheme + "://" + u.Host
 }
 
+// Token is the long-lived token itself, for taking it out of what is shared (diag's bundle), never for
+// showing.
+func (c *Client) Token() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.acc.Token
+}
+
 // Entity is an entity's id and the name Home Assistant shows for it.
 type Entity struct {
 	ID, Name string

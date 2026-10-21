@@ -152,7 +152,7 @@ fi
 
 # The kernel goes in after the line endings are fixed too, and is checked as a whole released image.
 if [ -n "$KERNEL_IMAGE" ]; then
-	kboard=$(sed -n 's/^T5_BOARD=//p' "$STAGE/overlay/etc/techo5/device.conf" 2>/dev/null | tail -1)
+	kboard=$( (sed -n 's/^T5_BOARD=//p' "$STAGE/overlay/etc/techo5/device.conf" 2>/dev/null || true) | tail -1)
 	case "$kboard" in
 	athena|skylight) ;;
 	*) echo "KERNEL_IMAGE is for athena or the Skylight: DEVICE_OVERLAY=tools/linux/athena/overlay or tools/linux/skylight/overlay" >&2; exit 1;;

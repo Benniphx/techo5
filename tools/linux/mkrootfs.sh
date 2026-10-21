@@ -60,6 +60,9 @@ base=${ARCH:-$($APK --print-arch 2>/dev/null)}
 base=${base:-armv7}
 mini=$(ls "$IN"/inputs/alpine-minirootfs-*-"$base".tar.gz 2>/dev/null | head -1)
 [ -n "$mini" ] || { echo "mkrootfs: no inputs/alpine-minirootfs-*-$base.tar.gz" >&2; exit 1; }
+# One base only: with an old one beside a new one, the first would be taken, and apk add does not
+# upgrade the packages a base already has.
+[ "$(ls "$IN"/inputs/alpine-minirootfs-*-"$base".tar.gz | wc -l)" -eq 1 ] || { echo "mkrootfs: more than one inputs/alpine-minirootfs-*-$base.tar.gz: keep only the one techo5lib.py names" >&2; exit 1; }
 say "base: $(basename "$mini")"
 tar -xzf "$mini" -C "$R"
 
@@ -124,8 +127,7 @@ if [ -e "$IN/inputs/vendor.tar.gz" ]; then
 	tar -xzf "$IN/inputs/vendor.tar.gz" -C "$R" vendor
 	# The Wi-Fi driver the device boots with (etc/techo5/device.conf in the overlay; the Show's by default).
 	WIFI_MODULE=/vendor/lib/modules/mt76x8_wlan.ko
-	[ -r "$IN/overlay/etc/techo5/device.conf" ] && WIFI_MODULE=$(sed -n 's/^WIFI_MODULE=//p' "$IN/overlay/etc/techo5/device.conf" | tr -d '
-"')
+	[ -r "$IN/overlay/etc/techo5/device.conf" ] && WIFI_MODULE=$(sed -n 's/^WIFI_MODULE=//p' "$IN/overlay/etc/techo5/device.conf" | tr -d '\r"')
 	[ -e "$R$WIFI_MODULE" ] || { echo "mkrootfs: vendor tree has no $WIFI_MODULE" >&2; exit 1; }
 else
 	say "no vendor tree: the unit's own is mounted at /vendor"

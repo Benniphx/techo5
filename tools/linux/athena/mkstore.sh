@@ -74,6 +74,8 @@ R=$WORK/root
 rm -rf "$WORK"
 mkdir -p "$R"
 mini=$(ls "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz | head -1)
+# One base only, as mkrootfs.sh: an old one beside a new one would be taken first.
+[ "$(ls "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz | wc -l)" -eq 1 ] || { echo "mkstore: more than one alpine-minirootfs-*-armv7.tar.gz in $INPUTS: keep only the one techo5lib.py names" >&2; exit 1; }
 say "base: $(basename "$mini")"
 tar -xzf "$mini" -C "$R"
 cp /etc/resolv.conf "$R/etc/resolv.conf"

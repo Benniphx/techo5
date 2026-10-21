@@ -18,8 +18,10 @@ STORE_DEV=/dev/mmcblk0p12
 WIFI_MODULE=/vendor/lib/modules/mt76x8_wlan.ko
 BT_MODULE=/vendor/lib/modules/mt76x8_bt.ko
 # The SDIO host the MT7668 sits on, on the mainline kernel: t5_wifi_up powers the chip off and on
-# through it when the driver makes no wlan0 (t5_wifi_reset). Not there on Amazon's kernels.
-WIFI_SDIO_HOST=/sys/bus/platform/drivers/mtk-msdc/11250000.mmc
+# through it when the driver makes no wlan0 (t5_wifi_reset). Only on a mainline kernel (6.x and later):
+# a vendor driver taken out and the host rebound on Amazon's or LineageOS's 4.x could hang the unit.
+WIFI_SDIO_HOST=
+[ "$(uname -r | cut -d. -f1)" -ge 6 ] 2>/dev/null && WIFI_SDIO_HOST=/sys/bus/platform/drivers/mtk-msdc/11250000.mmc
 [ -r /etc/techo5/device.conf ] && . /etc/techo5/device.conf
 export T5_PRODUCT
 . /lib/techo5-lib.sh

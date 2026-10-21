@@ -20,6 +20,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/redact"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wifi"
 )
@@ -76,9 +77,11 @@ func Redactor() *redact.Redactor {
 		r.Known("bluetooth", from)
 	}
 	// The secrets themselves, in case a line ever carries one: the patterns only catch a secret that
-	// says what it is.
-	for _, s := range secrets(c) {
-		r.Known("secret", s)
+	// says what it is. Home Assistant's token too, which the panel's whole log could carry bare.
+	for _, s := range append(secrets(c), hass.Get().Token()) {
+		if len([]rune(strings.TrimSpace(s))) >= shortestSecret {
+			r.Known("secret", s)
+		}
 	}
 	return r
 }
