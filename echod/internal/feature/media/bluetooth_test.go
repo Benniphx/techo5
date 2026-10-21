@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 )
 
 func pcm(frames, channels int, sample func(f, ch int) int16) []byte {
@@ -141,5 +142,30 @@ func TestPhonePlays(t *testing.T) {
 	if read(3000, receiveQuiet+time.Second) || read(0, time.Second) || read(3000, 3*time.Second) ||
 		!p.Playing() {
 		t.Error("a phone that ignored the pause was heard stopping between two songs")
+	}
+}
+
+// AirPlay's 44.1 kHz and a phone's goes through the band-limited converter, as a station does, mono
+// or stereo: straight lines left a 10 kHz tone a ghost at 13.9 kHz only 21 dB under it.
+func TestReceivedAt44100GoesThroughTheConverter(t *testing.T) {
+	for _, channels := range []int{1, 2} {
+		tone := func(f, _ int) int16 { return int16(16000 * math.Sin(2*math.Pi*10000*float64(f)/44100)) }
+		in := pcm(4410, channels, tone)
+		got := newToSpeaker(44100, channels).run(in)
+
+		samples := make([]int16, 4410*channels)
+		for i := range samples {
+			samples[i] = int16(binary.LittleEndian.Uint16(in[i*2:]))
+		}
+		want := audio.NewConverter(44100, speaker.Rate, channels).Run(samples, nil)
+		if len(got) != len(want)*speaker.Channels/channels {
+			t.Fatalf("%d channels: %d samples, want %d", channels, len(got), len(want)*speaker.Channels/channels)
+		}
+		for f := range len(want) / channels {
+			l, r := want[f*channels], want[f*channels+channels-1]
+			if got[f*2] != l || got[f*2+1] != r {
+				t.Fatalf("%d channels, frame %d: %d %d, want %d %d", channels, f, got[f*2], got[f*2+1], l, r)
+			}
+		}
 	}
 }

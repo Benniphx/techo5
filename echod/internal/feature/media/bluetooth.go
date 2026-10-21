@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
@@ -396,20 +397,32 @@ func audibleS16(pcm []byte) bool {
 	return false
 }
 
-// toSpeaker turns what a remote sends (mono or stereo, at its own rate: phones pick 44.1 or 48 kHz)
-// into the speaker's interleaved stereo at its rate. Linear interpolation, carried across calls so a
-// stream read in pieces comes out continuous.
+// toSpeaker turns what a remote sends (mono or stereo, at its own rate: phones pick 44.1 or 48 kHz,
+// AirPlay sends 44.1) into the speaker's interleaved stereo at its rate. Another rate goes through
+// lib/audio's band-limited converter, as a station does (resampler): straight lines between
+// neighboring samples fold the treble's images back into it, a 10 kHz tone with a ghost at 13.9 kHz
+// only 21 dB under it. Both keep their state across calls, so a stream read in pieces comes out
+// continuous.
 type toSpeaker struct {
 	channels int
+	rate     int
 	step     float64 // input frames per output frame
-	pos      float64 // where the next output frame falls between prev and the next input frame
-	prevL    int16
-	prevR    int16
-	primed   bool
+	conv     *audio.Converter
+	in       []int16
+
+	// Straight lines, for a rate with no small ratio to the speaker's (NewConverter).
+	pos    float64 // where the next output frame falls between prev and the next input frame
+	prevL  int16
+	prevR  int16
+	primed bool
 }
 
 func newToSpeaker(rate, channels int) *toSpeaker {
-	return &toSpeaker{channels: channels, step: float64(rate) / speaker.Rate}
+	c := &toSpeaker{channels: channels, rate: rate, step: float64(rate) / speaker.Rate}
+	if rate != speaker.Rate {
+		c.conv = audio.NewConverter(rate, speaker.Rate, channels)
+	}
+	return c
 }
 
 // run converts whole input frames. The result is freshly allocated, since queue scales it in place.
@@ -422,7 +435,31 @@ func (c *toSpeaker) run(pcm []byte) []int16 {
 		}
 		return out
 	}
+	if c.conv == nil && c.step != 1 {
+		return c.lines(pcm, frames)
+	}
 
+	c.in = c.in[:0]
+	for i := range frames * c.channels {
+		c.in = append(c.in, int16(uint16(pcm[i*2])|uint16(pcm[i*2+1])<<8))
+	}
+	samples := c.in
+	if c.conv != nil {
+		samples = c.conv.Run(c.in, make([]int16, 0, len(c.in)*speaker.Rate/c.rate+4*c.channels))
+	}
+	if c.channels == speaker.Channels {
+		return samples
+	}
+	out := make([]int16, 0, len(samples)*speaker.Channels)
+	for _, v := range samples {
+		out = append(out, v, v)
+	}
+	return out
+}
+
+// lines is the fallback: straight lines between neighboring samples, the last frame of each call
+// carried into the next.
+func (c *toSpeaker) lines(pcm []byte, frames int) []int16 {
 	out := make([]int16, 0, int(float64(frames)/c.step+2)*speaker.Channels)
 	for f := 0; f < frames; f++ {
 		o := f * c.channels * 2
