@@ -69,7 +69,9 @@ type Player struct {
 	duck       *esphome.Number
 
 	// asp is the driver's tuning: on applies it, off sends the signal as it came.
-	asp          *esphome.Switch
+	asp *esphome.Switch
+	// stereo plays athena's two internal speakers in stereo; there only on a board that can.
+	stereo       *esphome.Switch
 	bass, treble *esphome.Number
 	gain         *esphome.Number
 	gainApply    func(int) error
@@ -288,6 +290,14 @@ func build() *Player {
 				Category: esphome.CategoryConfig,
 			},
 		},
+		stereo: &esphome.Switch{
+			Base: esphome.Base{
+				ObjectID: "speaker_stereo",
+				Name:     "Stereo speakers",
+				Icon:     "mdi:speaker-multiple",
+				Category: esphome.CategoryConfig,
+			},
+		},
 		bass: &esphome.Number{
 			Base: esphome.Base{
 				ObjectID: "bass",
@@ -410,6 +420,8 @@ func build() *Player {
 		slog.Info("setting changed", "setting", p.asp.ObjectID, "using", settled, "asked", want)
 	}
 
+	p.stereo.OnCommand = p.SetStereo
+
 	// Nothing to apply: the stream reads the setting when a turn begins, so changing it takes effect on
 	// the next one rather than in the middle of this one.
 	component.Bind(p.onTurn, onTurns(), func(v config.OnTurn) config.OnTurn { return v },
@@ -527,6 +539,9 @@ func (p *Player) Entities() []esphome.Entity {
 	if speaker.HasJack {
 		out = append(out, p.output)
 	}
+	if speaker.Get().CanStereo() {
+		out = append(out, p.stereo)
+	}
 	for _, sel := range p.layers {
 		out = append(out, sel)
 	}
@@ -629,6 +644,7 @@ func (p *Player) Restore(c config.Config) {
 	settled := speaker.Get().SetASP(want)
 	p.asp.Set(settled)
 	slog.Info("restored", "what", p.asp.ObjectID, "using", settled, "asked", want)
+	p.stereo.Set(speaker.Get().SetStereo(c.Speaker.Stereo))
 
 	restoreQuiet(p.quiet, c)
 	p.night.Set(float32(c.Speaker.NightVolume))

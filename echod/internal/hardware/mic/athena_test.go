@@ -69,7 +69,7 @@ func asFloats(xs []int16) []float64 {
 }
 
 // The two devices come out as the 1st gen Show 8's frame: each microphone in its own channel at
-// Fire OS's level after its boost, the reference's left and right after them, and the two lined up.
+// Fire OS's level after its boost, the reference's mix and right after them, and the two lined up.
 func TestAthenaMakesTheShow8Frame(t *testing.T) {
 	asShow8(t)
 	c := newPairedCapture(nil, nil)
@@ -98,10 +98,11 @@ func TestAthenaMakesTheShow8Frame(t *testing.T) {
 			t.Errorf("microphone %d is silent in, but came out at %.0f", ch, l)
 		}
 	}
-	if l := rmsInt16(ref[0], skip); l > 1 {
-		t.Errorf("reference left is silent in, but came out at %.0f", l)
-	}
 	wantRef := 0.5 * rmsOfSignal() * math.MaxInt16
+	// The first is the mix the echo canceller reads (putRef): a silent left and the right make half.
+	if l := rmsInt16(ref[0], skip); math.Abs(l-wantRef/2) > 0.02*wantRef {
+		t.Errorf("reference mix: level %.0f, want %.0f", l, wantRef/2)
+	}
 	if l := rmsInt16(ref[1], skip); math.Abs(l-wantRef) > 0.02*wantRef {
 		t.Errorf("reference right: level %.0f, want %.0f", l, wantRef)
 	}

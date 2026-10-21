@@ -494,10 +494,7 @@ func (c *pairedCapture) convert(out, mics, ref []byte) {
 
 	if ref == nil && c.softOK {
 		for f := range min(frames, len(c.softL)) {
-			for ch, v := range [...]float32{c.softL[f], c.softR[f]} {
-				c.meter.ref[ch] += float64(v) * float64(v)
-				putS24(out[f*frameBytes+3*(RefFirst+ch):], v)
-			}
+			putRef(out[f*frameBytes:], c.softL[f], c.softR[f], &c.meter.ref)
 		}
 		return
 	}
@@ -509,20 +506,28 @@ func (c *pairedCapture) convert(out, mics, ref []byte) {
 	}
 	f = 0
 	for at := 0; at+athenaRefChannels*2 <= len(ref) && f < frames; at += athenaRefChannels * 2 {
+		var ys [athenaRefChannels]float32
 		var ready bool
 		for ch, d := range c.refDec {
 			x := float32(int16(binary.LittleEndian.Uint16(ref[at+2*ch:]))) / (1 << 15)
-			y, ok := d.Push(x)
-			if ok {
-				c.meter.ref[ch] += float64(y) * float64(y)
-				putS24(out[f*frameBytes+3*(RefFirst+ch):], y)
-			}
-			ready = ok
+			ys[ch], ready = d.Push(x)
 		}
 		if ready {
+			putRef(out[f*frameBytes:], ys[0], ys[1], &c.meter.ref)
 			f++
 		}
 	}
+}
+
+// putRef writes one frame's playback reference: the first channel, the one the echo canceller reads
+// (referenceInto), is the mix of the two, and the second is the second as it was played. In mono the
+// two are the same and the mix is the first exactly; with the speakers in stereo, a sound mostly on
+// one of them is in the reference either way.
+func putRef(frame []byte, a, b float32, meter *[athenaRefChannels]float64) {
+	meter[0] += float64(a) * float64(a)
+	meter[1] += float64(b) * float64(b)
+	putS24(frame[3*RefFirst:], (a+b)/2)
+	putS24(frame[3*(RefFirst+1):], b)
 }
 
 // putS24 writes a sample in [-1, 1) as S24_3LE, held to full scale.

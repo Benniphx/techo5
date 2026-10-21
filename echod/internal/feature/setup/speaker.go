@@ -73,6 +73,11 @@ func speakerSection(w http.ResponseWriter, token string) {
 	if speaker.HasJack {
 		choiceField(w, "output", "Audio output", media.OutputChoices(), p.Output())
 	}
+	if speaker.Get().CanStereo() {
+		st := p.Stereo()
+		fmt.Fprintf(w, `<p><label><input type="checkbox" name="stereo" value="yes" style="width:auto"%s> Stereo speakers:
+	  left and right on their own speakers; can make the wake word harder to catch over music</label><input type="hidden" name="was_stereo" value="%t"></p>`, checkedIf(st), st)
+	}
 
 	dnd := c.Home.DoNotDisturb
 	fmt.Fprintf(w, `<p><label><input type="checkbox" name="dnd" value="yes" style="width:auto"%s> Do not disturb: intercom
@@ -169,7 +174,12 @@ func saveSpeaker(r *http.Request) string {
 		}
 		p.SetOutput(v)
 	}
-	// A checkbox left clear sends nothing, so do not disturb is read from whether it came.
+	// A checkbox left clear sends nothing, so these are read from whether they came.
+	if was := r.PostFormValue("was_stereo"); was != "" && speaker.Get().CanStereo() {
+		if on := r.PostFormValue("stereo") == "yes"; strconv.FormatBool(on) != was {
+			p.SetStereo(on)
+		}
+	}
 	if was := r.PostFormValue("was_dnd"); was != "" {
 		if on := r.PostFormValue("dnd") == "yes"; strconv.FormatBool(on) != was {
 			phone.Get().SetDoNotDisturb(on)

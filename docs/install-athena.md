@@ -192,6 +192,21 @@ letter. Only do that after checking the tables: the speaker-config 0 table must 
 driver uses for 0 (table A), the other for 1. Please open an issue with the Fire OS version and the
 hashes so the next release knows them.
 
+## Stereo speakers
+
+The Show 8 2nd gen has two speakers. TECHO5 plays them in mono by default: left and right are mixed
+and both speakers play the mix. To hear left and right on their own speakers, turn on **Stereo
+speakers** in the **Configuration** card of the device's page in Home Assistant, or on the setup
+page under **Speaker and voice**. It changes at once, no restart.
+
+In stereo each speaker gets its own EQ and limiter, and the speaker EQ, bass and treble apply to
+both. Amazon wired the speakers the other way round from the usual left/right order, so TECHO5
+swaps them back. A Bluetooth speaker always gets stereo, with or without this switch.
+
+**Stereo can make the wake word harder to catch while music plays.** The echo canceller works from
+one reference, the mix of the two speakers, so a sound panned hard to one side is canceled less
+well than in mono. If the wake word gets missed over music, turn stereo back off.
+
 ## The store fills the partition
 
 The image is only as big as its contents (about 200 MB), so it writes in seconds. The `system`
