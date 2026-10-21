@@ -114,7 +114,8 @@ echo "== ffmpeg: sha256 $(sha256sum "$ROOT/bin/techo5-ffmpeg-arm" | cut -d' ' -f
 # athena and the Skylight carry the 64-bit build beside it (tools/linux/build-ffmpeg-arm64.sh in WSL: static,
 # with H.265, VP8 and VP9), which the daemon runs on their 64-bit kernels; an athena on Amazon's 32-bit
 # kernel keeps the one above. Not optional for them either, and checked for what it must be.
-board=$(sed -n 's/^T5_BOARD=//p' "${DEVICE_OVERLAY:-/nonexistent}/etc/techo5/device.conf" 2>/dev/null | tail -1)
+# No overlay (the Show's and the Spot's builds) is no board: sed's failure must not end the script (pipefail).
+board=$( (sed -n 's/^T5_BOARD=//p' "${DEVICE_OVERLAY:-/nonexistent}/etc/techo5/device.conf" 2>/dev/null || true) | tail -1)
 case "$board" in
 athena|skylight)
 	F64=$ROOT/bin/techo5-ffmpeg-arm64
