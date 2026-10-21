@@ -17,11 +17,13 @@ import "github.com/HuskerMinion/techo5/echod/internal/layout"
 // The 2nd gen Show 8's cores decode VP9 1080p at 128 frames a second: VP8 and VP9 are held to 1080p120,
 // so a 4K file is still refused. Its H.265 has not been timed, so it keeps the 1080p30 every board has.
 //
-// The Skylight's RK3566 has four Cortex-A55s at up to 1.8 GHz, not timed yet. A little faster than the 2nd gen
-// Show 5's cores, it is held to what those decode in time: H.265 to 720p30, VP8 and VP9 to 1080p30.
+// The Skylight's RK3566 has four Cortex-A55s at up to 1.8 GHz. Decoding alone, H.265 1080p30 ran at 71
+// frames a second flat out and at about 1.4 cores at real time, VP9 1080p30 at 85 and about 1.1 cores; a
+// 1080p camera's H.265 at 14 frames a second took about 0.6 of a core. Its screen is 1080p, so the
+// player's scaling adds little: it keeps the 1080p30 every board has for all three.
 func init() {
 	switch {
-	case layout.CronosMainline(), layout.Skylight():
+	case layout.CronosMainline():
 		coresMost["hevc"] = p720 * 30
 	case layout.AthenaMainline():
 		coresMost["vp8"], coresMost["vp9"] = p1080*120, p1080*120

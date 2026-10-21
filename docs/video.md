@@ -15,7 +15,7 @@ picture fills the width, and the edge of the glass takes its corners.
   TECHO5's own kernel (an Echo Show 8 2nd gen still on Amazon's kernel plays what the other Shows do). Each plays only
   as fast as the device decodes it in time; a faster one is refused rather than played behind. The
   Show 8 2nd gen plays H.265 up to 1080p at 30 frames a second, and VP8 and VP9 up to 1080p at 120. The
-  Skylight plays H.265 up to 720p at 30, and VP8 and VP9 up to 1080p at 30. The other Shows and the
+  Skylight plays H.265, VP8 and VP9 up to 1080p at 30. The other Shows and the
   Spot don't play them.
 - **Sound:** AAC, MP3, Opus, AC-3 and E-AC-3 (Dolby Digital), surround mixed down to stereo. A
   video whose sound is something else (DTS, TrueHD) plays without it.
