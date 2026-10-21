@@ -6613,8 +6613,8 @@
     ],
     "echo-show-8-2": [
      "yes",
-     "own mainline kernel, no LineageOS; one screen panel tested, nine more known but untested; two units",
-     "https://github.com/HuskerMinion/techo5/blob/v1.4.0/README.md"
+     "own mainline kernel, no LineageOS; two screen panels tested, eight more known but untested; two units",
+     "https://github.com/HuskerMinion/techo5/blob/main/docs/install-athena.md#which-screen"
     ],
     "echo-spot-1": [
      "lineage",
