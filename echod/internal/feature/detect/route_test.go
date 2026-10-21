@@ -51,9 +51,31 @@ func TestRouteFor(t *testing.T) {
 		{"wake word, ringing in", wake, heard{phase: phone.Ringing, callWake: true}, routeTurn},
 		{"wake word, placing a call", wake, heard{phase: phone.Dialing, callWake: true}, routeIgnore},
 		{"wake word, the far end talking", wake, heard{phase: phone.Talking, callWake: true, farEnd: true}, routeFarEnd},
+
+		{"volume down word", CommandSlot, heard{}, routeCommand},
+		{"volume down word, turn open", CommandSlot, heard{turnOpen: true}, routeCommand},
+		{"volume down word, ringing", CommandSlot, heard{ringing: true}, routeCommand},
+		{"volume down word, talk-back", CommandSlot, heard{talkBack: true}, routeIgnore},
 	} {
 		if got := routeFor(c.slot, c.h); got != c.want {
 			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// The volume down word never opens a turn, and does nothing in any phase of a call, even with Wake word
+// during calls on and with the stop word as the hang-up word.
+func TestTheVolumeDownWordNeverActsOnACall(t *testing.T) {
+	for _, phase := range []phone.Phase{phone.Ringing, phone.Dialing, phone.Talking} {
+		for _, h := range []heard{
+			{phase: phase},
+			{phase: phase, callWake: true},
+			{phase: phase, callWake: true, farEnd: true},
+			{phase: phase, stopHang: true, turnOpen: true, ringing: true},
+		} {
+			if got := routeFor(CommandSlot, h); got != routeIgnore {
+				t.Errorf("%+v: got %d, want it ignored", h, got)
+			}
 		}
 	}
 }

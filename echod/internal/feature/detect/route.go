@@ -14,6 +14,7 @@ const (
 	routeFarEnd                // a wake word during a call, ignored because the far end was talking
 	routeCancelTurn            // the stop word in a turn during a call: the turn ends, the call stays
 	routeCancelAndHangUp       // the hang-up word in a turn: the turn and the call both end, if hangUp agrees
+	routeCommand               // the volume down word, with no call and no talk through a camera: command.heard
 )
 
 // heard is everything route decides on, read once where the word is heard.
@@ -42,9 +43,17 @@ type heard struct {
 // it is the hang-up word, and only a call that can be ended by voice (phone.Answerable): not one being
 // placed. The hang-up word in a turn ends both, so "Okay Nabu, hang up" hangs up whether the word or Home
 // Assistant hears it first.
+//
+// The volume down word does nothing in any phase of a call or during a talk through a camera, whatever
+// Wake word during calls says: the music it turns down is not what is playing then. Otherwise it goes
+// to command.heard, which has its own checks (a turn, a ring, no music), and never opens a turn.
 func routeFor(slot int, h heard) route {
 	inCall := h.phase != phone.Idle
 	switch {
+	case slot == CommandSlot && (inCall || h.talkBack):
+		return routeIgnore
+	case slot == CommandSlot:
+		return routeCommand
 	case slot == HangupSlot && h.turnOpen:
 		return routeCancelAndHangUp
 	case slot == HangupSlot:
