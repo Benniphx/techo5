@@ -27,9 +27,9 @@ export T5_PRODUCT
 # --- Mounts the initramfs normally provides, for a boot that did not come through it.
 mountpoint -q /proc || mount -t proc proc /proc
 # On the 2nd gen Show 5's mainline kernel, an RCU stall is a wedged core: panic, and the kernel's
-# panic timeout reboots (as do its lockup detectors), rather than a unit that hangs for good. Not on
-# the Show 8 2nd gen until it is tried there: a stall it rides out now would reboot it, and use up a
-# slot trial's tries. Amazon's and LineageOS's kernels (4.x) are left as they are.
+# panic timeout reboots (as do its lockup detectors), rather than a unit that hangs for good. The Show 8
+# 2nd gen's kernel does the same from its own command line (tools/linux/athena/kernel/pack.py). Amazon's
+# and LineageOS's kernels (4.x) are left as they are.
 if grep -q 'amazon,cronos' /proc/device-tree/compatible 2>/dev/null &&
 	[ "$(uname -r | cut -d. -f1)" -ge 6 ] 2>/dev/null; then
 	echo 1 > /proc/sys/kernel/panic_on_rcu_stall 2>/dev/null
