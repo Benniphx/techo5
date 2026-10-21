@@ -171,9 +171,9 @@ func Bundle() string {
 	section("settings", settingsSummary(c))
 	section("network", networkSummary(ctx))
 	// The log is where this device's own start script puts it, which is not the same file on all of
-	// them, and not under StateDir on any: an empty log section is the one thing a bundle cannot be
-	// missing, since it is what somebody asked for the bundle to see.
-	last, wakes := readLog(layout.LogPath, logTail, wakeTail)
+	// them, and not under StateDir on any; a panel's is in memory (daemonLog): an empty log section is
+	// the one thing a bundle cannot be missing, since it is what somebody asked for the bundle to see.
+	last, wakes := daemonLog(logTail, wakeTail)
 	section("daemon log (last "+fmt.Sprint(logTail)+" lines)", last)
 	section("wake words (last "+fmt.Sprint(wakeTail)+" detections and near misses)", wakes)
 	if layout.BootLog != "" {
@@ -285,22 +285,31 @@ func readLog(path string, n, wakeN int) (last, wakes string) {
 		return "", ""
 	}
 	defer f.Close()
-	lines, found := newRing(n), newRing(wakeN)
+	s := newLogScan(n, wakeN)
 	r := bufio.NewReaderSize(f, 64<<10)
 	for {
 		line, err := r.ReadString('\n')
 		if line != "" {
-			line = strings.TrimRight(line, "\r\n")
-			lines.add(line)
-			if wakeLine.MatchString(line) {
-				found.add(line)
-			}
+			s.add(strings.TrimRight(line, "\r\n"))
 		}
 		if err != nil {
 			break
 		}
 	}
-	return lines.String(), found.String()
+	return s.lines.String(), s.found.String()
+}
+
+// logScan is the two rings a log is read into: the last n lines, and the last wakeN of the wake
+// engine's.
+type logScan struct{ lines, found *ring }
+
+func newLogScan(n, wakeN int) logScan { return logScan{newRing(n), newRing(wakeN)} }
+
+func (s logScan) add(line string) {
+	s.lines.add(line)
+	if wakeLine.MatchString(line) {
+		s.found.add(line)
+	}
 }
 
 // wakeLine is one of the wake engine's own lines: the message comes straight after the level and the
