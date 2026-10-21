@@ -21,7 +21,8 @@
 // To Home Assistant: a switch for pairing mode, a "Bluetooth phone" switch (on while phone pairing
 // is on or a phone is connected; off disconnects it), a sensor saying what is connected (a phone
 // too), buttons to reconnect or disconnect the remembered device, buttons to call the phones back or
-// forget them, and a switch for the controller's Secure Connections (secureconn.go).
+// forget them, a switch for the controller's Secure Connections (secureconn.go), and one for whether a
+// phone's volume is the device's (volume.go).
 package btaudio
 
 import (
@@ -110,6 +111,7 @@ type Feature struct {
 	forget     *esphome.Button
 	forgetOne  *esphome.Button // the earbuds or speaker the device plays to (Forget)
 	secure     *esphome.Switch // the controller's Secure Connections (secureconn.go)
+	setsVolume *esphome.Switch // Bluetooth sets the volume (volume.go)
 
 	// sc puts the Secure Connections setting on the controller.
 	sc *secureConn
@@ -184,6 +186,10 @@ type Feature struct {
 	// (sliderMove): a short while, since most phones say nothing back, and a press after it always
 	// counts.
 	ours map[string]time.Time
+	// shared is, for each received stream, whether its volume was last made the device's (true) or
+	// left to scale its own audio (false), by PCM path: a look puts right a stream whose mode is not
+	// what Bluetooth sets the volume says now (volumeMode).
+	shared map[string]bool
 	// levelTo hands the device's volume step to the one goroutine that tells the phone (tellPhone), the
 	// latest only, so two steps in quick succession reach the phone in order.
 	levelTo chan int
@@ -259,6 +265,7 @@ func build() *Feature {
 		kept:       map[string]*time.Timer{},
 		levels:     map[string]int{},
 		ours:       map[string]time.Time{},
+		shared:     map[string]bool{},
 		hushed:     map[string]time.Time{},
 		levelTo:    make(chan int, 1),
 		linked:     map[string]bool{},
@@ -266,10 +273,13 @@ func build() *Feature {
 		poke:       make(chan struct{}, 1),
 		state:      State{Status: notConnected},
 		secure:     newSecureConnSwitch(),
+		setsVolume: newSetsVolumeSwitch(),
 		sc:         newSecureConn(),
 	}
 	f.secure.Set(f.SecureConnections())
 	f.secure.OnCommand = func(on bool) { _ = f.SetSecureConnections(on) }
+	f.setsVolume.Set(f.SetsVolume())
+	f.setsVolume.OnCommand = func(on bool) { _ = f.SetSetsVolume(on) }
 	safe.Go("bluetooth secure connections", f.sc.loop)
 	f.pairing.OnCommand = func(on bool) { f.SetPairing(on) }
 	f.phonePair.OnCommand = func(on bool) {
@@ -295,6 +305,7 @@ func (f *Feature) Name() string { return "bluetooth audio" }
 func (f *Feature) Entities() []esphome.Entity {
 	e := []esphome.Entity{
 		f.pairing, f.phonePair, f.status, f.reconnect, f.disconnect, f.forgetOne, f.callPhone, f.forget,
+		f.setsVolume,
 	}
 	if secureConnHere() {
 		e = append(e, f.secure)
@@ -660,7 +671,7 @@ func (f *Feature) refresh() {
 	}
 	if cur := m.Receiving(); cur != "" && cur != give {
 		if s := streams[cur]; s != nil {
-			f.phoneSlider(s.pcm)
+			f.phoneSlider(al, s.pcm)
 		}
 	}
 
@@ -830,7 +841,8 @@ func (f *Feature) give(al *bluealsa.Client, s *inStream) {
 // is handed the device's level as it starts playing here, a move of its slider sets the device's
 // volume (phoneSlider), and the device's volume changing, by the buttons, Home Assistant or night
 // volume, moves the slider (tellPhone). A phone that does not do AVRCP volume scales its own audio, and
-// the level handed to it goes nowhere.
+// the level handed to it goes nowhere. With Bluetooth sets the volume off, none of that: the device
+// keeps its own volume and bluez-alsa scales the audio by the phone's level (volume.go, #245).
 
 // levelFor is a phone's level, 0..bluealsa.VolumeMax, for the device's volume step.
 func levelFor(step int) int {
@@ -843,7 +855,8 @@ func stepFor(level int) int {
 }
 
 // oneVolume makes p's volume the device's: bluez-alsa stops scaling it, and the phone is handed the
-// device's level.
+// device's level; or, with Bluetooth sets the volume off, leaves the phone's level to scale its own
+// audio (volumeMode).
 func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 	f.levelOnce.Do(func() {
 		media.Get().OnLevel.Listen(f.handLevel)
@@ -861,17 +874,7 @@ func (f *Feature) oneVolume(al *bluealsa.Client, p bluealsa.PCM) {
 			}
 		})
 	})
-	if err := al.SetSoftVolume(p, false); err != nil {
-		slog.Warn("bluetooth: leaving a phone's audio unscaled", "err", err)
-	}
-	level := levelFor(media.Get().Volume())
-	if err := al.SetLevel(p, level); err != nil {
-		slog.Warn("bluetooth: handing a phone the volume", "err", err)
-	}
-	f.mu.Lock()
-	f.levels[string(p.Path)] = level
-	f.ours[string(p.Path)] = time.Now().Add(echoFor)
-	f.mu.Unlock()
+	f.volumeMode(al, p, bluetoothSetsVolume(), volumeNow())
 }
 
 // echoing is whether a level read from the stream at path at now may be the phone saying back the
@@ -935,15 +938,25 @@ func sliderMove(level, last int, known, ours bool) bool {
 // phoneSlider is a look at the stream playing here: its level other than last seen or set is the
 // phone's slider moved, and sets the device's volume. A raise stops where night volume says
 // (media.CapRaise); the slider is then moved back to where the device ended up (tellPhone, by way of
-// OnLevel).
-func (f *Feature) phoneSlider(p bluealsa.PCM) {
+// OnLevel). With Bluetooth sets the volume off the level is only noted, and the device's volume left
+// alone. A stream whose volume mode is not what the setting says now is put right first: the switch
+// was turned while it played, and whatever its level did meanwhile is no slider move.
+func (f *Feature) phoneSlider(al pcmSetter, p bluealsa.PCM) {
+	shared := bluetoothSetsVolume()
+	f.mu.Lock()
+	was, applied := f.shared[string(p.Path)]
+	f.mu.Unlock()
+	if modeStale(was, applied, shared) {
+		f.volumeMode(al, p, shared, volumeNow())
+		return
+	}
 	level := p.Level()
 	f.mu.Lock()
 	last, known := f.levels[string(p.Path)]
 	ours := f.echoing(string(p.Path), time.Now())
 	f.levels[string(p.Path)] = level
 	f.mu.Unlock()
-	if !sliderMove(level, last, known, ours) {
+	if !sliderSets(shared, level, last, known, ours) {
 		return
 	}
 	m := media.Get()
@@ -959,27 +972,15 @@ func (f *Feature) phoneSlider(p bluealsa.PCM) {
 
 // tellPhone moves the slider of the phone playing here to the device's volume step, unless it is at
 // that step already: a slider being dragged is left alone, and the level it was dragged to is not
-// handed back to it.
+// handed back to it. With Bluetooth sets the volume off the slider is the phone's own, and never moved
+// from here.
 func (f *Feature) tellPhone(step int) {
-	f.mu.Lock()
-	al := f.alsa
-	f.mu.Unlock()
-	cur := media.Get().Receiving()
-	if al == nil || cur == "" {
+	if !bluetoothSetsVolume() {
 		return
 	}
-	f.mu.Lock()
-	a := f.adapter
-	f.mu.Unlock()
-	if a == nil {
-		return
-	}
-	names := map[string]string{}
-	for _, d := range a.Devices() {
-		names[string(d.Path)] = media.BluetoothPrefix + displayName(d)
-	}
-	for _, p := range al.PCMs() {
-		if !p.Receivable() || !p.Running || names[string(p.Device)] != cur || stepFor(p.Level()) == step {
+	al, pcms := f.receivingPCMs()
+	for _, p := range pcms {
+		if !p.Running || stepFor(p.Level()) == step {
 			continue
 		}
 		level := levelFor(step)

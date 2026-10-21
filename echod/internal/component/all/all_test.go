@@ -41,6 +41,7 @@ var registered = []string{
 	"bluetooth_reconnect",
 	"bluetooth_reconnect_phone",
 	"bluetooth_secure_connections",
+	"bluetooth_sets_volume",
 	"button_action",
 	"button_mute",
 	"button_volume_down",

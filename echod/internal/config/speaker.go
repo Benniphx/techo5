@@ -42,6 +42,11 @@ type Speaker struct {
 	// Home Assistant satellites' recorded ones.
 	ClassicSounds bool `json:"classic_sounds,omitempty"`
 
+	// NoBluetoothVolume keeps the device's volume its own while a phone or a computer plays to it over
+	// Bluetooth: the source's volume level scales only its own audio, and neither side moves the other's
+	// (btaudio's Bluetooth sets the volume, on unless this is set, #245).
+	NoBluetoothVolume bool `json:"no_bluetooth_volume,omitempty"`
+
 	// SoundsMoved is whether the wake sounds have been moved to Home Assistant's: once, for a device
 	// saved when Chirp was the default, and only for a word still on it (config.Load).
 	SoundsMoved bool `json:"sounds_moved,omitempty"`
@@ -143,6 +148,10 @@ func (w SpeakerWriter) Bass(v float64) error {
 
 func (w SpeakerWriter) Treble(v float64) error {
 	return w.st.Update(func(c *Config) { c.Speaker.Treble = v })
+}
+
+func (w SpeakerWriter) NoBluetoothVolume(v bool) error {
+	return w.st.Update(func(c *Config) { c.Speaker.NoBluetoothVolume = v })
 }
 
 func (w SpeakerWriter) ClassicSounds(v bool) error {

@@ -357,7 +357,8 @@ captured login to the same page for a few minutes, and could see the pictures an
   radio, and the phone's sound stutters or drops while it does (#105).
 - **Bluetooth, the rest of it.** A phone playing to the device has one volume, the device's: its
   volume slider moves the device's volume, and the device's buttons and Home Assistant move the
-  slider (night volume still caps a raise from the phone). Pause and play on the device, by voice or
+  slider (night volume still caps a raise from the phone), unless **Bluetooth sets the volume** is
+  off (below). Pause and play on the device, by voice or
   from Home Assistant, reach the phone over Bluetooth, and so do next and previous on the screen of
   a Show or a Spot; a pause or a play on the phone is followed here, so the song picks up where it
   was paused whichever side plays it again, for half an hour after the pause. A phone takes the
@@ -374,6 +375,18 @@ captured login to the same page for a few minutes, and could see the pictures an
   quiet hours and during a call. **Forget**, under the earbuds or speaker in **Settings >
   Connections** (it asks twice), or the **Bluetooth forget** button in Home Assistant on any device,
   forgets them, so new ones can be paired.
+- **Bluetooth sets the volume (new).** On the Show, the Spot and the Dot, the **Bluetooth sets the
+  volume** switch (the setup page's Connections tab, or Home Assistant) is on by default, as it
+  always was: a phone's or a computer's volume slider is the device's volume. **The device jumps to
+  full volume when a computer plays to it: turn it off.** A Linux computer (PipeWire or PulseAudio)
+  often reports full volume once and then turns its own sound down itself, which took the device to
+  100% and left it there, for Music Assistant afterward too (#245). Off, the device keeps its own
+  volume: the phone's or the computer's slider only makes its own sound quieter, never louder than the
+  device's volume, nothing a phone sends changes the device's volume, and the device's buttons and
+  Home Assistant no longer move the phone's slider. Turning it either way takes effect at once, on
+  a phone that is playing too. Turned off while a phone plays, the phone's slider stays where it was
+  and now turns its own sound down from there; turned on, the phone's slider jumps to the device's
+  volume. Shared with the other devices like the rest of the speaker settings, when sharing is on.
 - **Bluetooth Secure Connections (new).** On the Show, the Spot and the Dot, the **Bluetooth Secure
   Connections** switch (Settings > Connections, the setup page's Connections tab, or Home Assistant)
   is on by default, as it always was. **A phone pairs, then drops after a second or two: turn off
