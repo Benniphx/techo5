@@ -136,8 +136,8 @@ more when Home Assistant still has to start the camera's stream. The picture is 
 camera: HLS comes in parts a keyframe interval long. Other cameras, and any whose stream fails or that
 the device cannot decode, are shown from snapshots, a few a second, as with the switch off. That's H.265
 on most devices, and any stream over 1080p. The Echo Show 8 2nd gen and the Skylight Calendar play H.265
-cameras live too (on TECHO5's own kernel): the Show 8 up to 1080p at 30 frames a second, the Skylight up
-to 720p at 30, so pick a camera's sub stream there. A streamed camera's sound, when the view has one,
+cameras live too (on TECHO5's own kernel), both up to 1080p at 30 frames a second, so pick a camera's
+sub stream when its main one is bigger. A streamed camera's sound, when the view has one,
 comes from the same stream, decoded on the device: as far behind the camera as the picture, where the
 stream converted by Home Assistant and sent back was some twenty seconds. A stream with no sound in it
 falls back to Home Assistant's way. A camera's sub stream (often called *fluent* or *sub*) is the better

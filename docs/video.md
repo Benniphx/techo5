@@ -3,7 +3,7 @@
 An Echo Show or Spot can play a video full screen, with its sound. Home Assistant sends it an address, or a
 DLNA app on your phone or computer sends it one, and the Show plays it.
 
-The Echo Show 5, the Show 8 and the Spot. The Dot has no screen. On the Spot's round screen a wide
+The Echo Show 5, the Show 8, the Spot and the Skylight Calendar. The Dot has no screen. On the Spot's round screen a wide
 picture fills the width, and the edge of the glass takes its corners.
 
 ## What plays
