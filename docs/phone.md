@@ -140,7 +140,7 @@ triggers:
       - "end [the] call"
     id: hangup
 conditions:
-  - "{{ device_entities(trigger.device_id) | select('search', 'phone_hangup') | list | count > 0 }}"
+  - "{{ device_entities(trigger.device_id) | select('search', '^sensor[.].*_phone$') | list | count > 0 }}"
 actions:
   - action: "esphome.{{ device_attr(trigger.device_id, 'name') | slugify }}_phone_{{ trigger.id }}"
   - set_conversation_response: ""
