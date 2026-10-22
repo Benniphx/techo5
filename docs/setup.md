@@ -121,6 +121,12 @@ names (These), or none of them (None), use the setup page (Connections → Home 
 Assistant with other homes should be set to None or a list, so it does not offer the other homes'
 cameras. An automation calling `home_show_camera` can still show any camera.
 
+The setup page's **Camera list** (Connections) sets the order of the drawer and the grid: the
+cameras by name, one a line, the first at the top. Cameras not in the box go after the others, and an
+empty box puts them back in the usual order. It also has **List this device's own camera**, on by
+default. Turned off, the device's own camera is not in the drawer or the grid, and "show" does not
+find it; an automation can still put it up.
+
 To show a camera when something happens, like the doorbell, call
 [`home_show_camera`](actions.md#show-a-camera-on-screen) from an automation:
 
@@ -201,6 +207,11 @@ the device, by its name in go2rtc: on the Cameras drawer, and by voice ("show th
 picture comes from go2rtc, and with **Live camera video** on, live video from go2rtc's RTSP port
 (8554), with no camera's own login. Home Assistant is not asked, so they work with it down. Their
 sound is not played yet.
+
+Each stream can have a name of its own on the setup page, like "Doorbell" for `front_door_sub`. That
+name is shown in the drawer and is what "show the doorbell" listens for. Nothing changes in go2rtc,
+so other things that use the stream's name keep working. Left empty, the stream is called by its
+name in go2rtc. Reading go2rtc's list again keeps the names.
 
 A go2rtc with a login takes it in the address, as `http://user:password@host:1984`; the setup page
 does not show the password again, and saving the address as shown keeps it. Saving the address again

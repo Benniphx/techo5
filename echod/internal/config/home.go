@@ -1,6 +1,9 @@
 package config
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Home is what the device shows and reaches for in Home Assistant beyond its own entities: a
 // weather entity for the clock screen, and the radio — the selects whose options are the
@@ -49,6 +52,12 @@ type Home struct {
 	// With it, an empty Cameras is None: no Home Assistant camera at all. Without it, an empty Cameras
 	// is a device never told, which lists every camera Home Assistant has (AllHACameras).
 	CamerasChosen bool `json:"cameras_chosen,omitempty"`
+	// OwnCameraLeftOut leaves the device's own camera off the camera list (the setup page). It is on the
+	// list unless this is set.
+	OwnCameraLeftOut bool `json:"own_camera_left_out,omitempty"`
+	// CameraOrder is the camera list's order, by entity, chosen on the setup page: these first, in this
+	// order, and the rest after them in the usual order. Empty is the usual order.
+	CameraOrder []string `json:"camera_order,omitempty"`
 
 	// Reolink is a Reolink NVR, Home Hub or camera read directly, for a device with no Home Assistant
 	// to proxy its cameras (feature/home/reolink.go). Its cameras join the list.
@@ -406,6 +415,11 @@ func (w HomeWriter) NoCameras() error {
 	return w.st.Update(func(c *Config) { c.Home.Cameras, c.Home.CamerasChosen = nil, true })
 }
 
+// CameraList sets whether the device's own camera is left off the camera list, and the list's order.
+func (w HomeWriter) CameraList(ownLeftOut bool, order []string) error {
+	return w.st.Update(func(c *Config) { c.Home.OwnCameraLeftOut, c.Home.CameraOrder = ownLeftOut, order })
+}
+
 func (w HomeWriter) Slideshow(s Slideshow) error {
 	return w.st.Update(func(c *Config) { c.Home.Slideshow = s })
 }
@@ -480,6 +494,21 @@ type Go2RTC struct {
 
 func (w HomeWriter) Go2RTC(g Go2RTC) error {
 	return w.st.Update(func(c *Config) { c.Home.Go2RTC = g })
+}
+
+// Go2RTCNames sets the names shown and said for go2rtc's streams, by entity ("go2rtc:porch"). A stream
+// given no name, or an empty one, is called by its name in go2rtc.
+func (w HomeWriter) Go2RTCNames(names map[string]string) error {
+	return w.st.Update(func(c *Config) {
+		for i, cam := range c.Home.Go2RTC.Cameras {
+			if n, ok := names[cam.Entity]; ok {
+				if n = strings.TrimSpace(n); n == "" {
+					n = strings.TrimPrefix(cam.Entity, "go2rtc:")
+				}
+				c.Home.Go2RTC.Cameras[i].Name = n
+			}
+		}
+	})
 }
 
 func (w HomeWriter) Reolink(r Reolink) error {

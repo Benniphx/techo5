@@ -95,12 +95,36 @@ func (f *Feature) Cameras() []config.Camera {
 		// by its own name. None chosen leaves cams empty.
 		cams = listHACameras(f)
 	}
-	cams = append(cams, config.Get().Home.Reolink.Cameras...)
-	cams = append(cams, config.Get().Home.Go2RTC.Cameras...)
-	if camera.Available() {
-		return append([]config.Camera{{Entity: LocalCamera, Name: localCameraName}}, cams...)
+	cams = append(cams, h.Reolink.Cameras...)
+	cams = append(cams, h.Go2RTC.Cameras...)
+	if camera.Available() && !h.OwnCameraLeftOut {
+		cams = append([]config.Camera{{Entity: LocalCamera, Name: localCameraName}}, cams...)
 	}
-	return cams
+	return ordered(cams, h.CameraOrder)
+}
+
+// ordered puts the cameras named in order first, in that order, and the rest after them as they were.
+// A camera in order that is not on the list is passed over.
+func ordered(cams []config.Camera, order []string) []config.Camera {
+	if len(order) == 0 {
+		return cams
+	}
+	out := make([]config.Camera, 0, len(cams))
+	used := make([]bool, len(cams))
+	for _, e := range order {
+		for i, c := range cams {
+			if !used[i] && c.Entity == e {
+				out, used[i] = append(out, c), true
+				break
+			}
+		}
+	}
+	for i, c := range cams {
+		if !used[i] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // listHACameras is Home Assistant's own camera list; a test puts a list of its own in.
@@ -127,6 +151,26 @@ func ParseCameras(s string) (cams []config.Camera, none bool) {
 		cams = append(cams, config.Camera{Entity: entity, Name: name})
 	}
 	return cams, false
+}
+
+// SetCameraList saves whether the device's own camera is left off the camera list, and the list's
+// order (entities, first to last), and redraws what shows it.
+func SetCameraList(ownLeftOut bool, order []string) error {
+	if err := config.Set().Home().CameraList(ownLeftOut, order); err != nil {
+		return err
+	}
+	Get().Changed.Emit(struct{}{})
+	return nil
+}
+
+// SetGo2RTCNames saves the names shown and said for go2rtc's streams, by entity, and redraws what
+// shows them.
+func SetGo2RTCNames(names map[string]string) error {
+	if err := config.Set().Home().Go2RTCNames(names); err != nil {
+		return err
+	}
+	Get().Changed.Emit(struct{}{})
+	return nil
 }
 
 // SetCameras saves which of Home Assistant's cameras the device lists: none, the list, or every one
@@ -218,6 +262,9 @@ func (f *Feature) showCameraCaptioned(entity string, d time.Duration, sound bool
 		return // the grid's name, not a camera's: the grid goes up with ShowGrid
 	}
 	name, listed := entity, false
+	if entity == LocalCamera {
+		name = localCameraName // left off the list, an automation can still put it up
+	}
 	for _, cam := range f.Cameras() {
 		if cam.Entity == entity {
 			name, listed = cam.Name, true
