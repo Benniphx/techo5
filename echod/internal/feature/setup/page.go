@@ -421,6 +421,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 			realtimeSection(w, token)
 			listeningSection(w, token)
 			houseSection(w, token)
+			phoneBookSection(w, token)
 			wakeWordsSection(w, token)
 		} else {
 			fmt.Fprint(w, `<h3>Announcements and sounds</h3>`)

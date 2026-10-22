@@ -95,6 +95,11 @@ type Home struct {
 	// a call. Off, they are not heard until the speaker is the call's again.
 	CallUnderlay bool `json:"call_underlay,omitempty"`
 
+	// CallByVoiceOff leaves "call Mom" to Home Assistant. On (false) by default: a sentence that names a
+	// contact in the device's own phone book is a call the device can place itself, and Home Assistant
+	// has no way to do better with it.
+	CallByVoiceOff bool `json:"call_by_voice_off,omitempty"`
+
 	// RadarSource is where the rain map's radar comes from: RadarNWS (the U.S. National Weather
 	// Service's national composite, lower 48 only), RadarRainViewer (worldwide), or empty for
 	// automatic, which is the NWS when home is in the lower 48 and RainViewer anywhere else.
@@ -340,6 +345,11 @@ func (w HomeWriter) CallReplies(v bool) error {
 
 func (w HomeWriter) CallUnderlay(v bool) error {
 	return w.st.Update(func(c *Config) { c.Home.CallUnderlay = v })
+}
+
+// CallByVoice turns calling contacts by voice on or off.
+func (w HomeWriter) CallByVoice(on bool) error {
+	return w.st.Update(func(c *Config) { c.Home.CallByVoiceOff = !on })
 }
 
 func (w HomeWriter) DoNotDisturb(v bool) error {

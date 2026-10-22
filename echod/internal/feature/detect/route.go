@@ -15,6 +15,7 @@ const (
 	routeCancelTurn            // the stop word in a turn during a call: the turn ends, the call stays
 	routeCancelAndHangUp       // the hang-up word in a turn: the turn and the call both end, if hangUp agrees
 	routeCommand               // the volume down word, with no call and no talk through a camera: command.heard
+	routeCancelCall            // the stop or hang-up word before a call asked for by voice is dialed: it is not placed
 )
 
 // heard is everything route decides on, read once where the word is heard.
@@ -26,6 +27,7 @@ type heard struct {
 	callWake bool // Wake word during calls
 	farEnd   bool // the far end was talking just now
 	turnOpen bool // a turn is running: listening, thinking or replying
+	waiting  bool // a call is being placed and has not been dialed yet (phone.State.Waiting)
 }
 
 // routeFor decides what a word heard in slot does.
@@ -44,6 +46,11 @@ type heard struct {
 // placed. The hang-up word in a turn ends both, so "Okay Nabu, hang up" hangs up whether the word or Home
 // Assistant hears it first.
 //
+// A call asked for by voice waits a moment before it is dialed, so that it can be called off: the stop
+// word or the hang-up word then cancels it, as Hang up does. Nothing has been dialed, so nothing the
+// far end says can be in the speaker yet, and the only sound is the device saying whom it is calling.
+// An alarm or timer ringing then is still what the stop word ends first.
+//
 // The volume down word does nothing in any phase of a call or during a talk through a camera, whatever
 // Wake word during calls says: the music it turns down is not what is playing then. Otherwise it goes
 // to command.heard, which has its own checks (a turn, a ring, no music), and never opens a turn.
@@ -54,6 +61,8 @@ func routeFor(slot int, h heard) route {
 		return routeIgnore
 	case slot == CommandSlot:
 		return routeCommand
+	case h.waiting && !h.talkBack && (slot == HangupSlot || slot == StopSlot && !h.ringing):
+		return routeCancelCall
 	case slot == HangupSlot && h.turnOpen:
 		return routeCancelAndHangUp
 	case slot == HangupSlot:

@@ -88,6 +88,7 @@ type State struct {
 	Incoming   bool
 	Intercom   bool      // the call is with another device in the house, not over the phone line
 	DropIn     bool      // an intercom call that connected by itself: somebody is listening in
+	Waiting    bool      // a call being placed that has not been dialed yet (CallAfter)
 	Since      time.Time // when the phase began
 	Problem    string    // why the phone cannot be used, if it cannot
 }
@@ -99,8 +100,11 @@ type Phone struct {
 	// callWake, callReplies and callUnderlay are what a turn during a call may do: config.Home's
 	// CallWake, CallReplies and CallUnderlay.
 	callWake, callReplies, callUnderlay *esphome.Switch
-	ringSound                           *esphome.Select
-	ringLED, callLED                    *led.Claim
+	// callByVoice lets "call Mom" said to the device dial a contact (feature/voice): config.Home's
+	// CallByVoiceOff, the other way round.
+	callByVoice      *esphome.Switch
+	ringSound        *esphome.Select
+	ringLED, callLED *led.Claim
 
 	// Changed fires when State does; listeners must not block.
 	Changed hook.Hook[State]
@@ -155,6 +159,9 @@ func build() *Phone {
 		"mdi:account-voice", config.Set().Home().CallReplies)
 	p.callUnderlay = callSwitch("hear_call_under_assistant", "Hear the call under the assistant",
 		"mdi:phone-in-talk", config.Set().Home().CallUnderlay)
+	p.callByVoice = &esphome.Switch{Base: esphome.Base{ObjectID: "call_contacts_by_voice", Name: "Call contacts by voice",
+		Icon: "mdi:phone-outgoing", Category: esphome.CategoryConfig}}
+	p.callByVoice.OnCommand = p.SetCallByVoice
 	web.Handle(intercomPath, "", intercomOpen, p.intercomIn)
 	p.hangup.OnPress = func() { p.Hangup() }
 	p.ringLED = led.Get().Claim(led.PriorityAlarm)
@@ -167,12 +174,17 @@ func build() *Phone {
 func (p *Phone) Name() string { return "phone" }
 
 func (p *Phone) Entities() []esphome.Entity {
-	return []esphome.Entity{p.status, p.peer, p.answer, p.hangup, p.dropIn, p.dnd, p.ringSound,
+	list := []esphome.Entity{p.status, p.peer, p.answer, p.hangup, p.dropIn, p.dnd, p.ringSound,
 		p.callWake, p.callReplies, p.callUnderlay}
+	// Calling by voice needs something to hear the words.
+	if layout.HasMicrophone() {
+		list = append(list, p.callByVoice)
+	}
+	return list
 }
 
-// Restore puts the intercom's two switches, the call ring and what a turn during a call may do back
-// the way they were left.
+// Restore puts the intercom's two switches, the call ring, what a turn during a call may do and calling
+// contacts by voice back the way they were left.
 func (p *Phone) Restore(c config.Config) {
 	p.dropIn.Set(c.Home.DropIn)
 	p.ringSound.Set(RingSounds[RingSoundIndex()])
@@ -180,6 +192,7 @@ func (p *Phone) Restore(c config.Config) {
 	p.callWake.Set(c.Home.CallWake)
 	p.callReplies.Set(c.Home.CallReplies)
 	p.callUnderlay.Set(c.Home.CallUnderlay)
+	p.callByVoice.Set(!c.Home.CallByVoiceOff)
 }
 
 // callSwitch is one of the switches for what a turn during a call may do, saved by save.
@@ -265,6 +278,20 @@ func (p *Phone) SetDropIn(on bool) {
 	p.Changed.Emit(p.State())
 }
 
+// SetCallByVoice lets "call Mom" said to the device call a contact in the phone book, or leaves such
+// sentences to Home Assistant.
+func (p *Phone) SetCallByVoice(on bool) {
+	if err := config.Set().Home().CallByVoice(on); err != nil {
+		slog.Error("phone: saving call contacts by voice", "err", err)
+		return
+	}
+	p.callByVoice.Set(on)
+	slog.Info("setting changed", "setting", "call_contacts_by_voice", "using", on)
+}
+
+// CallByVoice reports whether "call Mom" said to the device calls a contact.
+func CallByVoice() bool { return !config.Get().Home.CallByVoiceOff }
+
 // SetRingSound chooses how a call rings here, from RingSounds.
 func (p *Phone) SetRingSound(v string) {
 	if !slices.Contains(RingSounds, v) {
@@ -342,7 +369,7 @@ func (p *Phone) set(f func(s *State)) {
 	before := p.state
 	f(&p.state)
 	if p.state.Phase == Idle {
-		p.state.Intercom, p.state.DropIn = false, false
+		p.state.Intercom, p.state.DropIn, p.state.Waiting = false, false, false
 	}
 	if p.state.Phase != before.Phase {
 		p.state.Since = time.Now()
@@ -511,7 +538,15 @@ func refused(err error) bool {
 
 // Call places a call to a number or an extension. It returns once the call is under way; what happens
 // to it is reported through State and the Home Assistant event.
-func (p *Phone) Call(number string) error {
+func (p *Phone) Call(number string) error { return p.CallAfter(number, nil) }
+
+// CallAfter is Call with a wait before the dialing: the line is taken at once, Dialing and Waiting, and
+// the number dialed only once wait returns true. Taken at once, the call's own page shows with its Hang
+// up, the button and Home Assistant's Hang up end it, and nothing else can take the line meanwhile;
+// any of them canceling ends wait's context, and the call ends there, never dialed. A call asked for by
+// voice waits so that it can be called off after the device has said whom it is calling. A nil wait
+// dials straight away. Home Assistant hears of the call (the dialing event) only once it is dialed.
+func (p *Phone) CallAfter(number string, wait func(ctx context.Context) bool) error {
 	number = dialable(number)
 	if number == "" {
 		return errors.New("phone: no number to call")
@@ -533,6 +568,7 @@ func (p *Phone) Call(number string) error {
 	default:
 		p.end = cancel
 		p.claim(Dialing, number, false)
+		p.state.Waiting = wait != nil
 	}
 	p.mu.Unlock()
 	if err != nil {
@@ -540,11 +576,23 @@ func (p *Phone) Call(number string) error {
 		return err
 	}
 	p.set(func(*State) {}) // tell Home Assistant and the lights
-	slog.Info("phone: calling", "number", number)
-	fire("dialing", p.State())
+	if wait == nil {
+		slog.Info("phone: calling", "number", number)
+		fire("dialing", p.State())
+	}
 
 	safe.Go("phone: call", func() {
 		defer cancel()
+		if wait != nil {
+			if !wait(ctx) || ctx.Err() != nil {
+				slog.Info("phone: call canceled before it was dialed")
+				p.set(func(s *State) { s.Phase, s.Peer = Idle, "" })
+				return
+			}
+			p.set(func(s *State) { s.Waiting = false })
+			slog.Info("phone: calling", "number", number)
+			fire("dialing", p.State())
+		}
 		// The call's media lives on the context it was placed with, so that context must outlast the
 		// call: a timeout on it would cut the audio the moment the call was answered. Nobody answering
 		// is limited by canceling the whole call instead.
@@ -743,16 +791,8 @@ func (p *Phone) Actions() []*esphome.Action {
 			Name: "phone_contacts",
 			Args: []esphome.Arg{{Name: "contacts", Type: esphome.ArgString}},
 			Run: func(c esphome.Call) (any, error) {
-				list, err := parseContacts(c.String("contacts"))
-				if err != nil {
-					return nil, err
-				}
-				if err := saveContacts(list); err != nil {
-					return nil, err
-				}
-				slog.Info("phone: contacts replaced", "count", len(list))
-				p.Changed.Emit(p.State())
-				return nil, nil
+				_, err := p.SetContacts(c.String("contacts"))
+				return nil, err
 			},
 		},
 		{

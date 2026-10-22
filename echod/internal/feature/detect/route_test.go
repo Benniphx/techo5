@@ -52,6 +52,14 @@ func TestRouteFor(t *testing.T) {
 		{"wake word, placing a call", wake, heard{phase: phone.Dialing, callWake: true}, routeIgnore},
 		{"wake word, the far end talking", wake, heard{phase: phone.Talking, callWake: true, farEnd: true}, routeFarEnd},
 
+		// A call asked for by voice, not dialed yet: the stop word and the hang-up word call it off, the
+		// stop word only once nothing rings; anything else is as for any call being placed.
+		{"stop word, call not dialed yet", StopSlot, heard{phase: phone.Dialing, waiting: true}, routeCancelCall},
+		{"hang-up word, call not dialed yet", HangupSlot, heard{phase: phone.Dialing, waiting: true}, routeCancelCall},
+		{"stop word over a ring, call not dialed yet", StopSlot, heard{phase: phone.Dialing, waiting: true, ringing: true}, routeEndRing},
+		{"wake word, call not dialed yet", wake, heard{phase: phone.Dialing, waiting: true, callWake: true}, routeIgnore},
+		{"volume down word, call not dialed yet", CommandSlot, heard{phase: phone.Dialing, waiting: true}, routeIgnore},
+
 		{"volume down word", CommandSlot, heard{}, routeCommand},
 		{"volume down word, turn open", CommandSlot, heard{turnOpen: true}, routeCommand},
 		{"volume down word, ringing", CommandSlot, heard{ringing: true}, routeCommand},

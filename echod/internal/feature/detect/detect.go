@@ -177,7 +177,10 @@ func newDetect() *Detect {
 		return wakeword.Threshold(slot)
 	}
 	e.Threshold = func(slot int) float64 {
-		slack := slackFor(slot, mic.Get().Canceling(), phone.Get().Busy(), ring.IsSounding())
+		// A call still waiting to be dialed has no far end in the speaker, only "Calling Mom.", so the
+		// stop word keeps the slack it has over any announcement.
+		onCall := phone.Get().Busy() && !phone.Get().State().Waiting
+		slack := slackFor(slot, mic.Get().Canceling(), onCall, ring.IsSounding())
 		return thresholdFor(slot, base, config.Get().Wake.Stop.Threshold, slack)
 	}
 
@@ -185,14 +188,16 @@ func newDetect() *Detect {
 	var d *Detect
 	e.OnDetect = func(slot int) {
 		c := config.Get()
+		st := phone.Get().State()
 		h := heard{
-			phase:    phone.Get().State().Phase,
+			phase:    st.Phase,
 			talkBack: talkback.Get().Busy(),
 			ringing:  ring.IsSounding(),
 			stopHang: c.Wake.Hangup.StopWord(),
 			callWake: c.Home.CallWake,
 			farEnd:   phone.Get().FarEndTalking(),
 			turnOpen: voice.Get().Busy(),
+			waiting:  st.Waiting,
 		}
 		switch routeFor(slot, h) {
 		case routeHangUp:
@@ -208,6 +213,9 @@ func newDetect() *Detect {
 			if hangUp("hang-up word during a turn") {
 				voice.Get().Cancel()
 			}
+		case routeCancelCall:
+			slog.Info("stop or hang-up word before a call was dialed, canceling it", "slot", slot+1)
+			phone.Get().Hangup()
 		case routeEndRing:
 			slog.Info("stop word during a call, ending the ring")
 			ring.End()

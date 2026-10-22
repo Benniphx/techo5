@@ -34,6 +34,7 @@ var keptByRestore = map[string]keptSetting{
 	"bluetooth_secure_connections":     {func(c *config.Config) { c.Bluetooth.SecureConnectionsOff = true }, func(c config.Config) bool { return c.Bluetooth.SecureConnectionsOff }},
 	"mic_mute":                         {func(c *config.Config) { c.Microphone.Muted = !c.Microphone.Muted }, nil},
 	"intercom_drop_in":                 {func(c *config.Config) { c.Home.DropIn = true }, func(c config.Config) bool { return c.Home.DropIn }},
+	"call_contacts_by_voice":           {func(c *config.Config) { c.Home.CallByVoiceOff = true }, func(c config.Config) bool { return c.Home.CallByVoiceOff }},
 	"wake_word_during_calls":           {func(c *config.Config) { c.Home.CallWake = true }, func(c config.Config) bool { return c.Home.CallWake }},
 	"assistant_replies_into_calls":     {func(c *config.Config) { c.Home.CallReplies = true }, func(c config.Config) bool { return c.Home.CallReplies }},
 	"hear_call_under_assistant":        {func(c *config.Config) { c.Home.CallUnderlay = true }, func(c config.Config) bool { return c.Home.CallUnderlay }},

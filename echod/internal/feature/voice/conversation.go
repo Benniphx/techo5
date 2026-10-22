@@ -211,8 +211,10 @@ type conversation struct {
 	followUp  bool
 	followUps int
 
-	// woke is the open turn's nextTurn.woke, and opened when it was asked for (nextTurn.at).
+	// woke is the open turn's nextTurn.woke, asked its nextTurn.asked, and opened when it was asked
+	// for (nextTurn.at).
 	woke   bool
+	asked  bool
 	opened time.Time
 
 	// lookHere says this turn's answer put a page on the screen (the rain map, the forecast), so it is
@@ -566,6 +568,11 @@ func (c *conversation) turnEvent(e event) {
 			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text, Opened: opened})
 			return
 		}
+		// "Call Mom", with Mom in the phone book: the device places the call itself (callvoice.go).
+		if who, words, ready, ok := c.heardCall(e.text, rt); ok {
+			c.callFromTurn(who, words, ready)
+			return
+		}
 		// Realtime voice's listening is ended by this device hearing the speaker finish (evSpokeEnd),
 		// never by a transcript, which can be of part of the question.
 		if c.phase == phaseListening && !rt {
@@ -865,6 +872,7 @@ func (c *conversation) start(n nextTurn) bool {
 	c.slot = slot
 	c.followUp = n.followUp
 	c.woke = n.woke
+	c.asked = n.asked
 	c.opened = n.at
 	if c.opened.IsZero() {
 		c.opened = time.Now()

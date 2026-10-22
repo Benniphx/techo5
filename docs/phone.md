@@ -6,7 +6,8 @@ microphones (with echo cancellation) and speaker. Calls between your own devices
 so one device can call another in the house.
 
 It is off until it has a login, and it never dials anything on its own: every call is placed by you,
-from Home Assistant, a voice command you set up, or by answering one.
+from Home Assistant, the screen, "call" and a name from its phone book, a voice command you set up, or
+by answering one.
 
 > **Not an emergency phone.** Whether a call to an emergency number works, and whether it reaches
 > the right place, depends entirely on your provider and the address registered with it. Set your
@@ -54,19 +55,75 @@ diagnostics can read, and never in an image or a release.
 | **Decline or hang up** | The same button again, a sideways swipe on the Spot, **Decline** / **Hang up** on the Show, the **Hang up** button, `esphome.<device>_phone_hangup`, the hang-up word, or by voice with **Wake word during calls** on (below). |
 | **Say something into a call** | `assist_satellite.announce` on the same device while a call is up: the message plays in the room and goes into the call. |
 
-### Contacts on a screen
+### The phone book
 
-A device with a screen can call without a voice command: the Spot's dial has **Call**, listing the
-contacts Home Assistant gives it, up to 12:
+Each device keeps a phone book of up to 12 contacts. The screen's **Call** list shows them (the Show's
+drawer, the Spot's dial), and "call Mom" said to the device calls them (below). Set it on the setup
+page (**Sound & Voice**, **Phone book**), one contact to a line:
+
+```text
+Mom|Mother = 15551234567
+Alex = 15557654321
+Front Desk = 106
+```
+
+or from Home Assistant, with the same list on one line:
 
 ```yaml
 action: esphome.<device>_phone_contacts
 data:
-  contacts: "Alex=15551234567, Sam=15557654321, Kitchen=106"
+  contacts: "Mom|Mother=15551234567, Alex=15557654321, Front Desk=106"
 ```
 
-An empty `contacts` clears the list. Like the login, the numbers are kept in their own owner-only file
-on the device.
+- A name, `=`, and the number or extension. Spaces, dashes and a leading `+` in the number are dropped.
+- Other names for the same contact go after the first, each after a `|`. The first is the one the
+  screen shows; voice can use any of them.
+- A name can be used only once in the whole book, other names included, whatever its capitals. A list
+  with one used twice is refused, and nothing is saved.
+- An empty list clears the book. The action and the setup page replace the whole book each time.
+
+Like the login, the book is kept in its own owner-only file on the device. Saving it puts no number in
+a Home Assistant entity or the device's log, only how many contacts there are. A call placed to one
+shows its number as any call does, in the **Phone call** sensor and the call's events.
+
+### Calling a contact by voice
+
+Say the wake word and "call" and a name in the phone book, and the device places the call itself:
+
+- "Call Mom", "phone Alex", "ring Mom", "dial Alex", "call up Mom", "call the Front Desk"
+- "Give Mom a call"
+- With "please", "hey", "can you", "could you" or "would you" before it, and "please", "now", "for me"
+  or "on the phone" after it: "Can you call Mother for me, please?"
+
+The name has to be a contact's, or one of its other names, exactly: "call Tom" does not call Mom, and
+"call Mom's cell" calls nobody. Anything else in the sentence and it is left to Home Assistant, as
+usual. "The" before a name is optional.
+
+The device says "Calling Mom." and shows the call's page, then waits 3 seconds after the words before
+it dials. To call it off in that time, say the stop word (or the hang-up word), press the action
+button, tap **Hang up** on the screen, or press **Hang up** in Home Assistant. Nothing is dialed, and
+no `dialing` event fires, until the wait is over.
+
+- It is handled on the device: Home Assistant's own answer to the sentence is not played.
+- Home Assistant says the words, so the device needs **Allow the device to perform Home Assistant
+  actions** turned on. A call whose "Calling Mom." is never said is not placed: nobody heard whom it
+  would call.
+- The phone has to be signed in. With an account that is not signed in, the device says "The phone
+  isn't signed in." With no phone account at all, the sentence goes to Home Assistant.
+- It does not apply in a follow-up or in a conversation Home Assistant started, where what you say is
+  an answer, or while an alarm or timer rings, or during a call. Nor with realtime voice, whose model
+  answers from your voice.
+- **Call contacts by voice** (the switch in Home Assistant, or the checkbox under the phone book on the
+  setup page) turns it off and leaves these sentences to Home Assistant. It is on by default. It can't be
+  changed through the device's remote API or by restoring settings from a file.
+
+**With a Home Assistant automation for calls.** The device answers a sentence that names a contact in
+its phone book before Home Assistant can, so an automation for the same names (the one below, or the
+[call by voice blueprint](../blueprints/automation/techo5/call_by_voice.yaml)) does not get to place
+the call: its answer is not played, and its own call is refused while the device's is under way. Use
+one or the other for a name. The blueprint is still what calls another device in the house (`call the
+kitchen` with Kitchen a device, not a contact) and names that are not in the phone book; keep a contact
+from having a device's name, or "call the kitchen" dials the contact.
 
 While a call rings or is up, the wake word is ignored (the far end talking through the speaker is not
 someone in the room), unless **Wake word during calls** is on (below). Music and other sounds pause
@@ -81,7 +138,8 @@ with Home Assistant down. It is **None**, off, until chosen. The list has **Stop
 word do it, and every wake word the device has but the ones chosen as wake words, so one of your own
 ("hang up", say) can do it, added the way a wake word of your own is (setup.md).
 
-- A call being placed is never ended this way, only one ringing here or one that is up.
+- A call being placed is never ended this way, only one ringing here or one that is up. The
+  exception is a call by voice that has not been dialed yet (above), which the word calls off.
 - It is not acted on while the other party is talking, or for a moment after: their voice comes out
   of the speaker. Wait for a gap.
 - A talk through a camera is not ended this way, and neither is a call while the device is making a
@@ -178,7 +236,8 @@ integration options for events to arrive.
 ## Example automations
 
 Replace the names and numbers with your own. These keep your contacts in Home Assistant, not on the
-devices.
+devices. For names in a device's own phone book, the device places the call itself (above), before an
+automation for them can.
 
 ### "Call Alex" from whichever device heard it
 

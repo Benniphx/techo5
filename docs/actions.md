@@ -2367,29 +2367,32 @@ data:
   device: Kitchen
 ```
 
-## Set the screen's contact list
+## Set the phone book
 
 In YAML, refer to this action as `esphome.<node>_phone_contacts`.
 
-Sets the contacts a device with a screen offers to call without a voice command, up to 12. The
-numbers are kept on the device in their own owner-only file, not in Home Assistant.
+Replaces the device's phone book, up to 12 contacts: the screen's Call list, and the names "call Mom"
+said to the device calls ([phone.md](phone.md#calling-a-contact-by-voice)). The setup page sets the same
+list. The numbers are kept on the device in their own owner-only file, not in Home Assistant.
 
 ### contacts (Required)
 
 *string*
 
-A comma-, newline-, or semicolon-separated list of `Name=number` pairs:
+A comma-, newline-, or semicolon-separated list of `Name=number` pairs. Other names for a contact,
+which voice can use and the screen does not show, go after the first, each after a `|`:
 
 ```text
-Alex=15551234567, Sam=15557654321, Kitchen=106
+Mom|Mother=15551234567, Sam=15557654321, Kitchen=106
 ```
 
-An empty value clears the list.
+A name can be used only once in the whole list, whatever its capitals; a list with one used twice is
+refused. An empty value clears the list.
 
 ```yaml
 action: esphome.office_phone_contacts
 data:
-  contacts: "Alex=15551234567, Kitchen=106"
+  contacts: "Mom|Mother=15551234567, Kitchen=106"
 ```
 
 ## Answer a call
