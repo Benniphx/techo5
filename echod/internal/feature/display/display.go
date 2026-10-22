@@ -112,6 +112,8 @@ const (
 )
 
 type Display struct {
+	boost boost // the cores held while the screen is in use (boost.go)
+
 	// holdsMu makes reading whether holds are wanted and telling the touchscreen one step (applyHolds).
 	holdsMu sync.Mutex
 
@@ -2302,8 +2304,16 @@ func (d *Display) Close() error {
 // on or the volume is showing, and at once when something changes.
 func (d *Display) Run(ctx context.Context) error {
 	go d.settle(ctx)
+	defer func() {
+		if d.boost.on {
+			d.boost.set(false)
+		}
+	}()
 	for {
 		wait := d.frame()
+		if d.boost.on && wait > boostLinger {
+			wait = boostLinger // a dark panel's next frame may be an hour off: it gives the cores back
+		}
 		if d.videoPainting {
 			// The video's frames, until the frame loop has to look again.
 			d.paintVideo(ctx, wait, d.videoOver)
@@ -2327,9 +2337,11 @@ func (d *Display) frame() (next time.Duration) {
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
 	volume, volAt := d.volume, d.volAt
+	touched := d.touchedAt
 	d.mu.Unlock()
 
 	now := time.Now()
+	d.boost.update(on && (view.Phase != "idle" || now.Sub(touched) < boostLinger))
 
 	d.mu.Lock()
 	d.expireUpdateLocked(now)
