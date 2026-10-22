@@ -593,7 +593,8 @@ Home Assistant's own voice commands know timers but not clock alarms, so "set an
 agent if you have one. Its volume command works, but it changes every speaker in the room's area,
 so in a room with a TV or another speaker, "volume down" can turn down the wrong one. These three
 automations answer those sentences on the TECHO5 device that heard them. Add each one in Settings >
-Automations & scenes > Create automation > Edit in YAML.
+Automations & scenes > Create automation > Edit in YAML. The time can come from speech-to-text as
+digits or as words ("6:30" or "six thirty"); both work.
 
 ```yaml
 alias: TECHO5 - set an alarm by voice
@@ -612,7 +613,18 @@ actions:
       spoken: "{{ (trigger.slots.when | default('')) | lower | replace('.', '') | trim }}"
       pm: "{{ 'pm' in spoken or 'p m' in spoken }}"
       am: "{{ 'am' in spoken or 'a m' in spoken }}"
-      nums: "{{ spoken | regex_findall('[0-9]{1,2}') }}"
+      nums: >-
+        {%- set w = {'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,'seventeen':17,'eighteen':18,'nineteen':19,'twenty':20,'thirty':30,'forty':40,'fifty':50,'oh':0,'o':0} -%}
+        {%- set ns = namespace(n=[], tens=false) -%}
+        {%- for t in spoken | regex_findall('[a-z]+|[0-9]+') -%}
+          {%- if t.isdigit() -%}{%- set ns.n = ns.n + [t | int] -%}{%- set ns.tens = false -%}
+          {%- elif t in w -%}
+            {%- set v = w[t] -%}
+            {%- if ns.tens and v > 0 and v < 10 -%}{%- set ns.n = ns.n[:-1] + [ns.n[-1] + v] -%}{%- set ns.tens = false -%}
+            {%- else -%}{%- set ns.n = ns.n + [v] -%}{%- set ns.tens = v in [0, 20, 30, 40, 50] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{- ns.n -}}
       h: "{{ nums[0] | int(-1) if nums else -1 }}"
       m: "{{ nums[1] | int(0) if nums | count > 1 else 0 }}"
       hh: "{{ h + 12 if pm and h < 12 else (0 if am and h == 12 else h) }}"
@@ -662,7 +674,18 @@ actions:
       everything: "{{ 'all' in trigger.sentence | lower or 'alarms' in trigger.sentence | lower }}"
       pm: "{{ 'pm' in spoken or 'p m' in spoken }}"
       am: "{{ 'am' in spoken or 'a m' in spoken }}"
-      nums: "{{ spoken | regex_findall('[0-9]{1,2}') }}"
+      nums: >-
+        {%- set w = {'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,'seventeen':17,'eighteen':18,'nineteen':19,'twenty':20,'thirty':30,'forty':40,'fifty':50,'oh':0,'o':0} -%}
+        {%- set ns = namespace(n=[], tens=false) -%}
+        {%- for t in spoken | regex_findall('[a-z]+|[0-9]+') -%}
+          {%- if t.isdigit() -%}{%- set ns.n = ns.n + [t | int] -%}{%- set ns.tens = false -%}
+          {%- elif t in w -%}
+            {%- set v = w[t] -%}
+            {%- if ns.tens and v > 0 and v < 10 -%}{%- set ns.n = ns.n[:-1] + [ns.n[-1] + v] -%}{%- set ns.tens = false -%}
+            {%- else -%}{%- set ns.n = ns.n + [v] -%}{%- set ns.tens = v in [0, 20, 30, 40, 50] -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{- ns.n -}}
       h: "{{ nums[0] | int(-1) if nums else -1 }}"
       m: "{{ nums[1] | int(0) if nums | count > 1 else 0 }}"
       hh: "{{ h + 12 if pm and h < 12 else (0 if am and h == 12 else h) }}"
