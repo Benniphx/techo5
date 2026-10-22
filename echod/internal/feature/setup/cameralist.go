@@ -25,8 +25,8 @@ func cameraListSection(w http.ResponseWriter, token string) {
 	fmt.Fprint(w, `<fieldset><legend>Camera list</legend><form method="post" action="/setup/save">`)
 	hidden(w, token, "cameralist", "connections")
 	if camera.Available() {
-		fmt.Fprintf(w, `<p><label><input type="checkbox" name="own" value="1"%s> List this device's own camera</label></p>
-		 <input type="hidden" name="was_own" value="%t">`, checkedIf(!h.OwnCameraLeftOut), !h.OwnCameraLeftOut)
+		fmt.Fprintf(w, `<p><label><input type="checkbox" name="own" value="1"%s> List this device's own camera</label></p>`,
+			checkedIf(!h.OwnCameraLeftOut))
 	}
 	var lines []string
 	for _, c := range cams {

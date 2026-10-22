@@ -58,6 +58,7 @@ func saveGo2RTC(r *http.Request) string {
 		return "the address is one line"
 	}
 	// The names first: reading the streams again keeps the names they have.
+	named := false
 	if streams, names := r.PostForm["stream"], r.PostForm["name"]; len(streams) > 0 {
 		if len(streams) != len(names) {
 			return "the stream names did not come through; reload the page and try again"
@@ -85,6 +86,7 @@ func saveGo2RTC(r *http.Request) string {
 				return "could not save the stream names: " + err.Error()
 			}
 			slog.Info("setup page: go2rtc stream names set")
+			named = true
 		}
 	}
 	// The address shown has no password: saved back unchanged, the one kept is kept. Only for the same
@@ -100,6 +102,9 @@ func saveGo2RTC(r *http.Request) string {
 	}
 	n, err := home.SetGo2RTC(address)
 	if err != nil {
+		if named {
+			return "the names were saved, but go2rtc's streams could not be read again: " + err.Error()
+		}
 		return "could not read go2rtc's streams: " + err.Error()
 	}
 	slog.Info("setup page: go2rtc cameras set", "cameras", n)

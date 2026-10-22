@@ -565,6 +565,8 @@ t5_ntp_peers() {
 t5_ntp() {
 	timeout -s KILL ${NTP_WAIT:-40} ntpd -n -q $(t5_ntp_peers) > /tmp/ntpd.log 2>&1 || { log "clock: ntp failed"; return 1; }
 	hwclock -w -u 2>/dev/null
+	# Tells echod NTP has set the clock, so Home Assistant's time leaves it alone (feature/timezone).
+	: > /run/techo5/ntp-set 2>/dev/null
 	log "clock: $(date)"
 }
 

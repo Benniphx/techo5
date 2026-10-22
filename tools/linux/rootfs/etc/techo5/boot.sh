@@ -219,7 +219,7 @@ t5_wifi_up $WIFI_MODULE $LOGDIR/wpa_supplicant.conf
 # SSH is echod's (feature/security): off unless switched on, and only with a key on userdata.
 if [ -n "$IP" ]; then
 	t5_ntp
-	ntpd $(t5_ntp_peers) > /dev/null 2>&1
+	ntpd -S /etc/techo5/ntp-event.sh $(t5_ntp_peers) > /dev/null 2>&1
 fi
 
 # --- Bluetooth (only on a kernel that has it; see t5_bt_up).
@@ -261,7 +261,7 @@ t5_bt_up "$BT_MODULE" /var/log
 			fi
 			if ! pidof ntpd >/dev/null; then
 				t5_ntp
-				ntpd $(t5_ntp_peers) > /dev/null 2>&1
+				ntpd -S /etc/techo5/ntp-event.sh $(t5_ntp_peers) > /dev/null 2>&1
 			fi
 			# A fixed address whose gateway stays silent gives way to DHCP until it answers again
 			# (techo5-net check): without it, a device whose router moved to another subnet, or

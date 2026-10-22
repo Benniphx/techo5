@@ -3,18 +3,22 @@
 package timezone
 
 import (
+	"os"
 	"os/exec"
 	"time"
 
 	"golang.org/x/sys/unix"
 )
 
-// ntpSynced is whether NTP keeps the clock: ntpd clears the kernel's unsynchronized flag once it has
-// it in hand.
+// ntpSet marks a clock NTP has set since boot: boot writes it when a time server answers (t5_ntp; on
+// the Dot, its boot.sh and ntp-event.sh). The kernel's own flag cannot say it: busybox's ntpd leaves
+// it set.
+var ntpSet = "/run/techo5/ntp-set"
+
+// ntpSynced is whether NTP has set the clock since boot.
 func ntpSynced() bool {
-	var tx unix.Timex
-	state, err := unix.Adjtimex(&tx)
-	return err == nil && state != unix.TIME_ERROR && tx.Status&unix.STA_UNSYNC == 0
+	_, err := os.Stat(ntpSet)
+	return err == nil
 }
 
 // setSystemClock sets the system clock, and the RTC from it, as boot does after NTP: in UTC, so the
