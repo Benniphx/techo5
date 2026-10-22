@@ -3,7 +3,9 @@
 package mic
 
 import (
+	"net"
 	"testing"
+	"time"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/loopback"
 )
@@ -32,5 +34,41 @@ func TestNoLineUpWhileTheSpeakerIsDown(t *testing.T) {
 	}
 	if c.offset == at {
 		t.Error("the reference never caught up with the writer once it moved again")
+	}
+}
+
+// A stream that sends nothing for a while is waited out, not given up on: the read returns the
+// samples once they come, and the stream is marked quiet in between only.
+func TestQuietStreamIsWaitedOut(t *testing.T) {
+	was := quietLimit
+	quietLimit = 20 * time.Millisecond
+	defer func() { quietLimit = was }()
+
+	app, daemon := net.Pipe()
+	defer app.Close()
+	c := &socketCapture{conn: daemon}
+	done := make(chan error, 1)
+	in := make([]byte, 4)
+	go func() { done <- c.readFull(in) }()
+
+	time.Sleep(80 * time.Millisecond)
+	if _, err := app.Write([]byte{1, 2, 3, 4}); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("readFull: %v", err)
+	}
+	if string(in) != "\x01\x02\x03\x04" {
+		t.Errorf("read %v", in)
+	}
+	if c.quiet {
+		t.Error("still marked quiet after sound came")
+	}
+
+	// The app going away still ends the read.
+	go func() { done <- c.readFull(in) }()
+	_ = app.Close()
+	if err := <-done; err == nil {
+		t.Error("readFull returned nothing after the app closed the stream")
 	}
 }

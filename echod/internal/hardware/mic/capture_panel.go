@@ -80,6 +80,46 @@ type socketCapture struct {
 
 	// flat notices Android handing over nothing but silence (flat_panel.go).
 	flat flatWatch
+
+	// quiet is set while the app's stream has sent nothing for quietLimit (readFull).
+	quiet bool
+}
+
+// quietLimit is how long the app's stream may send nothing at all before the log says so. Silence
+// still comes as samples; nothing means Android never started recording for the app, or stopped
+// handing it anything, and without a line here the only trace is the ambient noise sensor finding no
+// frames.
+var quietLimit = 5 * time.Second
+
+// readFull fills in from the app's stream. It waits as long as it takes, as io.ReadFull would, but says
+// once in the log when nothing has come for quietLimit, and again when sound comes back.
+func (c *socketCapture) readFull(in []byte) error {
+	for got := 0; got < len(in); {
+		_ = c.conn.SetReadDeadline(time.Now().Add(quietLimit))
+		n, err := c.conn.Read(in[got:])
+		got += n
+		if n > 0 && c.quiet {
+			c.quiet = false
+			slog.Info("the app's microphone is sending sound again")
+		}
+		if err == nil {
+			continue
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			if !c.quiet {
+				c.quiet = true
+				slog.Error("the app's microphone has sent nothing: Android has not started recording for the app, or has stopped; the app's log (tag techo5-panel) says what Android answered",
+					"seconds", int(quietLimit/time.Second))
+			}
+			continue
+		}
+		if got > 0 && errors.Is(err, io.EOF) {
+			return io.ErrUnexpectedEOF
+		}
+		return err
+	}
+	return nil
 }
 
 // openDevice dials the app's microphone socket: on a panel the capture is the app's stream, not ALSA.
@@ -119,7 +159,7 @@ func (c *socketCapture) Read(p []byte) (int, error) {
 		c.ref = make([]int16, frames)
 	}
 	in := c.in[:frames*2]
-	if _, err := io.ReadFull(c.conn, in); err != nil {
+	if err := c.readFull(in); err != nil {
 		return 0, err
 	}
 	if silent, changed := c.flat.add(in); changed {
