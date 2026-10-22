@@ -549,9 +549,11 @@ t5_wifi_prefer5() {
 # t5_ntp_peers: the time servers, as ntpd's -p arguments. Several: busybox ntpd
 # takes one address for each name, so pool.ntp.org alone is one pool member, and
 # one that never answers left the clock at 2010 until the next reboot (#77).
-# NTP_SERVER, from device.conf, is asked first.
+# The home's own time server, set on the setup page (echod feature/timezone), is asked first, then
+# NTP_SERVER from device.conf. The file holds one name or address, checked when it was saved.
 t5_ntp_peers() {
-	for s in $NTP_SERVER time.cloudflare.com time.google.com 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org; do
+	t5_own_ntp=$(head -n 1 /data/misc/techo5/ntp-server 2>/dev/null | tr -cd 'A-Za-z0-9.:-')
+	for s in $t5_own_ntp $NTP_SERVER time.cloudflare.com time.google.com 0.pool.ntp.org 1.pool.ntp.org 2.pool.ntp.org; do
 		printf ' -p %s' "$s"
 	done
 }

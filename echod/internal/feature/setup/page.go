@@ -344,6 +344,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 				problem = "that is not a time zone this device knows: " + err.Error()
 			}
 		}
+	case "timeserver":
+		if err := timezone.SetServer(r.PostFormValue("server")); err != nil {
+			problem = err.Error()
+		}
 	default:
 		if save, ok := saves[what]; ok {
 			problem = save(r)
@@ -470,6 +474,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		nameSection(w, token)
 		updatesSection(w, token)
 		timezoneSection(w, token)
+		timeServerSection(w, token)
 		homeAssistantSection(w, token)
 		settingsFileSection(w, token)
 		shareSection(w, token)
@@ -505,6 +510,22 @@ func timezoneSection(w http.ResponseWriter, token string) {
 	}
 	fmt.Fprint(w, `</select><p class="note">The device's clock keeps time on its own; this is only
 	 which zone it shows.</p><p><button type="submit">Save</button></p></fieldset></form>`)
+}
+
+// timeServerSection is a time server of the home's own, asked before the internet's.
+func timeServerSection(w http.ResponseWriter, token string) {
+	if !timezone.ServerSettable {
+		return
+	}
+	fmt.Fprint(w, `<form method="post" action="/setup/save"><fieldset><legend>Time server</legend>`)
+	hidden(w, token, "timeserver", "general")
+	fmt.Fprintf(w, `<label for="ntp">Your own time server (optional)</label>
+	 <input id="ntp" name="server" value="%s" placeholder="192.168.1.1" maxlength="253" autocomplete="off">
+	 <p class="note">The device sets its clock from time servers on the internet. A device that cannot
+	  reach them can use one on your network, like your router: it is asked first, and the internet's
+	  after it. %s Leave it empty for the internet's only. Without any time server, the clock is set
+	  from Home Assistant's when it connects.</p>
+	 <p><button type="submit">Save</button></p></fieldset></form>`, html.EscapeString(timezone.Server()), timezone.ServerWhen)
 }
 
 // privacySection says what the device has open, and what this page will never do. It shows and does

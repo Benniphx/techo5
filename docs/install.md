@@ -287,7 +287,8 @@ ESPHome integration by hand with host `<address>` and port 6053.
 Then:
 
 - **Time zone**: nothing to set. The unit starts on UTC and takes Home Assistant's zone as soon as it
-  connects, and keeps it from then on.
+  connects, and keeps it from then on. A unit with no internet can use a time server on your own
+  network (setup page, General, Time server), or takes Home Assistant's time when it connects.
 - **Wake word**: the default is "Alexa". Change it on the device (swipe down from the top, Sound,
   Wake word) or in Home Assistant; the other follows.
 - **Home Assistant token** (optional, for the forecast page, local radio stations and the radio's

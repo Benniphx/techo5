@@ -59,6 +59,7 @@ func (z *Zone) Handle(ctx context.Context, c *esphome.Conn, msg proto.Message) e
 			slog.Debug("asking home assistant for the time", "err", err)
 		}
 	case *api.GetTimeResponse:
+		takeTime(m.GetEpochSeconds()) // the clock, when NTP cannot set it (clock.go)
 		if z.SetHere() {
 			return nil // chosen on the device; Home Assistant does not override that
 		}
