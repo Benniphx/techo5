@@ -2215,6 +2215,40 @@ data:
 response_variable: audio
 ```
 
+## Set the camera stream's login
+
+In YAML, refer to this action as `esphome.<node>_camera_credentials`.
+
+Sets the user name and password a recorder uses for [this device's camera
+stream](setup.md#recording-this-devices-camera) (RTSP and ONVIF), by the same rules as the setup page.
+A new login lets go of whoever is watching with the old one.
+
+> **Good to know**
+>
+> It works only once **Camera login from Home Assistant** (a switch of the device's, under its
+> configuration) is on; it is off by default. Like `ssh_keys`, it is also refused unless Home
+> Assistant's *ESPHome* link to the device has a real encryption key set, so the password never
+> crosses the network in the clear.
+
+### username (Can be empty)
+
+*string*
+
+One line, with no quotes and no colon. Empty is `camera`.
+
+### password (Can be empty)
+
+*string*
+
+12 characters or more, one line, with no quotes. Empty keeps the password set now.
+
+```yaml
+action: esphome.office_camera_credentials
+data:
+  username: frigate
+  password: a-long-password-here
+```
+
 ## Set the SSH authorized keys
 
 In YAML, refer to this action as `esphome.<node>_ssh_keys`.

@@ -52,6 +52,7 @@ var keptByRestore = map[string]keptSetting{
 	"clap_gesture":                     {func(c *config.Config) { c.Microphone.Claps = true }, func(c config.Config) bool { return c.Microphone.Claps }},
 	"clock_hold_gesture":               {func(c *config.Config) { c.Screen.ClockHold = true }, func(c config.Config) bool { return c.Screen.ClockHold }},
 	"camera_streaming":                 {func(c *config.Config) { c.CamStream.On = true }, func(c config.Config) bool { return c.CamStream.On }},
+	"camera_login_from_ha":             {func(c *config.Config) { c.CamStream.LoginFromHA = true }, func(c config.Config) bool { return c.CamStream.LoginFromHA }},
 	"nearest_device_answers":           {func(c *config.Config) { c.Nearest.Off = true }, func(c config.Config) bool { return c.Nearest.Off }},
 	"person_detection":                 {func(c *config.Config) { c.Presence.Person = true }, func(c config.Config) bool { return c.Presence.Person }},
 	"settings_sharing":                 {func(c *config.Config) { c.Share.On = true }, func(c config.Config) bool { return c.Share.On }},

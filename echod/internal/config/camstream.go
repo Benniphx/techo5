@@ -11,6 +11,11 @@ type CamStream struct {
 	// discovery.go): anyone on the network who asks is told the device's name, model and MAC address,
 	// so it is off until turned on.
 	Discovery bool `json:"discovery,omitempty"`
+
+	// LoginFromHA lets Home Assistant set the login (the camera_credentials action), as the setup page
+	// does. It is off until turned on, so a login is never set from Home Assistant without someone
+	// choosing to.
+	LoginFromHA bool `json:"login_from_ha,omitempty"`
 }
 
 // DefaultCamStreamUser is the viewer's user name until one is chosen.
@@ -29,6 +34,10 @@ type CamStreamWriter struct{ st *Store }
 
 func (w CamStreamWriter) Discovery(v bool) error {
 	return w.st.Update(func(c *Config) { c.CamStream.Discovery = v })
+}
+
+func (w CamStreamWriter) LoginFromHA(v bool) error {
+	return w.st.Update(func(c *Config) { c.CamStream.LoginFromHA = v })
 }
 
 func (w CamStreamWriter) On(v bool) error {
