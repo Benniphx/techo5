@@ -294,6 +294,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = removeSound(r)
 	case "wakeword-remove":
 		problem = removeWakeWord(r)
+	case "hacameras":
+		problem = saveHACameras(r)
 	case "reolink":
 		problem = saveReolink(r)
 	case "doorbell":
@@ -436,6 +438,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 			 is not one this page can change.</p></fieldset>`)
 		}
 		bluetoothSection(w, token)
+		haCamerasSection(w, token)
 		reolinkSection(w, token)
 		go2rtcSection(w, token)
 		doorbellSection(w, token)

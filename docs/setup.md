@@ -115,8 +115,11 @@ National Weather Service).
 ## 4. Cameras
 
 With access set up, the Cameras drawer (swipe in from the right edge) lists every camera Home
-Assistant has. To show only some, with friendlier names, use
-[`home_cameras`](actions.md#choose-which-cameras-the-device-shows).
+Assistant has. That is the default (All) for a device never set. To show only some, with friendlier
+names (These), or none of them (None), use the setup page (Connections → Home Assistant cameras) or
+[`home_cameras`](actions.md#choose-which-cameras-the-device-shows). A device that shares a Home
+Assistant with other homes should be set to None or a list, so it does not offer the other homes'
+cameras. An automation calling `home_show_camera` can still show any camera.
 
 To show a camera when something happens, like the doorbell, call
 [`home_show_camera`](actions.md#show-a-camera-on-screen) from an automation:

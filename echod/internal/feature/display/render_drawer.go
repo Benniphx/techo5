@@ -135,6 +135,9 @@ func drawerRows(s scene) ([]settingRow, string) {
 	}
 	if s.drawerTab == drawerCameras {
 		if len(s.cameras) == 0 {
+			if config.Get().Home.NoHACameras() {
+				return nil, "No cameras: None is chosen for Home Assistant's cameras, on the setup page or with the home_cameras action."
+			}
 			return nil, "No cameras yet. Set a Home Assistant token to list them all, or pick some with the home_cameras action."
 		}
 		var rows []settingRow

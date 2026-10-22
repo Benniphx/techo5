@@ -32,8 +32,8 @@ whatever paired the device, and isn't something you call from an automation afte
 > **Good to know**
 >
 > Several other actions depend on this being set first: `home_show_camera` and
-> `home_show_camera_sound`, `home_weather`, `home_cameras`' automatic camera list (when called with
-> `cameras` empty), `home_slideshow`, Home Assistant's Radio Browser lists on the Radio page, and the
+> `home_show_camera_sound`, `home_weather`, `home_cameras`' automatic camera list (All, when called
+> with `cameras` empty), `home_slideshow`, Home Assistant's Radio Browser lists on the Radio page, and the
 > player's star. They all fetch in the background, so the action itself succeeds either way. Without
 > the token they show or offer nothing, and the camera actions open the view with
 > `hass: no access configured` on it in place of the picture. The radio lists are the exception: the
@@ -1059,26 +1059,44 @@ response_variable: go2rtc
 
 In YAML, refer to this action as `esphome.<node>_home_cameras`.
 
-Sets the list of cameras offered on the device's Cameras page and by voice ("show the front door").
+Sets which of Home Assistant's cameras the device offers on its Cameras page, in the camera grid,
+on the setup page's Talk through cameras list and by voice ("show the front door"). There are three
+choices, also on the setup page under Connections → Home Assistant cameras:
+
+- **None**: no Home Assistant camera at all.
+- **All**: every camera entity Home Assistant has, refreshed every 10 minutes. This is the default for
+  a device that was never set, and needs `home_assistant` to be set up first.
+- **These**: only the cameras listed, with the names given.
+
+A device that shares a Home Assistant with other homes should be set to None or a list: with All it
+offers every camera in that Home Assistant, the other homes' too. Cameras set up on the device itself
+(a Reolink recorder, go2rtc) and the device's own camera are offered whichever is chosen.
 
 ### cameras (Can be empty)
 
 *string*
 
-A comma-separated list of `entity=Display Name` pairs:
+`none` (any case) for None, empty (`""`) for All, or a comma-separated list of
+`entity=Display Name` pairs for These:
 
 ```text
 camera.front_door=Front door,camera.deck=Deck
 ```
 
 The `=Display Name` half can be left off, in which case the entity ID is used with its `camera.`
-prefix stripped. Left empty (`""`), the device instead lists every camera entity Home Assistant
-has, refreshed every 10 minutes — this needs `home_assistant` to be set up first.
+prefix stripped.
 
 ```yaml
 action: esphome.office_home_cameras
 data:
   cameras: camera.front_door=Front door,camera.deck=Deck
+```
+
+```yaml
+# No Home Assistant cameras on this device.
+action: esphome.office_home_cameras
+data:
+  cameras: none
 ```
 
 ## Show a camera on screen
@@ -1108,7 +1126,8 @@ room's music, so a Music Assistant group is not left.
 
 *string*
 
-The camera entity to show. Does not need to be one of the cameras set with `home_cameras`.
+The camera entity to show. Does not need to be one of the cameras set with `home_cameras`: an
+automation can show any camera Home Assistant has, even on a device set to None.
 
 ### seconds (Required)
 
@@ -1138,7 +1157,8 @@ the top of the Cameras drawer, when there are two cameras or more.
 *string*
 
 The cameras' entity ids, comma separated, in the order they go in: left to right, then down. Empty for
-the first six of the device's list (`home_cameras`, or every camera Home Assistant has). The device's
+the first six of the device's list (`home_cameras`: None, All or These). Cameras named here are
+shown even when they are not on the device's list. The device's
 own camera is not shown in the grid, and only cameras are: Home Assistant's (`camera.`), a Reolink
 recorder's, and go2rtc's streams (`go2rtc:name`).
 

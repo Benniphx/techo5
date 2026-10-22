@@ -88,10 +88,12 @@ const LocalCamera = "local"
 
 // Cameras is the configured list, with the device's own camera first where it has one.
 func (f *Feature) Cameras() []config.Camera {
-	cams := config.Get().Home.Cameras
-	if len(cams) == 0 {
-		// No list chosen (the home_cameras action): every camera Home Assistant has, by its own name.
-		cams = f.homeAssistantCameras()
+	h := config.Get().Home
+	cams := slices.Clone(h.Cameras)
+	if h.AllHACameras() {
+		// No list chosen (the home_cameras action or the setup page): every camera Home Assistant has,
+		// by its own name. None chosen leaves cams empty.
+		cams = listHACameras(f)
 	}
 	cams = append(cams, config.Get().Home.Reolink.Cameras...)
 	cams = append(cams, config.Get().Home.Go2RTC.Cameras...)
@@ -99,6 +101,51 @@ func (f *Feature) Cameras() []config.Camera {
 		return append([]config.Camera{{Entity: LocalCamera, Name: localCameraName}}, cams...)
 	}
 	return cams
+}
+
+// listHACameras is Home Assistant's own camera list; a test puts a list of its own in.
+var listHACameras = (*Feature).homeAssistantCameras
+
+// CamerasNone is the word that chooses no Home Assistant camera, in home_cameras and on the setup page.
+const CamerasNone = "none"
+
+// ParseCameras reads a camera list as home_cameras takes it: "camera.x=Front door,camera.y=Deck", the
+// name left off for the entity's own. none is the word CamerasNone (any case); an empty list is All.
+func ParseCameras(s string) (cams []config.Camera, none bool) {
+	if strings.EqualFold(strings.TrimSpace(s), CamerasNone) {
+		return nil, true
+	}
+	for _, item := range strings.Split(s, ",") {
+		entity, name, _ := strings.Cut(strings.TrimSpace(item), "=")
+		entity, name = strings.TrimSpace(entity), strings.TrimSpace(name)
+		if entity == "" {
+			continue
+		}
+		if name == "" {
+			name = strings.TrimPrefix(entity, "camera.")
+		}
+		cams = append(cams, config.Camera{Entity: entity, Name: name})
+	}
+	return cams, false
+}
+
+// SetCameras saves which of Home Assistant's cameras the device lists: none, the list, or every one
+// when the list is empty, and redraws what shows them.
+func SetCameras(cams []config.Camera, none bool) error { return Get().setCameras(cams, none) }
+
+func (f *Feature) setCameras(cams []config.Camera, none bool) error {
+	var err error
+	if none {
+		err = config.Set().Home().NoCameras()
+	} else {
+		err = config.Set().Home().Cameras(cams)
+	}
+	if err != nil {
+		return err
+	}
+	slog.Info("home: cameras set", "none", none, "count", len(cams))
+	f.Changed.Emit(struct{}{})
+	return nil
 }
 
 // haCamerasEvery is how often Home Assistant's own camera list is looked at again.
@@ -592,25 +639,10 @@ func (f *Feature) cameraActions() []*esphome.Action {
 		{
 			Name: "home_cameras",
 			Args: []esphome.Arg{{Name: "cameras", Type: esphome.ArgString}}, // "camera.x=Front door,camera.y=Deck"
+			// "none" for no Home Assistant camera, empty for every one.
 			Run: func(c esphome.Call) (any, error) {
-				var cams []config.Camera
-				for _, item := range strings.Split(c.String("cameras"), ",") {
-					entity, name, _ := strings.Cut(strings.TrimSpace(item), "=")
-					entity, name = strings.TrimSpace(entity), strings.TrimSpace(name)
-					if entity == "" {
-						continue
-					}
-					if name == "" {
-						name = strings.TrimPrefix(entity, "camera.")
-					}
-					cams = append(cams, config.Camera{Entity: entity, Name: name})
-				}
-				if err := config.Set().Home().Cameras(cams); err != nil {
-					return nil, err
-				}
-				slog.Info("home: cameras set", "count", len(cams))
-				f.Changed.Emit(struct{}{})
-				return nil, nil
+				cams, none := ParseCameras(c.String("cameras"))
+				return nil, f.setCameras(cams, none)
 			},
 		},
 		{

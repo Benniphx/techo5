@@ -45,6 +45,10 @@ type Home struct {
 
 	// Cameras are camera.* entities and the names to say for them, in the order the list shows.
 	Cameras []Camera `json:"cameras,omitempty"`
+	// CamerasChosen is a camera list chosen on purpose (the home_cameras action or the setup page).
+	// With it, an empty Cameras is None: no Home Assistant camera at all. Without it, an empty Cameras
+	// is a device never told, which lists every camera Home Assistant has (AllHACameras).
+	CamerasChosen bool `json:"cameras_chosen,omitempty"`
 
 	// Reolink is a Reolink NVR, Home Hub or camera read directly, for a device with no Home Assistant
 	// to proxy its cameras (feature/home/reolink.go). Its cameras join the list.
@@ -169,6 +173,13 @@ type Slideshow struct {
 
 // PhotoDay is the form ImmichFrom and ImmichTo are kept in.
 const PhotoDay = "2006-01-02"
+
+// AllHACameras is whether the list is every camera Home Assistant has: never chosen, or chosen as All.
+// A list saved before CamerasChosen existed has cameras in it, and stays that list.
+func (h Home) AllHACameras() bool { return !h.CamerasChosen && len(h.Cameras) == 0 }
+
+// NoHACameras is None chosen: no Home Assistant camera on the list.
+func (h Home) NoHACameras() bool { return h.CamerasChosen && len(h.Cameras) == 0 }
 
 // Camera is one camera on the screen's list.
 type Camera struct {
@@ -375,8 +386,14 @@ func (w HomeWriter) Glance(entities []string) error {
 	return w.st.Update(func(c *Config) { c.Home.Glance = entities })
 }
 
+// Cameras sets the list of Home Assistant's cameras. Empty is All: every camera Home Assistant has.
 func (w HomeWriter) Cameras(cams []Camera) error {
-	return w.st.Update(func(c *Config) { c.Home.Cameras = cams })
+	return w.st.Update(func(c *Config) { c.Home.Cameras, c.Home.CamerasChosen = cams, len(cams) > 0 })
+}
+
+// NoCameras sets the list to None: no Home Assistant camera, chosen on purpose.
+func (w HomeWriter) NoCameras() error {
+	return w.st.Update(func(c *Config) { c.Home.Cameras, c.Home.CamerasChosen = nil, true })
 }
 
 func (w HomeWriter) Slideshow(s Slideshow) error {
