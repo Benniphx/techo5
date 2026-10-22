@@ -1,5 +1,5 @@
 {
- "checked": "2026-10-21",
+ "checked": "2026-10-22",
  "sections": [
   "Basics",
   "Voice",
@@ -1336,7 +1336,7 @@
     "https://github.com/Gamer92000/echo-dot-assist/commits/main"
    ],
    "releases": [
-    "v2026.10.17.151309, 2026-10-17; 52 GitHub releases: 4 stable, 48 pre-releases (\"beta\" from main, latest v2026.10.21.191027-beta, 2026-10-21)",
+    "v2026.10.17.151309, 2026-10-17; 53 GitHub releases: 4 stable, 49 pre-releases (\"beta\" from main, latest v2026.10.21.213542-beta, 2026-10-21)",
     "",
     "https://github.com/Gamer92000/echo-dot-assist/releases"
    ],
@@ -2153,7 +2153,7 @@
     "https://github.com/ygelfand/echolocal/commits/main"
    ],
    "releases": [
-    "echolocal 0.0.10, 2026-10-20: 10 releases plus 5 pre-releases (latest 0.0.11-dev, 2026-10-21). echolocal-hacs v0.0.12, 2026-10-20: 12 releases",
+    "echolocal 0.0.11, 2026-10-21: 11 releases plus 5 pre-releases. echolocal-hacs v0.0.13, 2026-10-21: 13 releases",
     "",
     "https://github.com/ygelfand/echolocal/releases"
    ],
@@ -2579,8 +2579,8 @@
    ],
    "camera-view": [
     "Partly",
-    "HA camera pictures in Tessera tiles; live camera grid app in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/libcountertop/blob/b9aa28bf371a/pkg/tessera/picture.go"
+    "Cameras app: snapshot grid, live video one camera at a time; Shows only",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/display/cameraview/cameraview.go"
    ],
    "go2rtc": [
     "Not found",
@@ -2588,9 +2588,9 @@
     ""
    ],
    "camera-sound": [
-    "In progress",
-    "HA camera WebRTC audio, in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/libcountertop/blob/37d8ca667c/pkg/media/rtc/viewer.go"
+    "Yes",
+    "HA camera WebRTC audio in the live view, through the HACS integration; Shows only",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/media/rtc/viewer.go"
    ],
    "device-camera-entity": [
     "Yes",
@@ -2623,9 +2623,9 @@
     "https://github.com/ygelfand/echolocal/tree/0.0.9/internal/feature/call"
    ],
    "broadcast": [
-    "In progress",
-    "voice broadcast to other devices, in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/echolocal/blob/81ae7ac7f5/internal/feature/broadcast/broadcast.go"
+    "Yes",
+    "records until you stop talking, plays on every device",
+    "https://github.com/ygelfand/echolocal/blob/0.0.11/internal/feature/broadcast/broadcast.go"
    ],
    "auto-answer": [
     "Yes",
@@ -2633,9 +2633,9 @@
     "https://github.com/ygelfand/libcountertop/blob/b9aa28bf371a/pkg/settings/schema/call.go"
    ],
    "call-by-voice": [
-    "In progress",
-    "built-in \"call [the] {device}\" voice trigger with HACS v0.0.12, in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/libcountertop/blob/37d8ca667c/pkg/media/call/action.go"
+    "Yes",
+    "built-in \"call [the] {device}\" voice trigger through the HACS integration",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/media/call/action.go"
    ],
    "video-calls": [
     "Partly",
@@ -2734,7 +2734,7 @@
    ],
    "ha-actions": [
     "Partly",
-    "show_message, logs, recordings, tones, Tessera; call and broadcast in pre-release",
+    "show_message, logs, recordings, tones, Tessera, call, broadcast, settings export and import",
     "https://github.com/ygelfand/libcountertop/blob/b9aa28bf371a/pkg/display/message/message.go"
    ],
    "ha-events": [
@@ -2808,9 +2808,9 @@
     "https://github.com/ygelfand/echolocal/blob/0.0.9/internal/update/fetch.go"
    ],
    "settings-page": [
-    "Partly",
-    "onboarding page on port 80",
-    "https://github.com/ygelfand/echolocal/blob/0.0.9/internal/feature/web/web.go"
+    "Yes",
+    "HTTPS page on port 443: every setting, alarms, calls, broadcasts, logs",
+    "https://github.com/ygelfand/echolocal/blob/0.0.11/internal/feature/frontend/frontend.go"
    ],
    "logs": [
     "Yes",
@@ -2818,14 +2818,14 @@
     "https://github.com/ygelfand/echolocal-hacs/blob/v0.0.11/src/logs.ts"
    ],
    "screenshot": [
-    "Partly",
-    "on-device control command",
-    "https://github.com/ygelfand/echolocal/blob/0.0.9/internal/feature/control/screen.go"
+    "Yes",
+    "live screen view on the web page and /api/v1/screen; Shows only",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/runtime/webapi/screen.go"
    ],
    "diag-bundle": [
-    "Not found",
-    "",
-    ""
+    "Yes",
+    "diagnostics JSON from /api/v1/diagnostics; secrets show only as \"set\"",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/runtime/webapi/developer.go"
    ],
    "remote-shell": [
     "Yes",
@@ -2833,9 +2833,9 @@
     "https://github.com/ygelfand/echolocal/blob/0.0.9/internal/config/diag.go"
    ],
    "remote-api": [
-    "Not found",
-    "settings via ESPHome API only",
-    ""
+    "Yes",
+    "/api/v1 with the admin password, a session or a token",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/runtime/webapi/webapi.go"
    ],
    "copy-settings": [
     "Yes",
@@ -2903,14 +2903,14 @@
     "https://github.com/ygelfand/echolocal/blob/0.0.9/internal/android/firewall/firewall.go"
    ],
    "encrypted-peers": [
-    "Partly",
-    "config sync sealed, signaling plain HTTP; TLS peer trust in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/libcountertop/blob/b9aa28bf371a/pkg/media/call/signal.go"
+    "Yes",
+    "with a home key set: TLS 1.3 between devices, plain-HTTP peer routes refused; calls over WebRTC",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/network/trust/trust.go"
    ],
    "admin-auth": [
-    "In progress",
-    "on-screen settings PIN with retry backoff, in 0.0.11-dev pre-release",
-    "https://github.com/ygelfand/echolocal/blob/81ae7ac7f5/internal/feature/lock/lock.go"
+    "Yes",
+    "web admin password, 5 failed tries per 10 minutes; on-screen settings PIN with retry backoff",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/runtime/webapi/auth.go"
    ],
    "sendspin-pairing": [
     "In progress",
@@ -2918,9 +2918,9 @@
     "https://github.com/ygelfand/echolocal/pull/34"
    ],
    "tls-options": [
-    "Partly",
-    "switch to turn checks off",
-    "https://github.com/ygelfand/libcountertop/blob/b9aa28bf371a/pkg/settings/schema/network.go"
+    "Yes",
+    "certificate checks on by default; own HTTPS certificate from Cert Warden",
+    "https://github.com/ygelfand/libcountertop/blob/d51a3865a9e1/pkg/network/certwarden/certwarden.go"
    ],
    "privacy-indicators": [
     "Partly",
@@ -3787,9 +3787,9 @@
     "https://github.com/jxlarrea/kiosk-satellite/commits/main"
    ],
    "releases": [
-    "2026.10.34, 2026-10-21; 303 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags)",
+    "2026.10.36, 2026-10-22; 305 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags)",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.34"
+    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.36"
    ],
    "license": [
     "App: CC BY-NC-ND 4.0 plus plugin exception; plugin SDK and plugins repo: Apache-2.0",
@@ -4123,8 +4123,8 @@
    ],
    "clock": [
     "Yes",
-    "Digital, Flip, Roller",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.29/docs/screensavers.md#clock"
+    "Digital, Flip, Roller, Hand",
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.36/docs/screensavers.md#clock"
    ],
    "weather": [
     "Yes",
