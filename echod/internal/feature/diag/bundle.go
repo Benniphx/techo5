@@ -18,6 +18,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/announce"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timezone"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
@@ -75,6 +76,14 @@ func Redactor() *redact.Redactor {
 	}
 	if from, ok := phonePlaying(media.Get().Receiving()); ok {
 		r.Known("bluetooth", from)
+	}
+	// The phone book's names are often people's, and a turn's transcript in the log can carry one.
+	for _, c := range phone.Get().Contacts() {
+		for _, name := range c.Names() {
+			if !commonName(name) {
+				r.Known("contact", name)
+			}
+		}
 	}
 	// The secrets themselves, in case a line ever carries one: the patterns only catch a secret that
 	// says what it is. Home Assistant's token too, which the panel's whole log could carry bare.

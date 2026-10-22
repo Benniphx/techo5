@@ -195,3 +195,22 @@ func TestHangupOptionsRefresh(t *testing.T) {
 		t.Errorf("after a word was added and the chosen one became a wake word: options %v, want %v", got, want)
 	}
 }
+
+// The hang-up word is listened for while a call rings or is up, and while a call asked for by voice
+// waits to be dialed; not while one is dialed or nothing is on.
+func TestHangupListens(t *testing.T) {
+	for _, c := range []struct {
+		st   phone.State
+		want bool
+	}{
+		{phone.State{Phase: phone.Idle}, false},
+		{phone.State{Phase: phone.Ringing}, true},
+		{phone.State{Phase: phone.Talking}, true},
+		{phone.State{Phase: phone.Dialing}, false},
+		{phone.State{Phase: phone.Dialing, Waiting: true}, true},
+	} {
+		if got := hangupListens(c.st); got != c.want {
+			t.Errorf("%+v: listens %v, want %v", c.st, got, c.want)
+		}
+	}
+}

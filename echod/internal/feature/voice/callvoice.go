@@ -63,7 +63,7 @@ var placeCall = func(who phone.Contact, words string, ready bool) {
 		return
 	}
 	if err := phone.Get().CallAfter(who.Number, afterWords); err != nil {
-		slog.Warn("call by voice not placed", "contact", who.Name, "err", err)
+		slog.Warn("call by voice not placed", "err", err)
 	}
 }
 
@@ -95,7 +95,7 @@ func (c *conversation) heardCall(text string, rt bool) (who phone.Contact, words
 // on. Home Assistant goes on with the run it is told to stop, and its last events, its reply among
 // them, are still to come: a wake in the meantime waits for them (draining).
 func (c *conversation) callFromTurn(who phone.Contact, words string, ready bool) {
-	slog.Info("heard a call request", "slot", c.slot+1, "contact", who.Name, "ready", ready)
+	slog.Info("heard a call request", "slot", c.slot+1, "ready", ready)
 	c.log.Replied(words)
 	c.turn.Replying(words)
 	c.clearPending()

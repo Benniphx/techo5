@@ -93,7 +93,7 @@ func newHangup(d *Detect) *hangup {
 		}
 		h.word.Set(v)
 		slog.Info("setting changed", "setting", h.word.ObjectID, "using", v)
-		h.follow(phone.Answerable(phone.Get().State().Phase))
+		h.follow(hangupListens(phone.Get().State()))
 	}
 	h.threshold = &esphome.Number{
 		Base: esphome.Base{
@@ -115,12 +115,12 @@ func newHangup(d *Detect) *hangup {
 	}
 	// Words added or removed change what is offered. Changed's listeners must not block.
 	wake.Lib().Changed.Listen(func(struct{}) { go h.refreshOptions() })
-	// Loaded while a call can be ended by voice, and cleared otherwise. Changed's listeners must not
+	// Loaded while a call can be ended by voice or called off (hangupListens), and cleared otherwise. Changed's listeners must not
 	// block, and a load reads a model off disk.
 	// Each follow reads the phase as it runs, not as the event had it: two events close together (a
 	// call declined as it rings in) may run out of order, and the later state must win.
 	phone.Get().Changed.Listen(func(phone.State) {
-		go h.follow(phone.Answerable(phone.Get().State().Phase))
+		go h.follow(hangupListens(phone.Get().State()))
 	})
 	return h
 }
@@ -201,6 +201,10 @@ func (h *hangup) restore(c config.Hangup) {
 	h.threshold.Set(float32(c.ThresholdAt()))
 	slog.Info("restored", "what", h.word.ObjectID, "using", h.phraseFor(c.ID))
 }
+
+// hangupListens is whether the hang-up word is listened for: while a call can be ended by voice, and
+// while a call asked for by voice waits to be dialed, which the word calls off (routeCancelCall).
+func hangupListens(st phone.State) bool { return phone.Answerable(st.Phase) || st.Waiting }
 
 // wanted is the model the slot should hold: none off a call, with None (the default) or the stop word
 // (it has a slot of its own, loaded already), or with a word that has since been chosen as a wake word;

@@ -322,7 +322,7 @@ func newDetect() *Detect {
 		turn.SetActiveWakeWords(d.load(turn.ActiveWakeWords()))
 		d.loadStop()
 		// A call already up when the engine starts has its hang-up word, as one that starts later does.
-		d.hangup.follow(phone.Answerable(phone.Get().State().Phase))
+		d.hangup.follow(hangupListens(phone.Get().State()))
 		// Back in if music is playing: the start emptied its slot.
 		d.command.restarted()
 		// A device that was muted when it was switched off comes back muted, and the hook below only
@@ -459,7 +459,7 @@ func (d *Detect) loadLocked(ids []string) []string {
 	// listened for as the hang-up word.
 	if d.hangup != nil {
 		d.hangup.refreshOptions()
-		d.hangup.follow(phone.Answerable(phone.Get().State().Phase))
+		d.hangup.follow(hangupListens(phone.Get().State()))
 	}
 
 	// Only the slots that took a wake word are waited on. A selection that loaded nothing has nothing to

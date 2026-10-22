@@ -92,7 +92,7 @@ func parseContacts(s string) ([]Contact, error) {
 			}
 			key := nameKey(name)
 			if seen[key] {
-				return nil, fmt.Errorf("phone: the name %q is in the phone book twice", name)
+				return nil, fmt.Errorf("phone: contact %d has a name that is in the phone book twice", n)
 			}
 			seen[key] = true
 			if i == 0 {

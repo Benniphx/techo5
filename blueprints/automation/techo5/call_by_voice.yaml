@@ -6,8 +6,9 @@ blueprint:
     given to the device in Home Assistant, or the device's area. Add contacts and "call Alex" places
     a phone call from the device that heard it to Alex's number; device names are tried first, and
     "intercom" or "drop in" only ever means a device. Intercom calls need the same house word on
-    both devices; phone calls need the device's phone signed in. Contacts stay in Home Assistant,
-    not on the devices.
+    both devices; phone calls need the device's phone signed in. The contacts here stay in Home
+    Assistant. A name in a device's own phone book is called by the device itself, before this
+    automation sees the sentence, so keep each name in one place.
   domain: automation
   author: TECHO5
   source_url: https://github.com/HuskerMinion/techo5/blob/main/blueprints/automation/techo5/call_by_voice.yaml

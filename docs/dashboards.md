@@ -24,7 +24,7 @@ Everything is on the device's page in Home Assistant: **Settings → Devices & s
 your device. In the **Configuration** card (expand it if it ends in "+ N entities not shown"). The
 setup page's **Screen & Photos** tab has the same settings, except which dashboard to show:
 
-- **Dashboard**: *Off*, *Drawn on the device* or *Streamed*, and on the Show and the Panel app *Tessera*
+- **Dashboard**: *Off*, *Drawn on the device* or *Streamed*, and on the Show, the Skylight and the Panel app *Tessera*
   ([Tessera screens](#tessera-screens-preview)).
 - **Dashboard to show**: which dashboard, from a list of yours and their views. The list updates by
   itself within five minutes of a dashboard being added, renamed or removed. *Automatic* is the Rooms

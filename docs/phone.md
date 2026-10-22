@@ -148,8 +148,9 @@ word do it, and every wake word the device has but the ones chosen as wake words
   up. "Stop" comes up in conversation, so it can hang up by mistake; a word of your own that does not
   come up is less likely to. It is heard at **Stop word threshold**, and does nothing with the stop word
   turned off (that threshold at its top).
-- Another word is listened for only while a call rings or is up, at **Hang-up word threshold**, a wake
-  word's 0.85 until set. Higher hears it less often, by mistake or not.
+- Another word is listened for only while a call rings or is up, or while a call by voice waits to
+  be dialed, at **Hang-up word threshold**, a wake word's 0.85 until set. Higher hears it less often,
+  by mistake or not.
 - During a call the stop word and the hang-up word are held to their full threshold, without the
   allowance words get while the speaker plays; the stop word gets it back over a ring.
 - A word of your own chosen here can't be removed on the setup page or by **Purge cache** while it is
@@ -259,6 +260,7 @@ actions:
       - set_conversation_response: "I don't have a number for {{ trigger.slots.who }}."
       - stop: unknown
   - action: "esphome.{{ device_attr(trigger.device_id, 'name') | slugify }}_phone_call"
+    continue_on_error: true
     data:
       number: "{{ number }}"
   - set_conversation_response: "Calling {{ trigger.slots.who }}."
