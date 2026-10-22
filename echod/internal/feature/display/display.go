@@ -2333,6 +2333,7 @@ func (d *Display) Run(ctx context.Context) error {
 
 // frame draws what the moment calls for and says how long until the next one is due.
 func (d *Display) frame() (next time.Duration) {
+	began := time.Now()
 	d.videoPainting, d.vp.dark = false, false
 	d.mu.Lock()
 	on, view, at := d.on, d.view, d.viewAt
@@ -2781,7 +2782,11 @@ func (d *Display) frame() (next time.Duration) {
 		// Kept while the video is only covered: uncovered, paused, the frame it stopped on is put back.
 		d.dropVideoFrame()
 	}
-	if key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle); key != "" && key == d.deckDrawn {
+	key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle)
+	if rainbowOn() && d.r.rainbow.Busy() {
+		key = "" // the Rainbow light still going out over the deck, or its card going away
+	}
+	if key != "" && key == d.deckDrawn {
 		// The deck as it was last drawn, and nothing over it: drawing it again would only cost.
 		d.answerShots()
 		return 2 * time.Second
@@ -2793,6 +2798,13 @@ func (d *Display) frame() (next time.Duration) {
 		// The cue's light breathes and runs over whatever page is up; a page that moves faster (a
 		// photo changing, rain falling) keeps its own pace.
 		defer func() { next = min(next, cueFrame) }()
+	}
+	if rainbowOn() && d.r.rainbow.Busy() {
+		// Rainbow moves at the turn screens' pace, and on after the turn while its light goes out. The
+		// pace is from one frame's start to the next's: a frame that took most of it waits only for
+		// the rest, and one that took all of it waits only long enough to let the rest of the device
+		// have the processor for a moment.
+		defer func() { next = min(next, max(rainbowFrame-time.Since(began), rainbowBreath)) }()
 	}
 	unskinned(d.dev, s.redClockFace() || d.r.marked)
 	if err := d.dev.Present(); err != nil {
