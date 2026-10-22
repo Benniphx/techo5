@@ -110,6 +110,12 @@ type Device struct {
 	// shadow says: the next Present onto it writes every row.
 	stale []bool
 
+	// tint is what the panel is shown with (tint.go); tintTable applies it to a copy of each frame,
+	// tintImg.
+	tint      Tint
+	tintTable *[3][256]uint8
+	tintImg   *image.RGBA
+
 	// filter is laid over every row on its way to the panel (SetFilter, filter.go).
 	filter rowFilter
 }
@@ -225,6 +231,11 @@ func (d *Device) String() string {
 // it. Landscape (x, y) lands at panel (panelW-1-y, x), so each landscape column becomes one panel
 // row, written contiguously.
 func (d *Device) Present() error {
+	if d.tintTable != nil {
+		drawn := d.canvas
+		d.canvas = d.tinted()
+		defer func() { d.canvas = drawn }()
+	}
 	next := d.page
 	if d.pages > 1 {
 		next = (d.page + 1) % d.pages
@@ -366,8 +377,10 @@ func (d *Device) rotate(img *image.RGBA, dst []byte, next int) {
 // pan shows page next. The mainline kernel's simple-framebuffer on the 2nd gen Show 8 has one page
 // and no pan operation (FBIOPAN_DISPLAY gives EINVAL): there it scans out what was written. DRM's
 // fbdev emulation (mediatek-drm) has two pages and pans with an atomic commit, at the next vblank.
+// On the Echo Show 5's mainline kernel that emulation has a single page, where a pan to the page on
+// show is only a wasted commit.
 func (d *Device) pan(next int) error {
-	if d.pages <= 1 && layout.AthenaMainline() {
+	if d.pages <= 1 && (layout.AthenaMainline() || layout.CronosMainline()) {
 		d.page = 0
 		return nil
 	}
@@ -406,12 +419,21 @@ const (
 	skylightBacklightMax = 235
 )
 
+// The Echo Show 5 on TECHO5's mainline kernel has no LED class node either: its display PWM is a
+// backlight class device whose range is read from max_brightness.
+const cronosBacklightDir = "/sys/class/backlight/display-backlight"
+
 func backlightNode() (path string, top int) {
 	if layout.AthenaMainline() {
 		return mainlineBacklightPath, mainlineBacklightMax
 	}
 	if layout.Skylight() {
 		return skylightBacklightDir + "/brightness", readTop(skylightBacklightDir+"/max_brightness", skylightBacklightMax)
+	}
+	if _, err := os.Stat(backlightPath); os.IsNotExist(err) {
+		if top := readTop(cronosBacklightDir+"/max_brightness", 0); top > 0 {
+			return cronosBacklightDir + "/brightness", top
+		}
 	}
 	return backlightPath, BacklightMax
 }

@@ -20,7 +20,7 @@ var notOnPanel = []string{
 	"bluetooth_proxy", "ble_advertisements",
 	"bluetooth_audio", "bluetooth_disconnect", "bluetooth_forget", "bluetooth_forget_phones", "bluetooth_pairing",
 	"bluetooth_phone_pairing", "bluetooth_reconnect", "bluetooth_reconnect_phone", "bluetooth_secure_connections",
-	"bluetooth_sets_volume", "camera_web_access",
+	"bluetooth_sets_volume", "camera_web_access", "screen_night_warmth",
 	// A tablet's keys are Android's: the app hands the daemon no buttons (hardware/buttons.Here).
 	"button_action", "button_mute", "button_volume_down", "button_volume_up",
 	// The hotplug governor is the kernel's, which an app may not write (diag's coresHere).
