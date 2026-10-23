@@ -191,6 +191,10 @@ You need the Tessera add-on installed in Home Assistant.
    Show 8 and 5 by 3 on the Skylight. On a tablet it follows the screen: 3 cells on the short side
    (2 below 600 pixels) and as many on the long side as fit, so 4 by 3 on a 2560x1600 tablet. A
    tablet's first start with Tessera on tells the add-on a Show 8's grid until the screen opens.
+   For more or bigger tiles, pick another grid in **Tessera grid** (the device's **Configuration**
+   card): it offers the grids whose cells stay at least 120 pixels each way, such as 6 by 3 or 8 by 4
+   on the Show 5. *Automatic* goes back to the screen's own. Re-arrange the tiles in Tessera after a
+   change.
 3. Add tiles to its pages and save. **Tile settings** on the tessera device says *Synced* once the
    layout has arrived.
 4. Set **Dashboard** to *Tessera*. The layout is now the dashboard page: swipe in from the left edge

@@ -70,7 +70,7 @@ func TestEntitiesFollowTheSwitch(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Restore(config.Get())
-	want := []string{"tessera_screen", "tessera_tile_settings", "tessera_screen_firmware", "tessera_device_name", "tessera_screen_layout"}
+	want := []string{"tessera_screen", "tessera_grid", "tessera_tile_settings", "tessera_screen_firmware", "tessera_device_name", "tessera_screen_layout"}
 	got := ids(tt.Entities())
 	if len(got) != len(want) {
 		t.Fatalf("on: entities %v, want %v", got, want)

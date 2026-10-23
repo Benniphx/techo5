@@ -5,6 +5,9 @@ package config
 // own with the entities and the action the add-on looks for, and the add-on may send it layouts.
 type Tessera struct {
 	On bool `json:"on,omitempty"`
+	// Grid is the screen's grid as columns by rows ("6x3"), chosen in Home Assistant; empty is the
+	// screen's own (feature/tessera gridFor, gridForSize).
+	Grid string `json:"grid,omitempty"`
 }
 
 type TesseraWriter struct{ st *Store }
@@ -13,4 +16,8 @@ type TesseraWriter struct{ st *Store }
 // not hold would come back the other way after the restart.
 func (w TesseraWriter) On(v bool) error {
 	return w.st.UpdateOrUndo(func(c *Config) { c.Tessera.On = v })
+}
+
+func (w TesseraWriter) Grid(v string) error {
+	return w.st.Update(func(c *Config) { c.Tessera.Grid = v })
 }

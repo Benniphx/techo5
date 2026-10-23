@@ -42,6 +42,8 @@ type Tessera struct {
 	firmware *esphome.TextSensor
 	node     *esphome.TextSensor
 	shape    *esphome.TextSensor
+	// gridSel is the grid the screen tells the add-on: the screen's own, or one chosen (choice.go).
+	gridSel *esphome.Select
 
 	recv *Receiver
 
@@ -103,6 +105,11 @@ func build() *Tessera {
 	t.recv.drawn = func() { Changed.Emit(struct{}{}) }
 
 	t.on.OnCommand = t.set
+	t.gridSel = &esphome.Select{Base: esphome.Base{
+		ObjectID: "tessera_grid", Name: "Tessera grid", Icon: "mdi:grid-large",
+		Category: esphome.CategoryConfig,
+	}}
+	t.gridSel.OnCommand = t.chooseGrid
 	component.Offer(component.Offered{ID: component.DeviceTessera, Suffix: " tessera", Wanted: t.enabled.Load})
 	return t
 }
@@ -132,7 +139,7 @@ func (t *Tessera) Entities() []esphome.Entity {
 	if !t.enabled.Load() {
 		return []esphome.Entity{t.on}
 	}
-	return []esphome.Entity{t.on, t.inbox, t.firmware, t.node, t.shape}
+	return []esphome.Entity{t.on, t.gridSel, t.inbox, t.firmware, t.node, t.shape}
 }
 
 // Actions is screen_message while it is on: the add-on hands every message to it, as
@@ -159,7 +166,8 @@ func (t *Tessera) Restore(cfg config.Config) {
 	if !on {
 		return
 	}
-	g := screenGrid()
+	g := chosen(screenGrid(), cfg.Tessera.Grid)
+	t.showGrid(screenGrid(), cfg.Tessera.Grid)
 	t.recv.takes(capabilities(g))
 	t.firmware.Set(firmwareClaim)
 	t.node.Set(layout.NodeName(cfg.Device.Name, mac()))

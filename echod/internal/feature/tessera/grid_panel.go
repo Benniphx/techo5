@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
@@ -56,13 +57,8 @@ func SetPanelSize(w, h int) {
 		}
 	}
 	t := Get()
-	s := current.Load()
-	if !t.enabled.Load() || s == nil || s.grid == g {
-		return
+	if t.enabled.Load() {
+		t.showGrid(g, config.Get().Tessera.Grid)
 	}
-	slog.Info("tessera: the grid follows the screen", "grid", g.String(), "was", s.grid.String())
-	t.recv.takes(capabilities(g))
-	t.shape.Set(g.String())
-	current.Store(newScreen(t.recv, g))
-	Changed.Emit(struct{}{})
+	t.regrid(chosen(g, config.Get().Tessera.Grid), "the grid follows the screen")
 }
