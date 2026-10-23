@@ -1263,6 +1263,59 @@ data:
   sound: "on"
 ```
 
+## Buttons on a camera's view
+
+In YAML, refer to this action as `esphome.<node>_home_camera_buttons`. On devices with a screen,
+not the Dot.
+
+Puts up to four buttons on one camera's view that each run a Home Assistant action, such as
+**Open gate** or **Unlock**. Each call sets that camera's whole set, in the order given, and replaces
+what it had. The same buttons are on the setup page under Connections → Camera buttons. See
+[Camera buttons](setup.md#camera-buttons).
+
+> **Good to know**
+>
+> Home Assistant runs the buttons' actions as the device's own, so they need **Allow the device to
+> perform Home Assistant actions** turned on for the device in its ESPHome integration's options.
+> Without it Home Assistant refuses them and says so only in its own log; a button whose device has
+> no Home Assistant connected says so on the button for a few seconds.
+>
+> Every button asks for a second tap: the first lights it up with "Tap again: …", and a second tap
+> within 4 seconds runs it. A tap on a button never closes the view or starts Talk.
+
+### camera (Required)
+
+*string*
+
+The camera's entity as the device's camera list has it: `camera.front_door` for one of Home
+Assistant's, `go2rtc:name` for a go2rtc stream, `reolink:0` for a camera on a Reolink recorder, or
+`local` for the device's own.
+
+### buttons (Can be empty)
+
+*string*
+
+The buttons, split by commas or new lines, each `Label=domain.service`, or
+`Label=domain.service:domain.object` to run the action on an entity. A label is one line of 24
+characters at most; the action and the entity are Home Assistant ids (lowercase letters, digits and
+underscores). A list with any bad button is refused whole, with the reason. Empty (`""`) takes the
+camera's buttons off.
+
+```yaml
+action: esphome.office_home_camera_buttons
+data:
+  camera: camera.front_door
+  buttons: Unlock=lock.unlock:lock.front_door, Open gate=script.open_gate
+```
+
+```yaml
+# No buttons on the front door's view.
+action: esphome.office_home_camera_buttons
+data:
+  camera: camera.front_door
+  buttons: ""
+```
+
 ## Show a notification
 
 In YAML, refer to this action as `esphome.<node>_notify`.

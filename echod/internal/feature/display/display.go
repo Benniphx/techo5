@@ -114,6 +114,9 @@ const (
 type Display struct {
 	boost boost // the cores held while the screen is in use (boost.go)
 
+	// camButtons is the camera page's action buttons between taps: the one armed (camera_buttons.go).
+	camButtons cameraButtons
+
 	// holdsMu makes reading whether holds are wanted and telling the touchscreen one step (applyHolds).
 	holdsMu sync.Mutex
 
@@ -926,8 +929,9 @@ var (
 
 // cameraTap is a tap on the camera page for view v: it takes the view down, unless it lands on the
 // sound's control — that silences what the camera is saying and leaves the view up, which is the whole
-// use of it at a doorbell — or on Talk, which starts or ends talking through the camera. By day and on
-// the night light both come here, so a hand reaching for Talk in the dark does not lose the view.
+// use of it at a doorbell — or on Talk, which starts or ends talking through the camera, or on one of
+// the view's action buttons, which arms it or, armed, runs it. By day and on the night light all come
+// here, so a hand reaching for Talk in the dark does not lose the view.
 func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
 	if len(v.Grid) > 0 {
 		// The grid: a camera tapped goes up on its own, live where it can be; the strips close it.
@@ -938,7 +942,10 @@ func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
 		}
 		return
 	}
-	if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
+	if i := d.cameraButtonAt(image.Pt(g.X, g.Y)); i >= 0 {
+		d.camButtons.tap(v.Entity, i, cameraButtonsFor(v), time.Now())
+		d.wake()
+	} else if d.r != nil && d.r.cameraTalkTapped(image.Pt(g.X, g.Y)) {
 		go toggleTalk(v.Entity)
 	} else if d.r != nil && d.r.cameraSoundTapped(image.Pt(g.X, g.Y)) {
 		// Silence it, or ask for it again: the control is a toggle, and the view stays either way. Inline,
@@ -948,6 +955,14 @@ func (d *Display) cameraTap(g touch.Gesture, v home.CameraView) {
 		// Off the touch goroutine: closing a notification's picture ends in a network write.
 		go closeCamera(v)
 	}
+}
+
+// cameraButtonAt is which of the camera page's action buttons, as last drawn, p is on, or -1.
+func (d *Display) cameraButtonAt(p image.Point) int {
+	if d.r == nil {
+		return -1
+	}
+	return d.r.cameraButtonTapped(p)
 }
 
 // liftNightLight brings the screen back from the night light as by day, until the room has been quiet
@@ -2621,6 +2636,7 @@ func (d *Display) frame() (next time.Duration) {
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	if s.showCamera {
 		s.talkOffered, s.talk = talkback.Offered(s.camera.Entity), talkback.Get().State()
+		s.camButtons = d.camButtons.faces(s.camera.Entity, cameraButtonsFor(s.camera), now)
 	}
 	// Whether the idle screen wants to be what is playing. It is asked even when the page has been put
 	// away, because the track is what brings it back, so the radio is read either way.

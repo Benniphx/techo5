@@ -129,6 +129,47 @@ func (r *roundRenderer) cameraView(s roundScene) {
 		r.line(float64(b.Min.X), float64(b.Min.Y+b.Dy()/2), float64(b.Max.X), float64(b.Min.Y+b.Dy()/2), float64(b.Dy()), color.RGBA{0, 0, 0, 150})
 		r.centered(r.label, label, b.Min.Y+b.Dy()/2+8, colText)
 	}
+	r.cameraButtons(s)
+}
+
+// cameraButtons draws the view's action buttons as bars like Talk's, stacked up the face from just above
+// the bars at its foot (or from the sound's place when there are none), the first lowest, where a thumb
+// reaches first. Each is as wide as what it says, within the circle.
+func (r *roundRenderer) cameraButtons(s roundScene) {
+	if len(s.camButtons) == 0 {
+		return
+	}
+	const barH, barMin, barMax = 34, 96, 300
+	top := cameraSoundBox(0).Max.Y + talkGap // nothing at the foot: the first goes in the sound's place
+	if s.cameraSound || s.camera.Caption != nil {
+		top = cameraSoundBox(0).Min.Y // the sound's bar, or the "tap to close" in its place
+	}
+	if !r.drawnTalk.Empty() {
+		top = min(top, r.drawnTalk.Min.Y)
+	}
+	at := make([]image.Rectangle, len(s.camButtons))
+	for i, f := range s.camButtons {
+		f.label = clip(r.label, r, f.label, barMax-24)
+		w := min(max(r.width(r.label, f.label)+24, barMin), barMax)
+		bottom := top - talkGap
+		b := image.Rect(center-w/2, bottom-barH, center+w/2, bottom)
+		r.cameraButton(b, f)
+		at[i], top = b, b.Min.Y
+	}
+	r.drawnButtons = at
+}
+
+// cameraButtonTapped is which of the action buttons drawn in the frame last drawn a tap at x, y is on,
+// or -1. Each is grown a little, as Talk is, less than half the gap between them.
+func (r *roundRenderer) cameraButtonTapped(x, y int) int {
+	r.zmu.Lock()
+	defer r.zmu.Unlock()
+	for i, b := range r.cameraButtonsAt {
+		if !b.Empty() && image.Pt(x, y).In(b.Inset(-4)) {
+			return i
+		}
+	}
+	return -1
 }
 
 // talkGap is between the Talk bar and the sound's below it: more than the two taps' margins together
@@ -151,7 +192,7 @@ func (r *roundRenderer) setCameraSoundAt(b image.Rectangle) { r.drawnSound = b }
 // publishCameraTaps makes the finished frame's camera controls the ones a tap is matched against.
 func (r *roundRenderer) publishCameraTaps() {
 	r.zmu.Lock()
-	r.cameraSoundAt, r.cameraTalkAt = r.drawnSound, r.drawnTalk
+	r.cameraSoundAt, r.cameraTalkAt, r.cameraButtonsAt = r.drawnSound, r.drawnTalk, r.drawnButtons
 	r.zmu.Unlock()
 }
 
@@ -169,6 +210,7 @@ func (r *roundRenderer) cameraTalkTapped(x, y int) bool {
 func (r *roundRenderer) clearCameraSoundTap() {
 	r.setCameraSoundAt(image.Rectangle{})
 	r.setCameraTalkAt(image.Rectangle{})
+	r.drawnButtons = nil
 }
 
 // cameraSoundTapped reports whether a tap at x, y is on the sound control drawn in the frame last

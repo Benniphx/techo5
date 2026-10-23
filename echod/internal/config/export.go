@@ -357,6 +357,8 @@ func KeepOwn(c *Config, from Config) {
 	// What has the microphones or the camera take in the room: listening in, sending it to Home
 	// Assistant, keeping clips of it, watching for people.
 	c.Home.DropIn = from.Home.DropIn
+	// Buttons on a camera's view can open gates and unlock doors: never brought in by a settings file.
+	c.Home.CameraButtons = from.Home.CameraButtons
 	// What may listen during a call or end one by voice: the wake word let through, its answer sent up
 	// the call, the far end played under it, and the hang-up word.
 	c.Home.CallWake, c.Home.CallReplies, c.Home.CallUnderlay = from.Home.CallWake, from.Home.CallReplies, from.Home.CallUnderlay

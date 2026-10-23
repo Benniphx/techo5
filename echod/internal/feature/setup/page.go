@@ -447,6 +447,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		reolinkSection(w, token)
 		go2rtcSection(w, token)
 		cameraListSection(w, token)
+		cameraButtonsSection(w, token)
 		doorbellSection(w, token)
 		if layout.HasMicrophone() {
 			talkBackSection(w, token) // the microphones to a camera's speaker

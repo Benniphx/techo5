@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"slices"
 	"strings"
 )
@@ -58,6 +59,11 @@ type Home struct {
 	// CameraOrder is the camera list's order, by entity, chosen on the setup page: these first, in this
 	// order, and the rest after them in the usual order. Empty is the usual order.
 	CameraOrder []string `json:"camera_order,omitempty"`
+	// CameraButtons are the buttons on a camera's view that run a Home Assistant action ("Open gate",
+	// "Unlock"), by the camera's entity as the list has it ("camera.front_door", "go2rtc:porch",
+	// "reolink:0", "local"): four at most for a camera, in the order drawn (home_camera_buttons, the
+	// setup page).
+	CameraButtons map[string][]CameraButton `json:"camera_buttons,omitempty"`
 
 	// Reolink is a Reolink NVR, Home Hub or camera read directly, for a device with no Home Assistant
 	// to proxy its cameras (feature/home/reolink.go). Its cameras join the list.
@@ -199,6 +205,14 @@ func (h Home) NoHACameras() bool { return h.CamerasChosen && len(h.Cameras) == 0
 type Camera struct {
 	Entity string `json:"entity"`
 	Name   string `json:"name"`
+}
+
+// CameraButton is one button on a camera's view: what it says, and the Home Assistant action a tap runs
+// ("script.open_gate", or "lock.unlock" on "lock.front_door").
+type CameraButton struct {
+	Label   string `json:"label"`
+	Service string `json:"service"`
+	Entity  string `json:"entity,omitempty"`
 }
 
 // Radio is how the screen's radio page is wired to the house's own radio setup.
@@ -418,6 +432,42 @@ func (w HomeWriter) NoCameras() error {
 // CameraList sets whether the device's own camera is left off the camera list, and the list's order.
 func (w HomeWriter) CameraList(ownLeftOut bool, order []string) error {
 	return w.st.Update(func(c *Config) { c.Home.OwnCameraLeftOut, c.Home.CameraOrder = ownLeftOut, order })
+}
+
+// CameraButtons sets the buttons on camera's view; none takes them off.
+func (w HomeWriter) CameraButtons(camera string, buttons []CameraButton) error {
+	return w.st.Update(func(c *Config) {
+		m := maps.Clone(c.Home.CameraButtons)
+		if len(buttons) == 0 {
+			delete(m, camera)
+		} else {
+			if m == nil {
+				m = map[string][]CameraButton{}
+			}
+			m[camera] = slices.Clone(buttons)
+		}
+		if len(m) == 0 {
+			m = nil
+		}
+		c.Home.CameraButtons = m
+	})
+}
+
+// AllCameraButtons sets every camera's buttons at once (the setup page): a camera left out has none.
+func (w HomeWriter) AllCameraButtons(all map[string][]CameraButton) error {
+	return w.st.Update(func(c *Config) {
+		var m map[string][]CameraButton
+		for cam, buttons := range all {
+			if len(buttons) == 0 {
+				continue
+			}
+			if m == nil {
+				m = map[string][]CameraButton{}
+			}
+			m[cam] = slices.Clone(buttons)
+		}
+		c.Home.CameraButtons = m
+	})
 }
 
 func (w HomeWriter) Slideshow(s Slideshow) error {

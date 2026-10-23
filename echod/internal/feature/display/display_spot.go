@@ -127,6 +127,9 @@ const (
 )
 
 type Display struct {
+	// camButtons is the camera page's action buttons between taps: the one armed (camera_buttons.go).
+	camButtons cameraButtons
+
 	light *esphome.Light
 	auto  *esphome.Switch
 	// power is Screen power, the screen's on and off as a switch, and roomSw Screen ignores room light
@@ -844,7 +847,14 @@ func (d *Display) gesture(g touch.Gesture) {
 		case touch.Tap:
 			// The sound's control silences the sound and leaves the view up, which is the whole use of
 			// it at a doorbell; anywhere else on the face takes the view down as it always has. Talk
-			// starts or ends talking through the camera.
+			// starts or ends talking through the camera, and an action button arms or runs its action.
+			if d.r != nil {
+				if i := d.r.cameraButtonTapped(g.X, g.Y); i >= 0 {
+					d.camButtons.tap(v.Entity, i, cameraButtonsFor(v), time.Now())
+					d.wake()
+					return
+				}
+			}
 			if d.r != nil && d.r.cameraSoundTapped(g.X, g.Y) {
 				// Silence it, or ask for it again: the control is a toggle, and the view stays either way.
 				go home.Get().ToggleCameraSound()
@@ -1560,6 +1570,7 @@ func (d *Display) frame() (next time.Duration) {
 	s.cameraSound, s.cameraSoundLive = home.Get().CameraSoundOn(), home.Get().CameraSoundLive()
 	if s.showCamera {
 		s.talkOffered, s.talk = talkback.Offered(s.camera.Entity), talkback.Get().State()
+		s.camButtons = d.camButtons.faces(s.camera.Entity, cameraButtonsFor(s.camera), now)
 	}
 	s.cameraLive = camera.Get().Running()
 	bt := btaudio.Get().State()

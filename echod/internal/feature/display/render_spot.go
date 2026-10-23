@@ -126,6 +126,9 @@ type roundScene struct {
 	talkOffered bool
 	talk        talkback.State
 
+	// camButtons are that view's action buttons as this frame draws them (camera_buttons.go).
+	camButtons []camButtonFace
+
 	btPairing bool
 
 	// call is the phone: while one rings, is placed or is up, its face is over everything. atDoor is
@@ -251,9 +254,13 @@ type roundRenderer struct {
 	// cameraTalkAt is the same for the Talk control.
 	cameraTalkAt image.Rectangle
 
-	// drawnSound and drawnTalk are those two in the frame being drawn, published when it is done, so
-	// that a tap while a frame draws never finds them missing (see the Show's renderer).
+	// cameraButtonsAt is the same for the action buttons, in their order.
+	cameraButtonsAt []image.Rectangle
+
+	// drawnSound, drawnTalk and drawnButtons are those in the frame being drawn, published when it is
+	// done, so that a tap while a frame draws never finds them missing (see the Show's renderer).
 	drawnSound, drawnTalk image.Rectangle
+	drawnButtons          []image.Rectangle
 
 	// styleFaces are the clock styles' faces, made as they are first needed (render_styles_spot.go).
 	styleFaces map[spotFaceKey]font.Face

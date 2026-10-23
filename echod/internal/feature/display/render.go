@@ -192,6 +192,9 @@ type scene struct {
 	talkOffered bool
 	talk        talkback.State
 
+	// camButtons are that view's action buttons as this frame draws them (camera_buttons.go).
+	camButtons []camButtonFace
+
 	// callees are who the drawer's Call tab offers; callButton is the clock's Call button showing.
 	callees    []phone.Callee
 	callButton bool
@@ -351,11 +354,15 @@ type renderer struct {
 	// cameraTalkAt is the same for the camera page's Talk control.
 	cameraTalkAt image.Rectangle
 
-	// drawnSound and drawnTalk are those two in the frame being drawn, by the drawing goroutine alone;
-	// they become cameraSoundAt and cameraTalkAt when the frame is done. Clearing the published ones at
-	// the start of a frame would leave a gap, while the frame draws, in which a tap on Talk finds
-	// nothing there and closes the view.
+	// cameraButtonsAt is the same for the camera page's action buttons, in their order.
+	cameraButtonsAt []image.Rectangle
+
+	// drawnSound, drawnTalk and drawnButtons are those in the frame being drawn, by the drawing
+	// goroutine alone; they become cameraSoundAt, cameraTalkAt and cameraButtonsAt when the frame is
+	// done. Clearing the published ones at the start of a frame would leave a gap, while the frame
+	// draws, in which a tap on Talk finds nothing there and closes the view.
 	drawnSound, drawnTalk image.Rectangle
+	drawnButtons          []image.Rectangle
 
 	// badgeAt, pillsAt and pillsIdx are where the alert badge and the rain map's alert pills were drawn
 	// in the frame last drawn, and the alert each pill opens, for a tap there.
@@ -525,7 +532,7 @@ func (r *renderer) draw(s scene) {
 	r.setNextAt(image.Rectangle{})
 	r.setNextCard(image.Rectangle{}, time.Time{})
 	// The camera page's controls are tappable only in a frame that draws them, from when it is done.
-	r.drawnSound, r.drawnTalk = image.Rectangle{}, image.Rectangle{}
+	r.drawnSound, r.drawnTalk, r.drawnButtons = image.Rectangle{}, image.Rectangle{}, nil
 	defer r.publishCameraTaps()
 	r.setPopupAt(image.Rectangle{})
 	r.clearAlertTaps()
@@ -620,7 +627,7 @@ func (r *renderer) draw(s scene) {
 		r.cameraView(s, s.camera)
 		if s.showVolume {
 			// The bar covers the page's controls: what cannot be seen cannot be tapped.
-			r.drawnTalk, r.drawnSound = image.Rectangle{}, image.Rectangle{}
+			r.drawnTalk, r.drawnSound, r.drawnButtons = image.Rectangle{}, image.Rectangle{}, nil
 			r.volumeBar(s)
 		}
 		return
@@ -1016,8 +1023,21 @@ func (r *renderer) setCameraTalkAt(b image.Rectangle)  { r.drawnTalk = b }
 // publishCameraTaps makes the finished frame's camera controls the ones a tap is matched against.
 func (r *renderer) publishCameraTaps() {
 	r.weatherMu.Lock()
-	r.cameraSoundAt, r.cameraTalkAt = r.drawnSound, r.drawnTalk
+	r.cameraSoundAt, r.cameraTalkAt, r.cameraButtonsAt = r.drawnSound, r.drawnTalk, r.drawnButtons
 	r.weatherMu.Unlock()
+}
+
+// cameraButtonTapped is which of the camera page's action buttons, as last drawn, a tap at p landed on,
+// or -1 for none. A button takes a finger a little outside it, less than half the gap to the next.
+func (r *renderer) cameraButtonTapped(p image.Point) int {
+	r.weatherMu.Lock()
+	defer r.weatherMu.Unlock()
+	for i, b := range r.cameraButtonsAt {
+		if !b.Empty() && p.In(b.Inset(-r.s(4))) {
+			return i
+		}
+	}
+	return -1
 }
 
 // cameraTalkTapped is whether a tap at p landed on the camera page's Talk control, as last drawn.
