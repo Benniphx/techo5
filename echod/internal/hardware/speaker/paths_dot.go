@@ -295,4 +295,5 @@ const (
 	PlaybackDevice = 23
 	hwRate         = Rate
 	hwTrimDB       = 0.0
+	hwBits         = Bits
 )

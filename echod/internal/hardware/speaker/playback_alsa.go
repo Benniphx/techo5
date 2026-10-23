@@ -47,12 +47,17 @@ func openDevice() (playback, *alsa.Mixer, *os.File, bool, error) {
 	// before they are on (openSequence).
 	applyTo(m, openSequence)
 
-	// The ring is the same length of time at whatever rate the card runs (hwRate).
+	// The ring is the same length of time at whatever rate the card runs (hwRate), in samples as wide
+	// as the card is sent (hwBits).
+	format := alsa.FormatS16_LE
+	if hwBits == 32 {
+		format = alsa.FormatS32_LE
+	}
 	pb, err := alsa.OpenPlayback(card, device, alsa.Config{
 		Channels:   Channels,
 		Rate:       hwRate,
-		Format:     alsa.FormatS16_LE,
-		Bits:       Bits,
+		Format:     format,
+		Bits:       hwBits,
 		PeriodSize: period * hwRate / Rate,
 		Periods:    periods,
 		StartFull:  startFull,

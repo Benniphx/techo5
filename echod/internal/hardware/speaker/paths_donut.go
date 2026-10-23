@@ -35,11 +35,10 @@ type kctl struct {
 }
 
 // The Dot 3 plays out of the MT8516's AFE two ways, both from the AFE's O03/O04: over I2S to a TI
-// TAS2770 amplifier on the speaker, or through the SoC's own codec to the jack. TECHO5 feeds O03/O04
-// from DL2 (I07/I08), not DL1 (I05/I06) as Fire OS does: DL1's ring is in the AFE's SRAM up to 36 KB,
-// and zeroing it at stream start faults and panics this kernel (mt8167-afe-pcm.c max_sram_size; seen
-// three times on unit 1, 2026-10-23), while DL2's is always in DRAM. Both back ends stay connected; the
-// path picks the output by muting the other: the amplifier's digital volume (PCM Playback Volume) is at
+// TAS2770 amplifier on the speaker, or through the SoC's own codec to the jack, fed from DL1 (I05/I06)
+// as Fire OS feeds them. (DL2, I07/I08, reaches the jack's codec and the echo reference but not the
+// amplifier: on unit 1 a tone on it was quieter than the room.) Both back ends stay connected; the path
+// picks the output by muting the other: the amplifier's digital volume (PCM Playback Volume) is at
 // full on the speaker's path and zero on the jack's, which is how Fire OS keeps the speaker quiet while
 // the jack plays, and the jack's mux is open on the speaker's. The amplifier's own level is DAC
 // Playback Volume, 16 of 0 to 20 from boot, 11 to 21 dBV full scale at 0.5 dB a step. Found by
@@ -47,10 +46,10 @@ type kctl struct {
 var initSequence = []kctl{
 	{name: "LINEOUT Ext Amp Switch", level: 0},
 	{name: "HP Ext Amp Switch", level: 0},
-	{name: "O03 I05 Switch", level: 0},
-	{name: "O04 I06 Switch", level: 0},
-	{name: "O03 I07 Switch", level: 1},
-	{name: "O04 I08 Switch", level: 1},
+	{name: "O03 I05 Switch", level: 1},
+	{name: "O04 I06 Switch", level: 1},
+	{name: "O03 I07 Switch", level: 0},
+	{name: "O04 I08 Switch", level: 0},
 	{name: "INT ADDA O03_O04 Switch", level: 1},
 	{name: "I2S O03_O04 Switch", level: 1},
 }
@@ -165,10 +164,16 @@ func gainForStep(out Output, step int) float32 {
 	return float32(math.Pow(10, db/20))
 }
 
-// The playback ring, in DRAM on DL2 at any size (initSequence).
+// The playback ring: over 36 KB, always, and inside the quiet margin. The MT8516 AFE driver puts a DL1
+// ring of 36 KB or less in its internal SRAM (mt8167-afe-pcm.c, max_sram_size), mapped as device
+// memory, and zeroing it at the start of the stream (a memset that uses DC ZVA) takes an alignment
+// fault and panics the kernel: a 4096-frame 16-bit ring (16 KB) did exactly that on unit 1, 2026-10-23,
+// three times. The ring also has to stay under HardwareTail (150 ms), and at 48 kHz 16-bit both cannot
+// hold, so the card is sent 32-bit samples (hwBits): six periods of 1024 frames are 128 ms and 48 KB.
+// (96 kHz would do it too, but the jack's codec refuses 96 kHz.)
 const (
 	period  = 1024
-	periods = 4
+	periods = 6
 )
 
 // DRAMHold is unused here.
@@ -181,11 +186,11 @@ const startFull = false
 // the software reference (echoref.InUse), which this player then feeds.
 const softRef = true
 
-// openSequence connects DL2 to both back ends before the device opens: DPCM refuses to prepare a
-// front end with none enabled ("ASoC: no backend DAIs enabled", EINVAL).
+// openSequence connects DL1 to both back ends before the device opens: DPCM refuses to prepare a
+// front end with none enabled ("ASoC: no backend DAIs enabled for DL1 Playback", EINVAL).
 var openSequence = []kctl{
-	{name: "O03 I07 Switch", level: 1},
-	{name: "O04 I08 Switch", level: 1},
+	{name: "O03 I05 Switch", level: 1},
+	{name: "O04 I06 Switch", level: 1},
 	{name: "INT ADDA O03_O04 Switch", level: 1},
 	{name: "I2S O03_O04 Switch", level: 1},
 }
@@ -222,9 +227,11 @@ const HasJack = true
 // HasBoth is whether the speaker and the jack can play at once: not tried, so not offered.
 const HasBoth = false
 
-// PlaybackDevice is MultiMedia2_PLayback (DL2), which takes Rate as it is.
+// PlaybackDevice is DL1_Playback, at Rate, sent 32-bit samples so its ring is in DRAM (period, above).
+// The amplifier and the jack's codec both take S32_LE at 48 kHz (tried on the unit).
 const (
-	PlaybackDevice = 8
+	PlaybackDevice = 6
 	hwRate         = Rate
 	hwTrimDB       = 0.0
+	hwBits         = 32
 )

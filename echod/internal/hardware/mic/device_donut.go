@@ -10,9 +10,8 @@ import (
 // ADC_B; the card lists ADC_C and ADC_D as well, muted), on TDM into the MT8516's AFE, TDM_Capture
 // (hw:0,1). It opens at 16 kHz, S32_LE, four channels, each converter's 24 bits left-aligned in the
 // 32 (the low byte is always zero; read on unit 1, 2026-10-23). The playback reference is not in that
-// stream: DL1_AWB_Record (hw:0,7) records what the AFE's O05/O06 take, here I07/I08, DL2, which is
-// what the speaker plays (hardware/speaker/paths_donut.go says why DL2), as on the Show 8 2nd gen's
-// mainline card. So the capture is athena's paired one (athena.go): the two
+// stream: DL1_AWB_Record (hw:0,7) records what DL1 plays once the AFE's O05/O06 take I05/I06, as on
+// the Show 8 2nd gen's mainline card. So the capture is athena's paired one (athena.go): the two
 // devices read as one frame in the 1st gen Show 8's layout, the microphones then the reference, and
 // with no reference device the software reference (lib/echoref).
 //
@@ -53,14 +52,14 @@ var donutControls = []athenaControl{
 	{"AIN Mux", 0},
 }
 
-// donutRefControls are the AFE interconnect from DL2's two channels into AWB's (O05/O06 from I07/I08),
-// the path DL1_AWB_Record records whatever its name says; DL1's (I05/I06) are let go, as nothing plays
-// there. Recorded on the unit, 2026-10-23: a tone on DL2 read at the level it read on DL1.
+// donutRefControls are the AFE interconnect from DL1's two channels into AWB's (O05/O06 from I05/I06),
+// the path DL1_AWB_Record records; Fire OS's mixer_paths.xml sets the same at start. Nothing plays on
+// DL2, so its (I07/I08) are let go.
 var donutRefControls = []athenaControl{
-	{"O05 I05 Switch", 0},
-	{"O06 I06 Switch", 0},
-	{"O05 I07 Switch", 1},
-	{"O06 I08 Switch", 1},
+	{"O05 I05 Switch", 1},
+	{"O06 I06 Switch", 1},
+	{"O05 I07 Switch", 0},
+	{"O06 I08 Switch", 0},
 }
 
 var donutKernel = athenaKernel{

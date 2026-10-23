@@ -685,7 +685,7 @@ func (p *Player) Run(ctx context.Context) error {
 
 	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go).
 	var up *audio.Upsampler
-	var hw []byte
+	var hw, wide []byte
 	if hwRate != Rate || hwTrimDB != 0 {
 		up = audio.NewUpsampler(hwRate/Rate, upsampleTaps, Channels, math.Pow(10, hwTrimDB/20))
 		hw = make([]byte, 0, len(buf)*hwRate/Rate)
@@ -709,6 +709,10 @@ func (p *Player) Run(ctx context.Context) error {
 		if up != nil {
 			hw = up.S16LE(to, hw[:0])
 			to = hw
+		}
+		if hwBits == 32 {
+			wide = widenS16(to, wide[:0])
+			to = wide
 		}
 		if err := p.send(ctx, pb, to); err != nil {
 			if ctx.Err() != nil {
@@ -739,6 +743,15 @@ func (p *Player) Run(ctx context.Context) error {
 			p.ring.Store(nil)
 		}
 	}
+}
+
+// widenS16 appends in, S16_LE samples, to out as S32_LE ones: each sample in the top two bytes, the
+// low two zero, so full scale stays full scale. For a card that is sent 32-bit samples (hwBits).
+func widenS16(in, out []byte) []byte {
+	for i := 0; i+1 < len(in); i += 2 {
+		out = append(out, 0, 0, in[i], in[i+1])
+	}
+	return out
 }
 
 // send writes one period, putting the same buffer back after an underrun rather than refilling. fill

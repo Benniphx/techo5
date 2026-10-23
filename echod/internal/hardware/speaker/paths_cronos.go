@@ -220,6 +220,9 @@ var hwTrimDB = onAthena(athenaTrimDB, 0)
 
 const athenaTrimDB = 0.0
 
+// hwBits is the sample width the card is sent: Bits, as everything up to it works.
+const hwBits = Bits
+
 // softRef is whether the speaker may feed the software echo reference (lib/echoref): only athena on
 // the mainline kernel, and there only while the microphones use it (echoref.InUse), which is when the
 // card's own DL1_AWB_Record did not open (mic/athena.go).

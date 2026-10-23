@@ -256,4 +256,5 @@ const softRef = false
 const (
 	hwRate   = Rate
 	hwTrimDB = 0.0
+	hwBits   = Bits
 )
