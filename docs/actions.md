@@ -625,8 +625,10 @@ actions:
           {%- endif -%}
         {%- endfor -%}
         {{- ns.n -}}
-      h: "{{ nums[0] | int(-1) if nums else -1 }}"
-      m: "{{ nums[1] | int(0) if nums | count > 1 else 0 }}"
+      # Speech-to-text can write 6:45 as "645": one number past 99 is the hour and the minutes.
+      n: "{{ [nums[0] // 100, nums[0] % 100] + nums[1:] if nums and nums[0] >= 100 else nums }}"
+      h: "{{ n[0] | int(-1) if n else -1 }}"
+      m: "{{ n[1] | int(0) if n | count > 1 else 0 }}"
       hh: "{{ h + 12 if pm and h < 12 else (0 if am and h == 12 else h) }}"
   - choose:
       - conditions: "{{ not techo5 }}"
@@ -686,8 +688,10 @@ actions:
           {%- endif -%}
         {%- endfor -%}
         {{- ns.n -}}
-      h: "{{ nums[0] | int(-1) if nums else -1 }}"
-      m: "{{ nums[1] | int(0) if nums | count > 1 else 0 }}"
+      # Speech-to-text can write 6:45 as "645": one number past 99 is the hour and the minutes.
+      n: "{{ [nums[0] // 100, nums[0] % 100] + nums[1:] if nums and nums[0] >= 100 else nums }}"
+      h: "{{ n[0] | int(-1) if n else -1 }}"
+      m: "{{ n[1] | int(0) if n | count > 1 else 0 }}"
       hh: "{{ h + 12 if pm and h < 12 else (0 if am and h == 12 else h) }}"
       # With no AM or PM, "the 6 alarm" matches 6:00 AM and 6:00 PM.
       times: >-
