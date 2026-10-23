@@ -1,4 +1,4 @@
-//go:build dot && !donut
+//go:build dot
 
 package update
 
