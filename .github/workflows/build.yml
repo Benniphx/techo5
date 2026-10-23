@@ -82,6 +82,12 @@ jobs:
           GOOS=windows go vet ./cmd/techo5-deck
           GOOS=darwin go vet ./cmd/techo5-deck
 
+      # The installers, rehearsed against stand-ins for adb, fastboot and the unit's console: a fresh
+      # install's paths are the ones least often run on a real unit (#257).
+      - name: Installer rehearsals
+        working-directory: tools
+        run: python3 -m unittest test_install_show test_install_athena test_install_skylight
+
       - name: Build
         working-directory: echod
         env:
