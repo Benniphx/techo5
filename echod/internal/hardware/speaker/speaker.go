@@ -745,11 +745,17 @@ func (p *Player) Run(ctx context.Context) error {
 	}
 }
 
-// widenS16 appends in, S16_LE samples, to out as S32_LE ones: each sample in the top two bytes, the
-// low two zero, so full scale stays full scale. For a card that is sent 32-bit samples (hwBits).
+// widenS16 appends in, S16_LE samples, to out as S24_LE ones: 24 bits in the low three bytes of a
+// 32-bit container, the 16 at the top of the 24 and the fourth byte the sign, so full scale stays full
+// scale. For a card that is sent 32-bit containers (hwBits). S24_LE rather than S32_LE because the Echo
+// Dot 3's TAS2770 plays nothing at all of S32_LE, while S24_LE plays (unit 1, 2026-10-23).
 func widenS16(in, out []byte) []byte {
 	for i := 0; i+1 < len(in); i += 2 {
-		out = append(out, 0, 0, in[i], in[i+1])
+		sign := byte(0)
+		if in[i+1]&0x80 != 0 {
+			sign = 0xff
+		}
+		out = append(out, 0, in[i], in[i+1], sign)
 	}
 	return out
 }

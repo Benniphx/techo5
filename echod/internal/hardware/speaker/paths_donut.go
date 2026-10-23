@@ -169,7 +169,8 @@ func gainForStep(out Output, step int) float32 {
 // memory, and zeroing it at the start of the stream (a memset that uses DC ZVA) takes an alignment
 // fault and panics the kernel: a 4096-frame 16-bit ring (16 KB) did exactly that on unit 1, 2026-10-23,
 // three times. The ring also has to stay under HardwareTail (150 ms), and at 48 kHz 16-bit both cannot
-// hold, so the card is sent 32-bit samples (hwBits): six periods of 1024 frames are 128 ms and 48 KB.
+// hold, so the card is sent 32-bit containers (hwBits, S24_LE): six periods of 1024 frames are 128 ms
+// and 48 KB.
 // (96 kHz would do it too, but the jack's codec refuses 96 kHz.)
 const (
 	period  = 1024
@@ -227,8 +228,8 @@ const HasJack = true
 // HasBoth is whether the speaker and the jack can play at once: not tried, so not offered.
 const HasBoth = false
 
-// PlaybackDevice is DL1_Playback, at Rate, sent 32-bit samples so its ring is in DRAM (period, above).
-// The amplifier and the jack's codec both take S32_LE at 48 kHz (tried on the unit).
+// PlaybackDevice is DL1_Playback, at Rate, sent 32-bit containers so its ring is in DRAM (period,
+// above). S24_LE: the amplifier plays nothing of S32_LE, though it takes it (unit 1, 2026-10-23).
 const (
 	PlaybackDevice = 6
 	hwRate         = Rate
