@@ -70,6 +70,10 @@ var donutKernel = athenaKernel{
 	softRef:     true,
 	micRates:    []int{Rate},
 	refRate:     Rate,
+	// 80 ms rings: athena's 30 ms overran here at start and after a reply (unit 1, 2026-10-23). Small
+	// at 16 kHz either way (20 KB and 5 KB), and capture has none of DL1's SRAM trouble.
+	micPeriods: 8,
+	refPeriods: 8,
 }
 
 // boardKernel is the Dot 3's capture, which athenaRunning hands the paired capture.

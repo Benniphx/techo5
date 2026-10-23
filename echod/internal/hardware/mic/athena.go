@@ -171,6 +171,9 @@ type athenaKernel struct {
 	refRate int
 	// boostDB is added to the microphones after conversion (athenaMicBoostDB on athena).
 	boostDB float64
+	// micPeriods and refPeriods are the rings' lengths in 10 ms periods; zero is athena's
+	// (athenaMicPeriods, athenaRefPeriods), held to what Amazon's driver set aside.
+	micPeriods, refPeriods int
 }
 
 type athenaControl = struct {
@@ -350,7 +353,7 @@ func openAthena() (capture, error) {
 			Format:     alsa.FormatS32_LE,
 			Bits:       athenaMicBits,
 			PeriodSize: rate / 100,
-			Periods:    athenaMicPeriods,
+			Periods:    periodsOr(k.micPeriods, athenaMicPeriods),
 		})
 		if err == nil {
 			micRate = rate
@@ -413,13 +416,21 @@ func openAthenaRef(k *athenaKernel) *alsa.Capture {
 		Format:     alsa.FormatS16_LE,
 		Bits:       athenaRefBits,
 		PeriodSize: k.refRate / 100,
-		Periods:    athenaRefPeriods,
+		Periods:    periodsOr(k.refPeriods, athenaRefPeriods),
 	})
 	if err != nil {
 		slog.Warn("athena: no playback reference", "device", k.refDevice, "err", err)
 		return nil
 	}
 	return ref
+}
+
+// periodsOr is n, or athena's own count where the kernel sets none.
+func periodsOr(n, athena int) int {
+	if n > 0 {
+		return n
+	}
+	return athena
 }
 
 // athenaPCMIs is whether capture device dev of the card is the PCM named name: the kernel lists its
