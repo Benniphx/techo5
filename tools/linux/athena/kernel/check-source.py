@@ -28,7 +28,7 @@ MARKERS = {
     "drivers/phy/mediatek/phy-mtk-mipi-csi-0-5.c": b"athena: camera",
     "drivers/media/platform/mediatek/isp/mtk_camsv_hw.c": b"athena: no error interrupts",
     "drivers/gpu/drm/panel/Makefile": b"athena: panel select",
-    "drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c": b"athena: reset deasserted at probe",
+    "drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c": (b"athena: reset deasserted at probe", b"athena: boe-new link"),
 }
 # Files TECHO5 adds to the tree.
 OURS = [
@@ -99,9 +99,10 @@ def check(source, img, config=None):
     v = [re.search(rb"^%s = (\d+)$" % k, mk, re.M) for k in (b"VERSION", b"PATCHLEVEL", b"SUBLEVEL")]
     if kver and (not all(v) or ".".join(x.group(1).decode() for x in v) != kver):
         errors.append("the Makefile is not linux-%s" % kver)
-    for f, mark in MARKERS.items():
-        if mark not in found.get(f, b""):
-            errors.append("%s has no %r: not the patched tree" % (f, mark.decode()))
+    for f, marks in MARKERS.items():
+        for mark in marks if isinstance(marks, tuple) else (marks,):
+            if mark not in found.get(f, b""):
+                errors.append("%s has no %r: not the patched tree" % (f, mark.decode()))
     for f in OURS:
         if f not in found:
             errors.append("%s is missing" % f)

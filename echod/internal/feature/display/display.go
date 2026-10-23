@@ -341,6 +341,7 @@ type Display struct {
 	// what that frame showed, so an unchanged deck isn't drawn again every second.
 	deckOnScreen bool
 	deckDrawn    string
+	tintShown    screen.Tint // the night tint last given to the screen (night_warmth.go)
 
 	// popup is an event popped up on the screen (calendar_popup.go), until popupUntil or a tap;
 	// popupNext is when the calendar is next looked at (what was shown is kept in the config).
@@ -2354,7 +2355,12 @@ func (d *Display) frame() (next time.Duration) {
 	_, reminding := remind.Get().Showing()
 	night := nightNow(now)
 	if d.dev != nil {
-		d.dev.SetTint(d.nightTint(now, night))
+		// The tint is laid on in Present, so a deck kept as it was would keep the old one: a change
+		// draws it again.
+		if t := d.nightTint(now, night); t != d.tintShown {
+			d.tintShown, d.deckDrawn = t, ""
+			d.dev.SetTint(t)
+		}
 	}
 	if !on && (call.Phase != phone.Idle || (!night && (ring.any() || reminding))) {
 		// A call lights a dark panel, at night to half brightness (relight): its page is how it is
@@ -2783,7 +2789,7 @@ func (d *Display) frame() (next time.Duration) {
 		d.dropVideoFrame()
 	}
 	key := deckFrameKey(s, ring.any(), call.Phase != phone.Idle)
-	if rainbowOn() && d.r.rainbow.Busy() {
+	if rainbowHere(s) && d.r.rainbow.Busy() {
 		key = "" // the Rainbow light still going out over the deck, or its card going away
 	}
 	if key != "" && key == d.deckDrawn {
@@ -2799,7 +2805,7 @@ func (d *Display) frame() (next time.Duration) {
 		// photo changing, rain falling) keeps its own pace.
 		defer func() { next = min(next, cueFrame) }()
 	}
-	if rainbowOn() && d.r.rainbow.Busy() {
+	if rainbowHere(s) && d.r.rainbow.Busy() {
 		// Rainbow moves at the turn screens' pace, and on after the turn while its light goes out. The
 		// pace is from one frame's start to the next's: a frame that took most of it waits only for
 		// the rest, and one that took all of it waits only long enough to let the rest of the device

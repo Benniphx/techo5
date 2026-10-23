@@ -29,8 +29,9 @@ import (
 // light breathing and running. A page that moves faster keeps its own pace.
 const cueFrame = 100 * time.Millisecond
 
-// cueOn is whether turns are drawn as a cue over the page: Rainbow is one too, drawn its own way where
-// the device has it (render_rainbow.go) and as Cue and captions where it does not.
+// cueOn is whether turns are drawn as a cue over the page: Rainbow is one too, drawn its own way
+// (render_rainbow.go) except at night, when it is Cue and captions. Where the device does not offer it,
+// a saved Rainbow reads as Classic (turnStyleIndex).
 func cueOn() bool {
 	v := turnStyles[turnStyleIndex()].value
 	return v == "cue" || v == "captions" || v == "rainbow"

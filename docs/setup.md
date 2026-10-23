@@ -513,6 +513,8 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   press and hold lights it and opens the ring menu; the night clock comes back, or the screen goes off
   again, after a minute and a half. When the night starts, Night clock is chosen, or the settings or
   the menu close, the Spot's night clock comes up after 10 seconds instead. A Spot with no hours set has a night of 10 PM to 7 AM.
+- **Night warmth** (Show, a switch in Home Assistant, off at first): a warmer, lamp-like white on the
+  screen through the night hours. Not on the Spot or the Panel app.
 - **Night mode** switch in Home Assistant: start or end the night now, from a bedtime automation for
   example. Set Night hours to **Controlled by Home Assistant** to leave the night to the switch alone.
   See [Turning the night on from an automation](actions.md#turning-the-night-on-from-an-automation).
@@ -627,7 +629,7 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   pinks, violets, blues and oranges round the whole edge of the screen that moves with the voice,
   along the top and bottom only while the device thinks, and what was heard and the answer on a card
   of frosted glass a little above the middle. A request opens with a gold globe at the right edge and
-  a wave of pink crossing the screen. During night hours it is the Cue light instead (red over the
+  a wave of pink crossing the screen. During night hours it is Cue and captions instead (red over the
   night clock), so the colors don't light the room.
   The screen under a cue keeps working: a tap there does what it always does, and a tap on the
   captions (or Rainbow's card) puts them away. Stop a request by voice or with the stop word. A page
