@@ -18,8 +18,7 @@ var notOnThisDevice = append(boardAbsent,
 
 // speaker_gain is the codec's driver gain on the Dot (hardware/speaker/paths_dot.go), always there:
 // all_test.go's stand-in for a missing TAS5805M comes too late for the media player, built before it.
-// The audio output choice is the Dot 2's and the Echo 2's, not yet the Echo Dot 3's (boardChoices).
-var deviceSpecific = append([]string{"airplay", "speaker_gain", "spotify_connect"}, boardChoices...)
+var deviceSpecific = []string{"airplay", "audio_output", "speaker_gain", "spotify_connect"}
 
 // actionsNotOnThisDevice is what the Echo Dot must never offer, and which component would: the fixed
 // network address, since the Dot's image has a techo5-net of its own that joins Wi-Fi when run and
