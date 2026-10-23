@@ -76,6 +76,11 @@ To keep it even, it was built the same way for every project, TECHO5 included:
 3. Each project's reviewer answered every row for that project, using the row definitions at the
    bottom of this page, and a second reviewer checked every answer again.
 
+Every cell shows only what each project's own GitHub repos say: its code, docs and releases, and
+for devices also what users report in its issues and discussions (the note says when a device
+rests on user reports). Reports elsewhere (Reddit, Discord, forums) aren't counted, and nothing
+here was tested by me. A ❔ means nothing was found there, not that it can't work.
+
 Checked {checked_words(d["checked"])}. All of these projects move fast, so some cells will be out of date
 soon. If you spot something wrong or missing, please [open an issue]({ISSUES}) and it will be fixed.
 Projects are in alphabetical order.

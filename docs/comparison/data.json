@@ -6527,9 +6527,9 @@
      ""
     ],
     "echo-2": [
-     "unknown",
-     "",
-     ""
+     "lineage",
+     "User report only, not in its docs: the Echo Dot 2nd gen guide worked on one Echo 2nd gen with a community LineageOS 14.1 build (discussion 730)",
+     "https://github.com/jxlarrea/kiosk-satellite/discussions/730#discussioncomment-19017072"
     ],
     "echo-show-5-1": [
      "lineage",
@@ -6547,13 +6547,13 @@
      "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.38/CHANGELOG.md#L40"
     ],
     "echo-show-8-2": [
-     "unknown",
-     "Not in Kiosk Satellite docs; users report running it on LineageOS 18.1 (Android 11) since 2026-08-18 (issues 236, 1079, 1115)",
+     "lineage",
+     "User reports only, not in its docs: run on LineageOS 18.1 (Android 11) since 2026-08-18 (issues 236, 1079, 1115)",
      "https://github.com/jxlarrea/kiosk-satellite/issues/236"
     ],
     "echo-spot-1": [
-     "unknown",
-     "Not in Kiosk Satellite docs; a maintainer comment and user reports mention it on LineageOS (issues 736, 952)",
+     "lineage",
+     "User reports and a maintainer comment, not in its docs: run on LineageOS (issues 736, 952)",
      "https://github.com/jxlarrea/kiosk-satellite/issues/952#issuecomment-6108639736"
     ],
     "fire-tablet": [
@@ -6696,9 +6696,9 @@
      ""
     ],
     "echo-spot-1": [
-     "unknown",
-     "",
-     ""
+     "lineage",
+     "User reports only, not in its docs: VACA on LineageOS 18.1 (Android 11) (issues 104, 282, 324)",
+     "https://github.com/msp1974/ViewAssist_Companion_App/issues/324"
     ],
     "fire-tablet": [
      "yes",
@@ -6711,9 +6711,9 @@
      "https://github.com/msp1974/ViewAssistCompanionApp/blob/3c9517c49af97794d3ae950c123a20400d2bb078/app/src/main/java/com/msp1974/vacompanion/device/DeviceUnsupportedFunctions.kt#L25-L30"
     ],
     "raspberry-pi": [
-     "unknown",
-     "docs only say some users run Linux devices",
-     "https://dinki.github.io/View-Assist/docs/intro"
+     "lineage",
+     "Not in its docs; the VACA maintainer reports testing on a Pi with LineageOS (Android 15) (issue 97)",
+     "https://github.com/msp1974/ViewAssist_Companion_App/issues/97"
     ],
     "android-other": [
      "yes",
