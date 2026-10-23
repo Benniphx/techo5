@@ -43,7 +43,7 @@ type kctl struct {
 var initSequence = []kctl{
 	{name: "LINEOUT Ext Amp Switch", level: 0},
 	{name: "HP Ext Amp Switch", level: 0},
-	{name: "INT ADDA O03_O04 Switch", level: 1},
+	{name: "INT ADDA O03_O04 Switch", level: 0},
 	{name: "O03 I05 Switch", level: 1},
 	{name: "O04 I06 Switch", level: 1},
 	{name: "O03 I07 Switch", level: 0},
@@ -116,9 +116,11 @@ const jackState = "/sys/class/switch/h2w/state"
 // jackPoll is how often the jack switch is sampled.
 const jackPoll = 500 * time.Millisecond
 
-// DetectOutput picks the output to use. A missing switch means no jack detection, so assume the
-// speaker.
+// DetectOutput picks the output to use: the speaker, until the jack plays (HasJack).
 func DetectOutput() Output {
+	if !HasJack {
+		return OutputSpeaker
+	}
 	b, err := os.ReadFile(jackState)
 	if err != nil || strings.TrimSpace(string(b)) == "0" {
 		return OutputSpeaker
@@ -162,10 +164,16 @@ func gainForStep(out Output, step int) float32 {
 	return float32(math.Pow(10, db/20))
 }
 
-// The playback ring.
+// The playback ring: over 36 KB, always. The MT8516 AFE driver puts a DL1 ring of 36 KB or less in
+// its internal SRAM (mt8167-afe-pcm.c, max_sram_size), which is mapped as device memory; zeroing it
+// at the start of the stream (a memset that uses DC ZVA) then takes an alignment fault, and the kernel
+// panics. A 4096-frame ring (16 KB) did exactly that on unit 1, 2026-10-23, twice; aplay's default
+// 24000 frames played. The ring also has to stay under the quiet margin (HardwareTail, 150 ms), and
+// at 48 kHz both cannot hold, so the card runs at 96 kHz (hwRate): six periods of 1024 frames at Rate
+// are 128 ms and 48 KB at the card's rate. The TAS2770 takes 96 kHz (tried on the unit).
 const (
 	period  = 1024
-	periods = 4
+	periods = 6
 )
 
 // DRAMHold is unused here.
@@ -178,8 +186,16 @@ const startFull = false
 // the software reference (echoref.InUse), which this player then feeds.
 const softRef = true
 
-// openSequence is empty: the playback device opens with the card as the paths left it.
-var openSequence []kctl
+// openSequence routes DL1 to the I2S back end, the amplifier's, before the device opens: DPCM refuses
+// to prepare a front end with no back end enabled ("ASoC: no backend DAIs enabled for DL1 Playback",
+// EINVAL). The SoC codec's back end (INT ADDA, the jack's) is kept off: it refuses 96 kHz ("MTK
+// Codec: ASoC: hw_params BE failed -22"), and with it on DL1 will not open at hwRate at all.
+var openSequence = []kctl{
+	{name: "O03 I05 Switch", level: 1},
+	{name: "O04 I06 Switch", level: 1},
+	{name: "INT ADDA O03_O04 Switch", level: 0},
+	{name: "I2S O03_O04 Switch", level: 1},
+}
 
 // MediaService is the init service that owns Android's audio HAL on Fire OS.
 const MediaService = "media"
@@ -207,15 +223,17 @@ var tuningSet *asp.Set
 // firstCurves is empty: without the tuning, the volume is volumeCurves as they are.
 var firstCurves = map[string][VolumeSteps + 1]float64{}
 
-// HasJack is whether the device has a headphone jack: the Dot 3 has one.
-const HasJack = true
+// HasJack is whether the jack is offered. The Dot 3 has one, on the SoC codec, which does not take the
+// 96 kHz the speaker's ring needs (period); it waits for a 48 kHz, 32-bit stream, whose ring is in DRAM
+// and inside the quiet margin both. Until then the speaker plays whatever is plugged in.
+const HasJack = false
 
 // HasBoth is whether the speaker and the jack can play at once: not tried, so not offered.
 const HasBoth = false
 
-// PlaybackDevice is DL1_Playback, which the card takes at Rate as it is.
+// PlaybackDevice is DL1_Playback, run at twice Rate so its ring is in DRAM (period, above).
 const (
 	PlaybackDevice = 6
-	hwRate         = Rate
+	hwRate         = 2 * Rate
 	hwTrimDB       = 0.0
 )
