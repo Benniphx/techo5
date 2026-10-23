@@ -153,11 +153,13 @@ func CheckOwn(manifestJSON, model []byte) (Model, error) {
 // not for a file made to make it fall over. The published models have two subgraphs, under 100
 // operators, no dimension over a few hundred and well under a megabyte of tensors all told; these
 // leave room for a bigger one trained at home and none for a file that would run the daemon out of
-// memory, which is fatal rather than a panic anything can recover.
+// memory, which is fatal rather than a panic anything can recover. The elements and bytes are what
+// bound the memory; a single dimension may be long (a trainer's wider window makes one of 4736,
+// #267) as long as the tensor stays within them.
 const (
 	microMaxSubgraphs = 2
 	microMaxRank      = 8
-	microMaxDim       = 4096
+	microMaxDim       = 1 << 16
 	microMaxElements  = 1 << 20
 	microMaxBytes     = 4 << 20
 	microMaxOperators = 256
@@ -235,7 +237,11 @@ func microGraph(m *tflite.Model, size int) error {
 				if d < 0 || d > microMaxDim {
 					return fmt.Errorf("tensor %d has a dimension of %d; the most is %d", i, d, microMaxDim)
 				}
-				n *= d // at most 4096 per step, so it cannot overflow before the check below
+				// Checked before multiplying, so it cannot overflow an int on the 32-bit boards.
+				if d > 0 && n > microMaxElements/d {
+					return fmt.Errorf("tensor %d has more than %d elements", i, microMaxElements)
+				}
+				n *= d
 				if n > microMaxElements {
 					return fmt.Errorf("tensor %d has more than %d elements", i, microMaxElements)
 				}
