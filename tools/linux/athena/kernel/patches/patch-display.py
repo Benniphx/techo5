@@ -7,6 +7,7 @@ What it does:
        0001/0002  ilitek,ili9881c binding + driver: 5 "amazon,athena-ili9881c-*" panels
                   (unit 1 = amazon,athena-ili9881c-boe)
        0003/0004  jadard,jd9365da-h3 binding + driver: 5 "amazon,athena-jd9365-*" panels (other units)
+       0005       the JD9365 BOE (new) panel (0x35) on Amazon's DSI link settings (#187)
   2. mediatek-drm (mtk_drm_drv.c): evict the bootloader's simple-framebuffer when the DRM device
      binds (athena: evict-simplefb). Upstream mediatek-drm never does this (ChromeOS has no simplefb),
      so without it simplefb keeps /dev/fb0 and the DRM fbdev emulation lands on /dev/fb1, while the
@@ -87,6 +88,10 @@ edit("drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c", "athena: reset deassert
 	jadard->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_LOW);
 """),
 ])
+# athena: boe-new link. The 0x35 panel on Amazon's DSI link settings, without which it flickers
+# (#187): clock lane non-continuous, 478 Mbps per lane, EoT packets on.
+apply_patch("0005-drm-panel-jd9365da-athena-boe-new-link.patch",
+            "drivers/gpu/drm/panel/panel-jadard-jd9365da-h3.c", "athena: boe-new link")
 
 edit("drivers/gpu/drm/mediatek/mtk_drm_drv.c", "athena: evict-simplefb", [
     ("#include <linux/component.h>\n",
