@@ -54,7 +54,10 @@ type session struct {
 	// lastTS is the newest chunk's timestamp, kept to measure what a new stream overlaps.
 	lastTS int64
 	opened bool
-	muted  bool
+
+	// muted is the mute the server last set. It is an atomic because the state goes out from more than
+	// one goroutine: the read loop, the clock loop and whoever moved the level (levelMoved).
+	muted atomic.Bool
 
 	// converged is set once the clock filter has converged, and stays set: available in client/state.
 	converged atomic.Bool
@@ -168,6 +171,11 @@ func (s *session) run(ctx context.Context) error {
 	// can arrive after the cancel.
 	cancelTransport := media.Get().OnTransport.Listen(s.asks)
 	defer cancelTransport()
+	// The same goes for the level. Without this the server only heard of a level it had set itself, so
+	// a change from Home Assistant, the buttons or a voice request left Music Assistant's slider where
+	// it was (techo5-athena#3).
+	cancelLevel := media.Get().OnLevel.Listen(s.levelMoved)
+	defer cancelLevel()
 
 	// A picture left from an earlier connection is not this server's: it sends its own current one
 	// as soon as the artwork stream starts.
@@ -623,7 +631,7 @@ func (s *session) told(cmd protocol.PlayerCommand) {
 	case "volume":
 		s.out.setVolume(cmd.Volume)
 	case "mute":
-		s.muted = cmd.Mute
+		s.muted.Store(cmd.Mute)
 		s.out.setMuted(cmd.Mute)
 	}
 	s.reported()
@@ -647,6 +655,20 @@ func (s *session) told(cmd protocol.PlayerCommand) {
 // can play before its clock is good would be scheduled against a wrong offset. The clock loop says it
 // again once it has (noteClock).
 func (s *session) reported() {
+	s.state(config.Get().Speaker.Volume)
+}
+
+// levelMoved tells the server the level the device has just applied, whoever moved it. The step comes
+// from the hook rather than the settings, which are saved only after the hook has run.
+func (s *session) levelMoved(step int) {
+	if !s.live.Load() {
+		return
+	}
+	s.state(step)
+}
+
+// state sends client/state with the level at step, of speaker.VolumeSteps.
+func (s *session) state(step int) {
 	available := s.converged.Load()
 	state := "synchronized"
 	if !available {
@@ -656,8 +678,8 @@ func (s *session) reported() {
 		Available: available,
 		Player: playerState{
 			State:              state,
-			Volume:             config.Get().Speaker.Volume * 100 / speaker.VolumeSteps,
-			Muted:              s.muted,
+			Volume:             step * 100 / speaker.VolumeSteps,
+			Muted:              s.muted.Load(),
 			StaticDelayMs:      0,
 			OutputDelayMs:      0,
 			RequiredLeadTimeMs: requiredLeadTimeMs,
