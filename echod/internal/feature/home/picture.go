@@ -184,10 +184,10 @@ func (f *Feature) stillLocked(src, path string, c Caption, d time.Duration) func
 		name = untitled
 	}
 	// The same picture again, already on the screen (a run of notifications over one picture, only
-	// their words changing): the new view keeps its frame, and the picture is not fetched and decoded
-	// again. A view put up bare while the same bytes came back left the screen blank between each,
-	// which flickered. A picture that changes behind one address (a snapshot) needs the address to
-	// change too, a query that differs each time, to be fetched anew.
+	// their words changing): the new view keeps the frame up while the picture is fetched again. A
+	// view put up bare while the same bytes came back left the screen blank between each, which
+	// flickered. It is still fetched, because a picture can change behind one address: an image
+	// entity's newest snapshot, or a file saved over the last one.
 	var keep *image.RGBA
 	if f.viewIsUp(src) && f.cam.Caption != nil && f.cam.Frame != nil && f.cam.Error == "" {
 		keep = f.cam.Frame
@@ -207,14 +207,10 @@ func (f *Feature) stillLocked(src, path string, c Caption, d time.Duration) func
 	f.camMuted = false
 	return func() {
 		slog.Info("picture up", "source", redactURL(src), "for", d, "kept", keep != nil)
-		if keep != nil {
-			cancel() // nothing to fetch: the picture is the one already up
-		} else {
-			f.spawn(func() {
-				defer cancel() // the context is done with once the fetch is
-				f.fetchStill(ctx, src, path, c.ID)
-			})
-		}
+		f.spawn(func() {
+			defer cancel() // the context is done with once the fetch is
+			f.fetchStill(ctx, src, path, c.ID)
+		})
 		if name == untitled && strings.HasPrefix(src, "image.") {
 			f.spawn(func() { f.lookUpName(src, untitled) })
 		}
@@ -281,7 +277,8 @@ func (f *Feature) fetchStill(ctx context.Context, src, path, id string) {
 	f.mu.Lock()
 	if f.viewIsUp(src) && f.cam.Caption != nil && f.cam.Caption.ID == id {
 		if err != nil {
-			f.cam.Error = err.Error()
+			// A frame kept from the last notification is not this picture: the error shows alone.
+			f.cam.Frame, f.cam.Error = nil, err.Error()
 		} else {
 			f.cam.Frame, f.cam.Error = frame, ""
 			if until := time.Now().Add(f.cam.span); until.After(f.cam.Until) {

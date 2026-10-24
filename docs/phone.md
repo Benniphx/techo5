@@ -51,7 +51,7 @@ diagnostics can read, and never in an image or a release.
 A SIP server on the home network, such as a FRITZ!Box's own registrar for its IP phones, usually
 offers no TLS. For one of those, turn on **Phone without encryption** (a configuration switch of the
 device, off by default): the device then signs in over plain UDP on port 5060, and calls go without
-SRTP. Turning it on or off signs the device in again at once. While it is off, the device signs in
+SRTP. Turning it on or off signs the device in again at once, which ends a call in progress. While it is off, the device signs in
 with TLS and encrypts calls as before; leave it off for a provider on the internet.
 
 On a FRITZ!Box: **Telefonie → Telefoniegeräte → Neues Gerät einrichten → Telefon (mit und ohne

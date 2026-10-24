@@ -136,10 +136,11 @@ func TestTheSamePictureAgainKeepsItsFrame(t *testing.T) {
 			t.Errorf("notification %s is not the one up", id)
 		}
 	}
-	time.Sleep(200 * time.Millisecond) // long enough for another fetch, were there one
-	if n := hits.Load(); n != 1 {
-		t.Errorf("fetched %d times, want once", n)
-	}
+	// The picture is still fetched again: it can change behind one address (a snapshot saved over the
+	// last), and the newest has to show. A burst fetches only the newest, as each new view cancels the
+	// fetch of the one it replaces.
+	eventually(t, "the picture fetched again", func() bool { return hits.Load() >= 2 })
+	eventually(t, "the newest picture", func() bool { v, _ := f.Camera(); return v.Frame != nil && v.Frame != first.Frame })
 
 	// Another picture's address: a view of its own, fetched.
 	if err := f.ShowPicture("/local/door.png?v=2", Caption{ID: "4", Message: "Four"}, time.Minute, ""); err != nil {

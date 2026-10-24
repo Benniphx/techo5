@@ -169,6 +169,11 @@ type Player struct {
 	// as the Spotify app's slider.
 	OnLevel hook.Hook[int]
 
+	// OnMute fires with the new state whenever the speaker is muted or unmuted, by anyone: Home
+	// Assistant, a button that brings a muted speaker back, or a Music Assistant command. It is for
+	// what keeps its own copy, as OnLevel is.
+	OnMute hook.Hook[bool]
+
 	// OnPlay fires with the URL whenever a track (not an announcement) is started, so a screen can
 	// find out what it is.
 	OnPlay hook.Hook[string]
@@ -1603,9 +1608,10 @@ func (p *Player) Mute(muted bool) {
 	p.mp.SetMuted(muted)
 	if muted {
 		speaker.Get().SetVolume(0)
-		return
+	} else {
+		speaker.Get().SetVolume(p.Volume())
 	}
-	speaker.Get().SetVolume(p.Volume())
+	p.OnMute.Emit(muted)
 }
 
 // Muted reports whether the speaker is muted (Mute): the level is kept, and nothing is heard.
