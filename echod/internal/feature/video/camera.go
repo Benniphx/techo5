@@ -72,6 +72,11 @@ func fillFilter(w, h int) string {
 	return fmt.Sprintf("fps=%d,%s", tileFPS, coverFilter(w, h))
 }
 
+// tileFitFilter is fitFilter at no more than tileFPS: a tile showing the whole picture.
+func tileFitFilter(w, h int) string {
+	return fmt.Sprintf("fps=%d,%s", tileFPS, fitFilter(w, h))
+}
+
 // OpenCamera starts decoding a camera's stream at url (Home Assistant's HLS playlist for it) into w×h
 // frames. Close ends it.
 func OpenCamera(ctx context.Context, url string, w, h int) (*Camera, error) {
@@ -371,6 +376,12 @@ func OpenCameraRTSPCovering(ctx context.Context, addr, user, pass string, w, h i
 // barred, as a tile shows it.
 func OpenCameraRTSPFilling(ctx context.Context, addr, user, pass string, w, h int) (*Camera, error) {
 	return openCameraRTSP(ctx, addr, user, pass, w, h, fillFilter(w, h))
+}
+
+// OpenCameraRTSPFitting is OpenCameraRTSP for a tile showing the whole picture, with bars: at no more
+// than tileFPS, as one filling its tile.
+func OpenCameraRTSPFitting(ctx context.Context, addr, user, pass string, w, h int) (*Camera, error) {
+	return openCameraRTSP(ctx, addr, user, pass, w, h, tileFitFilter(w, h))
 }
 
 func openCameraRTSP(ctx context.Context, addr, user, pass string, w, h int, filter string) (*Camera, error) {

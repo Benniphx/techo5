@@ -28,6 +28,9 @@ func OpenCameraRTSP(context.Context, string, string, string, int, int) (*Camera,
 func OpenCameraRTSPFilling(context.Context, string, string, string, int, int) (*Camera, error) {
 	return nil, ErrNotHere
 }
+func OpenCameraRTSPFitting(context.Context, string, string, string, int, int) (*Camera, error) {
+	return nil, ErrNotHere
+}
 func OpenCameraRTSPCovering(context.Context, string, string, string, int, int) (*Camera, error) {
 	return nil, ErrNotHere
 }

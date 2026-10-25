@@ -3,6 +3,7 @@
 package video
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -168,5 +169,12 @@ func TestALoginInTheAddressWins(t *testing.T) {
 	}
 	if _, err := rtspURL("http://192.0.2.20/s", "admin", "x"); err == nil {
 		t.Error("an http address taken for RTSP")
+	}
+}
+
+// A tile showing the whole picture is decoded no faster than one filling its tile.
+func TestTileFitFilterCapsTheRate(t *testing.T) {
+	if f := tileFitFilter(320, 240); !strings.HasPrefix(f, fmt.Sprintf("fps=%d,", tileFPS)) || !strings.Contains(f, fitFilter(320, 240)) {
+		t.Errorf("tileFitFilter = %q", f)
 	}
 }

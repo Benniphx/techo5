@@ -47,6 +47,12 @@ const (
 	tessLiveRetry = time.Minute      // after a live picture that failed, snapshots this long
 )
 
+// tessLiveSlots is how many tiles may play live at once: each is a decoder of its own, and a page of live
+// cameras would take a Show 5's every core. The rest show snapshots, and try again after tessLiveRetry.
+var tessLiveSlots = make(chan struct{}, 2)
+
+var errLiveBusy = errors.New("as many cameras play live as may")
+
 // tessCams are the cameras the Tessera page draws, by entity and fit (tessCamKey).
 var tessCams = &tessCamSet{cams: map[string]*tessCam{}}
 
@@ -82,7 +88,7 @@ var (
 	tessLiveAddr = home.LiveRTSP
 	openTessLive = func(ctx context.Context, addr, user, pass string, w, h int, whole bool) (tessLive, error) {
 		if whole {
-			return video.OpenCameraRTSP(ctx, addr, user, pass, w, h)
+			return video.OpenCameraRTSPFitting(ctx, addr, user, pass, w, h)
 		}
 		return video.OpenCameraRTSPFilling(ctx, addr, user, pass, w, h)
 	}
@@ -142,7 +148,10 @@ func (s *tessCamSet) keep(key string) {
 		// several.
 		if addr, user, pass, ok := tessLiveAddr(entity); ok && shown && size.X > 0 && size.Y > 0 &&
 			time.Since(liveFailed) > tessLiveRetry {
-			if err := s.live(key, addr, user, pass, size, whole); err != nil {
+			if err := s.live(key, addr, user, pass, size, whole); errors.Is(err, errLiveBusy) {
+				slog.Debug("tessera camera: snapshots while other tiles play live", "entity", entity)
+				liveFailed = time.Now()
+			} else if err != nil {
 				slog.Info("tessera camera: live picture stopped, snapshots for now", "entity", entity, "err", err)
 				liveFailed = time.Now()
 			}
@@ -168,6 +177,12 @@ func (s *tessCamSet) keep(key string) {
 // live plays a camera's live picture from addr into its tile, while the tile is drawn at size. It ends nil
 // when the tile went undrawn or changed size, else with why the picture stopped.
 func (s *tessCamSet) live(key, addr, user, pass string, size image.Point, whole bool) error {
+	select {
+	case tessLiveSlots <- struct{}{}:
+		defer func() { <-tessLiveSlots }()
+	default:
+		return errLiveBusy
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	// The decoder's sizes are even: a tile an odd pixel wider or higher is decoded that pixel over, and
