@@ -2880,6 +2880,9 @@ func (d *Display) frame() (next time.Duration) {
 		return wait
 	}
 	if (s.phase == "idle" || s.phase == "lingering") && !s.showVolume {
+		if d.r.c64Drawn {
+			return time.Until(now.Truncate(c64Blink).Add(c64Blink)) // the cursor blinks (skin_c64.go)
+		}
 		// On the next whole second, so the clock changes when the second does.
 		return time.Until(now.Truncate(idleFrame).Add(idleFrame))
 	}

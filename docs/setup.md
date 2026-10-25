@@ -591,7 +591,15 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   is the handheld's four greens. **Matrix** is green on black with code falling behind the clock.
   **Synthwave** is a neon sunset over a grid, the sun only behind a clock in the middle. **HAL 9000** is
   black and red with the computer's eye at the top right (not behind the Overlap style, whose figures
-  reach into that corner). On the turn screens a skin brings its ground and colors too, except at
+  reach into that corner). **Commodore 64** is the home computer's blue screen in its light blue
+  border, in an 8 by 8 pixel font drawn in its style: the home clock is its start-up screen, the
+  banner, READY., the time as PRINT TI$ answers it in big characters, the date and weather, a line for
+  each timer and the next alarm, and the cursor blinking as the computer's does (it redraws the screen
+  three times a second for that). The characters are always a whole number of the panel's pixels, so
+  they stay sharp, and on a wide panel the border is wide at the sides, as on a television. **TECHO5
+  BASIC** is the same screen with TECHO5's banner: the version running, the device's memory and how
+  much of it is free. On the Spot both bring their colors and font. On the turn screens a skin brings
+  its ground and colors too, except at
   night. **None** puts back the theme and font you chose. It costs a little time on each frame.
 - **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
   switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
