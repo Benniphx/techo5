@@ -111,6 +111,14 @@ for c in fbprobe audioprobe rebootto btbridge; do cp "$ROOT/bin/$c-arm" "$STAGE/
 [ -e "$ROOT/bin/techo5-ffmpeg-arm" ] || { echo "bin/techo5-ffmpeg-arm is missing: build it with tools/linux/build-ffmpeg.sh (in WSL)" >&2; exit 1; }
 cp "$ROOT/bin/techo5-ffmpeg-arm" "$STAGE/bin/techo5-ffmpeg"
 echo "== ffmpeg: sha256 $(sha256sum "$ROOT/bin/techo5-ffmpeg-arm" | cut -d' ' -f1)"
+# Tailscale's daemon (tools/linux/build-tailscaled.sh), for reaching the device from away (feature/tailscale,
+# docs/tailscale.md): off until somebody gives it a key. Every image this script builds carries it, and its
+# license (BSD-3-Clause) beside it. One static arm64 build serves them all: their kernels are 64-bit.
+TS=$ROOT/bin/tailscaled-arm64
+[ -e "$TS" ] && [ -e "$TS.LICENSE" ] || { echo "bin/tailscaled-arm64 (and its .LICENSE) is missing: build it with tools/linux/build-tailscaled.sh" >&2; exit 1; }
+[ "$(od -An -tx1 -j4 -N1 "$TS" | tr -d ' ')" = 02 ] && [ "$(od -An -tu2 -j18 -N2 "$TS" | tr -d ' ')" = 183 ] && ! grep -q 'ld-musl-\|ld-linux-' "$TS" 	|| { echo "bin/tailscaled-arm64 is not a static aarch64 binary: build it with tools/linux/build-tailscaled.sh" >&2; exit 1; }
+cp "$TS" "$STAGE/bin/tailscaled"
+echo "== tailscaled: sha256 $(sha256sum "$TS" | cut -d' ' -f1)"
 # athena and the Skylight carry the 64-bit build beside it (tools/linux/build-ffmpeg-arm64.sh in WSL: static,
 # with H.265, VP8 and VP9), which the daemon runs on their 64-bit kernels; an athena on Amazon's 32-bit
 # kernel keeps the one above. Not optional for them either, and checked for what it must be.
@@ -132,6 +140,7 @@ cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/li
 [ -n "${EXTRA_PACKAGES:-}" ] && printf '%s\n' $EXTRA_PACKAGES >> "$STAGE/tools/packages-rootfs.txt"
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"
 [ -n "$DEVICE_OVERLAY" ] && cp -r "$DEVICE_OVERLAY/." "$STAGE/overlay/"
+mkdir -p "$STAGE/overlay/usr/share/licenses/tailscale" && cp "$TS.LICENSE" "$STAGE/overlay/usr/share/licenses/tailscale/LICENSE"
 cp "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz "$STAGE/inputs/"
 [ -n "$VENDOR_TGZ" ] && cp "$VENDOR_TGZ" "$STAGE/inputs/vendor.tar.gz"
 cp "$INPUTS"/apks312/wpa_supplicant-2.9-*.apk "$INPUTS"/apks312/libssl1.1-*.apk "$INPUTS"/apks312/libcrypto1.1-*.apk "$STAGE/inputs/apks312/"

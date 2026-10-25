@@ -1514,6 +1514,12 @@ answered replaced by how long it was; it still names rooms and other devices, so
 sends requests that do not check out is turned away for a minute after ten of them; nobody else is,
 except that a public IPv6 address is counted with the rest of its /64.
 
+## 12. Reaching the device from away
+
+An Echo Show, Echo Spot or Skylight can join your Tailscale network, so a device in another house
+stays in your own Home Assistant, and its setup page can be opened from afar with **Remote setup**.
+Off until you give it a key: see [Tailscale: reaching a device from away](tailscale.md).
+
 ## More
 
 - [Dashboards](dashboards.md): Home Assistant dashboards on the screen.

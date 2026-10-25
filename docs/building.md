@@ -214,6 +214,16 @@ Every image carries a small ffmpeg for the video player and live cameras. It is 
 
 Both go in `bin/`, which git ignores. A release built from a worktree needs both copied into its `bin/`.
 
+## Tailscale
+
+Every image `deploy-rootfs.sh` builds carries Tailscale's daemon ([docs/tailscale.md](tailscale.md)), and
+it stops when it is missing.
+[tools/linux/build-tailscaled.sh](../tools/linux/build-tailscaled.sh) builds `bin/tailscaled-arm64` and
+its license from Tailscale's own release source, pinned and checked by SHA-256, with Go (Linux or WSL,
+under a minute). One static arm64 build serves every image: their kernels are 64-bit. The build is
+reproducible: the same script gives the same bytes on any machine. A release built from a worktree needs
+it copied into its `bin/` as well, with `tailscaled-arm64.LICENSE`.
+
 ## Optional: a CPU profile from a device
 
 To see where the daemon spends its time on a unit, turn SSH on and write the number of seconds to a
