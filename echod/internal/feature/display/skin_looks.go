@@ -3,6 +3,7 @@
 package display
 
 import (
+	"image"
 	"math"
 	"sync"
 )
@@ -26,6 +27,25 @@ func unskinned(p skinPanel, plain bool) {
 	if plain && p != nil {
 		p.SetFilter("", nil)
 	}
+}
+
+// skinnedCopy is a copy of src as the panel shows it, for a screenshot: through the skin's filter, the
+// one-color skins' tint and scanlines, unless the frame went out plain (unskinned). Without it a
+// screenshot of Pip-Boy or Matrix came out in the grays they are drawn in.
+func skinnedCopy(src *image.RGBA, plain bool) *image.RGBA {
+	cp := image.NewRGBA(src.Rect)
+	copy(cp.Pix, src.Pix)
+	if plain {
+		return cp
+	}
+	w, h := src.Rect.Dx(), src.Rect.Dy()
+	if f := skinFilterFor(w, h); f != nil {
+		for y := 0; y < h; y++ {
+			at := y * cp.Stride
+			f(cp.Pix[at:at+w*4], y)
+		}
+	}
+	return cp
 }
 
 // skinLook is what a skin brings besides its font: its palette and its filter. Either may be left out.

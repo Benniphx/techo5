@@ -225,6 +225,9 @@ type Display struct {
 
 	// shots are screenshot requests, answered with a copy of the next frame drawn.
 	shots chan chan *image.RGBA
+	// shotPlain is whether the frame last sent went to the panel without the skin's filter (unskinned), so
+	// a screenshot of it is left plain too (skinnedCopy).
+	shotPlain bool
 	dev   *screen.Device
 	r     *renderer
 
@@ -2105,8 +2108,7 @@ func (d *Display) answerShots() {
 		case ch := <-d.shots:
 			var img *image.RGBA
 			if d.r != nil {
-				img = image.NewRGBA(d.r.dst.Rect)
-				copy(img.Pix, d.r.dst.Pix)
+				img = skinnedCopy(d.r.dst, d.shotPlain)
 			}
 			ch <- img
 		default:
@@ -2478,6 +2480,7 @@ func (d *Display) frame() (next time.Duration) {
 		// again until the watching ends.
 		d.r.watchedDark()
 		unskinned(d.dev, true)
+		d.shotPlain = true
 		if err := d.dev.Present(); err != nil {
 			slog.Warn("presenting the frame failed", "err", err)
 		}
@@ -2828,7 +2831,8 @@ func (d *Display) frame() (next time.Duration) {
 		// have the processor for a moment.
 		defer func() { next = min(next, max(rainbowFrame-time.Since(began), rainbowBreath)) }()
 	}
-	unskinned(d.dev, s.redClockFace() || d.r.marked)
+	d.shotPlain = s.redClockFace() || d.r.marked
+	unskinned(d.dev, d.shotPlain)
 	if err := d.dev.Present(); err != nil {
 		slog.Warn("presenting the frame failed", "err", err)
 	}
