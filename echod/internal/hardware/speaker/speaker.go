@@ -779,6 +779,11 @@ func (p *Player) Run(ctx context.Context) error {
 func (p *Player) reformat(ctx context.Context, pb playback, want cardFormat) (playback, error) {
 	_, mixer := p.device()
 	_ = pb.Close()
+	// Nothing holds a stream until the new one opens, so a Close meanwhile (a shutdown during a wait
+	// below) does not close this one a second time.
+	p.devMu.Lock()
+	p.pb = nil
+	p.devMu.Unlock()
 	p.ring.Store(nil)
 	var err error
 	for try := 0; try < reopenTries; try++ {
@@ -798,9 +803,6 @@ func (p *Player) reformat(ctx context.Context, pb playback, want cardFormat) (pl
 		case <-time.After(reopenWait):
 		}
 	}
-	p.devMu.Lock()
-	p.pb = nil
-	p.devMu.Unlock()
 	return nil, fmt.Errorf("speaker: opening playback again at %d Hz: %w", want.rate, err)
 }
 
