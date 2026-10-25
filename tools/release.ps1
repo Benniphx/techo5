@@ -270,10 +270,10 @@ if ($Rootfs) { Test-Image $Rootfs }
 if ($AthenaRootfs) { Test-Image $AthenaRootfs }
 # Every Show rootfs carries the echo canceller and Spotify Connect: deploy-rootfs.sh copies them only when
 # bin/ has them, so a worktree without the prebuilts copied in would ship without either. And Tailscale,
-# which deploy-rootfs.sh requires, checked here too with its license.
+# which deploy-rootfs.sh requires, checked here too with its license; and AirPlay 2 (its receiver and nqptp).
 foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
     $names = @(& tar -tzf $t) -replace '^\./', ''
-    foreach ($b in 'techo5-aec', 'techo5-librespot') {
+    foreach ($b in 'techo5-aec', 'techo5-librespot', 'techo5-shairport-sync', 'techo5-nqptp') {
         if ($names -notcontains "usr/local/bin/$b") { throw "$t has no usr/local/bin/${b}: copy bin/$b-arm into bin/ before building" }
     }
     if ($names -notcontains 'usr/local/bin/tailscaled' -or $names -notcontains 'usr/share/licenses/tailscale/LICENSE') {

@@ -786,6 +786,23 @@ func TestTheAirPlay2Switch(t *testing.T) {
 	if why := airplay2Missing(); why != "AirPlay 2 is turned off" {
 		t.Errorf("turned off, AirPlay 2 is missing for %q", why)
 	}
+
+	// On again, but the firewall could not let it in: classic.
+	if err := config.Set().Streaming().AirPlayClassic(false); err != nil {
+		t.Fatal(err)
+	}
+	wasNo := noAirPlay2
+	t.Cleanup(func() { noAirPlay2 = wasNo })
+	noAirPlay2 = filepath.Join(dir, "no-airplay2")
+	if why := airplay2Missing(); strings.Contains(why, "firewall") {
+		t.Errorf("no marker, but %q", why)
+	}
+	if err := os.WriteFile(noAirPlay2, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if why := airplay2Missing(); !strings.Contains(why, "firewall") {
+		t.Errorf("with the firewall's marker, AirPlay 2 is missing for %q", why)
+	}
 }
 
 // nqptp drops root for the receivers' user where there is one, and stays as it is where there is none.

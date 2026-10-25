@@ -356,7 +356,7 @@ captured login to the same page for a few minutes, and could see the pictures an
   one for that request: "play Taylor Swift on YouTube Music". This is for a device whose voice
   assistant [answers directly](#voice-without-home-assistant); under Home Assistant, its own Music Assistant support decides. It needs
   Music Assistant 2.10 or later.
-- **AirPlay and Spotify Connect.** On the Show and the Dot, two switches make the device a
+- **AirPlay and Spotify Connect.** On every device but the Panel app, two switches make the device a
   speaker other apps play to, under its own name: **AirPlay** from an iPhone, iPad or Mac, and
   **Spotify Connect** from the Spotify app (Spotify Premium). Both are off until turned on, under
   Settings → Sound, on the setup page (Sound & Voice), or in Home Assistant. What they play shows as
@@ -370,10 +370,11 @@ captured login to the same page for a few minutes, and could see the pictures an
   on the device stops the stream there; the phone keeps going until it is paused too. Anyone on the
   same network can play to the device while one is on, as with any AirPlay or Spotify speaker, and
   Spotify Connect keeps the login a phone hands it until it is turned off. Where the image carries the
-  AirPlay 2 receiver (the Echo Dot 2nd gen's and the Echo 2nd gen's, so far), an iPhone can group the
+  AirPlay 2 receiver (every image from v1.6.8 and dot-v1.0.35), an iPhone can group the
   device with other AirPlay 2 speakers (a HomePod, a Sonos)
   and play to all of them at once; without it, or when it will not start, the device is a classic
-  AirPlay speaker, which plays on its own. A third switch there, **AirPlay 2** (on unless turned off),
+  AirPlay speaker, which plays on its own; so is one whose kernel can't take the firewall's AirPlay 2
+  rules (the firewall's log says so). A third switch there, **AirPlay 2** (on unless turned off),
   keeps it to classic AirPlay: for a group it will not play in step with, since it can still drift a few
   milliseconds from the other speakers, more just after it joins one that is already playing. If something does not work, open an issue.
 - **DLNA.** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to

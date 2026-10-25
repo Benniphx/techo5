@@ -103,8 +103,15 @@ for c in fbprobe audioprobe rebootto btbridge; do cp "$ROOT/bin/$c-arm" "$STAGE/
 # The WebRTC echo canceller helper is C++ built separately (tools/linux/build-aec.sh in WSL); ship it when it is there.
 [ -e "$ROOT/bin/techo5-aec-arm" ] && cp "$ROOT/bin/techo5-aec-arm" "$STAGE/bin/techo5-aec"
 # The Spotify Connect receiver (librespot, Rust) is built separately too (tools/linux/build-librespot.sh in WSL).
-# The Spot's daemon offers neither receiver (feature/streaming), so its image carries neither.
-[ "$BUILD_TAGS" != spot ] && [ -e "$ROOT/bin/techo5-librespot-arm" ] && cp "$ROOT/bin/techo5-librespot-arm" "$STAGE/bin/techo5-librespot"
+[ -e "$ROOT/bin/techo5-librespot-arm" ] && cp "$ROOT/bin/techo5-librespot-arm" "$STAGE/bin/techo5-librespot"
+# AirPlay 2's receiver and nqptp, the clock it needs (tools/linux/build-shairport-sync.sh, Linux or WSL): in
+# every image, which the daemon runs where it can and keeps the classic receiver where it can't
+# (feature/streaming). Not optional: an image without them would quietly be classic AirPlay only.
+for b in techo5-shairport-sync techo5-nqptp; do
+	[ -e "$ROOT/bin/$b-arm" ] || { echo "bin/$b-arm is missing: build it with tools/linux/build-shairport-sync.sh" >&2; exit 1; }
+	cp "$ROOT/bin/$b-arm" "$STAGE/bin/$b"
+	echo "== $b: sha256 $(sha256sum "$ROOT/bin/$b-arm" | cut -d' ' -f1)"
+done
 # The video player's decoder (ffmpeg, C, tools/linux/build-ffmpeg.sh in WSL), for the Show's and the Spot's video
 # player (feature/video). Not optional: an image without it offers Video and plays nothing, so a build that
 # lacks it stops here rather than ship that. Its SHA-256 is said, to check against the one build-ffmpeg.sh printed.
@@ -136,7 +143,6 @@ athena|skylight)
 	;;
 esac
 cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
-[ "$BUILD_TAGS" = spot ] && sed -i '/^shairport-sync/d' "$STAGE/tools/packages-rootfs.txt"
 # EXTRA_PACKAGES: Alpine packages a device needs on top of the list (athena: busybox-extras, for udhcpd).
 [ -n "${EXTRA_PACKAGES:-}" ] && printf '%s\n' $EXTRA_PACKAGES >> "$STAGE/tools/packages-rootfs.txt"
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"

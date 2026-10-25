@@ -66,6 +66,44 @@ if [ -z "$ok" ]; then
 fi
 echo "techo5-firewall: Wi-Fi inbound closed except 6053, 5353, 22, 8928, 8181, 5000, 6001-6010, 4070, 8554, 3702" >&2
 
+# AirPlay 2 (feature/streaming), where the image carries its receiver: its session (7000/tcp), nqptp's PTP
+# (319-320/udp), and the event, data and audio ports the receiver opens for each session, which the kernel
+# picks, from a sender seen on 7000 within ten minutes. Every packet to 7000 marks its sender, so one playing
+# for hours stays marked: the first thing TECHO5-IN does, before what is already established is taken in.
+# A chain of its own, made after TECHO5-IN is whole: it needs the kernel's recent match, and where a rule of
+# it fails, the chain goes, Wi-Fi stays closed as above, and /run/techo5-no-airplay2 tells the daemon to keep
+# the classic receiver.
+APCHAIN=TECHO5-AP2
+rm -f /run/techo5-no-airplay2
+for T in iptables-legacy ip6tables-legacy; do
+	$T -D $CHAIN -j $APCHAIN 2> /dev/null
+	$T -F $APCHAIN 2> /dev/null
+	$T -X $APCHAIN 2> /dev/null
+done
+if [ -x /usr/local/bin/techo5-shairport-sync ] && [ -x /usr/local/bin/techo5-nqptp ]; then
+	apok=1
+	for T in iptables-legacy ip6tables-legacy; do
+		$T -N $APCHAIN &&
+			$T -A $APCHAIN -p tcp --dport 7000 -m recent --name AIRPLAY --set &&
+			$T -A $APCHAIN -p tcp --dport 7000 -j ACCEPT &&
+			$T -A $APCHAIN -p udp --dport 319:320 -j ACCEPT &&
+			$T -A $APCHAIN -p tcp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT &&
+			$T -A $APCHAIN -p udp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT &&
+			$T -I $CHAIN 1 -j $APCHAIN || apok=
+	done
+	if [ -n "$apok" ]; then
+		echo "techo5-firewall: AirPlay 2 in on Wi-Fi: 7000, 319-320/udp and its senders' ports" >&2
+	else
+		for T in iptables-legacy ip6tables-legacy; do
+			$T -D $CHAIN -j $APCHAIN 2> /dev/null
+			$T -F $APCHAIN 2> /dev/null
+			$T -X $APCHAIN 2> /dev/null
+		done
+		: > /run/techo5-no-airplay2
+		echo "techo5-firewall: AirPlay 2's rules failed (no recent match in this kernel?); AirPlay stays classic" >&2
+	fi
+fi
+
 # The tailnet (feature/tailscale, docs/tailscale.md), on the interface tailscaled is started with: Home
 # Assistant's API (6053/tcp), the web port (8181/tcp, which serves the tailnet nothing but the setup page
 # while Remote setup is on), SSH (22/tcp, while its switch is on), ping, and anything answering a
