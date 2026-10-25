@@ -250,6 +250,13 @@ On the page:
 - A tile too low for its icon above its words, on a grid of many rows, has its words beside the icon.
 - A tap beside the tiles, where there is none, starts a voice turn while **Tap on the clock** is
   *Assist*, as a tap on the clock does.
+- Two of Tessera's plugins are drawn by the device itself: **World clock** (up to three places, each
+  with its dial, or its time in digits, and how far it is from here; a tap on the tile turns the dials
+  to digits and back) and **Custom card** (the parts a template sensor lists in its `elements`
+  attribute: values, bars, rings, rows and text). The device names them as its own when the add-on
+  asks, so the add-on sends it their tiles; install the plugin in Tessera to have it in the editor. A
+  tile of any other plugin says *Plugin missing*, and a Custom card's `image` part shows its number,
+  as the device takes no pictures from plugins.
 
 What the device tells Tessera it takes: every tile size its grid has room for (single, wide, tall,
 square, the whole page, and spans like 3x2), and up to eight pages. Tessera leaves out everything
