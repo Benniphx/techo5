@@ -280,18 +280,20 @@ foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ })
         throw "$t has no Tailscale, or not its license: build bin/tailscaled-arm64 with tools/linux/build-tailscaled.sh"
     }
 }
-# And the same Tailscale in each: one build, as with ffmpeg64.
-$tsSums = @(foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
-    $d = Join-Path ([System.IO.Path]::GetTempPath()) ("techo5-ts-" + [guid]::NewGuid())
-    New-Item -ItemType Directory $d | Out-Null
-    try {
-        & tar -xzf $t -C $d ./usr/local/bin/tailscaled
-        if ($LASTEXITCODE -ne 0) { throw "${t}: usr/local/bin/tailscaled could not be read" }
-        (Get-FileHash -Algorithm SHA256 (Join-Path $d 'usr/local/bin/tailscaled')).Hash.ToLower()
-    } finally { Remove-Item -Recurse -Force $d }
-})
-if (@($tsSums | Select-Object -Unique).Count -gt 1) { throw "the images carry different Tailscale builds ($($tsSums -join ', ')): build them all from one bin/tailscaled-arm64" }
-if ($tsSums) { Write-Host "== tailscaled: sha256 $($tsSums[0])" }
+# And the same build of each of these in every image, as with ffmpeg64.
+foreach ($b in 'tailscaled', 'techo5-shairport-sync', 'techo5-nqptp') {
+    $sums = @(foreach ($t in @($Rootfs, $AthenaRootfs, $SkylightRootfs) | Where-Object { $_ }) {
+        $d = Join-Path ([System.IO.Path]::GetTempPath()) ("techo5-bin-" + [guid]::NewGuid())
+        New-Item -ItemType Directory $d | Out-Null
+        try {
+            & tar -xzf $t -C $d ./usr/local/bin/$b
+            if ($LASTEXITCODE -ne 0) { throw "${t}: usr/local/bin/$b could not be read" }
+            (Get-FileHash -Algorithm SHA256 (Join-Path $d "usr/local/bin/$b")).Hash.ToLower()
+        } finally { Remove-Item -Recurse -Force $d }
+    })
+    if (@($sums | Select-Object -Unique).Count -gt 1) { throw "the images carry different builds of $b ($($sums -join ', ')): build them all from one bin/" }
+    if ($sums) { Write-Host "== ${b}: sha256 $($sums[0])" }
+}
 
 # The Skylight: its three images and the kernel's source from one release, with its rootfs. install-skylight.py
 # takes the installer, boot and store images from one release, and a kernel is published only with its

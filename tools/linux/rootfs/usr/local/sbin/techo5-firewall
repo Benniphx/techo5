@@ -6,7 +6,8 @@
 # while the SSH switch is on and a key is set), Sendspin audio (8928/tcp), the setup page and the camera
 # and screen views (8181/tcp; each served only while it is on), AirPlay (5000/tcp, 6001-6010/udp) and
 # Spotify Connect (4070/tcp), the camera over RTSP (8554/tcp), WS-Discovery's searches for it (3702/udp,
-# feature/camstream) and DLNA's SSDP searches (1900/udp, IPv4),
+# feature/camstream) and DLNA's SSDP searches (1900/udp, IPv4), and AirPlay 2 (7000/tcp, 319-320/udp, and
+# its senders' own ports, from a chain of its own below),
 # which nothing listens on unless their switches are on; DHCP replies, ping,
 # IPv6 neighbor discovery, and anything answering a connection the device made (calls included).
 # Out: everything, as before.
@@ -24,6 +25,8 @@ command -v iptables-legacy > /dev/null || { echo "techo5-firewall: no iptables-l
 
 CHAIN=TECHO5-IN
 ok=1
+# What an earlier run said about AirPlay 2 holds no longer: said again below if it still holds.
+rm -f /run/techo5-no-airplay2
 for T in iptables-legacy ip6tables-legacy; do
 	$T -N $CHAIN 2> /dev/null
 	$T -F $CHAIN || { ok=; continue; }
@@ -74,7 +77,6 @@ echo "techo5-firewall: Wi-Fi inbound closed except 6053, 5353, 22, 8928, 8181, 5
 # it fails, the chain goes, Wi-Fi stays closed as above, and /run/techo5-no-airplay2 tells the daemon to keep
 # the classic receiver.
 APCHAIN=TECHO5-AP2
-rm -f /run/techo5-no-airplay2
 for T in iptables-legacy ip6tables-legacy; do
 	$T -D $CHAIN -j $APCHAIN 2> /dev/null
 	$T -F $APCHAIN 2> /dev/null
