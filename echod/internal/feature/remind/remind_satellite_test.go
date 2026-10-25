@@ -9,7 +9,7 @@ import (
 // Assistant's templates take no escapes; a name no quotes can hold is not asked for.
 func TestSatelliteTemplate(t *testing.T) {
 	for name, want := range map[string]string{
-		"Kitchen":      `'name', 'Kitchen')`,
+		"Kitchen":    `'name', 'Kitchen')`,
 		"Kids' Room": `'name', "Kids' Room")`,
 	} {
 		got, ok := satelliteTemplate(name)
