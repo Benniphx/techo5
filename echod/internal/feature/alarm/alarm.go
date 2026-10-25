@@ -112,6 +112,7 @@ type Alarms struct {
 	stop   *esphome.Button
 	snooze *esphome.Button
 	words  *esphome.Select
+	rise   *esphome.Select // how long a ring takes to come up from quiet (#284)
 
 	// sun is the ring while the light before an alarm comes up, under a ringing alarm and over
 	// everything quieter; lighting is whether it is showing anything.
@@ -205,6 +206,7 @@ func build() *Alarms {
 		OnCommand: func(v string) { a.SetSound(v, false) },
 	}
 	a.words = a.sayChoice()
+	a.rise = a.riseChoice()
 	a.snoozeFor = &esphome.Number{
 		Base: esphome.Base{ObjectID: "alarm_snooze_length", Name: "Snooze length", Icon: "mdi:alarm-snooze", Category: esphome.CategoryConfig},
 		Min:  config.MinSnoozeMinutes, Max: config.MaxSnoozeMinutes, Step: 1, Unit: "min",
@@ -224,12 +226,13 @@ func build() *Alarms {
 func (a *Alarms) Name() string { return "alarms" }
 
 func (a *Alarms) Entities() []esphome.Entity {
-	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.words, a.snoozeFor, a.ringVol, a.lightLevel, a.lightColor}
+	return []esphome.Entity{a.next, a.stop, a.snooze, a.sound, a.words, a.rise, a.snoozeFor, a.ringVol, a.lightLevel, a.lightColor}
 }
 
 func (a *Alarms) Restore(c config.Config) {
 	a.sound.Set(soundName(c.Alarms.Sound))
 	a.words.Set(c.Alarms.Say.Label())
+	a.rise.Set(c.Alarms.Rise.Label())
 	a.snoozeFor.Set(float32(c.Alarms.Snooze()))
 	a.followHelpers(c.Alarms.Follow)
 
@@ -517,7 +520,7 @@ func (a *Alarms) fire(s source, now time.Time) {
 	a.ringing = &Ring{Key: key, Label: s.label, At: now, local: s.local || (isSnooze(s) && localAlarm(key)), lit: lights(s)}
 	// Started under the lock, so there is no moment where an alarm is ringing and Stop finds
 	// nothing to stop. The bell calls rang from its own goroutine, never from here.
-	a.silence = ring.Start("alarm", s.label, speaker.AlarmSound(a.Sound()), a.rang)
+	a.silence = ring.StartRising("alarm", s.label, speaker.AlarmSound(a.Sound()), config.Get().Alarms.Rise.Duration(), a.rang)
 	a.mu.Unlock()
 
 	if spent {

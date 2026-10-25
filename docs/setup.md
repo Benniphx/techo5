@@ -1218,6 +1218,7 @@ Or copy a WAVE file named for the sound into the device's sounds folder over SSH
 | `failure.wav` | the falling notes when a request cannot be served |
 | `canceled.wav` | the notes when a request is dropped |
 | `timer_finished.wav` | a finished timer, and the Home Assistant alarm sound |
+| `alarm.wav` | an alarm, where **Alarm sound** is **Your own** (without one it rings with the Home Assistant sound) |
 | `mute_switch_on.wav`, `mute_switch_off.wav` | muting and unmuting the microphones |
 
 The timer and mute files play where **Home Assistant sounds** is on, and an alarm set to the
@@ -1241,6 +1242,15 @@ goes with it; turn it back on and it rings at its next time. A one-time alarm is
 has rung, so delete it instead, or cancel the snoozes: the Snoozed row on the screen, or Cancel snoozes
 on the setup page. An alarm followed from a Home Assistant helper works the same way when its on/off
 switch is turned off.
+
+**Alarm sound** (the Alarms card, the setup page, or Home Assistant) picks what alarms ring with.
+**Your own** rings with `alarm.wav`, sent from **Sounds of your own** above; it can be up to 10 seconds,
+and plays again after a short pause for as long as the alarm rings.
+
+**Gets louder** (the Alarms card, the setup page, or **Alarm gets louder** in Home Assistant) starts an
+alarm quiet, 30 dB under its ring volume, and brings it up evenly to the ring volume over 30 seconds, 1,
+2 or 5 minutes. **Full at once**, the default, rings at the ring volume from the first chime. Timers
+always ring at full.
 
 **Said as it rings** (the Alarms card, the setup page, or **Alarm words** in Home Assistant) is what
 an alarm says after its first chime: **Its words** (the default) says the words an alarm was given,

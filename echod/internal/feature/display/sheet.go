@@ -526,6 +526,9 @@ func pickerFor(id string, sv sheetView) (pickerView, bool) {
 		says := config.AlarmSays()
 		p := pickerView{title: "Said as it rings", opts: config.Labels(says), cur: slices.Index(says, alarm.Get().Say())}
 		return p, true
+	case "alarmrise":
+		rises := config.AlarmRises()
+		return pickerView{title: "Gets louder", opts: config.Labels(rises), cur: slices.Index(rises, alarm.Get().Rise())}, true
 	case "e.repeat":
 		p := pickerView{title: "Repeat", opts: repeatNames, cur: -1}
 		if sv.draft != nil {
@@ -861,6 +864,10 @@ func (d *Display) choose(id string, i int) {
 	case "alarmwords":
 		if says := config.AlarmSays(); i >= 0 && i < len(says) {
 			alarm.Get().SetSay(says[i])
+		}
+	case "alarmrise":
+		if rises := config.AlarmRises(); i >= 0 && i < len(rises) {
+			alarm.Get().SetRise(rises[i])
 		}
 	case "e.repeat":
 		if i < len(repeats) {

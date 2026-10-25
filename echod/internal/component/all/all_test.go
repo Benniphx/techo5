@@ -28,6 +28,7 @@ var registered = []string{
 	"alarm_stop",
 	"assistant_replies_into_calls",
 	"alarm_words",
+	"alarm_gets_louder",
 	"ambient_noise",
 	"ambient_noise_sensor",
 	"bass",
