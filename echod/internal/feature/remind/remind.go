@@ -236,7 +236,9 @@ func sayThroughHA(label string) {
 func satellite() string {
 	name := config.Get().Device.Name
 	if t, ok := satelliteTemplate(name); ok {
-		if id, err := hass.Get().Render(t); err == nil && strings.HasPrefix(id, "assist_satellite.") {
+		// One satellite only: two devices of that name (an Echo and a voice satellite both called
+		// "Kitchen") leave it to the lookups below, rather than to whichever Home Assistant lists first.
+		if id, err := hass.Get().Render(t); err == nil && strings.HasPrefix(id, "assist_satellite.") && !strings.Contains(id, ",") {
 			return id
 		}
 	}
@@ -255,8 +257,8 @@ func satellite() string {
 	return guess
 }
 
-// satelliteTemplate asks Home Assistant for the assist satellite on the device named name. Home
-// Assistant's templates take no escapes in a string, so the name goes in single quotes, or double ones
+// satelliteTemplate asks Home Assistant for the assist satellites on devices named name, comma-separated.
+// Home Assistant's templates take no escapes in a string, so the name goes in single quotes, or double ones
 // when it has an apostrophe ("Kids' Room"); a name with a backslash, or with both kinds of quote, is
 // not asked for (false).
 func satelliteTemplate(name string) (string, bool) {
@@ -270,5 +272,5 @@ func satelliteTemplate(name string) (string, bool) {
 		return "", false
 	}
 	return "{{ states.assist_satellite | map(attribute='entity_id') | select('is_device_attr', 'name', " + lit +
-		") | list | first | default('') }}", true
+		") | join(',') }}", true
 }
