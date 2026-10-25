@@ -116,8 +116,24 @@ func (r *renderer) c64Home(s scene) {
 		rows -= off
 	}
 
+	// left is where a line at row starts: the screen's edge, or just past the Call button when it is on
+	// the clock and the line would run under it.
+	left := func(row int) int {
+		if !s.callButton {
+			return 0
+		}
+		btn, y := r.callButtonRect(), y0+(row+off)*cell
+		if y+cell <= btn.Min.Y || y >= btn.Max.Y {
+			return 0
+		}
+		return (btn.Max.X-x0)/cell + 1
+	}
+
 	// put writes text at a row and column, scale rows tall; a column below 0 centers it.
 	put := func(row, col int, text string, c color.RGBA, scale int) image.Rectangle {
+		if col == 0 {
+			col = left(row)
+		}
 		row += off
 		n := utf8.RuneCountInString(text)
 		if n > cols/scale {
@@ -168,7 +184,8 @@ func (r *renderer) c64Home(s scene) {
 		row += 2
 	}
 	if row < rows && s.now.UnixMilli()/c64Blink.Milliseconds()%2 == 0 {
-		r.fillRect(image.Rect(x0, y0+(row+off)*cell, x0+cell, y0+(row+off+1)*cell), c64Ink)
+		x := x0 + left(row)*cell
+		r.fillRect(image.Rect(x, y0+(row+off)*cell, x+cell, y0+(row+off+1)*cell), c64Ink)
 	}
 	r.alertBadge(s)
 }

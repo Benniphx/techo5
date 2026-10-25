@@ -30,6 +30,7 @@ func TestC64HomeDraws(t *testing.T) {
 		"-timer": {now: at, phase: "idle", weather: sky, timers: running},
 		"-alarm": {now: at, phase: "idle", weather: sky, timers: running, alarms: alarm.View{Next: &alarm.Upcoming{At: at.Add(16 * time.Hour)}}},
 		"-blink": {now: at.Add(c64Blink), phase: "idle", weather: sky},
+		"-call":  {now: at.Add(c64Blink), phase: "idle", weather: sky, callButton: true},
 	}
 	dir := os.Getenv("SHOW_PREVIEW")
 	t.Cleanup(func() { skinPreview = "" })
