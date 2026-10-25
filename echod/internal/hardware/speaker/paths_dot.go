@@ -61,7 +61,8 @@ var dotInit = []kctl{
 	{name: "Audio_DacMux_Setting", value: "On"},
 	{name: "Ignore Ramp Up", value: "Off"},
 	{name: driverGain, level: 0},
-	{name: eqControl, blob: speakerEQ},
+	// Amazon's 3.18 only: the Linux 6.1 sound driver has no such control and applies its own filter.
+	{name: eqControl, blob: speakerEQ, ifPresent: true},
 }
 
 // eqControl is the DAC's filter chain.
