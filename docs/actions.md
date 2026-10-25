@@ -1716,7 +1716,8 @@ data:
 
 In YAML, refer to this action as `esphome.<node>_calendar_show`.
 
-Opens the calendar page on a Show, on this month, as a tap on the date under the clock does. The page
+Opens the calendar page on a Show, as a tap on the date under the clock does: on this month, or on
+the view its **Opens on** setting names. The page
 shows the month with each day's events on it; a tap on a day lists its events, and a tap on an event
 opens its details. It closes after two minutes untouched, or with Done. At night it lights a screen
 the night has put out, at the night light's level (or at half brightness with no night light), and

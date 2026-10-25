@@ -688,6 +688,9 @@ The calendar page opens from the date under the clock. Under Settings → **Disp
 once a calendar is shown, and on the setup page's Weather & Calendar tab. Each is also in Home
 Assistant.
 
+- **Opens on**: the view the date opens, and the voice assistant and `calendar_show` too: *Month*
+  (the default), *Week*, *Day* (today) or *Coming up*. *Week* opens the month while Week view is off.
+  The next event on the clock still opens its own day.
 - **Day timeline**: a day on its hours, with the day's weather, the now line on today, ‹ › and a
   swipe for the day before or after. Off shows the day as a list.
 - **Coming up, one line each**: one line per event, each day with its weather.
