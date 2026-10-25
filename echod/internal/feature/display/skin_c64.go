@@ -87,6 +87,10 @@ func (r *renderer) c64Face(cell int) font.Face {
 // c64Home is the home clock as the computer's screen.
 func (r *renderer) c64Home(s scene) {
 	r.c64Drawn = true
+	// The screen covers any photo behind the clock, so its words are drawn plainly: no halo, no gold.
+	over := r.over
+	r.over.photo, r.over.record = nil, false
+	defer func() { r.over.photo, r.over.record = over.photo, over.record }()
 	x0, y0, cell, rows := c64Grid(r.w, r.h, r.s(20))
 	r.fillRect(image.Rect(0, 0, r.w, r.h), c64Border)
 	r.fillRect(image.Rect(x0, y0, x0+c64Cols*cell, y0+rows*cell), c64Screen)
