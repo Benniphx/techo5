@@ -117,8 +117,8 @@ func wcPlaces(o map[string]any) []wcPlace {
 		case p.here:
 			p.loc = time.Local
 		default:
-			loc, err := time.LoadLocation(id)
-			if err != nil {
+			loc := cachedZone(id) // read once, not every frame
+			if loc == nil {
 				continue
 			}
 			p.loc = loc
