@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -51,7 +52,7 @@ const (
 	// and the card is playing, not only filled.
 	unmuteAfter = periods + 1
 
-	// upsampleTaps is the length of each phase of the filter that takes a period up to hwRate, where
+	// upsampleTaps is the length of each phase of the filter that takes a period up to the card's rate, where
 	// the card runs faster than Rate: 96 taps at 96 kHz, flat to 21 kHz and about 74 dB down on the
 	// images from 27 kHz. 1 ms of delay.
 	upsampleTaps = 48
@@ -356,7 +357,7 @@ func (p *Player) Name() string { return "speaker" }
 // open takes the playback stream and the mixer. Mixer writes happen in Run: the first one enumerates
 // the card, which takes over a second.
 func (p *Player) open() error {
-	pb, m, hold, mainline, err := openDevice()
+	pb, m, hold, mainline, err := openDevice(formatFor(p.Output()))
 	if err != nil {
 		return err
 	}
@@ -683,18 +684,36 @@ func (p *Player) Run(ctx context.Context) error {
 	silence := make([]byte, len(buf))
 	muted := 0 // periods written while an amplifier mute is still held
 
-	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go).
+	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go),
+	// and a card sent 32-bit containers each sample widened. Both follow the format the device is open in,
+	// which on a board with two (formatFor) changes with the output.
+	cur := formatFor(out)
 	var up *audio.Upsampler
 	var hw, wide []byte
-	if hwRate != Rate || hwTrimDB != 0 {
-		up = audio.NewUpsampler(hwRate/Rate, upsampleTaps, Channels, math.Pow(10, hwTrimDB/20))
-		hw = make([]byte, 0, len(buf)*hwRate/Rate)
-		slog.Info("playback at the card's own rate", "rate", hwRate, "trim_db", hwTrimDB)
+	upFor := func(f cardFormat) {
+		up, hw = nil, nil
+		if f.rate != Rate || hwTrimDB != 0 {
+			up = audio.NewUpsampler(f.rate/Rate, upsampleTaps, Channels, math.Pow(10, hwTrimDB/20))
+			hw = make([]byte, 0, len(buf)*f.rate/Rate)
+			slog.Info("playback at the card's own rate", "rate", f.rate, "trim_db", hwTrimDB)
+		}
 	}
+	upFor(cur)
 
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil
+		}
+
+		// The output moved to one the device is opened differently for: it is closed and opened
+		// again in the new format, here, where nothing else is writing to it.
+		if want := formatFor(p.Output()); !want.same(cur) {
+			np, err := p.reformat(pb, want)
+			if err != nil {
+				return err
+			}
+			pb, cur = np, want
+			upFor(cur)
 		}
 
 		p.fill(buf)
@@ -710,7 +729,7 @@ func (p *Player) Run(ctx context.Context) error {
 			hw = up.S16LE(to, hw[:0])
 			to = hw
 		}
-		if hwBits == 32 {
+		if cur.bits == 32 {
 			wide = widenS16(to, wide[:0])
 			to = wide
 		}
@@ -730,7 +749,7 @@ func (p *Player) Run(ctx context.Context) error {
 		// between the write and the render, and published with the count it belongs to: in frames at
 		// Rate, which is what everything placing audio counts in.
 		d, err := pb.Delay()
-		d = d * Rate / hwRate
+		d = d * Rate / cur.rate
 		at := time.Now()
 		w := p.written.Add(period)
 		if err == nil && d >= 0 {
@@ -745,9 +764,30 @@ func (p *Player) Run(ctx context.Context) error {
 	}
 }
 
+// reformat closes pb and opens the stream again in f, on the card and mixer already held, and puts the
+// new stream where the rest of the player finds it. What was still in the old ring is dropped: a change
+// of output is a moment of quiet anyway (setOutput).
+func (p *Player) reformat(pb playback, f cardFormat) (playback, error) {
+	_, mixer := p.device()
+	_ = pb.Close()
+	p.ring.Store(nil)
+	np, err := reopenPlayback(mixer, f)
+	if err != nil {
+		p.devMu.Lock()
+		p.pb = nil
+		p.devMu.Unlock()
+		return nil, fmt.Errorf("speaker: opening playback again at %d Hz: %w", f.rate, err)
+	}
+	p.devMu.Lock()
+	p.pb = np
+	p.devMu.Unlock()
+	slog.Info("playback opened again for the output", "output", p.Output(), "rate", f.rate, "bits", f.bits)
+	return np, nil
+}
+
 // widenS16 appends in, S16_LE samples, to out as S24_LE ones: 24 bits in the low three bytes of a
 // 32-bit container, the 16 at the top of the 24 and the fourth byte the sign, so full scale stays full
-// scale. For a card that is sent 32-bit containers (hwBits). S24_LE rather than S32_LE because the Echo
+// scale. For a card that is sent 32-bit containers (cardFormat.bits). S24_LE rather than S32_LE because the Echo
 // Dot 3's TAS2770 plays nothing at all of S32_LE, while S24_LE plays (unit 1, 2026-10-23).
 func widenS16(in, out []byte) []byte {
 	for i := 0; i+1 < len(in); i += 2 {

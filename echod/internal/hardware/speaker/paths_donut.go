@@ -37,8 +37,9 @@ type kctl struct {
 // The Dot 3 plays out of the MT8516's AFE two ways, both from the AFE's O03/O04: over I2S to a TI
 // TAS2770 amplifier on the speaker, or through the SoC's own codec to the jack, fed from DL1 (I05/I06)
 // as Fire OS feeds them. (DL2, I07/I08, reaches the jack's codec and the echo reference but not the
-// amplifier: on unit 1 a tone on it was quieter than the room.) Both back ends stay connected; the path
-// picks the output by muting the other: the amplifier's digital volume (PCM Playback Volume) is at
+// amplifier: on unit 1 a tone on it was quieter than the room.) On the jack both back ends are
+// connected (formatFor; on the speaker the jack's is off) and the path picks the output by muting the
+// other: the amplifier's digital volume (PCM Playback Volume) is at
 // full on the speaker's path and zero on the jack's, which is how Fire OS keeps the speaker quiet while
 // the jack plays, and the jack's mux is open on the speaker's. The amplifier's own level is DAC
 // Playback Volume, 16 of 0 to 20 from boot, 11 to 21 dBV full scale at 0.5 dB a step. Found by
@@ -50,8 +51,8 @@ var initSequence = []kctl{
 	{name: "O04 I06 Switch", level: 1},
 	{name: "O03 I07 Switch", level: 0},
 	{name: "O04 I08 Switch", level: 0},
-	{name: "INT ADDA O03_O04 Switch", level: 1},
-	{name: "I2S O03_O04 Switch", level: 1},
+	// The back ends (INT ADDA and I2S O03_O04) are the format's (formatFor): written here, the jack's
+	// would join a stream already open at the speaker's 96 kHz, which its codec refuses.
 }
 
 var pathSequence = map[Output][]kctl{
@@ -169,9 +170,8 @@ func gainForStep(out Output, step int) float32 {
 // memory, and zeroing it at the start of the stream (a memset that uses DC ZVA) takes an alignment
 // fault and panics the kernel: a 4096-frame 16-bit ring (16 KB) did exactly that on unit 1, 2026-10-23,
 // three times. The ring also has to stay under HardwareTail (150 ms), and at 48 kHz 16-bit both cannot
-// hold, so the card is sent 32-bit containers (hwBits, S24_LE): six periods of 1024 frames are 128 ms
-// and 48 KB.
-// (96 kHz would do it too, but the jack's codec refuses 96 kHz.)
+// hold. Both formats below make six periods of 1024 frames at Rate, 128 ms and 48 KB: the speaker's at
+// 96 kHz 16-bit, the jack's at 48 kHz in 32-bit containers.
 const (
 	period  = 1024
 	periods = 6
@@ -187,13 +187,41 @@ const startFull = false
 // the software reference (echoref.InUse), which this player then feeds.
 const softRef = true
 
-// openSequence connects DL1 to both back ends before the device opens: DPCM refuses to prepare a
-// front end with none enabled ("ASoC: no backend DAIs enabled for DL1 Playback", EINVAL).
-var openSequence = []kctl{
-	{name: "O03 I05 Switch", level: 1},
-	{name: "O04 I06 Switch", level: 1},
-	{name: "INT ADDA O03_O04 Switch", level: 1},
-	{name: "I2S O03_O04 Switch", level: 1},
+// The card runs two ways, and the player opens it again when the output moves from one to the other.
+//
+// The speaker's: 96 kHz, 16-bit, the amplifier's I2S back end alone. At 48 kHz the TAS2770 turns the
+// upper frequencies of speech and music into static (techo5-dot#20): a sweep is clean low and gritty at
+// the top, and the same sentence that is clean on a Show crackles here, from echod and from aplay alike.
+// At 96 kHz it is clean, as it was in the port's first build (donut.3, 2b9c706c): the user's bench unit
+// played with static on every build from donut.8 (48 kHz S24_LE) to v1.0.32 and without it on donut.3,
+// 2026-10-24. The jack's codec refuses 96 kHz, and with its back end connected DL1 will not open at that
+// rate at all, so it is off here.
+//
+// The jack's: 48 kHz in 32-bit containers (S24_LE), both back ends connected, as the jack needs; the
+// amplifier is silent on this path (pathSequence), so its static is not heard. DPCM refuses to prepare a
+// front end with no back end enabled ("ASoC: no backend DAIs enabled for DL1 Playback", EINVAL), so the
+// routes go on before the device opens.
+var (
+	speakerFormat = cardFormat{rate: 2 * Rate, bits: Bits, open: []kctl{
+		{name: "O03 I05 Switch", level: 1},
+		{name: "O04 I06 Switch", level: 1},
+		{name: "INT ADDA O03_O04 Switch", level: 0},
+		{name: "I2S O03_O04 Switch", level: 1},
+	}}
+	jackFormat = cardFormat{rate: Rate, bits: 32, open: []kctl{
+		{name: "O03 I05 Switch", level: 1},
+		{name: "O04 I06 Switch", level: 1},
+		{name: "INT ADDA O03_O04 Switch", level: 1},
+		{name: "I2S O03_O04 Switch", level: 1},
+	}}
+)
+
+// formatFor is the speaker's format on the speaker and the jack's on the jack.
+func formatFor(out Output) cardFormat {
+	if out == OutputSpeaker {
+		return speakerFormat
+	}
+	return jackFormat
 }
 
 // MediaService is the init service that owns Android's audio HAL on Fire OS.
@@ -228,11 +256,9 @@ const HasJack = true
 // HasBoth is whether the speaker and the jack can play at once: not tried, so not offered.
 const HasBoth = false
 
-// PlaybackDevice is DL1_Playback, at Rate, sent 32-bit containers so its ring is in DRAM (period,
-// above). S24_LE: the amplifier plays nothing of S32_LE, though it takes it (unit 1, 2026-10-23).
+// PlaybackDevice is DL1_Playback, at the output's format (formatFor). S24_LE on the jack's: the
+// amplifier plays nothing of S32_LE, though it takes it (unit 1, 2026-10-23).
 const (
 	PlaybackDevice = 6
-	hwRate         = Rate
 	hwTrimDB       = 0.0
-	hwBits         = 32
 )
