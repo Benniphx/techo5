@@ -235,10 +235,14 @@ func sayThroughHA(label string) {
 // A guess is logged, since Home Assistant takes an announcement to an entity it does not have in silence.
 func satellite() string {
 	name := config.Get().Device.Name
+	if id, ok := found.get(name); ok {
+		return id
+	}
 	if t, ok := satelliteTemplate(name); ok {
 		// One satellite only: two devices of that name (an Echo and a voice satellite both called
 		// "Kitchen") leave it to the lookups below, rather than to whichever Home Assistant lists first.
 		if id, err := hass.Get().Render(t); err == nil && strings.HasPrefix(id, "assist_satellite.") && !strings.Contains(id, ",") {
+			found.put(name, id)
 			return id
 		}
 	}
@@ -250,11 +254,36 @@ func satellite() string {
 	}
 	for _, e := range list {
 		if strings.EqualFold(e.Name, name+" Assist satellite") {
+			found.put(name, e.ID)
 			return e.ID
 		}
 	}
 	slog.Warn("say: no assist satellite found for this device; guessing", "entity", guess)
 	return guess
+}
+
+// found keeps the satellite last found, for foundFor: each lookup is a round trip to Home Assistant, up to
+// two when the first finds nothing, and an alarm's words or a notification wait on it. A guess is not kept.
+var found satelliteCache
+
+const foundFor = 10 * time.Minute
+
+type satelliteCache struct {
+	mu       sync.Mutex
+	name, id string
+	at       time.Time
+}
+
+func (c *satelliteCache) get(name string) (string, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.id, c.id != "" && c.name == name && time.Since(c.at) < foundFor
+}
+
+func (c *satelliteCache) put(name, id string) {
+	c.mu.Lock()
+	c.name, c.id, c.at = name, id, time.Now()
+	c.mu.Unlock()
 }
 
 // satelliteTemplate asks Home Assistant for the assist satellites on devices named name, comma-separated.
