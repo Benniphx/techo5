@@ -21,13 +21,14 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
-// The Commodore 64 skins (skin.go): the home clock is the computer's screen. A light blue border round
-// a blue screen of 40 columns of 8 by 8 characters, each pixel a whole number of the panel's, so the
-// characters stay sharp: two on the Show 5, three on the Show 8, five on the Skylight, with the border
-// taking what is left, wide at the sides of a wide panel as it was on a television. On it the start-up
-// banner, READY., the clock as PRINT TI$ answers it in characters six rows tall, the date and the
-// weather, any timers and the next alarm as lines of their own, and the cursor blinking under them as
-// the computer's does. Every line has an empty row above and below it.
+// The Commodore 64 skins (skin.go): the home clock is the computer's screen. A thin light blue border,
+// the same all round, and the blue screen filling the rest with 8 by 8 characters. Each of their pixels
+// is a whole number of the panel's, so they stay sharp and square: as large as lets the computer's 40
+// columns and 25 rows fit (two on the Show 5, three on the Show 8, five on the Skylight), with as many
+// more columns and rows as the panel has room for, rather than the computer's wide border. On it the
+// start-up banner, READY., the clock as PRINT TI$ answers it in characters as tall as fit, the date and
+// the weather, any timers and the next alarm as lines of their own, and the cursor blinking under them
+// as the computer's does. Every line has an empty row above and below it.
 //
 // Commodore 64 shows the computer's own banner. TECHO5 BASIC shows the version running and this
 // device's memory: all of it, and what is free, read as the screen is drawn.
@@ -41,13 +42,13 @@ var (
 )
 
 const (
-	c64Cols = 40
-	c64Rows = 25 // as the computer's, on a panel wider than tall; a tall one takes as many as fit
+	c64Cols, c64Rows = 40, 25 // the computer's screen, which the characters' size is chosen to fit
 
 	// c64Blink is how long the cursor is lit and then dark: the computer's 20 frames of its 60.
 	c64Blink = 333 * time.Millisecond
 
-	c64ClockRows = 6 // how tall the clock's characters are, in rows
+	// c64ClockMin and c64ClockMax bound how tall the clock's characters are, in rows.
+	c64ClockMin, c64ClockMax = 4, 10
 )
 
 // c64Skin is whether a Commodore 64 skin is on.
@@ -56,16 +57,13 @@ func c64Skin() bool {
 	return sk == skinC64 || sk == skinBASIC
 }
 
-// c64Grid is the screen's place on a panel w by h: its top left, the size of a character cell, and how
-// many rows it has.
-func c64Grid(w, h, minBorder int) (x0, y0, cell, rows int) {
-	px := max((w-2*minBorder)/(c64Cols*8), 1)
+// c64Grid is the screen's characters on a panel w by h inside a border b: the top left of the first,
+// the size of a character cell, and how many columns and rows there are.
+func c64Grid(w, h, b int) (x0, y0, cell, cols, rows int) {
+	px := max(min((w-2*b)/(c64Cols*8), (h-2*b)/(c64Rows*8)), 1)
 	cell = 8 * px
-	rows = (h - 2*minBorder) / cell
-	if w > h {
-		rows = min(rows, c64Rows)
-	}
-	return (w - c64Cols*cell) / 2, (h - rows*cell) / 2, cell, rows
+	cols, rows = (w-2*b)/cell, (h-2*b)/cell
+	return (w - cols*cell) / 2, (h - rows*cell) / 2, cell, cols, rows
 }
 
 // c64Face is the pixel font with each pixel px of the panel's.
@@ -91,25 +89,43 @@ func (r *renderer) c64Home(s scene) {
 	over := r.over
 	r.over.photo, r.over.record = nil, false
 	defer func() { r.over.photo, r.over.record = over.photo, over.record }()
-	x0, y0, cell, rows := c64Grid(r.w, r.h, r.s(20))
+	b := r.s(20)
+	x0, y0, cell, cols, rows := c64Grid(r.w, r.h, b)
 	r.fillRect(image.Rect(0, 0, r.w, r.h), c64Border)
-	r.fillRect(image.Rect(x0, y0, x0+c64Cols*cell, y0+rows*cell), c64Screen)
+	r.fillRect(image.Rect(b, b, r.w-b, r.h-b), c64Screen)
 
-	// On a panel taller than wide the screen has more rows than the computer's 25: what it shows is
-	// centered among them, the rest left blue.
-	off := max(rows-c64Rows, 0) / 2
-	rows -= off
+	// The clock as tall as the rows and columns allow: its five characters and AM or PM beside them.
+	big := min(max(min(rows-17, (cols-8)/5), c64ClockMin), c64ClockMax)
+
+	var lines []string
+	for _, t := range runningTimers(s) {
+		name := strings.ToUpper(t.Name)
+		if name == "" {
+			name = "TIMER"
+		}
+		lines = append(lines, fmt.Sprintf("%s %s", name, c64Left(t.Left)))
+	}
+	if next := s.alarms.Next; next != nil && next.At.Sub(s.now) < 24*time.Hour {
+		lines = append(lines, strings.ToUpper(locale.Alarm(screenLang(), next.Snoozed)+" "+clockText(next.At)))
+	}
+
+	// On a panel taller than wide what the screen shows is centered among its rows, the rest left blue.
+	off := 0
+	if r.h > r.w {
+		off = max(rows-(15+big+2*len(lines)), 0) / 2
+		rows -= off
+	}
 
 	// put writes text at a row and column, scale rows tall; a column below 0 centers it.
 	put := func(row, col int, text string, c color.RGBA, scale int) image.Rectangle {
 		row += off
 		n := utf8.RuneCountInString(text)
-		if n > c64Cols/scale {
-			text = string([]rune(text)[:c64Cols/scale])
-			n = c64Cols / scale
+		if n > cols/scale {
+			text = string([]rune(text)[:cols/scale])
+			n = cols / scale
 		}
 		if col < 0 {
-			col = (c64Cols - n*scale) / 2
+			col = (cols - n*scale) / 2
 		}
 		x, y := x0+col*cell, y0+row*cell
 		r.text(r.c64Face(cell*scale), text, x, y+7*cell*scale/8, c)
@@ -123,12 +139,12 @@ func (r *renderer) c64Home(s scene) {
 	put(7, 0, "PRINT TI$", c64Ink, 1)
 
 	row := 9
-	clock := put(row, -1, clockHM(s.now), c64White, c64ClockRows)
+	clock := put(row, -1, clockHM(s.now), c64White, big)
 	if ampm := clockSuffix(s.now); ampm != "" {
 		// Beside the figures' foot, a column clear of them.
-		put(row+c64ClockRows-1, (clock.Max.X-x0)/cell+1, strings.ToUpper(ampm), c64Ink, 1)
+		put(row+big-1, (clock.Max.X-x0)/cell+1, strings.ToUpper(ampm), c64Ink, 1)
 	}
-	row += c64ClockRows + 1
+	row += big + 1
 
 	date := strings.ToUpper(locale.ShortDate(s.now, screenLang()))
 	line := date
@@ -140,17 +156,6 @@ func (r *renderer) c64Home(s scene) {
 
 	// Then a line for each running timer and the next alarm, while there is room for them and the
 	// prompt under them.
-	var lines []string
-	for _, t := range runningTimers(s) {
-		name := strings.ToUpper(t.Name)
-		if name == "" {
-			name = "TIMER"
-		}
-		lines = append(lines, fmt.Sprintf("%s %s", name, c64Left(t.Left)))
-	}
-	if next := s.alarms.Next; next != nil && next.At.Sub(s.now) < 24*time.Hour {
-		lines = append(lines, strings.ToUpper(locale.Alarm(screenLang(), next.Snoozed)+" "+clockText(next.At)))
-	}
 	for _, l := range lines {
 		if row+4 > rows {
 			break

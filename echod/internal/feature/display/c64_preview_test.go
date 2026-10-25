@@ -46,9 +46,10 @@ func TestC64HomeDraws(t *testing.T) {
 				if !r.c64Drawn {
 					t.Fatalf("%s%s%s: not the computer's screen", sk, suffix, panel.name)
 				}
-				x0, y0, cell, rows := c64Grid(panel.wide, panel.high, r.s(20))
-				if cell%8 != 0 || x0 < 0 || y0 < 0 || rows < 18 {
-					t.Errorf("%s%s: grid %d,%d cell %d rows %d", sk, panel.name, x0, y0, cell, rows)
+				b := r.s(20)
+				x0, y0, cell, cols, rows := c64Grid(panel.wide, panel.high, b)
+				if cell%8 != 0 || x0 < b || y0 < b || cols < c64Cols || rows < c64Rows || x0-b >= cell || y0-b >= cell {
+					t.Errorf("%s%s: grid %d,%d cell %d, %d by %d", sk, panel.name, x0, y0, cell, cols, rows)
 				}
 				if dir == "" {
 					continue
