@@ -370,7 +370,8 @@ captured login to the same page for a few minutes, and could see the pictures an
   on the device stops the stream there; the phone keeps going until it is paused too. Anyone on the
   same network can play to the device while one is on, as with any AirPlay or Spotify speaker, and
   Spotify Connect keeps the login a phone hands it until it is turned off. Where the image carries the
-  AirPlay 2 receiver, an iPhone can group the device with other AirPlay 2 speakers (a HomePod, a Sonos)
+  AirPlay 2 receiver (the Echo Dot 2nd gen's and the Echo 2nd gen's, so far), an iPhone can group the
+  device with other AirPlay 2 speakers (a HomePod, a Sonos)
   and play to all of them at once; without it, or when it will not start, the device is a classic
   AirPlay speaker, which plays on its own. A third switch there, **AirPlay 2** (on unless turned off),
   keeps it to classic AirPlay: for a group it will not play in step with, since it can still drift a few
