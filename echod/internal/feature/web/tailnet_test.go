@@ -168,8 +168,9 @@ func TestTheTailnetReachesTheSetupPageOnlyWithRemoteSetup(t *testing.T) {
 // A house numbered across the whole tailnet range takes every tailnet address for its own (Away), but a
 // request that reached the device's own tailnet address came over the tailnet: from away, and refused.
 func TestARequestToTheTailnetAddressIsFromAway(t *testing.T) {
-	was, wasAddrs := LocalNets, TailnetAddrs
-	t.Cleanup(func() { LocalNets, TailnetAddrs = was, wasAddrs })
+	was, wasAddrs, wasUp := LocalNets, TailnetAddrs, TailscaleUp
+	t.Cleanup(func() { LocalNets, TailnetAddrs, TailscaleUp = was, wasAddrs, wasUp })
+	TailscaleUp = func() bool { return true }
 	LocalNets = func() (bool, []netip.Prefix) { return true, []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10")} }
 	TailnetAddrs = func() []netip.Addr { return []netip.Addr{netip.MustParseAddr("100.64.1.9")} }
 	h := tailnetGate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) }))
@@ -192,6 +193,11 @@ func TestARequestToTheTailnetAddressIsFromAway(t *testing.T) {
 	}
 	if !AwayConn("192.0.2.5:1", "100.64.1.9:554") || AwayConn("192.0.2.5:1", "100.64.0.30:554") {
 		t.Error("AwayConn by the address reached")
+	}
+	// With Tailscale not connected there is no tailnet address to have reached.
+	TailscaleUp = func() bool { return false }
+	if AwayConn("192.0.2.5:1", "100.64.1.9:554") {
+		t.Error("AwayConn with Tailscale down")
 	}
 }
 

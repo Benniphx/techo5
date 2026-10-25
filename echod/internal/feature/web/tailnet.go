@@ -139,7 +139,10 @@ func ToTailnet(local string) bool {
 
 // AwayConn is whether a connection is from away: by its source (Away), or by the address it reached
 // (ToTailnet).
-func AwayConn(remote, local string) bool { return Away(remote) || ToTailnet(local) }
+// The address reached is looked at only while Tailscale is connected: listing the interfaces for
+// every request would cost a slow device on every camera frame, and with no tailnet there is no
+// tailnet address to reach.
+func AwayConn(remote, local string) bool { return Away(remote) || (TailscaleUp() && ToTailnet(local)) }
 
 // AwayRequest is AwayConn for a request to an http.Server, which says the address it reached.
 func AwayRequest(r *http.Request) bool {

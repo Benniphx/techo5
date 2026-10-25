@@ -153,10 +153,11 @@ func TestEntitiesOnlyWhereTheImageCarriesIt(t *testing.T) {
 // Joining or turning it on needs Home Assistant's link to have its own key: none, and nothing changes.
 func TestOnNeedsAnEncryptedLink(t *testing.T) {
 	config.Use(filepath.Join(t.TempDir(), "state.json"))
-	was := encrypted
-	t.Cleanup(func() { encrypted = was })
+	was, wasAvailable := encrypted, Available
+	t.Cleanup(func() { encrypted, Available = was, wasAvailable })
 	encrypted = func() bool { return false }
-	if err := Get().SetOn(true); err == nil || config.Get().Tailscale.On {
+	Available = func() bool { return true }
+	if err := Get().SetOn(true); err == nil || !strings.Contains(err.Error(), "encryption key") || config.Get().Tailscale.On {
 		t.Errorf("turned on with no key on the link: %v", err)
 	}
 	if err := Get().Login(context.Background(), "tskey-auth-test"); err == nil || !strings.Contains(err.Error(), "encryption key") {

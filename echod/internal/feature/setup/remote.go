@@ -192,7 +192,9 @@ func (f *Feature) showAsking() {
 		}
 	}
 	f.mu.Unlock()
-	f.remote.asking.Set(from)
+	if f.remote.asking.Get() != from { // each Set is sent, even unchanged: Run calls this every 15 s
+		f.remote.asking.Set(from)
+	}
 }
 
 // letInFromHA lets in the browser asking now, as a press on the device would: only while Remote setup
