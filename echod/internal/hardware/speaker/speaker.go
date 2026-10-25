@@ -91,6 +91,9 @@ type Player struct {
 	devMu sync.Mutex
 	pb    playback
 	mixer *alsa.Mixer
+	// pbFormat is what pb was opened in (formatFor), which Run starts from: the output can change
+	// between the open and the first period, and the format it had at the open is what the card holds.
+	pbFormat cardFormat
 
 	// hold is DRAMHold, kept open for as long as pb is: see paths_cronos.go.
 	hold     *os.File
@@ -357,13 +360,14 @@ func (p *Player) Name() string { return "speaker" }
 // open takes the playback stream and the mixer. Mixer writes happen in Run: the first one enumerates
 // the card, which takes over a second.
 func (p *Player) open() error {
-	pb, m, hold, mainline, err := openDevice(formatFor(p.Output()))
+	f := formatFor(p.Output())
+	pb, m, hold, mainline, err := openDevice(f)
 	if err != nil {
 		return err
 	}
 
 	p.devMu.Lock()
-	p.pb, p.mixer, p.hold = pb, m, hold
+	p.pb, p.mixer, p.hold, p.pbFormat = pb, m, hold, f
 	p.mainline = mainline
 	p.devMu.Unlock()
 	return nil
@@ -687,7 +691,9 @@ func (p *Player) Run(ctx context.Context) error {
 	// A card that runs faster than Rate is sent each period upsampled, with the board's trim (paths_*.go),
 	// and a card sent 32-bit containers each sample widened. Both follow the format the device is open in,
 	// which on a board with two (formatFor) changes with the output.
-	cur := formatFor(out)
+	p.devMu.Lock()
+	cur := p.pbFormat
+	p.devMu.Unlock()
 	var up *audio.Upsampler
 	var hw, wide []byte
 	upFor := func(f cardFormat) {
@@ -708,11 +714,11 @@ func (p *Player) Run(ctx context.Context) error {
 		// The output moved to one the device is opened differently for: it is closed and opened
 		// again in the new format, here, where nothing else is writing to it.
 		if want := formatFor(p.Output()); !want.same(cur) {
-			np, err := p.reformat(pb, want)
+			np, got, err := p.reformat(ctx, pb, want, cur)
 			if err != nil {
 				return err
 			}
-			pb, cur = np, want
+			pb, cur = np, got
 			upFor(cur)
 		}
 
@@ -764,26 +770,41 @@ func (p *Player) Run(ctx context.Context) error {
 	}
 }
 
-// reformat closes pb and opens the stream again in f, on the card and mixer already held, and puts the
-// new stream where the rest of the player finds it. What was still in the old ring is dropped: a change
-// of output is a moment of quiet anyway (setOutput).
-func (p *Player) reformat(pb playback, f cardFormat) (playback, error) {
+// reformat closes pb and opens the stream again in want, on the card and mixer already held, and puts
+// the new stream where the rest of the player finds it. What was still in the old ring is dropped: a
+// change of output is a moment of quiet anyway (setOutput). The run goroutine is the player's only
+// writer and nothing restarts it, so a stream that will not open is tried again, and then the format
+// that was playing is taken back rather than leaving the device silent; it returns the format it got.
+// An error only when neither opens.
+func (p *Player) reformat(ctx context.Context, pb playback, want, was cardFormat) (playback, cardFormat, error) {
 	_, mixer := p.device()
 	_ = pb.Close()
 	p.ring.Store(nil)
-	np, err := reopenPlayback(mixer, f)
-	if err != nil {
-		p.devMu.Lock()
-		p.pb = nil
-		p.devMu.Unlock()
-		return nil, fmt.Errorf("speaker: opening playback again at %d Hz: %w", f.rate, err)
+	var err error
+	for _, f := range []cardFormat{want, want, want, was} {
+		var np playback
+		if np, err = reopenPlayback(mixer, f); err == nil {
+			p.devMu.Lock()
+			p.pb, p.pbFormat = np, f
+			p.devMu.Unlock()
+			slog.Info("playback opened again for the output", "output", p.Output(), "rate", f.rate, "bits", f.bits)
+			return np, f, nil
+		}
+		slog.Warn("speaker: opening playback again failed", "rate", f.rate, "bits", f.bits, "err", err)
+		select {
+		case <-ctx.Done():
+			return nil, was, ctx.Err()
+		case <-time.After(reopenWait):
+		}
 	}
 	p.devMu.Lock()
-	p.pb = np
+	p.pb = nil
 	p.devMu.Unlock()
-	slog.Info("playback opened again for the output", "output", p.Output(), "rate", f.rate, "bits", f.bits)
-	return np, nil
+	return nil, was, fmt.Errorf("speaker: opening playback again: %w", err)
 }
+
+// reopenWait is how long reformat waits between tries.
+const reopenWait = 200 * time.Millisecond
 
 // widenS16 appends in, S16_LE samples, to out as S24_LE ones: 24 bits in the low three bytes of a
 // 32-bit container, the 16 at the top of the 24 and the fourth byte the sign, so full scale stays full

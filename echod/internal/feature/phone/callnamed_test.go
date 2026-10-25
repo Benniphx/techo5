@@ -71,6 +71,9 @@ func TestTheLogKeepsOnlyTheNumber(t *testing.T) {
 		"Dr. Lee (Clinic) (5550)": "5550",
 		"15551234567":             "15551234567",
 		"":                        "",
+		"Unknown":                 "Unknown",
+		"Mom":                     "a named caller",
+		"*86":                     "*86",
 	} {
 		if got := loggedPeer(in); got != want {
 			t.Errorf("loggedPeer(%q) = %q, want %q", in, got, want)

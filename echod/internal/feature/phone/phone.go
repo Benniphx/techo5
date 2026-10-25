@@ -659,7 +659,7 @@ func (p *Phone) incoming(d *diago.DialogServerSession) {
 	defer cancel()
 
 	if busy {
-		slog.Info("phone: call refused, already on one", "from", caller)
+		slog.Info("phone: call refused, already on one", "from", loggedPeer(caller))
 		_ = d.Respond(sip.StatusBusyHere, "Busy Here", nil)
 		return
 	}
@@ -667,7 +667,7 @@ func (p *Phone) incoming(d *diago.DialogServerSession) {
 		slog.Warn("phone: ringing", "err", err)
 	}
 	p.set(func(*State) {})
-	slog.Info("phone: ringing", "from", caller)
+	slog.Info("phone: ringing", "from", loggedPeer(caller))
 	fire("ringing", p.State())
 
 	rctx, stopRing := context.WithCancel(ctx)
@@ -694,13 +694,13 @@ func (p *Phone) incoming(d *diago.DialogServerSession) {
 		p.set(func(s *State) { s.Phase, s.Peer = Idle, "" })
 	case <-d.Context().Done():
 		stopRing()
-		slog.Info("phone: missed call", "from", caller)
+		slog.Info("phone: missed call", "from", loggedPeer(caller))
 		fire("missed", p.State())
 		p.set(func(s *State) { s.Phase, s.Peer = Idle, "" })
 	case <-timeout.C:
 		stopRing()
 		_ = d.Respond(sip.StatusTemporarilyUnavailable, "No Answer", nil)
-		slog.Info("phone: missed call", "from", caller)
+		slog.Info("phone: missed call", "from", loggedPeer(caller))
 		fire("missed", p.State())
 		p.set(func(s *State) { s.Phase, s.Peer = Idle, "" })
 	}
@@ -783,8 +783,9 @@ func (p *Phone) Hangup() {
 }
 
 // Actions: phone_account signs the device in (an empty username signs it out); phone_call places a
-// call, and phone_call_named one with the name of whom it calls; intercom_call calls another device in the house; phone_contacts sets who a screen offers to
-// call; phone_answer and phone_hangup act on the call that is up, whichever line it is on.
+// call, and phone_call_named one with the name of whom it calls; intercom_call calls another device in
+// the house; phone_contacts sets who a screen offers to call; phone_answer and phone_hangup act on the
+// call that is up, whichever line it is on.
 func (p *Phone) Actions() []*esphome.Action {
 	return []*esphome.Action{
 		{
@@ -855,19 +856,27 @@ func dialable(number string) string {
 	return b.String()
 }
 
-// calledPeer is whom a call goes to, as the screen and Home Assistant show it: the name it was placed
-// with and the number, as callerOf gives a caller the network names, or the number alone. The name is
-// kept to what the screen can print, and as long as an intercom caller's.
 // loggedPeer is who is on the call as the log may say it: the number alone, never a name. A call placed
-// to a contact shows "Mom (15551234567)", and a network can name its caller the same way, but names stay
-// out of the log and so out of diagnostics bundles.
+// to a contact shows "Mom (15551234567)", and a network can name its caller the same way, or send a name
+// with no number at all, but names stay out of the log and so out of diagnostics bundles.
 func loggedPeer(peer string) string {
 	if i := strings.LastIndex(peer, " ("); i >= 0 && strings.HasSuffix(peer, ")") {
-		return peer[i+2 : len(peer)-1]
+		peer = peer[i+2 : len(peer)-1]
+	}
+	if peer == "Unknown" {
+		return peer
+	}
+	for _, r := range peer {
+		if (r < '0' || r > '9') && !strings.ContainsRune("+*#", r) {
+			return "a named caller"
+		}
 	}
 	return peer
 }
 
+// calledPeer is whom a call goes to, as the screen and Home Assistant show it: the name it was placed
+// with and the number, as callerOf gives a caller the network names, or the number alone. The name is
+// kept to what the screen can print, and as long as an intercom caller's.
 func calledPeer(name, number string) string {
 	name = strings.TrimSpace(strings.Map(func(r rune) rune {
 		if r == utf8.RuneError || !unicode.IsPrint(r) {

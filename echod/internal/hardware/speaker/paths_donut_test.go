@@ -45,6 +45,10 @@ func TestTheJacksBackEndFollowsTheFormat(t *testing.T) {
 			t.Errorf("%s: %s = %d (set %v), want 1: DPCM refuses a front end with no back end", out, i2s, v, ok)
 		}
 	}
+	// The amplifier is muted before the jack's 48 kHz stream opens, so the speaker never plays it.
+	if v, ok := level(formatFor(OutputHeadphone).open, "PCM Playback Volume"); !ok || v != 0 {
+		t.Errorf("jack: PCM Playback Volume = %d (set %v), want 0 before the stream opens", v, ok)
+	}
 	if _, ok := level(initSequence, adda); ok {
 		t.Errorf("initSequence writes %s: it would join a 96 kHz stream already open", adda)
 	}

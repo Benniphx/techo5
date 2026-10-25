@@ -198,7 +198,9 @@ const softRef = true
 // rate at all, so it is off here.
 //
 // The jack's: 48 kHz in 32-bit containers (S24_LE), both back ends connected, as the jack needs; the
-// amplifier is silent on this path (pathSequence), so its static is not heard. DPCM refuses to prepare a
+// amplifier is silent on this path, so its static is not heard. Its digital volume goes to zero before
+// the stream opens: the jack's path (pathSequence) is written only after setOutput's drain, and until
+// then the amplifier would play the 48 kHz stream at full. DPCM refuses to prepare a
 // front end with no back end enabled ("ASoC: no backend DAIs enabled for DL1 Playback", EINVAL), so the
 // routes go on before the device opens.
 var (
@@ -209,6 +211,7 @@ var (
 		{name: "I2S O03_O04 Switch", level: 1},
 	}}
 	jackFormat = cardFormat{rate: Rate, bits: 32, open: []kctl{
+		{name: "PCM Playback Volume", level: 0},
 		{name: "O03 I05 Switch", level: 1},
 		{name: "O04 I06 Switch", level: 1},
 		{name: "INT ADDA O03_O04 Switch", level: 1},
