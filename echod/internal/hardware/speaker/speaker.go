@@ -714,11 +714,11 @@ func (p *Player) Run(ctx context.Context) error {
 		// The output moved to one the device is opened differently for: it is closed and opened
 		// again in the new format, here, where nothing else is writing to it.
 		if want := formatFor(p.Output()); !want.same(cur) {
-			np, got, err := p.reformat(ctx, pb, want, cur)
+			np, err := p.reformat(ctx, pb, want)
 			if err != nil {
 				return err
 			}
-			pb, cur = np, got
+			pb, cur = np, want
 			upFor(cur)
 		}
 
@@ -772,39 +772,43 @@ func (p *Player) Run(ctx context.Context) error {
 
 // reformat closes pb and opens the stream again in want, on the card and mixer already held, and puts
 // the new stream where the rest of the player finds it. What was still in the old ring is dropped: a
-// change of output is a moment of quiet anyway (setOutput). The run goroutine is the player's only
-// writer and nothing restarts it, so a stream that will not open is tried again, and then the format
-// that was playing is taken back rather than leaving the device silent; it returns the format it got.
-// An error only when neither opens.
-func (p *Player) reformat(ctx context.Context, pb playback, want, was cardFormat) (playback, cardFormat, error) {
+// change of output is a moment of quiet anyway (setOutput). A stream that will not open is tried again a
+// few times; after that the error ends Run, and the service restarts the player, which opens the device
+// in the format of the output it then has. The format's routes can change what the output's path set
+// (the jack's mutes the amplifier), so the path is written again once the stream is open.
+func (p *Player) reformat(ctx context.Context, pb playback, want cardFormat) (playback, error) {
 	_, mixer := p.device()
 	_ = pb.Close()
 	p.ring.Store(nil)
 	var err error
-	for _, f := range []cardFormat{want, want, want, was} {
+	for try := 0; try < reopenTries; try++ {
 		var np playback
-		if np, err = reopenPlayback(mixer, f); err == nil {
+		if np, err = reopenPlayback(mixer, want); err == nil {
 			p.devMu.Lock()
-			p.pb, p.pbFormat = np, f
+			p.pb, p.pbFormat = np, want
 			p.devMu.Unlock()
-			slog.Info("playback opened again for the output", "output", p.Output(), "rate", f.rate, "bits", f.bits)
-			return np, f, nil
+			p.route()
+			slog.Info("playback opened again for the output", "output", p.Output(), "rate", want.rate, "bits", want.bits)
+			return np, nil
 		}
-		slog.Warn("speaker: opening playback again failed", "rate", f.rate, "bits", f.bits, "err", err)
+		slog.Warn("speaker: opening playback again failed", "rate", want.rate, "bits", want.bits, "err", err)
 		select {
 		case <-ctx.Done():
-			return nil, was, ctx.Err()
+			return nil, ctx.Err()
 		case <-time.After(reopenWait):
 		}
 	}
 	p.devMu.Lock()
 	p.pb = nil
 	p.devMu.Unlock()
-	return nil, was, fmt.Errorf("speaker: opening playback again: %w", err)
+	return nil, fmt.Errorf("speaker: opening playback again at %d Hz: %w", want.rate, err)
 }
 
-// reopenWait is how long reformat waits between tries.
-const reopenWait = 200 * time.Millisecond
+// reopenTries and reopenWait are how often, and how far apart, reformat tries a stream that will not open.
+const (
+	reopenTries = 3
+	reopenWait  = 200 * time.Millisecond
+)
 
 // widenS16 appends in, S16_LE samples, to out as S24_LE ones: 24 bits in the low three bytes of a
 // 32-bit container, the 16 at the top of the 24 and the fourth byte the sign, so full scale stays full
