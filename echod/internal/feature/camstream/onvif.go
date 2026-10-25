@@ -83,7 +83,7 @@ type envelope struct {
 }
 
 func (f *Feature) onvif(w http.ResponseWriter, r *http.Request) {
-	if web.Away(r.RemoteAddr) { // never one from away, over the tailnet
+	if web.AwayRequest(r) { // never one from away, over the tailnet
 		http.NotFound(w, r)
 		return
 	}

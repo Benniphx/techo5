@@ -220,7 +220,8 @@ Every image `deploy-rootfs.sh` builds carries Tailscale's daemon ([docs/tailscal
 it stops when it is missing.
 [tools/linux/build-tailscaled.sh](../tools/linux/build-tailscaled.sh) builds `bin/tailscaled-arm64` and
 its license from Tailscale's own release source, pinned and checked by SHA-256, with Go (Linux or WSL,
-under a minute). One static arm64 build serves every image: their kernels are 64-bit. The build is
+under a minute). One static arm64 build serves every image, on the devices' 64-bit kernels; on a 32-bit
+one (an athena on Amazon's kernel) the daemon doesn't offer Tailscale. The build is
 reproducible: the same script gives the same bytes on any machine. A release built from a worktree needs
 it copied into its `bin/` as well, with `tailscaled-arm64.LICENSE`.
 

@@ -7,7 +7,8 @@
 # writes bin/tailscaled-arm64 (deploy-rootfs.sh puts it in the image as /usr/local/bin/tailscaled).
 #
 # arm64: their kernels are 64-bit, also under the Show's 32-bit userspace, and tailscaled is static
-# (CGO off), so the one build runs on every one of them. It is built from Tailscale's own release
+# (CGO off), so the one build runs on every one of them (not on an athena still on Amazon's 32-bit
+# kernel, where the daemon doesn't offer it). It is built from Tailscale's own release
 # source, checked against the SHA-256 below, with what TECHO5 doesn't use left out by Tailscale's own
 # ts_omit build tags: no SSH server, no Taildrop, no exit node or subnet routes, no DNS or route
 # changes on the device, no web client, no logging to Tailscale. What is left joins the tailnet with an

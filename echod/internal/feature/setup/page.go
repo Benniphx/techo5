@@ -58,6 +58,7 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-t.C:
 		}
+		f.showAsking() // a browser that gave up asking is not still asking in Home Assistant
 		if !f.On() {
 			f.mu.Lock()
 			stale := !f.openedAt.IsZero()
@@ -162,7 +163,7 @@ func (f *Feature) wait(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		from = r.RemoteAddr
 	}
-	token, ok := f.awaitFrom(from, web.Away(r.RemoteAddr)) // for Home Assistant's let in (remote.go)
+	token, ok := f.awaitFrom(from, web.AwayRequest(r)) // for Home Assistant's let in (remote.go)
 	if !ok {
 		if f.ShutOut() {
 			http.Error(w, "too many tries without a press on the device; try again in a few minutes",

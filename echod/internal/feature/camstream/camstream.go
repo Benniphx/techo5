@@ -340,8 +340,8 @@ func (f *Feature) dropAll() {
 	}
 }
 
-// away is web.Away; a test sets its own, since nothing here can dial from a tailnet address.
-var away = web.Away
+// away is web.AwayConn; a test sets its own, since nothing here can dial from a tailnet address.
+var away = web.AwayConn
 
 // serve takes connections until the listener is closed.
 func (f *Feature) serve(ln net.Listener) {
@@ -351,7 +351,7 @@ func (f *Feature) serve(ln net.Listener) {
 			return
 		}
 		// Never one from away, over the tailnet: RTSP has its own listener, outside the web server's gate.
-		if away(conn.RemoteAddr().String()) || !f.admit(ln, conn, hostOf(conn.RemoteAddr())) {
+		if away(conn.RemoteAddr().String(), conn.LocalAddr().String()) || !f.admit(ln, conn, hostOf(conn.RemoteAddr())) {
 			_ = conn.Close()
 			continue
 		}

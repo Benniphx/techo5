@@ -113,7 +113,8 @@ cp "$ROOT/bin/techo5-ffmpeg-arm" "$STAGE/bin/techo5-ffmpeg"
 echo "== ffmpeg: sha256 $(sha256sum "$ROOT/bin/techo5-ffmpeg-arm" | cut -d' ' -f1)"
 # Tailscale's daemon (tools/linux/build-tailscaled.sh), for reaching the device from away (feature/tailscale,
 # docs/tailscale.md): off until somebody gives it a key. Every image this script builds carries it, and its
-# license (BSD-3-Clause) beside it. One static arm64 build serves them all: their kernels are 64-bit.
+# license (BSD-3-Clause) beside it. One static arm64 build serves them all, on their 64-bit kernels; on a
+# 32-bit one (an athena on Amazon's kernel) the daemon doesn't offer it (feature/tailscale Available).
 TS=$ROOT/bin/tailscaled-arm64
 [ -e "$TS" ] && [ -e "$TS.LICENSE" ] || { echo "bin/tailscaled-arm64 (and its .LICENSE) is missing: build it with tools/linux/build-tailscaled.sh" >&2; exit 1; }
 [ "$(od -An -tx1 -j4 -N1 "$TS" | tr -d ' ')" = 02 ] && [ "$(od -An -tu2 -j18 -N2 "$TS" | tr -d ' ')" = 183 ] && ! grep -q 'ld-musl-\|ld-linux-' "$TS" 	|| { echo "bin/tailscaled-arm64 is not a static aarch64 binary: build it with tools/linux/build-tailscaled.sh" >&2; exit 1; }

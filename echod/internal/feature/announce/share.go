@@ -234,9 +234,9 @@ func shareFailed(addr string, now time.Time) {
 
 // receiveShare takes a message from another device and hands it to feature/share.
 func receiveShare(w http.ResponseWriter, r *http.Request) {
-	// Settings are shared within the house, never with a device from away over the tailnet (web.Away).
+	// Settings are shared within the house, never with a device from away over the tailnet (web.AwayRequest).
 	// The web port's own gate turns it away first; this holds whatever the gate lets through.
-	if web.Away(r.RemoteAddr) {
+	if web.AwayRequest(r) {
 		slog.Warn("share: refused, from away", "from", r.RemoteAddr)
 		http.NotFound(w, r)
 		return

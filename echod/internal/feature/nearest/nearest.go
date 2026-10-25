@@ -416,7 +416,7 @@ func (n *Nearest) receive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A claim is this house's only: never one from away, over the tailnet.
-	if web.Away(r.RemoteAddr) {
+	if web.AwayRequest(r) {
 		http.NotFound(w, r)
 		return
 	}

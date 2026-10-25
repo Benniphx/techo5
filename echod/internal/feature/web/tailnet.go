@@ -94,11 +94,67 @@ func Away(remote string) bool {
 	return tailscale
 }
 
-// tailnetGate lets a request from away (Away) reach nothing but the setup page, and that only while
-// Remote setup is on (RemoteSetup).
+// TailnetAddrs are this device's own addresses on the tailnet: those of its Tailscale interface. A
+// variable, for tests.
+var TailnetAddrs = func() []netip.Addr {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	var out []netip.Addr
+	for _, ifc := range ifaces {
+		if ifc.Name != TunName && !strings.HasPrefix(ifc.Name, "tailscale") {
+			continue
+		}
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			if pfx, err := netip.ParsePrefix(a.String()); err == nil {
+				out = append(out, pfx.Addr().Unmap())
+			}
+		}
+	}
+	return out
+}
+
+// ToTailnet is whether a connection's local address is one of this device's own on the tailnet: it came
+// in over the tailnet, whatever its source says. A house numbered in the tailnet's range (where Away goes
+// by the house's own networks) is still told apart this way.
+func ToTailnet(local string) bool {
+	host, _, err := net.SplitHostPort(local)
+	if err != nil {
+		host = local
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	ip = ip.Unmap()
+	for _, a := range TailnetAddrs() {
+		if a == ip {
+			return true
+		}
+	}
+	return false
+}
+
+// AwayConn is whether a connection is from away: by its source (Away), or by the address it reached
+// (ToTailnet).
+func AwayConn(remote, local string) bool { return Away(remote) || ToTailnet(local) }
+
+// AwayRequest is AwayConn for a request to an http.Server, which says the address it reached.
+func AwayRequest(r *http.Request) bool {
+	local := ""
+	if a, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		local = a.String()
+	}
+	return AwayConn(r.RemoteAddr, local)
+}
+
+// tailnetGate lets a request from away (AwayRequest) reach nothing but the setup page, and that only
+// while Remote setup is on (RemoteSetup).
 func tailnetGate(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if Away(r.RemoteAddr) && !remoteSetupRequest(r) {
+		if AwayRequest(r) && !remoteSetupRequest(r) {
 			http.NotFound(w, r)
 			return
 		}

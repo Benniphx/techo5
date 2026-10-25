@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 )
 
 // fakeTailscaled answers the local API on a unix socket the way tailscaled does, keeping what it was sent.
@@ -145,5 +147,22 @@ func TestEntitiesOnlyWhereTheImageCarriesIt(t *testing.T) {
 	Available = func() bool { return true }
 	if n := len(Get().Entities()); n != 2 {
 		t.Errorf("%d entities, want the switch and the status", n)
+	}
+}
+
+// Joining or turning it on needs Home Assistant's link to have its own key: none, and nothing changes.
+func TestOnNeedsAnEncryptedLink(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	was := encrypted
+	t.Cleanup(func() { encrypted = was })
+	encrypted = func() bool { return false }
+	if err := Get().SetOn(true); err == nil || config.Get().Tailscale.On {
+		t.Errorf("turned on with no key on the link: %v", err)
+	}
+	if err := Get().Login(context.Background(), "tskey-auth-test"); err == nil || !strings.Contains(err.Error(), "encryption key") {
+		t.Errorf("joined with no key on the link: %v", err)
+	}
+	if err := Get().SetOn(false); err != nil {
+		t.Errorf("turning it off needs no key: %v", err)
 	}
 }

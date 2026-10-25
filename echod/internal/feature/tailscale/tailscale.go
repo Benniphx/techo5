@@ -26,6 +26,7 @@ import (
 	"time"
 
 	esphome "github.com/ygelfand/go-esphome-device"
+	"golang.org/x/sys/unix"
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -119,8 +120,14 @@ func (f *Feature) Entities() []esphome.Entity {
 	return []esphome.Entity{f.sw, f.status}
 }
 
-// Available is whether this image carries Tailscale. A variable, for tests.
-var Available = func() bool { return findBinary() != "" }
+// Available is whether Tailscale can run here: the image carries it, and the kernel is 64-bit. The
+// binary is a static arm64 one, so a Show 8 2nd gen on Amazon's 32-bit kernel has the file and could
+// never run it (a 64-bit ARM kernel says aarch64 to the 32-bit processes on it too; a 32-bit one never
+// does). Decided once; a variable, for tests.
+var Available = sync.OnceValue(func() bool {
+	var u unix.Utsname
+	return findBinary() != "" && unix.Uname(&u) == nil && unix.ByteSliceToString(u.Machine[:]) == "aarch64"
+})
 
 func (f *Feature) Restore(c config.Config) {
 	f.set(func(s *Status) { s.On = c.Tailscale.On })
@@ -135,7 +142,18 @@ func (f *Feature) State() Status {
 
 // SetOn runs Tailscale or stops it. Stopping keeps the device's identity, so on again rejoins by
 // itself; a device never given a key has nothing to rejoin with and says so.
+//
+// On needs Home Assistant's link to have an encryption key of its own, however it is asked for: over
+// the tailnet its port is open to every node allowed to reach the device, and with no key it would
+// take commands from any of them, in the clear.
 func (f *Feature) SetOn(on bool) error {
+	if on && !Available() {
+		return errors.New("tailscale: not on this device (its image has none, or its kernel is 32-bit)")
+	}
+	if on && !encrypted() {
+		f.sw.Set(f.State().On)
+		return errors.New("tailscale: set an API encryption key first; over the tailnet the device's Home Assistant link would otherwise be open in the clear")
+	}
 	if err := config.Set().Tailscale().On(on); err != nil {
 		return err
 	}
@@ -151,6 +169,9 @@ func (f *Feature) Login(ctx context.Context, authKey string) error {
 	authKey = strings.TrimSpace(authKey)
 	if !strings.HasPrefix(authKey, "tskey-") {
 		return errors.New("tailscale: that is not an auth key (they start tskey-auth-)")
+	}
+	if !encrypted() {
+		return errors.New("tailscale: set an API encryption key first; over the tailnet the device's Home Assistant link would otherwise be open in the clear")
 	}
 	if !f.State().On {
 		if err := f.SetOn(true); err != nil {
@@ -205,7 +226,11 @@ func cmpOr(a, b string) string {
 
 // Actions: tailscale_login joins the tailnet with a key. Only over an encrypted Home Assistant link,
 // since the key would otherwise cross the network in the clear.
+// None where Tailscale can't run (Available).
 func (f *Feature) Actions() []*esphome.Action {
+	if !Available() {
+		return nil
+	}
 	return []*esphome.Action{{
 		Name: "tailscale_login",
 		Args: []esphome.Arg{{Name: "auth_key", Type: esphome.ArgString}},
@@ -229,6 +254,11 @@ func (f *Feature) poke() {
 
 // Run keeps tailscaled running while it is meant to, and its status read.
 func (f *Feature) Run(ctx context.Context) error {
+	if !Available() {
+		// Nothing to run here, ever: not an error to restart on.
+		<-ctx.Done()
+		return nil
+	}
 	for {
 		if !f.State().On {
 			f.set(func(s *Status) { s.Running, s.State, s.IP, s.Problem = false, "", "", "" })
@@ -450,8 +480,8 @@ func findBinary() string {
 }
 
 // encrypted reports whether the Home Assistant link has a key of its own rather than the reserved
-// all-zeros one an unprovisioned device answers with.
-func encrypted() bool {
+// all-zeros one an unprovisioned device answers with. A variable, for tests.
+var encrypted = func() bool {
 	b, err := os.ReadFile(layout.KeyPath)
 	if err != nil {
 		return false

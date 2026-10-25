@@ -1,6 +1,8 @@
 package web
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -161,4 +163,40 @@ func TestTheTailnetReachesTheSetupPageOnlyWithRemoteSetup(t *testing.T) {
 			t.Errorf("remote setup on, Host %q: %d, want 404", host, w.Code)
 		}
 	}
+}
+
+// A house numbered across the whole tailnet range takes every tailnet address for its own (Away), but a
+// request that reached the device's own tailnet address came over the tailnet: from away, and refused.
+func TestARequestToTheTailnetAddressIsFromAway(t *testing.T) {
+	was, wasAddrs := LocalNets, TailnetAddrs
+	t.Cleanup(func() { LocalNets, TailnetAddrs = was, wasAddrs })
+	LocalNets = func() (bool, []netip.Prefix) { return true, []netip.Prefix{netip.MustParsePrefix("100.64.0.0/10")} }
+	TailnetAddrs = func() []netip.Addr { return []netip.Addr{netip.MustParseAddr("100.64.1.9")} }
+	h := tailnetGate(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusTeapot) }))
+	for _, c := range []struct {
+		local string
+		want  int
+	}{
+		{"100.64.1.9:8181", http.StatusNotFound}, // over the tailnet
+		{"100.64.0.30:8181", http.StatusTeapot},  // the house's own address for the device
+		{"[::ffff:100.64.1.9]:8181", http.StatusNotFound},
+	} {
+		r := httptest.NewRequest(http.MethodGet, "/camera.jpg", nil)
+		r.RemoteAddr = "100.64.0.20:5000"
+		r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, addrOf(c.local)))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != c.want {
+			t.Errorf("reaching %s: %d, want %d", c.local, w.Code, c.want)
+		}
+	}
+	if !AwayConn("192.0.2.5:1", "100.64.1.9:554") || AwayConn("192.0.2.5:1", "100.64.0.30:554") {
+		t.Error("AwayConn by the address reached")
+	}
+}
+
+// addrOf is a net.Addr for host:port, as an http.Server puts the address it reached in a request.
+func addrOf(s string) net.Addr {
+	ap := netip.MustParseAddrPort(s)
+	return net.TCPAddrFromAddrPort(ap)
 }
