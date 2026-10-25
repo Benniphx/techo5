@@ -156,6 +156,7 @@ func TestIdleStepWakesAndReleases(t *testing.T) {
 // The amplifier is not put to sleep on the jack, where the line-out mute is the headphone path's, nor
 // while a switch to the jack drains: it stays awake and is tried again later.
 func TestAmpSleepOnlyOnTheSpeaker(t *testing.T) {
+	writesWork(t, true)
 	for _, c := range []struct {
 		out      Output
 		draining bool
@@ -168,8 +169,59 @@ func TestAmpSleepOnlyOnTheSpeaker(t *testing.T) {
 		}
 	}
 	p := &Player{gate: testGate, out: OutputSpeaker}
+	p.idle.state = ampSleeping
 	p.ampSleep()
 	if p.idle.state != ampAsleep {
 		t.Error("the speaker's amplifier did not go to sleep")
+	}
+}
+
+// writesWork makes the gated amplifier's writes succeed, or fail, for the length of a test.
+func writesWork(t *testing.T, ok bool) {
+	was := gateWrite
+	gateWrite = func(*Player, []kctl) bool { return ok }
+	t.Cleanup(func() { gateWrite = was })
+}
+
+// A sleep overtaken while it waited, by a wake or by something wanting the speaker, leaves the
+// amplifier on; so does one whose writes fail.
+func TestAmpSleepOvertaken(t *testing.T) {
+	writesWork(t, true)
+	p := &Player{gate: testGate, out: OutputSpeaker}
+	p.idle.state = ampAwake // a wake got there first
+	p.ampSleep()
+	if p.idle.state != ampAwake {
+		t.Error("a sleep after a wake put the amplifier down")
+	}
+	p.idle.state = ampSleeping
+	p.bell = []int16{1}
+	p.ampSleep()
+	if p.idle.state != ampAwake {
+		t.Error("the amplifier went to sleep under a ring")
+	}
+	writesWork(t, false)
+	p = &Player{gate: testGate, out: OutputSpeaker}
+	p.idle.state = ampSleeping
+	p.ampSleep()
+	if p.idle.state != ampAwake {
+		t.Error("a sleep that failed counts as asleep")
+	}
+}
+
+// A wake whose writes fail leaves the amplifier asleep, so the next period tries again with the audio
+// held, until wakeTries have failed; then the audio is let out anyway.
+func TestAmpWakeFails(t *testing.T) {
+	writesWork(t, false)
+	p := &Player{gate: testGate, out: OutputHeadphone}
+	for i := 1; i < wakeTries; i++ {
+		p.idle.state = ampWaking
+		p.ampWake()
+		if p.idle.state != ampAsleep {
+			t.Fatalf("wake %d failed and counted as awake", i)
+		}
+	}
+	p.ampWake()
+	if p.idle.state != ampAwake {
+		t.Error("the audio was held for good")
 	}
 }

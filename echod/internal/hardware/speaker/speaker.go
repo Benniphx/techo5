@@ -169,6 +169,8 @@ type Player struct {
 	gate    *ampGate
 	idle    idleAmp
 	claimed atomic.Bool
+	// wakeFails is the gated amplifier's wakes that failed in a row (ampWake).
+	wakeFails atomic.Int32
 
 	// underruns is the card running out while we were away. Write blocks against the whole ring, so
 	// each one means the loop was starved for as long as the ring is deep.
@@ -636,16 +638,21 @@ func (p *Player) watchJack(ctx context.Context) {
 }
 
 // apply writes a mixer sequence in order, logging failures and continuing.
-func (p *Player) apply(seq []kctl) {
+func (p *Player) apply(seq []kctl) { _ = p.applyAll(seq) }
+
+// applyAll is apply that says whether every write was made: false with no mixer held, or when one
+// failed (each failure is logged as apply logs it).
+func (p *Player) applyAll(seq []kctl) bool {
 	_, mixer := p.device()
 	if mixer == nil {
-		return
+		return false
 	}
-	applyTo(mixer, seq)
+	return applyTo(mixer, seq)
 }
 
-// applyTo is apply on a mixer that is not held yet.
-func applyTo(mixer *alsa.Mixer, seq []kctl) {
+// applyTo is apply on a mixer that is not held yet, reporting whether every write was made.
+func applyTo(mixer *alsa.Mixer, seq []kctl) bool {
+	ok := true
 	for _, c := range seq {
 		if c.ifPresent {
 			if _, err := mixer.Find(c.name); err != nil {
@@ -664,8 +671,10 @@ func applyTo(mixer *alsa.Mixer, seq []kctl) {
 		}
 		if err != nil {
 			slog.Error("mixer write failed", "control", c.name, "err", err)
+			ok = false
 		}
 	}
+	return ok
 }
 
 // Run feeds the stream until ctx is canceled, writing silence when nothing is queued.

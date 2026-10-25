@@ -1,6 +1,7 @@
 package speaker
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 
@@ -124,6 +125,13 @@ func (a *idleAmp) step(now time.Time, busy bool) (act ampAct, hold bool) {
 	}
 }
 
+// is reports whether the amplifier is in s.
+func (a *idleAmp) is(s ampState) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.state == s
+}
+
 // settled is the mixer writes done, leaving the amplifier in s. Awake starts the idle count again.
 func (a *idleAmp) settled(s ampState) {
 	a.mu.Lock()
@@ -173,15 +181,21 @@ func (p *Player) idleStep() bool {
 // ampSleep switches the gated amplifier off, line-out first. Only on the speaker: with the jack the
 // output, the line-out's mute is the headphone path's and is left alone, and the amplifier stays as
 // it is; and not while a switch to the jack drains, which writes the path itself after (setOutput).
-// Declining counts as awake, so it is tried again idleAfter later.
+// Declining counts as awake, so it is tried again idleAfter later. So does a sleep overtaken while it
+// waited for pathMu: by a wake (amp, from a path change) or by something wanting the speaker again,
+// which would otherwise go out through an amplifier switched off under it. A sleep whose writes fail
+// leaves the amplifier on, so it counts as awake too.
 func (p *Player) ampSleep() {
 	p.pathMu.Lock()
 	defer p.pathMu.Unlock()
-	if p.out != OutputSpeaker || p.draining {
+	if p.out != OutputSpeaker || p.draining || !p.idle.is(ampSleeping) || p.wanted() {
 		p.idle.settled(ampAwake)
 		return
 	}
-	p.apply(p.gate.sleep())
+	if !gateWrite(p, p.gate.sleep()) {
+		p.idle.settled(ampAwake)
+		return
+	}
 	p.idle.settled(ampAsleep)
 }
 
@@ -192,10 +206,27 @@ func (p *Player) ampWake() {
 	p.pathMu.Lock()
 	defer p.pathMu.Unlock()
 	on, unmute := p.gate.wake(p.out == OutputSpeaker && !p.draining)
-	p.apply(on)
+	if !gateWrite(p, on) {
+		// The amplifier may still be off: left awake, a ring or an alarm would play into it unheard.
+		// Asleep, the next period that wants the speaker tries the wake again, the audio held meanwhile;
+		// after wakeTries in a row the audio is let out anyway rather than held for good.
+		if p.wakeFails.Add(1) < wakeTries {
+			p.idle.settled(ampAsleep)
+			return
+		}
+		slog.Error("speaker: the amplifier would not switch on; playing anyway", "tries", wakeTries)
+	}
+	p.wakeFails.Store(0)
 	if len(unmute) > 0 {
 		time.Sleep(wakeSettle)
 		p.apply(unmute)
 	}
 	p.idle.settled(ampAwake)
 }
+
+// wakeTries is how many wakes in a row may fail before the audio held for them is let out anyway.
+const wakeTries = 5
+
+// gateWrite makes the gated amplifier's writes and says whether all of them were made; a variable for
+// the tests, which have no mixer.
+var gateWrite = func(p *Player, seq []kctl) bool { return p.applyAll(seq) }
