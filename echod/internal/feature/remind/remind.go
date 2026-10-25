@@ -227,14 +227,23 @@ func sayThroughHA(label string) {
 	})
 }
 
-// satellite is this device's assist satellite in Home Assistant: the one named for it, found the way
-// the radio finds its media player, since an entity id does not follow a renamed device. The id it
-// would have is the answer when Home Assistant cannot be asked.
+// satellite is this device's assist satellite in Home Assistant. First the one whose device bears this
+// device's name, which holds in any language (#294): Home Assistant names the entity in its own, so on a
+// German one it is "Echo Assist-Satellit", and its id follows that wording. Then, for a Home Assistant
+// that cannot render templates, the one named for the device in English, found the way the radio finds
+// its media player, since an entity id does not follow a renamed device; and last the id it would have.
+// A guess is logged, since Home Assistant takes an announcement to an entity it does not have in silence.
 func satellite() string {
 	name := config.Get().Device.Name
+	if t, ok := satelliteTemplate(name); ok {
+		if id, err := hass.Get().Render(t); err == nil && strings.HasPrefix(id, "assist_satellite.") {
+			return id
+		}
+	}
 	guess := "assist_satellite." + layout.EntitySlug(name) + "_assist_satellite"
 	list, err := hass.Get().Entities("assist_satellite")
 	if err != nil {
+		slog.Warn("say: no assist satellite found for this device; guessing", "entity", guess, "err", err)
 		return guess
 	}
 	for _, e := range list {
@@ -242,5 +251,24 @@ func satellite() string {
 			return e.ID
 		}
 	}
+	slog.Warn("say: no assist satellite found for this device; guessing", "entity", guess)
 	return guess
+}
+
+// satelliteTemplate asks Home Assistant for the assist satellite on the device named name. Home
+// Assistant's templates take no escapes in a string, so the name goes in single quotes, or double ones
+// when it has an apostrophe ("Kids' Room"); a name with a backslash, or with both kinds of quote, is
+// not asked for (false).
+func satelliteTemplate(name string) (string, bool) {
+	var lit string
+	switch {
+	case !strings.ContainsAny(name, `'\`):
+		lit = "'" + name + "'"
+	case !strings.ContainsAny(name, `"\`):
+		lit = `"` + name + `"`
+	default:
+		return "", false
+	}
+	return "{{ states.assist_satellite | map(attribute='entity_id') | select('is_device_attr', 'name', " + lit +
+		") | list | first | default('') }}", true
 }
