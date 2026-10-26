@@ -167,6 +167,7 @@ func build() *Proxy {
 	if openCentral != nil {
 		safe.Go("ble links", b.links.watch)
 	}
+	safe.Go("ble rest", b.restWhilePlaying)
 	b.apply()
 	return b
 }
