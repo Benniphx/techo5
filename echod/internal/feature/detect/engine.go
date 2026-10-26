@@ -322,6 +322,18 @@ func (e *Engine) Crossing(n int) float64 {
 	return e.slots[n].crossing
 }
 
+// Margin is how far a slot's latest detection crossed over the cutoff it was judged against, so that words
+// with cutoffs of their own can be compared by how surely each was heard.
+func (e *Engine) Margin(n int) float64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	if n < 0 || n >= len(e.slots) {
+		return 0
+	}
+	return e.slots[n].crossing - e.slots[n].crossCutoff
+}
+
 // Ready reports whether a slot has scored, and so whether its wake word can be heard yet. A slot with
 // nothing loaded is never ready.
 func (e *Engine) Ready(n int) bool {

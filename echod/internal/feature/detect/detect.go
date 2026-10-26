@@ -14,7 +14,6 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/diag"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
-	"github.com/HuskerMinion/techo5/echod/internal/feature/nearest"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
@@ -45,6 +44,9 @@ type Detect struct {
 	// order, and vote is the ones heard together: see command.go.
 	commands []*command
 	vote     commandVote
+
+	// contest settles a wake word and a command word that crossed on the same thing said.
+	contest contest
 
 	// loading is held for a whole load, so a refresh (wakeword.Refresh) and a selection take turns, and
 	// asked is what the latest one was asked for, which is what a refresh loads again. refreshing keeps
@@ -237,7 +239,7 @@ func newDetect() *Detect {
 			// The other devices that heard it may be asked first which of them heard it best
 			// (feature/nearest); with that off, or nobody to ask, the turn opens at once as it always
 			// has.
-			nearest.Get().Woke(slot)
+			d.wakeHeard(slot)
 		default:
 			slog.Debug("wake word ignored during a call or a talk through a camera", "slot", slot+1)
 		}
