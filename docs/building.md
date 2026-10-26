@@ -300,8 +300,15 @@ for all three is built here:
 ```
 git tag v0.6.0 && git push origin v0.6.0                       # the Show; triggers the workflow
 gh run download -n techo5-v0.6.0 -D bin                        # once it finishes
-.\tools\release.ps1 -Version v0.6.0 -Notes "..." -PrebuiltArm bin\echod-arm -PrebuiltArmDot bin\echod-arm-dot -Agents bin
+bash tools/linux/third-party-sources.sh v0.6.0                 # build/techo5-third-party-sources-v0.6.0.tar.gz
+.\tools\release.ps1 -Version v0.6.0 -Notes "..." -PrebuiltArm bin\echod-arm -PrebuiltArmDot bin\echod-arm-dot -Agents bin -ThirdPartySources build\techo5-third-party-sources-v0.6.0.tar.gz
 ```
+
+The images carry programs built from others' sources (FFmpeg, Shairport Sync, nqptp, librespot; see
+NOTICE), with their licenses in `/usr/share/licenses`. Their licenses want the source beside the
+binaries, so every release attaches it: `third-party-sources.sh` downloads each source the build scripts
+name, checks its SHA-256, and packs it with the patches, licenses and build scripts. The three release
+scripts refuse to publish without `-ThirdPartySources`; the Dot and the Spot take the same archive.
 
 All three Shows share the tag `vX.Y.Z` and the one `echod-arm`: which board a unit is settles itself at
 run time from the panel name in its kernel command line. What is per-board is the boot image, and each

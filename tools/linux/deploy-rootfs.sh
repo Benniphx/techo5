@@ -148,6 +148,10 @@ cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/li
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"
 [ -n "$DEVICE_OVERLAY" ] && cp -r "$DEVICE_OVERLAY/." "$STAGE/overlay/"
 mkdir -p "$STAGE/overlay/usr/share/licenses/tailscale" && cp "$TS.LICENSE" "$STAGE/overlay/usr/share/licenses/tailscale/LICENSE"
+# The licenses of the other programs built from others' sources above (tools/linux/licenses: Shairport Sync,
+# nqptp, librespot, FFmpeg), beside Tailscale's; librespot's only when the image carries it.
+cp -r "$ROOT/tools/linux/licenses/." "$STAGE/overlay/usr/share/licenses/"
+[ -e "$STAGE/bin/techo5-librespot" ] || rm -rf "$STAGE/overlay/usr/share/licenses/librespot"
 cp "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz "$STAGE/inputs/"
 [ -n "$VENDOR_TGZ" ] && cp "$VENDOR_TGZ" "$STAGE/inputs/vendor.tar.gz"
 cp "$INPUTS"/apks312/wpa_supplicant-2.9-*.apk "$INPUTS"/apks312/libssl1.1-*.apk "$INPUTS"/apks312/libcrypto1.1-*.apk "$STAGE/inputs/apks312/"

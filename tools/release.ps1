@@ -100,9 +100,16 @@ param(
     [string]$Agents = '',
     # A Show release without the agents breaks every link to the latest release's agent files, so it
     # takes this switch to make one on purpose.
-    [switch]$NoAgents
+    [switch]$NoAgents,
+    # The sources of the programs the images carry built from others' sources (FFmpeg, Shairport Sync,
+    # nqptp, librespot; NOTICE), from tools/linux/third-party-sources.sh: their licenses want the source
+    # beside the binaries, so every release attaches it, as techo5-third-party-sources-<version>.tar.gz.
+    [string]$ThirdPartySources = ''
 )
 $ErrorActionPreference = 'Stop'
+if (-not $ThirdPartySources -or -not (Test-Path $ThirdPartySources)) {
+    throw "no -ThirdPartySources archive: build it with tools/linux/third-party-sources.sh $Version"
+}
 if (-not $Agents -and -not $NoAgents) {
     throw "no -Agents folder: the docs link to the latest release's TECHO5 Deck agent files (pass -NoAgents to release without them)"
 }
@@ -507,6 +514,9 @@ if ($athenaRootfsNamed) { $args += $athenaRootfsNamed }
 if ($skylightRootfsNamed) { $args += $skylightRootfsNamed }
 $args += $bootAssets
 $args += $agentAssets
+$named = Join-Path $bin "techo5-third-party-sources-$Version.tar.gz"
+Copy-Item $ThirdPartySources $named -Force
+$args += $named
 # Before SHA256SUMS is made from this list, so the sums cover the source too.
 if ($athenaSourceName) {
     $named = Join-Path $bin $athenaSourceName
