@@ -455,26 +455,29 @@ try {
         Copy-Item $AthenaRootfs $athenaRootfsNamed -Force
     }
 
-    # NetBird's client: no image carries it, a device downloads it from the release feature/netbird pins
-    # (pinned.go), by size and SHA-256. The release that pin names publishes it, the same bytes; a later
-    # one checks it is still there.
-    $pin = Get-Content -Raw (Join-Path $PSScriptRoot '../echod/internal/feature/netbird/pinned.go')
-    if ($pin -notmatch 'releases/download/([^/"]+)/netbird-arm64\.tar\.gz"' ) { throw 'pinned.go names no NetBird archive' }
-    $nbTag = $Matches[1]
-    $nbSha = [regex]::Match($pin, 'SHA256:\s*"([0-9a-f]{64})"').Groups[1].Value
-    $nbSize = [regex]::Match($pin, 'Size:\s*(\d+)').Groups[1].Value
-    if ($nbTag -eq $Version) {
-        $nb = Join-Path $bin 'netbird-arm64.tar.gz'
-        if (-not (Test-Path $nb)) { throw "no ${nb}: build it with tools/linux/build-netbird.sh" }
-        $got = (Get-FileHash -Algorithm SHA256 $nb).Hash.ToLower()
-        if ($got -ne $nbSha -or (Get-Item $nb).Length -ne [int64]$nbSize) {
-            throw "$nb is not the NetBird archive pinned.go names ($got, $((Get-Item $nb).Length) bytes)"
+    # Files no image carries, which a device downloads from the release its daemon pins them to, by size
+    # and SHA-256: NetBird's client (feature/netbird, pinned.go) and the Japanese font (feature/cjkfont).
+    # The release a pin names publishes the file, the same bytes; a later one checks it is still there.
+    foreach ($p in @(@{ Pin = 'feature/netbird/pinned.go'; Asset = 'netbird-arm64.tar.gz'; Build = 'tools/linux/build-netbird.sh' },
+                     @{ Pin = 'feature/cjkfont/cjkfont.go'; Asset = 'techo5-noto-sans-jp.tar.gz'; Build = 'tools/fonts/make_cjk_font.py' })) {
+        $pin = Get-Content -Raw (Join-Path $PSScriptRoot "../echod/internal/$($p.Pin)")
+        if ($pin -notmatch ('releases/download/([^/"]+)/' + [regex]::Escape($p.Asset) + '"')) { throw "$($p.Pin) names no $($p.Asset)" }
+        $pinTag = $Matches[1]
+        $pinSha = [regex]::Match($pin, 'SHA256:\s*"([0-9a-f]{64})"').Groups[1].Value
+        $pinSize = [regex]::Match($pin, 'Size:\s*(\d+)').Groups[1].Value
+        if ($pinTag -eq $Version) {
+            $file = Join-Path $bin $p.Asset
+            if (-not (Test-Path $file)) { throw "no ${file}: build it with $($p.Build)" }
+            $got = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLower()
+            if ($got -ne $pinSha -or (Get-Item $file).Length -ne [int64]$pinSize) {
+                throw "$file is not the one $($p.Pin) names ($got, $((Get-Item $file).Length) bytes)"
+            }
+            Write-Host "== $($p.Asset): sha256 $got"
+            $bootAssets += $file
+        } else {
+            $there = @(& gh release view $pinTag --repo $repo --json assets -q '.assets[].name')
+            if ($there -notcontains $p.Asset) { throw "$($p.Pin)'s $($p.Asset) is not in release $pinTag" }
         }
-        Write-Host "== netbird-arm64.tar.gz: sha256 $got"
-        $bootAssets += $nb
-    } else {
-        $there = @(& gh release view $nbTag --repo $repo --json assets -q '.assets[].name')
-        if ($there -notcontains 'netbird-arm64.tar.gz') { throw "pinned.go's NetBird archive is not in release $nbTag" }
     }
 
     Write-Host "== manifest"

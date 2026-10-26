@@ -237,6 +237,16 @@ Go (Linux, WSL or Git Bash on Windows). The build is reproducible, so the same s
 `pinned.go` names; a new NetBird version means a new build, new values there, and the archive published
 with that release.
 
+## The Japanese font
+
+No image carries a Japanese font either: a Show or a Spot whose screen language is Japanese downloads
+one into its fonts folder (`echod/internal/feature/cjkfont`), from the release that first published it,
+checked against the size and SHA-256 pinned there. [tools/fonts/make_cjk_font.py](../tools/fonts/make_cjk_font.py)
+builds `bin/techo5-noto-sans-jp.tar.gz`, Noto Sans JP (SIL Open Font License) cut down to kana and the
+everyday kanji, with its license, from google/fonts at a pinned commit, with a pinned fontTools
+(`pip install fonttools==4.65.0`). The same script gives the same bytes; release.ps1 checks them against
+the pin.
+
 ## Optional: a CPU profile from a device
 
 To see where the daemon spends its time on a unit, turn SSH on and write the number of seconds to a
