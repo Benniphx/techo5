@@ -101,6 +101,10 @@ type Screen struct {
 	// default five seconds, -1 until they are tapped away.
 	AnswerSeconds int `json:"answer_seconds,omitempty"`
 
+	// DimAfterMinutes dims a Show's screen to its Dimmest once it has gone that long without a touch, a
+	// turn or anybody seen near it, 0 for never (#275).
+	DimAfterMinutes int `json:"dim_after_minutes,omitempty"`
+
 	// ClockPosition is where the home screen's clock sits: empty for the center, "bottom-left",
 	// "bottom-center" or "bottom-right" on a Show, "bottom" on the Spot; DateColor the date's color,
 	// empty for the theme's (display/clock_position.go, clock_layout.go).
@@ -376,6 +380,10 @@ func (w ScreenWriter) DateColor(v string) error {
 
 func (w ScreenWriter) WeatherPosition(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.WeatherPosition = v })
+}
+
+func (w ScreenWriter) DimAfterMinutes(v int) error {
+	return w.st.Update(func(c *Config) { c.Screen.DimAfterMinutes = max(v, 0) })
 }
 
 func (w ScreenWriter) AnswerSeconds(v int) error {

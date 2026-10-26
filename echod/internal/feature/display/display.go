@@ -145,6 +145,8 @@ type Display struct {
 	dateCol    *esphome.Select
 	weatherPos *esphome.Select
 	answerTime *esphome.Select
+	// idleDimSel is Dim after idle (idle_dim.go).
+	idleDimSel *esphome.Select
 	turnStyle  *esphome.Select
 	timerStyle *esphome.Select
 	skinSl     *esphome.Select
@@ -256,7 +258,11 @@ type Display struct {
 	// touchedAt is the last finger on the panel; nightDark is the screen having been put out by the
 	// night schedule rather than by anyone.
 	touchedAt time.Time
-	nightDark bool
+	// usedAt is when the screen was last in use other than by a finger (a turn, a call, somebody near),
+	// and idleDimmed whether Dim after idle has it down (idle_dim_show.go).
+	usedAt     time.Time
+	idleDimmed bool
+	nightDark  bool
 
 	// nightGlow is the screen turned down to a night light by the night schedule, until a touch or
 	// the end of the night brings it back.
@@ -510,6 +516,7 @@ func build() *Display {
 	d.nightMode = nightModeSwitch(d)
 	d.glowLevel = glowNumber(d)
 	d.dimmestNum = dimmestNumber(d)
+	d.idleDimSel = idleDimSelect(d)
 	d.lang = langSelect()
 	voice.Changed.Listen(d.changed)
 	media.Get().OnVolume.Listen(d.volumeMoved)
@@ -596,7 +603,7 @@ func (d *Display) skinSel() *esphome.Select { return d.skinSl }
 func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
-	ents := append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.weatherPos, d.camTime, cameraFitSel, cameraBandsSel, cameraShadeSel, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.warmthSw, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.weekendStart, d.weekendEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
+	ents := append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.weatherPos, d.camTime, cameraFitSel, cameraBandsSel, cameraShadeSel, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.warmthSw, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.weekendStart, d.weekendEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum, d.idleDimSel,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.volumeSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 	if !screen.CanTint {
 		// Night warmth tints the frame on its way to the panel, which a tablet's screen does not take.
@@ -618,6 +625,7 @@ func (d *Display) Restore(c config.Config) {
 	cameraBandsSel.Set(cameraBandStyles[cameraBandsIndex()].label)
 	cameraShadeSel.Set(cameraShades[cameraShadeIndex()].label)
 	d.answerTime.Set(answerTimes[answerTimeIndex()].label)
+	d.idleDimSel.Set(idleDims[idleDimIndex()].label)
 	d.clockPos.Set(clockPositions[clockPositionIndex()].label)
 	d.dateCol.Set(dateColors[dateColorIndex()].label)
 	d.weatherPos.Set(weatherPositions[weatherPositionIndex()].label)
@@ -723,6 +731,9 @@ func (d *Display) relight(jump bool) {
 	if d.on {
 		lux, _, haveLux := ambient.Get().Current()
 		target = dayBacklight(d.ceiling, d.autoOn && haveLux, lux, dimmest())
+		if d.idleDimmed {
+			target = idleDimLevel(target, d.ceiling)
+		}
 		if d.nightGlow {
 			target = float64(d.glowBacklight()) // relight holds mu
 		} else if (phone.Get().Busy() || video.Get().State().Active() || d.askedUp(time.Now())) && nightNow(time.Now()) {
@@ -2450,6 +2461,7 @@ func (d *Display) frame() (next time.Duration) {
 		on = d.on
 		d.mu.Unlock()
 	}
+	d.idleDimTick(now, on, busy, night)
 	if !config.Get().Screen.Welcomed {
 		// The welcome card ignores a stale deck and draws its own frame; the update dialog still goes
 		// over it, or the screen would look normal while every tap was taken by an invisible dialog.

@@ -187,7 +187,7 @@ func optionLabel(english string) string {
 
 func builtinOptionRow(id string) bool {
 	switch id {
-	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "timerstyle", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_month_details", "calpopallday", "calpopwhen":
+	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "timerstyle", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_month_details", "calpopallday", "calpopwhen":
 		return true
 	}
 	return false

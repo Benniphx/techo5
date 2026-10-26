@@ -243,9 +243,12 @@ type Display struct {
 	// (night_spot.go); redShown is the frame drawn last being that clock. nightDark is the face put out
 	// by the night (Screen off) rather than by anyone.
 	touchedAt time.Time
-	nightGlow bool
-	redShown  bool
-	nightDark bool
+	// idleDimmed is always false: Dim after idle is the Show's (idle_dim_show.go), named here for
+	// the settle ticker both share (autobright.go).
+	idleDimmed bool
+	nightGlow  bool
+	redShown   bool
+	nightDark  bool
 	// soonAt is when the red clock was last asked for at once (nightSoon): the night starting, Night
 	// clock chosen, or the settings or the menu closing. A touch or a turn after it waits nightIdle as
 	// before. nightIn and nightUsing are what the last frame found, to see the night begin and the

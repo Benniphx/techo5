@@ -607,6 +607,11 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   device with a light sensor, the screen follows the room's light, up to the brightness you set. On
   the Show, **Dimmest** (**Auto-brightness dimmest** in Home Assistant) sets how dark it goes in a
   dark room.
+- **Dim after idle** (Show, Never by default; Settings > Display, or **Dim after idle** in Home
+  Assistant): after 1 to 30 minutes with no touch, no voice turn and, with Presence detection on,
+  nobody seen near, the screen fades down to its **Dimmest** share of the brightness. A touch, a turn
+  or somebody coming near brings it straight back. Not at night, which has its own rules, and not
+  while a call, an alarm, a timer or the settings are up.
 - **Font**: the font of every word the screen draws: the clock, the date, the weather, the settings
   and the rest (not the icons). *Go*, the screen's own and the default, *Inter*, *MuseoModerno*,
   *Exo*, *Overpass*, *Saira*, *Comic Neue*, *Open Sans*, *Google Sans Flex* or *Go Mono*. Each is sized so a line

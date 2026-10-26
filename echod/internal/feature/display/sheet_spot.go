@@ -126,6 +126,10 @@ const hasCalendarPopups = false
 // hasDimmest: the Spot's auto-brightness keeps its own floor (display_spot.go), with no setting.
 const hasDimmest = false
 
+// setIdleDim is nothing on the Spot: Dim after idle is the Show's (idle_dim_show.go), and its row is
+// never offered here (hasDimmest).
+func (d *Display) setIdleDim(int) {}
+
 func dimmestSetting() int          { return 0 }
 func (d *Display) stepDimmest(int) {}
 
