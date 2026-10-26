@@ -35,7 +35,7 @@ fetch "ffmpeg-$FF.tar.xz" "https://ffmpeg.org/releases/ffmpeg-$FF.tar.xz" "$FF_S
 fetch "shairport-sync-$SPS.tar.gz" "https://github.com/mikebrady/shairport-sync/archive/refs/tags/$SPS.tar.gz" "$SPS_SHA"
 fetch "nqptp-$NQ.tar.gz" "https://github.com/mikebrady/nqptp/archive/refs/tags/$NQ.tar.gz" "$NQ_SHA"
 fetch "librespot-$LR.crate" "https://crates.io/api/v1/crates/librespot/$LR/download" "$LR_SHA"
-cp "$L/nqptp-run-as-user.patch" "$L/librespot-volume-fifo.patch" "$STAGE/patches/"
+cp "$L/shairport-sync-stdout-delay.patch" "$L/nqptp-run-as-user.patch" "$L/librespot-volume-fifo.patch" "$STAGE/patches/"
 cp "$L/build-ffmpeg.sh" "$L/build-ffmpeg-arm64.sh" "$L/build-shairport-sync.sh" "$L/build-librespot.sh" "$STAGE/build-scripts/"
 cp -r "$L/licenses" "$STAGE/licenses"
 
@@ -48,6 +48,7 @@ build script names and checks by SHA-256. Their licenses are in licenses/.
 
 - techo5-shairport-sync (/usr/local/bin): Shairport Sync $SPS, the AirPlay receiver. MIT; see
   licenses/shairport-sync (its files name their own licenses). Built with FFmpeg $FF's libraries.
+  Changed by patches/shairport-sync-stdout-delay.patch (a delay() for its stdout output).
 - techo5-nqptp (/usr/local/bin): nqptp $NQ, the clock AirPlay 2 needs. GPL-2.0; see
   licenses/nqptp. Changed by patches/nqptp-run-as-user.patch (adds -u <user>), which is GPL-2.0 too.
 - techo5-librespot (/usr/local/bin): librespot $LR, the Spotify Connect receiver. MIT; see
