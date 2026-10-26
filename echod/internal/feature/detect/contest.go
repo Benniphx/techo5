@@ -21,8 +21,9 @@ const contestWindow = Hold + 100*time.Millisecond
 // every word has a cutoff of its own, and a wake word heard at 0.78 against a playing cutoff of 0.77 is
 // a poor catch next to a command word at 0.78 against 0.60 (Engine.Margin).
 //
-// A wake word is held for contestWindow when command words are listening, so that a command word that
-// crosses just after it can still win before anything is heard or shown. A command word that crossed first
+// A wake word's turn is held for contestWindow when command words are listening, so that a command word
+// that crosses just after it can still win before anything is heard or shown; its claim against the other
+// devices goes out at once all the same. A command word that crossed first
 // has already acted, so only the wake word is judged against it then. With no command word loaded, and
 // with nothing crossing near, nothing changes.
 type contest struct {
@@ -39,7 +40,10 @@ type contest struct {
 	after func(time.Duration, func())
 }
 
-type heldWake struct{ margin float64 }
+type heldWake struct {
+	margin float64
+	at     time.Time
+}
 
 func (c *contest) clock() time.Time {
 	if c.now != nil {
@@ -56,61 +60,75 @@ func (c *contest) later(d time.Duration, f func()) {
 	time.AfterFunc(d, f)
 }
 
-// wakeHeard is a wake word with margin over its cutoff. open starts the turn (held, if it waited): at once unless command words
-// are listening (hold), and then after the window, unless a command word beat it by then.
-func (c *contest) wakeHeard(margin float64, hold bool, open func(held bool)) {
+// wakeHeard is a wake word with margin over its cutoff, and whether it goes on: not when a command word
+// already beat it within the window. gate runs the turn's opening: at once when no command word listens
+// (hold false), and otherwise once the window since the word has passed, unless a command word beat it
+// by then. The wake word can be claimed against the other devices meanwhile (nearest.WokeGated), so a
+// device that waits is not beaten to the word by one that doesn't.
+func (c *contest) wakeHeard(margin float64, hold bool) (gate func(open func()), ok bool) {
 	c.mu.Lock()
-	if !c.cmdAt.IsZero() && c.clock().Sub(c.cmdAt) < contestWindow && c.cmdMargin > margin {
+	now := c.clock()
+	if !c.cmdAt.IsZero() && now.Sub(c.cmdAt) < contestWindow && c.cmdMargin > margin {
 		c.mu.Unlock()
 		slog.Info("wake word ignored: the command word was heard more surely", "margin", margin, "theirs", c.cmdMargin)
-		return
+		return nil, false
 	}
 	if !hold {
 		c.mu.Unlock()
-		open(false)
-		return
+		return func(open func()) { open() }, true
 	}
-	w := &heldWake{margin: margin}
+	w := &heldWake{margin: margin, at: now}
 	c.wake = w
 	c.mu.Unlock()
-	c.later(contestWindow, func() {
-		c.mu.Lock()
-		mine := c.wake == w
-		if mine {
-			c.wake = nil
+	return func(open func()) {
+		run := func() {
+			c.mu.Lock()
+			mine := c.wake == w
+			if mine {
+				c.wake = nil
+			}
+			c.mu.Unlock()
+			if mine {
+				open()
+			}
 		}
-		c.mu.Unlock()
-		if mine {
-			open(true)
+		if wait := contestWindow - c.clock().Sub(w.at); wait > 0 {
+			c.later(wait, run)
+			return
 		}
-	})
+		run()
+	}, true
 }
 
 // commandCrossed is a command word with margin over its cutoff, and whether it goes on to act. It does
-// not if a wake word waiting out the window crossed by as much or more; otherwise it ends that wake word's
-// wait, so no turn opens.
+// not if a wake word heard within the window crossed by as much or more; otherwise it ends that wake
+// word's wait, so no turn opens.
 func (c *contest) commandCrossed(margin float64) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if w := c.wake; w != nil {
+	now := c.clock()
+	if w := c.wake; w != nil && now.Sub(w.at) <= contestWindow {
 		if w.margin >= margin {
 			return false
 		}
 		c.wake = nil
 		slog.Info("command word heard more surely than the wake word, no turn opened", "margin", margin, "theirs", w.margin)
 	}
-	c.cmdAt, c.cmdMargin = c.clock(), margin
+	c.cmdAt, c.cmdMargin = now, margin
 	return true
 }
 
 // wakeHeard is a wake word the engine heard in slot (routeTurn).
 func (d *Detect) wakeHeard(slot int) {
 	at := time.Now()
-	d.contest.wakeHeard(d.engine.Margin(slot), d.commandsListening() > 0, func(held bool) {
-		if held {
-			nearest.Get().WokeAt(slot, at)
-			return
-		}
+	hold := d.commandsListening() > 0
+	gate, ok := d.contest.wakeHeard(d.engine.Margin(slot), hold)
+	if !ok {
+		return
+	}
+	if !hold {
 		nearest.Get().Woke(slot)
-	})
+		return
+	}
+	nearest.Get().WokeGated(slot, at, gate)
 }

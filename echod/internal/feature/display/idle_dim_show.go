@@ -13,7 +13,7 @@ import (
 )
 
 // idleDimTick dims the screen once it has been idle for Dim after idle, and brings it back up at the
-// first touch, turn or person near. busy is anything going on that keeps it lit (a turn, a call, a ring,
+// first touch, turn or person near, or when the screen is turned on or its brightness set (apply). busy is anything going on that keeps it lit (a turn, a call, a ring,
 // the settings open); it counts as use, so the wait starts again when it ends.
 func (d *Display) idleDimTick(now time.Time, on, busy, night bool) {
 	after := idleDimAfter()
@@ -25,8 +25,10 @@ func (d *Display) idleDimTick(now time.Time, on, busy, night bool) {
 	if d.touchedAt.After(last) {
 		last = d.touchedAt
 	}
-	dim := on && !night && after > 0 && now.Sub(last) >= after
 	was := d.idleDimmed
+	// The night starts no dimming, and ends none either: a screen already down stays down into it
+	// rather than jumping up to its brightness as the night begins.
+	dim := on && after > 0 && now.Sub(last) >= after && (!night || was)
 	d.idleDimmed = dim
 	d.mu.Unlock()
 	if dim == was {

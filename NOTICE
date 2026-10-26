@@ -342,7 +342,7 @@ Shairport Sync, https://github.com/mikebrady/shairport-sync (MIT, with parts und
 
 nqptp, https://github.com/mikebrady/nqptp (GPL-2.0)
   Every root filesystem carries nqptp 1.2.9, the clock AirPlay 2 needs, as /usr/local/bin/techo5-nqptp
-  (armv7, statically linked with musl, MIT License). Copyright (c) Mike Brady. Changes: one,
+  (armv7, statically linked with musl, which is MIT). Copyright (c) Mike Brady. Changes: one,
   tools/linux/nqptp-run-as-user.patch, adds -u <user> so it gives up root; it is GPL-2.0 too.
     - Source: https://github.com/mikebrady/nqptp/archive/refs/tags/1.2.9.tar.gz (its SHA-256 is in
       tools/linux/build-shairport-sync.sh, which builds it).

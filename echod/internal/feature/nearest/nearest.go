@@ -268,13 +268,15 @@ func (n *Nearest) Woke(slot int) {
 		func() { n.wokeNow(slot) })
 }
 
-// WokeAt is Woke for a wake word heard at at and held back since, so that the turn sends what was said in
-// the meantime from the history.
-func (n *Nearest) WokeAt(slot int, at time.Time) {
+// WokeGated is Woke for a wake word whose turn may still be called off (detect's contest with a command
+// word): the claim goes out at once, as Woke's does, and gate decides whether the turn opens once this
+// device has won it, sending what was said since at from the history.
+func (n *Nearest) WokeGated(slot int, at time.Time, gate func(open func())) {
+	open := func(at time.Time) { gate(func() { n.woke(slot, at) }) }
 	n.contend(n.wakeWord(slot), at,
 		func() bool { return n.canAnswer(slot) },
-		func(at time.Time) { n.woke(slot, at) },
-		func() { n.woke(slot, at) })
+		open,
+		func() { open(at) })
 }
 
 // Answer is the same question for something other than a wake word, the next song word: of the devices

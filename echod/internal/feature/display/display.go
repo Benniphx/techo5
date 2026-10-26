@@ -674,6 +674,7 @@ func (d *Display) apply(on bool, pct int, save bool) {
 	pct = min(max(pct, 0), 100)
 	d.mu.Lock()
 	d.on, d.ceiling = on, pct
+	d.usedAt = time.Now() // turned on or its brightness set: in use, for Dim after idle
 	// Somebody chose this, so the night no longer owns the screen: without this, a screen switched off
 	// during the night was switched back on when the night ended.
 	if save {

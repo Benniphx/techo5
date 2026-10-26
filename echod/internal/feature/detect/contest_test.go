@@ -23,7 +23,9 @@ func newContestRig() *contestRig {
 }
 
 func (r *contestRig) wake(margin float64, hold bool) {
-	r.c.wakeHeard(margin, hold, func(held bool) { r.opened = append(r.opened, held) })
+	if gate, ok := r.c.wakeHeard(margin, hold); ok {
+		gate(func() { r.opened = append(r.opened, hold) })
+	}
 }
 
 func (r *contestRig) fire() {
