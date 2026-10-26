@@ -854,6 +854,13 @@ alarms; the usual volume and night volume still work. Higher gain can distort or
 especially at high volume or with raised bass or treble. Start low and reduce the boost if
 that happens; +6 dB is a setting limit, not a guarantee of clean output on every track.
 
+**Louder speech** (off by default; Settings → **Sound**, the setup page under **Speaker and
+voice**, and the **Louder speech** switch in Home Assistant) compresses replies and announcements on
+their way to the speaker: the quiet parts of words come up by 8 dB and the loud ones by less, about
+3 to 5 dB louder on average, with the peaks held under full scale.
+Music, alarms, the intercom, and what is sent for transcription or into a call are not
+changed. It works on every device with Speaker gain or without it.
+
 On the **Echo Dot (2nd gen) and the Echo (2nd gen)** the same setting raises the speaker driver
 in the audio chip, in Home Assistant's **Playback** configuration and on the setup page (the Dot
 has no screen). It is off (0 dB) by default. Each dB is added at every volume step, most

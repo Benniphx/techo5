@@ -220,6 +220,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 				{id: "waketone", label: tr("wake_sound"), kind: ctlChoice, value: config.Get().Wake.Slot(0).Tone.Label()},
 				voiceRow(),
 				{id: "hasounds", label: tr("home_assistant_sounds"), sub: tr("for_muting_and_timers"), kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds},
+				{id: "louder", label: tr("louder_speech"), sub: tr("replies_and_announcements"), kind: ctlToggle, on: config.Get().Speaker.LouderSpeech},
 			}...)
 		} else {
 			rows = append(rows,
@@ -1112,6 +1113,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		go phone.Get().SetDoNotDisturb(!config.Get().Home.DoNotDisturb)
 	case "hasounds":
 		media.Get().SetHASounds(config.Get().Speaker.ClassicSounds)
+	case "louder":
+		media.Get().SetLouderSpeech(!config.Get().Speaker.LouderSpeech)
 	case "dropin":
 		go phone.Get().SetDropIn(!config.Get().Home.DropIn)
 	case "volume":

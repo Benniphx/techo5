@@ -97,6 +97,7 @@ var registered = []string{
 	"last_wake_score",
 	"last_wake_word",
 	"load_average",
+	"louder_speech",
 	"lux",
 	"lyrics",
 	"max_listen_1",
