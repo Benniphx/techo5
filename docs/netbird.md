@@ -19,7 +19,7 @@ The same as Tailscale, by the same rules (see [what Tailscale does](tailscale.md
 - **SSH, if you turned it on.**
 - **Nothing else gets in.** The device's own firewall lets NetBird's interface reach only ports 6053,
   8181 and 22, and ping. NetBird's access policies apply on top, from your dashboard.
-- **The device takes nothing from the network.** No DNS, no routes, no NetBird SSH server. NetBird's
+- **The device takes nothing from the network.** No DNS, no routes, no IPv6, no NetBird SSH server. NetBird's
   own firewall on the device is off: the device's firewall does that job. The client sends NetBird no
   metrics. It does talk to your management server, and to NetBird's signal and relay servers, which is
   how peers find each other.
@@ -34,7 +34,8 @@ The same as Tailscale, by the same rules (see [what Tailscale does](tailscale.md
 3. **Give the device the key.** Either:
    - the setup page: **Connections → NetBird**, paste the key, and if you run your own NetBird, put
      your management server's URL (`https://netbird.example.com`). Leave it empty for NetBird's own.
-     Then **Join**. The first join downloads the client first, so give it a minute.
+     Then **Join**. The first join downloads the client first, so give it a minute. Use an `https://`
+     address: with `http://` the setup key crosses the network unencrypted.
    - Home Assistant: the [`netbird_login` action](actions.md#join-a-netbird-network).
 
    The key is used once, to join, and isn't kept. The **NetBird status** sensor then says

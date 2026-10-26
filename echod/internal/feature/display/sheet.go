@@ -417,7 +417,7 @@ func connectionRows(sv sheetView) []settingRow {
 	ts := tailscale.Get().State()
 	rows = append(rows, settingRow{id: "tailscale", label: "Tailscale", sub: tailscaleSub(ts), kind: ctlToggle, on: ts.On})
 	// NetBird likewise, once it has been joined: until then there is nothing to turn on here.
-	if nb := netbird.Get().State(); netbird.Available() && (nb.On || config.Get().Netbird.Management != "" || nb.State != "") {
+	if nb := netbird.Get().State(); netbird.Available() && (nb.On || config.Get().Netbird.Joined) {
 		rows = append(rows, settingRow{id: "netbird", label: "NetBird", sub: netbirdSub(nb), kind: ctlToggle, on: nb.On})
 	}
 	return rows

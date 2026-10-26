@@ -8,6 +8,8 @@ type Netbird struct {
 	On bool `json:"on,omitempty"`
 	// Management is the management server's URL it was joined with: NetBird's own when empty.
 	Management string `json:"management,omitempty"`
+	// Joined is whether it has ever been joined: then the screen offers its switch.
+	Joined bool `json:"joined,omitempty"`
 }
 
 type NetbirdWriter struct{ st *Store }
@@ -18,5 +20,5 @@ func (w NetbirdWriter) On(v bool) error {
 
 // Joined is a join: on, with the management server it was made with.
 func (w NetbirdWriter) Joined(management string) error {
-	return w.st.Update(func(c *Config) { c.Netbird.On, c.Netbird.Management = true, management })
+	return w.st.Update(func(c *Config) { c.Netbird.On, c.Netbird.Management, c.Netbird.Joined = true, management, true })
 }

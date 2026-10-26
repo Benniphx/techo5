@@ -2423,7 +2423,8 @@ A setup key from your NetBird dashboard.
 
 *string*
 
-Your own management server's URL, such as `https://netbird.example.com`. Empty for NetBird's own.
+Your own management server's URL, such as `https://netbird.example.com`. Empty for NetBird's own. Use
+`https://`: with `http://` the setup key crosses the network unencrypted.
 
 ```yaml
 action: esphome.office_netbird_login

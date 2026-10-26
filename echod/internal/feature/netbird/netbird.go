@@ -220,7 +220,7 @@ func (f *Feature) Login(ctx context.Context, setupKey, management string) error 
 	// outright: the client keeps only what it is told.
 	out, err := cli(ctx, []string{"NB_SETUP_KEY=" + setupKey}, "up",
 		"--management-url="+mgmt, "--hostname="+name, "--interface-name="+web.NetbirdTun,
-		"--disable-dns", "--disable-client-routes", "--disable-server-routes", "--disable-firewall",
+		"--disable-dns", "--disable-client-routes", "--disable-server-routes", "--disable-firewall", "--disable-ipv6",
 		"--allow-server-ssh=false", "--enable-rosenpass=false", "--disable-auto-connect=false")
 	if err != nil {
 		return fmt.Errorf("netbird: joining: %s", cmpOr(lastLine(scrub(out, setupKey)), err.Error()))
@@ -471,10 +471,15 @@ func env(extra ...string) []string {
 
 // cli runs the client's command line against its daemon, and answers what it said.
 func cli(ctx context.Context, extraEnv []string, args ...string) ([]byte, error) {
+	cmd := command(ctx, extraEnv, args...)
+	return cmd.CombinedOutput()
+}
+
+func command(ctx context.Context, extraEnv []string, args ...string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, binPath(), append(args, daemonAddr, "--log-file=console")...)
 	cmd.Env = env(extraEnv...)
 	cmd.WaitDelay = 5 * time.Second
-	return cmd.CombinedOutput()
+	return cmd
 }
 
 // daemonStatus is the part of the client's status --json read here.
@@ -492,9 +497,13 @@ type daemonStatus struct {
 var status = func(ctx context.Context) (daemonStatus, error) {
 	sctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	out, err := cli(sctx, nil, "status", "--json")
+	// The answer only: the command line logs to stderr, and a line of that is not JSON.
+	cmd := command(sctx, nil, "status", "--json")
+	var errOut bytes.Buffer
+	cmd.Stderr = &errOut
+	out, err := cmd.Output()
 	if err != nil {
-		return daemonStatus{}, fmt.Errorf("%v: %s", err, lastLine(out))
+		return daemonStatus{}, fmt.Errorf("%v: %s", err, lastLine(errOut.Bytes()))
 	}
 	return parseStatus(out)
 }
