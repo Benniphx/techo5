@@ -137,6 +137,7 @@ narrow screens, so one dashboard can show more on a phone than on the Show.
 ## Setting up Streamed
 
 Streamed needs **dashcast**, a small server that runs a headless Chrome next to Home Assistant. It
+is a Docker container of its own, not a Home Assistant add-on. It
 opens the dashboard at the device's screen size and sends the device only what changes, as pictures.
 It sends where the screen was touched back, and replays it on the page. The connection is encrypted
 with the key you give both ends, and dashcast only ever shows dashboards: Settings and the other
@@ -149,7 +150,8 @@ Then tell the device where it is, either:
   (`host:9555`) and the key; or
 - with the action **`esphome.<node>_dashboard_server`**, `address` and `key`.
 
-…and set **Dashboard** to **Streamed**.
+…and set **Dashboard** to **Streamed**. Saving the server on the setup page tries it at once and says
+whether it works: connected, can't reach it, or it didn't take the key.
 
 The streamed page is your real dashboard, with everything on it. The device's demo mode for
 screenshots does not cover it.
