@@ -1566,7 +1566,8 @@ version (Settings → General → Updates shows it), what you did and what happe
 too.
 
 Attach the device's diagnostics if you can: open its setup page (Settings → Privacy → Setup page, or
-the device's **Setup page** switch in Home Assistant on a Dot), go to **General** and press
+the device's **Setup page** switch in Home Assistant on a Dot; the **Visit** link on the device's page
+in Home Assistant opens it), go to **General** and press
 **Download diagnostics**. It holds the last of the device's log, its recent wake word detections and
 near misses, and what it is set to. Addresses, network names, keys and
 serial numbers are replaced before you get it, but give it a read before you post it.
