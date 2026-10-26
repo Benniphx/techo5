@@ -2432,9 +2432,10 @@ data:
 In YAML, refer to this action as `esphome.<node>_netbird_login`.
 
 Joins the device to your NetBird network with a setup key, and turns its **NetBird** switch on. The
-first time, the device downloads NetBird's client first. The key is handed to NetBird once and not
-kept: after that the device rejoins by itself. It waits up to 2 minutes, for the download and to see
-the device connect, so a key that's used up or expired is an error here. Echo Shows, the Echo Spot and
+first time, the device downloads NetBird's client first (about 14 MB): the action then answers that it's
+downloading, and you run it again once the **NetBird status** sensor says *Needs a setup key*. The key is
+handed to NetBird once and not kept: after that the device rejoins by itself. It waits up to 30 seconds
+to see the device connect, so a key that's used up or expired is an error here. Echo Shows, the Echo Spot and
 the Skylight only. See [NetBird: reaching a device from away](netbird.md).
 
 > **Good to know**

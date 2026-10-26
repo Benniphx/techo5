@@ -208,7 +208,7 @@
    ],
    "focus": "TECHO5 turns old, unlockable Echo devices into private Home Assistant voice satellites with \"Linux inside, Home Assistant in charge, no Amazon cloud\", replacing Fire OS with Alpine Linux and one daemon that drives the hardware directly. Its own emphasis is on a useful touch screen (clock, calendar, dashboards, photos, cameras), alarms and house features that keep working when Home Assistant is down, and security by default with signed updates that \"can't brick it\".",
    "also": [
-    "Spotify Connect receiver (Show and Dot, off by default)",
+    "Spotify Connect receiver (every device but the Panel app, off by default)",
     "Talk through doorbell cameras over the ONVIF backchannel",
     "Reolink doorbell chime and camera pop-up without HA",
     "Now-playing sensors in HA for every source",
@@ -5020,7 +5020,7 @@
    ],
    "airplay": [
     "Partly",
-    "Show and Dot only (not the Spot); off by default; AirPlay 2 grouping on the Echo Dot 2nd gen and Echo 2nd gen",
+    "every device but the Panel app; off by default; AirPlay 2 grouping",
     "https://github.com/HuskerMinion/techo5-dot/releases/tag/dot-v1.0.34"
    ],
    "dlna": [

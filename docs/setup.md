@@ -387,14 +387,15 @@ captured login to the same page for a few minutes, and could see the pictures an
   well. With Spotify Connect, and with an AirPlay app that gives the device no way back to it, a pause
   on the device stops the stream there; the phone keeps going until it is paused too. Anyone on the
   same network can play to the device while one is on, as with any AirPlay or Spotify speaker, and
-  Spotify Connect keeps the login a phone hands it until it is turned off. Where the image carries the
-  AirPlay 2 receiver (every image from v1.6.8 and dot-v1.0.35), an iPhone can group the
-  device with other AirPlay 2 speakers (a HomePod, a Sonos)
-  and play to all of them at once; without it, or when it will not start, the device is a classic
-  AirPlay speaker, which plays on its own; so is one whose kernel can't take the firewall's AirPlay 2
-  rules (the firewall's log says so). A third switch there, **AirPlay 2** (on unless turned off),
-  keeps it to classic AirPlay: for a group it will not play in step with, since it can still drift a few
-  milliseconds from the other speakers, more just after it joins one that is already playing. If something does not work, open an issue.
+  Spotify Connect keeps the login a phone hands it until it is turned off.
+
+  Every image from v1.6.8 and dot-v1.0.35 carries the AirPlay 2 receiver, so an iPhone can group the
+  device with other AirPlay 2 speakers (a HomePod, a Sonos) and play to all of them at once. Where it
+  can't run (it won't start, or the kernel can't take the firewall's AirPlay 2 rules, which the
+  firewall's log says), the device is a classic AirPlay speaker, which plays on its own. A third
+  switch, **AirPlay 2** (on unless turned off), keeps it to classic AirPlay: for a group it doesn't
+  play in step with, since it can drift a few milliseconds from the other speakers, more just after
+  it joins one that is already playing. If something doesn't work, open an issue.
 - **DLNA.** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to
   this device box, or Home Assistant) makes the device a DLNA speaker, a "media renderer", under its
   own name. Music apps and servers on the network find it and play to it: BubbleUPnP on a phone,

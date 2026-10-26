@@ -10,7 +10,7 @@ import (
 	esphome "github.com/ygelfand/go-esphome-device"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
-	"github.com/HuskerMinion/techo5/echod/internal/layout"
+	"github.com/HuskerMinion/techo5/echod/internal/hardware/screen"
 )
 
 // The Show's own parts of the night (night_select.go has what the Spot shares): its actions, the pages
@@ -120,8 +120,8 @@ var glowSteps = [...]int{1, 2, 3, 4, 6, 8, 10, 13, 16, 20}
 
 // glowSetting is the night light's brightness on its 1 to 10 scale: the one set, or the panel's own.
 // The Show 5 starts where the night light began; the Show 8's panel lights a dark room far more at the
-// same backlight, so it starts lower. The Skylight starts at the top, about where its stock floor kept
-// it before its scale went under that floor (screen.skylightRaw).
+// same backlight, so it starts lower. The Skylight on its kernel that dims under stock's floor starts at the
+// top, about where that floor kept it before (screen.skylightRaw); on the kernel before, as the Show 8 does.
 func (d *Display) glowSetting() int {
 	d.mu.Lock()
 	wide := d.wide
@@ -134,7 +134,7 @@ func glowFor(wide bool) int {
 	if v := config.Get().Screen.NightLightLevel; v > 0 {
 		return v
 	}
-	if layout.Skylight() {
+	if screen.SkylightUnderFloor() {
 		return len(glowSteps)
 	}
 	if wide {

@@ -289,8 +289,19 @@ func newDetect() *Detect {
 	})
 
 	// A cut microphone hands on silence, and running the models over it is work that cannot find
-	// anything. The engines go down with the microphones and come back with them.
+	// anything. The engines go down with the microphones and come back with them. Not for a panel's
+	// microphone found silent (its own switch, or another app holding it): that shows as muted, but the
+	// engines run on over the silence, so the word that ends it is heard rather than lost to a reload.
+	var observed atomic.Bool
 	mute.Get().Changed.Listen(func(muted bool) {
+		if muted && !mute.Get().CutHere() {
+			observed.Store(true)
+			return
+		}
+		if !muted && observed.Swap(false) {
+			return // the silence ended; nothing was stopped
+		}
+		observed.Store(false)
 		e.Quiet(muted)
 		// The stop word is spared while an alarm or timer rings: it has to stop when told, and the sound
 		// could otherwise hold it for as long as ten seconds. With nothing ringing it settles too, or

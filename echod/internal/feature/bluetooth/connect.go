@@ -346,27 +346,37 @@ func (c *connections) connect(ctx context.Context, ct central, addr string, rand
 // queue runs op on the device's worker, answering with an error if it fails.
 func (c *connections) queue(conn sender, address uint64, handle uint32, do func(central, string) error) error {
 	address = address48(address)
-	c.mu.Lock()
-	p, ok := c.peers[address]
-	ct := c.central
-	c.mu.Unlock()
-	if !ok || ct == nil {
-		return conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: espGattError})
-	}
 	fail := func() {
 		_ = conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: espGattError})
 	}
-	select {
-	case p.work <- op{fail: fail, run: func() {
-		if err := do(ct, addressString(address)); err != nil {
-			slog.Debug("ble: gatt request failed", "address", addressString(address), "handle", handle, "err", err)
-			_ = conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: gattError(err)})
+	// Queued under the lock forget takes the peer away under: either it is queued while the peer is still
+	// there, and forget's drain answers it, or the peer is gone and it is answered here. Never left in a
+	// queue nobody reads.
+	c.mu.Lock()
+	p, ok := c.peers[address]
+	ct := c.central
+	queued, full := false, false
+	if ok && ct != nil {
+		select {
+		case p.work <- op{fail: fail, run: func() {
+			if err := do(ct, addressString(address)); err != nil {
+				slog.Debug("ble: gatt request failed", "address", addressString(address), "handle", handle, "err", err)
+				_ = conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: gattError(err)})
+			}
+		}}:
+			queued = true
+		default:
+			full = true
 		}
-	}}:
+	}
+	c.mu.Unlock()
+	switch {
+	case queued:
 		return nil
-	default:
+	case full:
 		return conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: espNoResources})
 	}
+	return conn.Send(&api.BluetoothGATTErrorResponse{Address: address, Handle: handle, Error: espGattError})
 }
 
 func (p *peer) run() {

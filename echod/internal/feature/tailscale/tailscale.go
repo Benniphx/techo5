@@ -286,6 +286,9 @@ func (f *Feature) runOnce(ctx context.Context) error {
 	if bin == "" {
 		return errors.New("tailscale is not in this image")
 	}
+	if err := Fenced(web.TunName); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return err
 	}
@@ -445,6 +448,24 @@ func statusText(s Status) string {
 		return s.State
 	}
 	return "Starting"
+}
+
+// Fenced says whether the firewall's tailnet chain (techo5-firewall, TECHO5-TS: 6053, 8181, 22 and ping)
+// stands in front of iface, and why not when it does not. Neither Tailscale nor NetBird starts without it:
+// a firewall that could not make its rules leaves Wi-Fi open, which is the house's own, but a tailnet
+// open to every port is open to whoever the tailnet lets reach the device. A variable, for tests.
+var Fenced = func(iface string) error {
+	for _, tool := range []string{"iptables-legacy", "ip6tables-legacy"} {
+		for _, rule := range [][]string{{"INPUT", "-i", iface, "-j", "TECHO5-TS"}, {"TECHO5-TS", "-j", "DROP"}} {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			err := exec.CommandContext(ctx, tool, append([]string{"-C"}, rule...)...).Run()
+			cancel()
+			if err != nil {
+				return fmt.Errorf("the firewall's rules for %s are not in place (%s -C %s); see techo5-firewall in the log", iface, tool, strings.Join(rule, " "))
+			}
+		}
+	}
+	return nil
 }
 
 // Hostname is hostname, for NetBird's name for the device (feature/netbird), which follows the same rules.

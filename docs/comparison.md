@@ -369,7 +369,7 @@ Projects are in alphabetical order.
 - **Bluetooth speaker for phones**: echo-dot-assist: SBC, AAC, aptX, aptX HD; off by default; EchoLocal: Shows only; Kiosk Satellite: Echo Dot image only: phones pair with it as a Bluetooth speaker (adb command); LibreEcho: A2DP sink with AVRCP absolute volume (0.14.3); TECHO5: Show, Spot, Dot and Echo gen 2; the Panel app has no Bluetooth
 - **Play on a Bluetooth speaker**: echo-dot-assist: SBC only, one speaker; Kiosk Satellite: Speaker picker lists Bluetooth outputs; media follows Android routing; TECHO5: Echos; not the Panel app (no Bluetooth)
 - **Headphone or line-out jack**: echo-dot-assist: stock 3.5 mm jack plays; EQ applies, speaker gain does not; EchoLocal: Dot jack; headphones sensor; EchoMuse: mono; stereo in progress (PR#753); Kiosk Satellite: Speaker picker lists wired outputs; media follows Android routing; TECHO5: devices with a jack only (Spot, Dot, Dot gen 3, Echo gen 2 mono)
-- **AirPlay receiver**: EchoLocal: Shows only, with screen mirroring; off by default; Kiosk Satellite: AirPlay 1, audio only; LibreEcho: AirPlay 2 through Shairport Sync; TECHO5: Show and Dot only (not the Spot); off by default; AirPlay 2 grouping on the Echo Dot 2nd gen and Echo 2nd gen
+- **AirPlay receiver**: EchoLocal: Shows only, with screen mirroring; off by default; Kiosk Satellite: AirPlay 1, audio only; LibreEcho: AirPlay 2 through Shairport Sync; TECHO5: every device but the Panel app; off by default; AirPlay 2 grouping
 - **DLNA renderer**: TECHO5: off by default; no seeking yet
 - **Google Cast receiver**: EchoLocal: off by default; audio only on the Dot; TECHO5: video.md: not a Google Cast target
 - **Separate volumes per stream**: echo-dot-assist: Separate music, voice, sounds, timer and call volumes in the 2026-10-21 beta (PR #47 merged); not in a stable release yet; EchoMuse: reply level offset (+6/+12 dB) over volume; Kiosk Satellite: media, assistant, intercom, notification​, alarm; TECHO5: separate alarm/timer ring volume only; View Assist: voice, music, alarm
@@ -597,7 +597,7 @@ Released features that no row covers, as each project's reviewer picked them.
 
 **TECHO5**
 
-- Spotify Connect receiver (Show and Dot, off by default)
+- Spotify Connect receiver (every device but the Panel app, off by default)
 - Talk through doorbell cameras over the ONVIF backchannel
 - Reolink doorbell chime and camera pop-up without HA
 - Now-playing sensors in HA for every source

@@ -60,7 +60,11 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 	if why := airplay2Missing(); why != "" {
 		slog.Info("streaming: AirPlay is the classic receiver here", "why", why)
 	} else if writeConf(conf, shairportConf(name, meta, true)) {
-		if !runAirPlay2(ctx, conf, w, cred) {
+		// Its senders are let in through the firewall only while it runs (airplay2_door.go).
+		airplay2Door(true)
+		failed := runAirPlay2(ctx, conf, w, cred)
+		airplay2Door(false)
+		if !failed {
 			return
 		}
 		slog.Warn("streaming: AirPlay 2 would not start; the classic receiver takes over until AirPlay starts again")

@@ -150,6 +150,16 @@ func (m *Mute) external() {
 	}
 }
 
+// CutHere is whether a mute is one the device made: on a panel, the software cut, rather than Android's
+// capture found silent (external), which shows as muted but cuts nothing of the device's own. Everywhere
+// else every mute is.
+func (m *Mute) CutHere() bool {
+	if line, ok := m.line.(interface{ Persisted() bool }); ok {
+		return line.Persisted()
+	}
+	return true
+}
+
 func (m *Mute) Name() string { return "microphone mute" }
 
 func (m *Mute) Entities() []esphome.Entity {

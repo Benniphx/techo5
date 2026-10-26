@@ -75,8 +75,11 @@ echo "techo5-firewall: Wi-Fi inbound closed except 6053, 5353, 22, 8928, 8181, 5
 # for hours stays marked: the first thing TECHO5-IN does, before what is already established is taken in.
 # A chain of its own, made after TECHO5-IN is whole: it needs the kernel's recent match, and where a rule of
 # it fails, the chain goes, Wi-Fi stays closed as above, and /run/techo5-no-airplay2 tells the daemon to keep
-# the classic receiver.
+# the classic receiver. Made here but not jumped to: the daemon puts it first in TECHO5-IN only while the
+# AirPlay 2 receiver runs (feature/streaming, airplay2_door.go), where /run/techo5-airplay2-jump says, so a
+# sender is never let in to those ports while AirPlay is off.
 APCHAIN=TECHO5-AP2
+rm -f /run/techo5-airplay2-jump
 for T in iptables-legacy ip6tables-legacy; do
 	$T -D $CHAIN -j $APCHAIN 2> /dev/null
 	$T -F $APCHAIN 2> /dev/null
@@ -90,11 +93,11 @@ if [ -x /usr/local/bin/techo5-shairport-sync ] && [ -x /usr/local/bin/techo5-nqp
 			$T -A $APCHAIN -p tcp --dport 7000 -j ACCEPT &&
 			$T -A $APCHAIN -p udp --dport 319:320 -j ACCEPT &&
 			$T -A $APCHAIN -p tcp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT &&
-			$T -A $APCHAIN -p udp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT &&
-			$T -I $CHAIN 1 -j $APCHAIN || apok=
+			$T -A $APCHAIN -p udp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT || apok=
 	done
 	if [ -n "$apok" ]; then
-		echo "techo5-firewall: AirPlay 2 in on Wi-Fi: 7000, 319-320/udp and its senders' ports" >&2
+		echo "$CHAIN 1" > /run/techo5-airplay2-jump
+		echo "techo5-firewall: AirPlay 2 in on Wi-Fi while its receiver runs: 7000, 319-320/udp and its senders' ports" >&2
 	else
 		for T in iptables-legacy ip6tables-legacy; do
 			$T -D $CHAIN -j $APCHAIN 2> /dev/null

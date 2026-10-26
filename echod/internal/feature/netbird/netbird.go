@@ -201,10 +201,15 @@ func (f *Feature) Login(ctx context.Context, setupKey, management string) error 
 			return err
 		}
 	}
-	// The client may be downloading, or its daemon starting: wait for it to answer.
+	// The client may be downloading, or its daemon starting: wait for it to answer. A download is not
+	// waited out: Home Assistant's connection waits on an action, so the answer comes at once and the
+	// status sensor says when the key can be given.
 	for {
 		if _, err := status(ctx); err == nil {
 			break
+		}
+		if st := f.State(); st.Downloading {
+			return fmt.Errorf("netbird: downloading the client (%d%%); give the key again when the status says it needs one", int(st.Got*100))
 		}
 		select {
 		case <-ctx.Done():
@@ -230,10 +235,15 @@ func (f *Feature) Login(ctx context.Context, setupKey, management string) error 
 		return err
 	}
 	f.poke()
+	upAt := time.Now()
 	for {
 		st, err := status(ctx)
 		if err == nil && st.DaemonStatus == connected && st.IP != "" {
 			return nil
+		}
+		// Still asking for a key a few seconds after taking one: the management server turned it down.
+		if err == nil && needsKey(st.DaemonStatus) && time.Since(upAt) > 5*time.Second {
+			return errors.New("netbird: the management server did not take the key; it may be used up or expired: make a new one")
 		}
 		select {
 		case <-ctx.Done():
@@ -282,8 +292,9 @@ func (f *Feature) Actions() []*esphome.Action {
 			if !encrypted() {
 				return nil, errors.New("netbird: set an API encryption key first; the setup key would otherwise cross the network in the clear")
 			}
-			// Long enough for the client's first download on a slow link.
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			// Home Assistant's connection waits on an action, so it is kept short, as Tailscale's is; a
+			// download is not waited for (Login).
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			return nil, f.Login(ctx, c.String("setup_key"), c.String("management_url"))
 		},
@@ -524,6 +535,9 @@ func needsKey(s string) bool {
 
 // runOnce runs the daemon until it is turned off, ctx ends, or it exits.
 func (f *Feature) runOnce(ctx context.Context) error {
+	if err := tailscale.Fenced(web.NetbirdTun); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Join(stateDir, "state"), 0o700); err != nil {
 		return err
 	}

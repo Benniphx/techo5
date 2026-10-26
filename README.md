@@ -279,8 +279,8 @@ Which to use, how to set it up and what each can do: **[docs/dashboards.md](docs
 - 📡 **DLNA, and FLAC** (v1.0.0). Every device can be a DLNA speaker that music apps and servers play
   to (BubbleUPnP, Jellyfin, Plex, a NAS), off until you turn it on. Streams in FLAC now play on the
   device too, alongside MP3 and WAV. [docs/setup.md](docs/setup.md#5-music)
-- 📲 **AirPlay and Spotify Connect** (v0.9.25). The Show and the Dot can be a speaker other apps
-  play to, under the device's own name: AirPlay from an iPhone, iPad or Mac, and Spotify Connect
+- 📲 **AirPlay and Spotify Connect** (v0.9.25). Every device but the Panel app can be a speaker other
+  apps play to (the Spot since v1.6.8), under the device's own name: AirPlay from an iPhone, iPad or Mac, and Spotify Connect
   from the Spotify app (Premium). Both are off until you turn them on, on the screen, the setup page
   or in Home Assistant, and what they play shows as now playing. Since v1.2.7 the Spotify app's
   slider follows the device's volume, and the device follows the slider. If something does not work,
@@ -400,7 +400,7 @@ Echo Show 8 and the Echo Spot, are in [docs/screenshots](docs/screenshots/README
 | Where your voice goes | Amazon | Your Home Assistant, encrypted |
 | Wake word | "Alexa", processed for Amazon | On the device, two at once: Alexa, Okay Nabu, Hey Jarvis, Hey Mycroft, eight more, or your own. Plus a "stop" word |
 | Screen | Alexa cards and ads | Clock, weather, now playing, Home Assistant dashboards, cameras, timers, alarms, settings |
-| Music | Amazon Music and skills | Home Assistant radio lists with cover art, Music Assistant (Sendspin), Home Assistant media, AirPlay and Spotify Connect (Show and Dot), DLNA, a phone over Bluetooth, sleep sounds made on the device |
+| Music | Amazon Music and skills | Home Assistant radio lists with cover art, Music Assistant (Sendspin), Home Assistant media, AirPlay 2 and Spotify Connect, DLNA, a phone over Bluetooth, sleep sounds made on the device |
 | Timers and alarms | Alexa | Home Assistant timers on screen; alarms that ring without Home Assistant |
 | Camera | Video calls, Drop In | A Home Assistant camera entity, off unless watched; a camera for Frigate or an NVR over RTSP and ONVIF, if you turn it on; presence and gestures, on the device only |
 | Bluetooth | Speaker and phone audio | Audio to earbuds and speakers; Home Assistant Bluetooth proxy |

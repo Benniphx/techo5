@@ -533,6 +533,18 @@ const (
 	skylightStockFloor = 20
 )
 
+// SkylightUnderFloor is whether this is a Skylight whose kernel's backlight goes under stock's floor (levels
+// 0..255): only then does the night range dim under it. On the kernel before, the night's default is not its
+// top step, which that kernel spreads over far brighter levels (display, glowFor). Read once: the kernel
+// does not change under a running daemon. A variable, for tests.
+var SkylightUnderFloor = sync.OnceValue(func() bool {
+	if !layout.Skylight() {
+		return false
+	}
+	_, top := backlightNode()
+	return top >= BacklightMax
+})
+
 // skylightRaw is the Skylight's driver level for a level on the 0..BacklightMax scale. Stock's
 // table squeezed the whole night range into the few steps over its floor, where a step of the night
 // brightness changed nothing to see and the lowest turned the panel off. With levels 0..255 the night
