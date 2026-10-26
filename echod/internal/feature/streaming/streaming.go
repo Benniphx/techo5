@@ -158,6 +158,9 @@ func Installed() (airplay, spotify bool) {
 
 // Run keeps what runs matching the switches.
 func (f *Feature) Run(ctx context.Context) error {
+	// A daemon that stopped with AirPlay 2's senders let in (airplay2_door.go) left them so: they are let
+	// in again only while its receiver runs.
+	airplay2Door(false)
 	defer f.stop()
 	for {
 		f.settle(ctx)

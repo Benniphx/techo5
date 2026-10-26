@@ -292,21 +292,16 @@ func newDetect() *Detect {
 	// anything. The engines go down with the microphones and come back with them. Not for a panel's
 	// microphone found silent (its own switch, or another app holding it): that shows as muted, but the
 	// engines run on over the silence, so the word that ends it is heard rather than lost to a reload.
-	var observed atomic.Bool
+	// What decides is whether the device cut the microphones (CutHere), and the engines' own state says
+	// whether they are coming back.
 	mute.Get().Changed.Listen(func(muted bool) {
-		if muted && !mute.Get().CutHere() {
-			observed.Store(true)
-			return
-		}
-		if !muted && observed.Swap(false) {
-			return // the silence ended; nothing was stopped
-		}
-		observed.Store(false)
-		e.Quiet(muted)
+		cut := muted && mute.Get().CutHere()
+		was := e.Quieted()
+		e.Quiet(cut)
 		// The stop word is spared while an alarm or timer rings: it has to stop when told, and the sound
 		// could otherwise hold it for as long as ten seconds. With nothing ringing it settles too, or
 		// the unmute sound could be heard as "stop" and cut itself short, and music with it.
-		if !muted {
+		if was && !cut {
 			settle := unmuteSettle()
 			if ring.IsSounding() {
 				e.Settle(settle, StopSlot)
@@ -335,7 +330,7 @@ func newDetect() *Detect {
 		// A device that was muted when it was switched off comes back muted, and the hook below only
 		// fires on a change, so the state has to be read once here as well.
 		if muted, err := mute.Get().Muted(); err == nil {
-			e.Quiet(muted)
+			e.Quiet(muted && mute.Get().CutHere())
 		}
 		return nil
 	}

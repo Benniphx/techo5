@@ -601,6 +601,13 @@ func (e *Engine) Settle(d time.Duration, spared ...int) {
 // The slots are kept. What is dropped is the engines under them, which is where both the work and
 // the streaming state live, so coming back is the same cold start as a wake word freshly chosen
 // rather than a window holding audio from before the mute and audio from after it, spliced.
+// Quieted is whether the engines are down for a cut microphone (Quiet).
+func (e *Engine) Quieted() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.quiet
+}
+
 func (e *Engine) Quiet(on bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
