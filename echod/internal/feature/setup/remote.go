@@ -65,7 +65,7 @@ var keyed = func() bool {
 
 // letInNotice puts up on the screen that Home Assistant let a browser in; a variable for tests.
 var letInNotice = func(from string) {
-	if err := notify.Get().Notify("Home Assistant let a browser at "+from+" into the setup page, over Tailscale.",
+	if err := notify.Get().Notify("Home Assistant let a browser at "+from+" into the setup page, from away.",
 		"Setup page", "mdi:tools", "", "", "", 60); err != nil {
 		slog.Warn("setup page: the notice of a browser let in was not shown", "err", err)
 	}

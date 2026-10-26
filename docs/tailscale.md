@@ -5,7 +5,8 @@ a device in another house, a relative's or a vacation home, stay in your own Hom
 once by its tailnet name, it keeps working wherever it is plugged in, with no ports opened on
 anybody's router.
 
-Every Echo Show, Echo Spot and Skylight image carries Tailscale, off until you give it a key. It needs
+Every Echo Show, Echo Spot and Skylight image carries Tailscale, off until you give it a key. If you use
+NetBird instead, see [NetBird](netbird.md). It needs
 the device's 64-bit kernel: an Echo Show 8 2nd gen still on Amazon's kernel doesn't offer it. The Echo
 Dots don't carry it: they stay in the house.
 

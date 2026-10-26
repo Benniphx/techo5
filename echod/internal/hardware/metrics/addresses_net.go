@@ -13,8 +13,8 @@ import (
 // link-local are left out: neither is an answer to "where is it". So is a USB gadget link (the bench
 // network on the USB cable, athena's RNDIS at 172.16.42.1): it reaches only the computer at the other
 // end of the cable, and advertised over mDNS it became the address Home Assistant kept for the device
-// and could not connect to (unit 1, 2026-10-15). Nor is the Tailscale interface (feature/tailscale):
-// its address is the tailnet's, which the house's devices and Home Assistant at home must not be sent
+// and could not connect to (unit 1, 2026-10-15). Nor is the Tailscale interface (feature/tailscale), or
+// NetBird's (feature/netbird): its address is the tailnet's, which the house's devices and Home Assistant at home must not be sent
 // to; a device from away reaches it by its tailnet name.
 //
 // Not a Reader: this comes from the network stack rather than from a file under Root, so there is
@@ -26,7 +26,7 @@ func Addresses() []net.IP {
 	}
 	var ips []net.IP
 	for _, i := range ifs {
-		if usbGadget(i.Name) || strings.HasPrefix(i.Name, "tailscale") {
+		if usbGadget(i.Name) || strings.HasPrefix(i.Name, "tailscale") || i.Name == "netbird0" {
 			continue
 		}
 		addrs, err := i.Addrs()

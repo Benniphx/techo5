@@ -341,6 +341,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveVideo(r)
 	case "tailscale":
 		problem = saveTailscale(r)
+	case "netbird":
+		problem = saveNetbird(r)
 	case "timezone":
 		zone := strings.TrimSpace(r.PostFormValue("zone"))
 		switch {
@@ -459,6 +461,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		cameraButtonsSection(w, token)
 		doorbellSection(w, token)
 		tailscaleSection(w, token)
+		netbirdSection(w, token)
 		if layout.HasMicrophone() {
 			talkBackSection(w, token) // the microphones to a camera's speaker
 		}

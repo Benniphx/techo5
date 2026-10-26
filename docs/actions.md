@@ -2398,6 +2398,40 @@ data:
   auth_key: tskey-auth-example
 ```
 
+## Join a NetBird network
+
+In YAML, refer to this action as `esphome.<node>_netbird_login`.
+
+Joins the device to your NetBird network with a setup key, and turns its **NetBird** switch on. The
+first time, the device downloads NetBird's client first. The key is handed to NetBird once and not
+kept: after that the device rejoins by itself. It waits up to 2 minutes, for the download and to see
+the device connect, so a key that's used up or expired is an error here. Echo Shows, the Echo Spot and
+the Skylight only. See [NetBird: reaching a device from away](netbird.md).
+
+> **Good to know**
+>
+> This needs an API encryption key: it's refused unless Home Assistant's *ESPHome* link to the device
+> already has a real encryption key set, since otherwise the key would cross the network in the clear.
+
+### setup_key (Required)
+
+*string*
+
+A setup key from your NetBird dashboard.
+
+### management_url (Required)
+
+*string*
+
+Your own management server's URL, such as `https://netbird.example.com`. Empty for NetBird's own.
+
+```yaml
+action: esphome.office_netbird_login
+data:
+  setup_key: A1B2C3D4-0000-0000-0000-000000000000
+  management_url: ""
+```
+
 ## Set the settings lock's PIN
 
 In YAML, refer to this action as `esphome.<node>_settings_lock_pin`.

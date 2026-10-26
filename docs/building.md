@@ -226,6 +226,17 @@ one (an athena on Amazon's kernel) the daemon doesn't offer Tailscale. The build
 reproducible: the same script gives the same bytes on any machine. A release built from a worktree needs
 it copied into its `bin/` as well, with `tailscaled-arm64.LICENSE`.
 
+## NetBird
+
+No image carries NetBird's client ([docs/netbird.md](netbird.md)): a device downloads it when NetBird
+is turned on, from the release that first published it, checked against the size and SHA-256 in
+`echod/internal/feature/netbird/pinned.go`.
+[tools/linux/build-netbird.sh](../tools/linux/build-netbird.sh) builds `bin/netbird-arm64.tar.gz`, the
+client and its license, from NetBird's own release source, pinned and checked by SHA-256, with a pinned
+Go (Linux, WSL or Git Bash on Windows). The build is reproducible, so the same script gives the bytes
+`pinned.go` names; a new NetBird version means a new build, new values there, and the archive published
+with that release.
+
 ## Optional: a CPU profile from a device
 
 To see where the daemon spends its time on a unit, turn SSH on and write the number of seconds to a

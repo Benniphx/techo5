@@ -10,4 +10,8 @@ func hasTailnet() bool { return false }
 
 func tailscaleSection(http.ResponseWriter, string) {}
 
+func netbirdSection(http.ResponseWriter, string) {}
+
+func saveNetbird(*http.Request) string { return "this device has no NetBird" }
+
 func saveTailscale(*http.Request) string { return "this device has no Tailscale" }

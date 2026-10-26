@@ -49,6 +49,7 @@ type Config struct {
 	Deck           Deck           `json:"deck,omitempty"`
 	Video          Video          `json:"video,omitempty"`
 	Tailscale      Tailscale      `json:"tailscale"`
+	Netbird        Netbird        `json:"netbird"`
 	Nearest        Nearest        `json:"nearest,omitempty"`
 	Remote         Remote         `json:"remote,omitempty"`
 	CamStream      CamStream      `json:"cam_stream,omitempty"`
@@ -118,6 +119,7 @@ func (w Writer) Presence() PresenceWriter             { return PresenceWriter(w)
 func (w Writer) Deck() DeckWriter                     { return DeckWriter(w) }
 func (w Writer) Video() VideoWriter                   { return VideoWriter(w) }
 func (w Writer) Tailscale() TailscaleWriter           { return TailscaleWriter(w) }
+func (w Writer) Netbird() NetbirdWriter               { return NetbirdWriter(w) }
 func (w Writer) Nearest() NearestWriter               { return NearestWriter(w) }
 func (w Writer) Remote() RemoteWriter                 { return RemoteWriter(w) }
 func (w Writer) CamStream() CamStreamWriter           { return CamStreamWriter(w) }

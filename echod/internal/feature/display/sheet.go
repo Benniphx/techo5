@@ -22,6 +22,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/netbird"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/presence"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remote"
@@ -414,7 +415,29 @@ func connectionRows(sv sheetView) []settingRow {
 		return rows
 	}
 	ts := tailscale.Get().State()
-	return append(rows, settingRow{id: "tailscale", label: "Tailscale", sub: tailscaleSub(ts), kind: ctlToggle, on: ts.On})
+	rows = append(rows, settingRow{id: "tailscale", label: "Tailscale", sub: tailscaleSub(ts), kind: ctlToggle, on: ts.On})
+	// NetBird likewise, once it has been joined: until then there is nothing to turn on here.
+	if nb := netbird.Get().State(); netbird.Available() && (nb.On || config.Get().Netbird.Management != "" || nb.State != "") {
+		rows = append(rows, settingRow{id: "netbird", label: "NetBird", sub: netbirdSub(nb), kind: ctlToggle, on: nb.On})
+	}
+	return rows
+}
+
+// netbirdSub is the NetBird row's line.
+func netbirdSub(s netbird.Status) string {
+	switch {
+	case !s.On:
+		return "Reach this device from away: off"
+	case s.Downloading:
+		return fmt.Sprintf("Downloading NetBird, %d%%", int(s.Got*100))
+	case s.State == "Connected" && s.Name != "":
+		return "Connected as " + s.Name
+	case s.State == "NeedsLogin" || s.State == "LoginFailed" || s.State == "SessionExpired":
+		return "Needs a setup key: the setup page, Connections"
+	case s.Problem != "":
+		return s.Problem
+	}
+	return "Starting"
 }
 
 // tailscaleSub is the Tailscale row's line: where the device stands on the tailnet.
@@ -1153,6 +1176,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		security.Get().SetSSH(!config.Get().Security.SSH)
 	case "tailscale":
 		go func() { _ = tailscale.Get().SetOn(!config.Get().Tailscale.On) }()
+	case "netbird":
+		go func() { _ = netbird.Get().SetOn(!config.Get().Netbird.On) }()
 	case "remoteapi":
 		remote.Get().SetOn(!config.Get().Remote.On)
 	case "camweb":

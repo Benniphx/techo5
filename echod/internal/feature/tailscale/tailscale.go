@@ -447,6 +447,12 @@ func statusText(s Status) string {
 	return "Starting"
 }
 
+// Hostname is hostname, for NetBird's name for the device (feature/netbird), which follows the same rules.
+func Hostname(name string) string { return hostname(name) }
+
+// LinkKeyed is encrypted, for NetBird, which needs the same of the link.
+func LinkKeyed() bool { return encrypted() }
+
 // hostname is the device's name as a tailnet name: lower case, letters and digits, hyphens between.
 func hostname(name string) string {
 	var b strings.Builder

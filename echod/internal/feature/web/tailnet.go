@@ -34,10 +34,26 @@ func FromTailnet(remote string) bool {
 // TunName is the Tailscale interface's name, as tailscaled is started with it (feature/tailscale).
 const TunName = "tailscale0"
 
+// NetbirdTun is NetBird's, as its client is started with it (feature/netbird). NetBird numbers its
+// networks in the same range as Tailscale, and everything here holds for it alike: "the tailnet" is
+// either.
+const NetbirdTun = "netbird0"
+
 // TailscaleUp is whether Tailscale says it is connected (feature/tailscale sets it): then a tailnet
 // address is from away even if no Tailscale interface is found (a renamed one, userspace
 // networking).
 var TailscaleUp = func() bool { return false }
+
+// NetbirdUp is the same for NetBird (feature/netbird sets it).
+var NetbirdUp = func() bool { return false }
+
+// meshUp is whether either says it is connected.
+func meshUp() bool { return TailscaleUp() || NetbirdUp() }
+
+// meshIface is whether an interface is Tailscale's or NetBird's.
+func meshIface(name string) bool {
+	return name == TunName || strings.HasPrefix(name, "tailscale") || name == NetbirdTun
+}
 
 // LocalNets is this device's networks: whether it has a Tailscale interface, and the prefixes of its
 // other interfaces. A variable, for tests.
@@ -51,7 +67,7 @@ var LocalNets = func() (tailscale bool, nets []netip.Prefix) {
 		if err != nil {
 			continue
 		}
-		ts := ifc.Name == TunName || strings.HasPrefix(ifc.Name, "tailscale")
+		ts := meshIface(ifc.Name)
 		for _, a := range addrs {
 			pfx, err := netip.ParsePrefix(a.String())
 			if err != nil {
@@ -85,7 +101,7 @@ func Away(remote string) bool {
 	}
 	ip = ip.Unmap()
 	tailscale, nets := LocalNets()
-	tailscale = tailscale || TailscaleUp()
+	tailscale = tailscale || meshUp()
 	for _, n := range nets {
 		if n.Contains(ip) {
 			return false // this house's own network, numbered like a tailnet
@@ -103,7 +119,7 @@ var TailnetAddrs = func() []netip.Addr {
 	}
 	var out []netip.Addr
 	for _, ifc := range ifaces {
-		if ifc.Name != TunName && !strings.HasPrefix(ifc.Name, "tailscale") {
+		if !meshIface(ifc.Name) {
 			continue
 		}
 		addrs, _ := ifc.Addrs()
@@ -142,7 +158,7 @@ func ToTailnet(local string) bool {
 // The address reached is looked at only while Tailscale is connected: listing the interfaces for
 // every request would cost a slow device on every camera frame, and with no tailnet there is no
 // tailnet address to reach.
-func AwayConn(remote, local string) bool { return Away(remote) || (TailscaleUp() && ToTailnet(local)) }
+func AwayConn(remote, local string) bool { return Away(remote) || (meshUp() && ToTailnet(local)) }
 
 // AwayRequest is AwayConn for a request to an http.Server, which says the address it reached.
 func AwayRequest(r *http.Request) bool {

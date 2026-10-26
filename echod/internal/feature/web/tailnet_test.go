@@ -106,6 +106,24 @@ func TestTheTailscaleInterface(t *testing.T) {
 	}
 }
 
+// NetBird is the tailnet too: its interface is one, and with it connected a tailnet address beyond this
+// device's networks is from away.
+func TestNetBirdIsTheTailnetToo(t *testing.T) {
+	if !meshIface(NetbirdTun) || meshIface("wlan0") {
+		t.Errorf("meshIface")
+	}
+	was, wasUp := LocalNets, NetbirdUp
+	t.Cleanup(func() { LocalNets, NetbirdUp = was, wasUp })
+	LocalNets = func() (bool, []netip.Prefix) { return false, []netip.Prefix{netip.MustParsePrefix("192.0.2.0/24")} }
+	if Away("100.64.0.20:80") {
+		t.Error("away with neither connected")
+	}
+	NetbirdUp = func() bool { return true }
+	if !Away("100.64.0.20:80") || Away("192.0.2.9:80") {
+		t.Error("with NetBird connected and no interface found")
+	}
+}
+
 // With Remote setup on, a browser from away reaches the setup page's own paths, and still nothing else.
 func TestTheTailnetReachesTheSetupPageOnlyWithRemoteSetup(t *testing.T) {
 	was, wasRemote := LocalNets, RemoteSetup
