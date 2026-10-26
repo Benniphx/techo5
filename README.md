@@ -79,6 +79,18 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🎵 **AirPlay 2 on every device** (v1.6.8). With the AirPlay switch on, an iPhone can group the
+  device with other AirPlay 2 speakers, like a HomePod or a Sonos. The **AirPlay 2** switch keeps it
+  to classic AirPlay if a group doesn't play in step. Its firewall ports are open only while the
+  AirPlay 2 receiver runs.
+- 🛰️ **NetBird** (v1.6.8). The other way, beside Tailscale, to keep a device in another house in
+  your Home Assistant, with NetBird's own service or your own server. Off until you give it a setup
+  key. [docs/netbird.md](docs/netbird.md)
+- 📶 **Also in v1.6.8.** Home Assistant can connect to Bluetooth devices through a Show, up to three
+  at a time, with the new **Bluetooth proxy connections** switch
+  ([#184](https://github.com/HuskerMinion/techo5/pull/184)). Weekend nights can have their own hours
+  ([#305](https://github.com/HuskerMinion/techo5/issues/305)), and the Skylight's night clock now
+  dims well below its old floor.
 - 🌐 **Reach a device from away** (v1.6.7). An Echo Show, Echo Spot or Skylight can join your
   Tailscale network, so a device in another house stays in your own Home Assistant, and its setup page
   can be opened from afar with Remote setup. Off until you give it a key; over the tailnet only Home
