@@ -252,14 +252,45 @@ func satellite() string {
 		slog.Warn("say: no assist satellite found for this device; guessing", "entity", guess, "err", err)
 		return guess
 	}
-	for _, e := range list {
-		if strings.EqualFold(e.Name, name+" Assist satellite") {
-			found.put(name, e.ID)
-			return e.ID
-		}
+	if id, ok := matchSatellite(list, name, guess); ok {
+		found.put(name, id)
+		return id
 	}
 	slog.Warn("say: no assist satellite found for this device; guessing", "entity", guess)
 	return guess
+}
+
+// matchSatellite picks this device's satellite out of the assist satellites Home Assistant lists, for a
+// token that may not render templates (#294: Home Assistant allows the template API to admins only). The
+// states carry no device, only a friendly name, which is the device's name and then the entity's own, in
+// Home Assistant's language ("Echo Assist satellite", "Echo Assist-Satellit"). So the English name is
+// taken first, then the only entity whose name starts with the device's name and a space. Two such
+// entities (a device "Kitchen" and one called "Kitchen Echo") are told apart by the id it would have;
+// failing that none is picked, rather than another device's.
+func matchSatellite(list []hass.Entity, name, guess string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", false
+	}
+	var prefixed []string
+	for _, e := range list {
+		friendly := strings.TrimSpace(e.Name)
+		if strings.EqualFold(friendly, name+" Assist satellite") {
+			return e.ID, true
+		}
+		if len(friendly) > len(name) && strings.EqualFold(friendly[:len(name)], name) && friendly[len(name)] == ' ' {
+			prefixed = append(prefixed, e.ID)
+		}
+	}
+	if len(prefixed) == 1 {
+		return prefixed[0], true
+	}
+	for _, id := range prefixed {
+		if id == guess {
+			return id, true
+		}
+	}
+	return "", false
 }
 
 // found keeps the satellite last found, for foundFor: each lookup is a round trip to Home Assistant, up to
