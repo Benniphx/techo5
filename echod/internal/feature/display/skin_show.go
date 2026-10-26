@@ -11,6 +11,7 @@ var skinBackdrops = map[string]func(r *renderer, s scene){
 	skinSynthwave: (*renderer).synthwaveSun,
 	skinHAL:       (*renderer).halBackdrop,
 	skinPrairie:   (*renderer).prairiePhoto,
+	skinEarthrise: (*renderer).earthrisePhoto,
 	skinControl:   (*renderer).controlFrame,
 }
 

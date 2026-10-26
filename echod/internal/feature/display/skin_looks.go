@@ -65,11 +65,14 @@ var skinLooks = map[string]skinLook{
 	skinPrairie:   {theme: &prairieTheme},
 	skinControl:   {theme: &controlTheme},
 	skinPlain:     {theme: &plainTheme},
+	skinEarthrise: {theme: &earthriseTheme},
 }
 
 // The readable skins: full color, no filter over the panel, the words at 7:1 or more on their ground
 // (TestReadableSkinsContrast) so they read across a room on every screen.
 var (
+	// earthriseTheme is space as Apollo 8 saw it: white on black, the blue of the Earth for marks.
+	earthriseTheme = preset("Earthrise", 0x000000, 0x7fb2ff, 0xffffff, 0xd2d8e2, 0x39424f)
 	// prairieTheme is the Sandhills at sunrise: warm white on an evening blue, wheat gold marks.
 	prairieTheme = preset("Prairie", 0x0e1a30, 0xf4c45a, 0xfbf5e6, 0xcdd3e0, 0x2f4266)
 	// controlTheme is a console: near-white on dark gray, status green marks.

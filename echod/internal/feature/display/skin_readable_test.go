@@ -27,7 +27,7 @@ func contrast(a, b color.RGBA) float64 {
 // The readable skins keep their words at 7:1 or more on their ground, quiet words included, and what
 // they mark at 4.5:1.
 func TestReadableSkinsContrast(t *testing.T) {
-	for _, th := range []theme{prairieTheme, controlTheme, plainTheme} {
+	for _, th := range []theme{prairieTheme, earthriseTheme, controlTheme, plainTheme} {
 		c := th.colors
 		for _, w := range []struct {
 			role int

@@ -17,8 +17,8 @@ import (
 // ink. LCARS is a starship's console, with its frame around the home clock; Synthwave a neon sunset over
 // a grid; HAL 9000 black and red with the computer's eye. Commodore 64 is the home computer's blue
 // screen, its border and its READY prompt (skin_c64.go); TECHO5 BASIC is the same screen saying which
-// TECHO5 it is and how much memory it has. Big and plain, Control room and Prairie are
-// the readable ones (skin_readable.go): full color, no filter, the words at 7:1 or more. While a skin is
+// TECHO5 it is and how much memory it has. Big and plain, Control room, Prairie and Earthrise
+// are the readable ones (skin_readable.go): full color, no filter, the words at 7:1 or more. While a skin is
 // on, the theme and the font chosen are kept and come back when it is taken off. None until somebody
 // chooses.
 
@@ -33,6 +33,7 @@ const (
 	skinControl   = "controlroom"
 	skinPrairie   = "prairie"
 	skinPlain     = "bigplain"
+	skinEarthrise = "earthrise"
 )
 
 // skins are the choices, as the screen and Home Assistant name them, with what the config keeps.
@@ -50,6 +51,7 @@ var skins = []struct {
 	{"Prairie", skinPrairie, "overpass"},
 	{"Control room", skinControl, "inter"},
 	{"Big and plain", skinPlain, "inter"},
+	{"Earthrise", skinEarthrise, "inter"},
 }
 
 // skinsGone are the one-color skins taken out in v1.6.9, hard to read on some screens, and the

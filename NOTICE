@@ -129,6 +129,11 @@ Prairie skin photo (embedded in the Show's daemon), echod/internal/feature/displ
   (https://commons.wikimedia.org/wiki/File:Crescent_Lake_National_Wildlife_Refuge_(46254955375).jpg).
   Cropped and scaled to 1280 by 800.
 
+Earthrise skin photo (embedded in the Show's daemon), echod/internal/feature/display/skinphotos/earthrise.jpg
+  "Earthrise", Apollo 8, December 24, 1968, by Bill Anders, NASA, a work of the U.S. government in the
+  public domain (https://commons.wikimedia.org/wiki/File:NASA-Apollo8-Dec24-Earthrise.jpg). Cropped
+  and scaled to 1280 by 800.
+
 Icon font (embedded in the daemon)
   Material Design Icons webfont 7.4.47, echod/internal/lib/mdi/materialdesignicons.ttf — Apache License 2.0
   Pictogrammers, https://pictogrammers.com/library/mdi/. The icons Home Assistant uses, for dashboards

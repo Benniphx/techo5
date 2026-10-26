@@ -630,8 +630,9 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   nothing behind the clock: the easiest to read across a room. **Control room** is near-white on dark
   gray with green, inside a thin console frame with three status lights at the top left. **Prairie**
   is a sunrise over the Nebraska Sandhills behind the home clock (a public domain U.S. Fish and
-  Wildlife Service photo, darkened so the words stay clear), warm white with wheat gold. All three keep
-  their words at 7:1 contrast or more. **LCARS** is a starship console: black, with orange,
+  Wildlife Service photo, darkened so the words stay clear), warm white with wheat gold. **Earthrise**
+  is the Earth rising over the Moon, Apollo 8's photo (NASA, public domain), white with the Earth's blue,
+  the Moon's ground darkened under the date. All four keep their words at 7:1 contrast or more. **LCARS** is a starship console: black, with orange,
   peach, lavender and blue, the tall narrow Antonio font, and the console's frame of elbows and colored
   bars around the home clock. **E-ink** is ink on paper, and photos turn black and white.
   **Synthwave** is a neon sunset over a grid, the sun only behind a clock in the middle. **HAL 9000** is
