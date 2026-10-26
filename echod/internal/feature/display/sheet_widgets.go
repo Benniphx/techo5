@@ -166,7 +166,7 @@ func (r *paint) text(face font.Face, s string, x, baseline int, c color.Color) {
 	if r.over.photo != nil {
 		r.over.halo(r.dst, face, s, x, baseline)
 		if _, chosen := c.(chosenColor); !chosen && face.Metrics().Height.Ceil() <= r.s(scrimTallest) {
-			c = photoGold
+			c = overPhotoColor(c)
 		}
 	}
 	d := &font.Drawer{Dst: r.dst, Src: image.NewUniform(c), Face: face, Dot: fixed.P(x, baseline)}
