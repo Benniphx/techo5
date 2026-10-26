@@ -191,7 +191,6 @@ type ccDraw struct {
 	parts      []ccPart
 	w, h       int
 	flat       bool
-	colored    bool
 	perRow     int
 	wholeTexts bool
 	strictRows bool
