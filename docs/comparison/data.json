@@ -1,5 +1,5 @@
 {
- "checked": "2026-10-25",
+ "checked": "2026-10-26",
  "sections": [
   "Basics",
   "Voice",
@@ -37,7 +37,8 @@
     "Temporary stock-Alexa-online mode for fetching models",
     "Draw your own light ring animations and theme packs on the settings page (beta)",
     "Windows (Git Bash) setup for an Echo that is already unlocked (beta)",
-    "Echo Dot 2 unlock from Windows with firebreak, hidden Wi-Fi join in setup (beta)"
+    "Echo Dot 2 unlock from Windows with firebreak, hidden Wi-Fi join in setup (beta)",
+    "Save wake word models to a file and load them back on the settings page (beta)"
    ]
   },
   {
@@ -68,7 +69,8 @@
     "Per-assistant screen visuals for listening, thinking and replying",
     "Visual ring and screen effects driven by room sound",
     "Host CLI encryption key show and rotate",
-    "Host audio tools: capture analysis, direction estimate, test tones"
+    "Host audio tools: capture analysis, direction estimate, test tones",
+    "Doorbell view and home alarm panel, Google Photos source (libcountertop main, not in an echolocal release yet)"
    ]
   },
   {
@@ -132,7 +134,8 @@
     "Barcode scanner with a screen light button (2026.10.40)",
     "Choose which system toasts show over the dashboard (2026.10.40)",
     "Plugin manifests can name a minimum app version (2026.10.40)",
-    "Echo Dot LineageOS 18.1 image with Amazon wake word engine, speaker removal from 7 mics and self-updating firmware"
+    "Echo Dot and Echo Show 5 LineageOS 18.1 images with Amazon wake word engine and self-updating firmware (Dot: speaker removal from 7 mics)",
+    "App Launcher return waits during calls in other apps (2026.10.41)"
    ]
   },
   {
@@ -1448,7 +1451,7 @@
     "https://github.com/Gamer92000/echo-dot-assist/commits/main"
    ],
    "releases": [
-    "v2026.10.17.151309, 2026-10-17; 58 GitHub releases: 4 stable, 54 pre-releases (\"beta\" from main, latest v2026.10.25.190656-beta, 2026-10-25)",
+    "v2026.10.17.151309, 2026-10-17; 59 GitHub releases: 4 stable, 55 pre-releases (\"beta\" from main, latest v2026.10.26.172552-beta, 2026-10-26)",
     "",
     "https://github.com/Gamer92000/echo-dot-assist/releases"
    ],
@@ -2285,7 +2288,7 @@
     "https://github.com/ygelfand/echolocal/commits/main"
    ],
    "releases": [
-    "echolocal 0.0.11, 2026-10-21: 11 releases plus 5 pre-releases. echolocal-hacs v0.0.13, 2026-10-21: 13 releases. libcountertop: 1 pre-release (engine-full-1, 2026-10-24, an engine binary)",
+    "echolocal 0.0.11, 2026-10-21: 11 releases plus 6 pre-releases (latest 0.0.12-dev.1793021635, 2026-10-26). echolocal-hacs v0.0.14, 2026-10-26: 14 releases. libcountertop: 1 pre-release (engine-full-1, 2026-10-24, an engine binary)",
     "",
     "https://github.com/ygelfand/echolocal/releases"
    ],
@@ -3037,7 +3040,7 @@
    "controller": [
     "Partly",
     "HACS integration: Fleet compare and sync, groups, tones, health",
-    "https://github.com/ygelfand/echolocal-hacs/blob/v0.0.13/README.md#fleet"
+    "https://github.com/ygelfand/echolocal-hacs/blob/v0.0.14/README.md#fleet"
    ],
    "browser-install": [
     "Partly",
@@ -3949,9 +3952,9 @@
   },
   "kiosk-satellite": {
    "type": [
-    "Android app installed on a stock OS; optional plugin SDK; blueprint scripts for HA; separate LineageOS images for Echo Dot (and Echo Shows, in progress)",
+    "Android app installed on a stock OS; optional plugin SDK; blueprint scripts for HA; separate LineageOS images for Echo Dot and Echo Show 5 2nd gen (Echo Show 8 1st gen in progress)",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ],
    "started": [
     "2026-07-15 (app repo); 2026-09-10 (plugins repo); 2026-10-24 (LineageOS 18.1 Echo image repo)",
@@ -3959,39 +3962,39 @@
     "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/commits/main"
    ],
    "releases": [
-    "App 2026.10.40, 2026-10-25; 309 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags). Echo image repo: biscuit-2026.10.10, 2026-10-25; 5 releases",
+    "App 2026.10.41, 2026-10-26; 310 GitHub releases, 0 marked pre-release (63 early v0.x-beta tags). Echo image repo: Echo Show 5 cronos-2026.10.1 and Echo Dot biscuit-2026.10.12, both 2026-10-26; 8 releases",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.40"
+    "https://github.com/jxlarrea/kiosk-satellite/releases/tag/2026.10.41"
    ],
    "license": [
     "App: CC BY-NC-ND 4.0 plus plugin exception; plugin SDK and plugins repo: Apache-2.0; Echo image repo: none stated",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/LICENSE"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/LICENSE"
    ],
    "devices": [
-    "Android 7.0+ phones, tablets, panels; guides: Fire tablets, Meta Portal, Raspberry Pi 4, Echo Dot 2nd gen (headless, own LineageOS 18.1 image). In progress: Echo Show 8 1st gen and Echo Show 5 2nd gen images",
+    "Android 7.0+ phones, tablets, panels; guides: Fire tablets, Meta Portal, Raspberry Pi 4, Echo Dot 2nd gen (headless) and Echo Show 5 2nd gen (own LineageOS 18.1 images). In progress: Echo Show 8 1st gen image",
     "",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/README.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/README.md"
    ],
    "on-device": [
-    "Stock Android or Fire OS stays (Echo Dot: Kiosk Satellite Edition LineageOS 18.1 image); the app and its foreground service run; no separate server",
+    "Stock Android or Fire OS stays (Echo Dot and Echo Show 5: Kiosk Satellite Edition LineageOS 18.1 image); the app and its foreground service run; no separate server",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/echo-dot.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/echo-dot.md"
    ],
    "install": [
-    "Sideload APK; optional adb grants or device-owner command from a PC; Echo Dot: unlock with firebreak (Linux, macOS or Windows), flash the image from TWRP with adb, app installs on first boot",
+    "Sideload APK; optional adb grants or device-owner command from a PC; Echo Dot and Echo Show 5: unlock (Dot with firebreak on Linux, macOS or Windows; Show with fastbrick), flash the image from TWRP with adb, app installs on first boot",
     "",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md"
    ],
    "os-replaced": [
     "No",
-    "app on the existing OS; the Echo Dot image is LineageOS, still Android",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "app on the existing OS; the Echo Dot and Echo Show 5 images are LineageOS, still Android",
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ],
    "third-party-parts": [
     "Partly",
     "hosts the Voice Satellite card integration in its dashboard",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/js-api.md#wake-word-handoff-protocol-voice-satellite"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/js-api.md#wake-word-handoff-protocol-voice-satellite"
    ],
    "ui-languages": [
     "Yes",
@@ -4001,142 +4004,142 @@
    "porting": [
     "Partly",
     "per-device guides and hardware notes; Echo image repo has per-device trees and a build guide, no step-by-step porting guide",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/building.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/building.md"
    ],
    "assist-satellite": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md"
    ],
    "follow-up": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/lib/managers/voice/voice_session.dart"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/lib/managers/voice/voice_session.dart"
    ],
    "ask-question": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#timers-announcements-and-conversations"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#timers-announcements-and-conversations"
    ],
    "wake-word": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#settings"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#settings"
    ],
    "custom-wake": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/custom-wake-words.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-wake-words.md"
    ],
    "two-wake": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#settings"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#settings"
    ],
    "server-wake": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md"
    ],
    "no-wake-start": [
     "Yes",
     "gesture, HA action or Android broadcast",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#home-assistant-entities-and-actions"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#home-assistant-entities-and-actions"
    ],
    "cancel-turn": [
     "Yes",
     "double tap or vs_cancel action",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#home-assistant-entities-and-actions"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#home-assistant-entities-and-actions"
    ],
    "stop-word": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#settings"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#settings"
    ],
    "arbitration": [
     "Yes",
     "needs one network segment; off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#wake-word-arbitration"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#wake-word-arbitration"
    ],
    "echo-cancel": [
     "Yes",
     "not for web page or DLNA video sound",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#echo-cancellation"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#echo-cancellation"
    ],
    "noise-suppression": [
     "Yes",
     "off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#noise-suppression"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#noise-suppression"
    ],
    "mic-gain": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#microphone-gain"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#microphone-gain"
    ],
    "mic-array": [
     "Yes",
     "downmix or one channel; multichannel USB arrays only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#microphone-channel"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#microphone-channel"
    ],
    "external-mic": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#microphone-channel"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#microphone-channel"
    ],
    "end-of-speech": [
     "Partly",
     "HA's Finished speaking detection select",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#settings"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#settings"
    ],
    "no-wake-gap": [
     "Partly",
     "setting skips the wake sound",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#settings"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#settings"
    ],
    "streaming-replies": [
     "Yes",
     "uses HA's streaming TTS",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/lib/managers/voice/voice_session.dart"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/lib/managers/voice/voice_session.dart"
    ],
    "voice-recordings": [
     "Partly",
     "last 10 seconds replay; one TTS capture for diagnostics",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#when-you-need-them"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#when-you-need-them"
    ],
    "turn-history": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md"
    ],
    "last-turn-sensors": [
     "Not found",
     "state sensor only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#home-assistant-entities-and-actions"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#home-assistant-entities-and-actions"
    ],
    "wake-clips": [
     "Yes",
     "off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/microphone.md#when-you-need-them"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/microphone.md#when-you-need-them"
    ],
    "vendor-frontend": [
     "Partly",
-    "Amazon's wake word engine is an option on the Echo Dot image (CM14.1 and 18.1); own engines elsewhere; firmware mic processing kept where present",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/echo-dot.md#amazon"
+    "Amazon's wake word engine is an option on the Echo Dot image (CM14.1 and 18.1) and the Echo Show 5 image; own engines elsewhere; firmware mic processing kept where present",
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/echo-dot.md#amazon"
    ],
    "whisper": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md"
    ],
    "realtime-voice": [
     "Yes",
     "OpenAI, xAI or Gemini key; HA control via MCP server",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#realtime-conversations"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#realtime-conversations"
    ],
    "voice-without-ha": [
     "Partly",
     "cloud realtime model skips HA pipeline; setup still uses HA",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#realtime-conversations"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#realtime-conversations"
    ],
    "voice-command-library": [
     "Partly",
@@ -4146,627 +4149,627 @@
    "music-by-voice": [
     "Yes",
     "blueprint for an LLM agent; plays on the kiosk's speaker, best with Music Assistant",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/music-library.md#playing-music-by-voice"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/music-library.md#playing-music-by-voice"
    ],
    "chatgpt-assistant": [
     "Partly",
     "Realtime providers (OpenAI, Gemini, xAI) take an API key; a provider Endpoint can point at a relay speaking its protocol. No ChatGPT sign-in found.",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md"
    ],
    "media-player": [
     "Yes",
     "through DLNA renderer or Sendspin via Music Assistant",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/dlna.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/dlna.md"
    ],
    "ducking": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#voice-assistant-interplay"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#voice-assistant-interplay"
    ],
    "sendspin": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#sendspin-player"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#sendspin-player"
    ],
    "bluetooth-in": [
     "Partly",
-    "Echo Dot image only: phones pair with it as a Bluetooth speaker (adb command)",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md#bluetooth"
+    "Echo images only: phones pair with the Dot or Show as a Bluetooth speaker (adb command)",
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md#bluetooth"
    ],
    "bluetooth-out": [
     "Yes",
     "Speaker picker lists Bluetooth outputs; media follows Android routing",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/AudioRouting.kt"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/AudioRouting.kt"
    ],
    "line-out": [
     "Yes",
     "Speaker picker lists wired outputs; media follows Android routing",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/AudioRouting.kt"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/android/app/src/main/kotlin/me/jxl/kiosk_satellite/AudioRouting.kt"
    ],
    "airplay": [
     "Yes",
     "AirPlay 1, audio only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#airplay"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#airplay"
    ],
    "dlna": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/dlna.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/dlna.md"
    ],
    "cast-receiver": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ],
    "volume-streams": [
     "Yes",
     "media, assistant, intercom, notification, alarm",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#configuration"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#configuration"
    ],
    "equalizer": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md"
    ],
    "speaker-gain": [
     "Partly",
     "Echo Dot image only: gain setting from -6 to 29 dB through adb, default 3 dB",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md#speaker"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md#speaker"
    ],
    "custom-sounds": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#sounds"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#sounds"
    ],
    "route-to-player": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#play-sounds-on-a-media-player"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#play-sounds-on-a-media-player"
    ],
    "radio": [
     "Partly",
     "radio only through Music Assistant or another player",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#the-floating-player"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#the-floating-player"
    ],
    "sleep-sounds": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md"
    ],
    "sleep-timer": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md"
    ],
    "now-playing": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#full-screen-now-playing"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#full-screen-now-playing"
    ],
    "follow-player": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#following-another-player"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#following-another-player"
    ],
    "lyrics": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md#lyrics"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md#lyrics"
    ],
    "video": [
     "Yes",
     "via DLNA renderer",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/dlna.md#what-plays"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/dlna.md#what-plays"
    ],
    "nursery-monitor": [
     "Partly",
     "Room audio comes through camera streams (sound for a single camera, baby monitor use named); no live stream of the device's own microphone found.",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/cameras.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/cameras.md"
    ],
    "speaker-tuning": [
     "Partly",
     "Echo Dot image only: 3 dB gain, optional high-pass filter and limiter, both off by default",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md#speaker"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md#speaker"
    ],
    "ha-dashboard": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ],
    "web-pages": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#website"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#website"
    ],
    "on-screen-settings": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/kiosk.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/kiosk.md"
    ],
    "app-drawer": [
     "Yes",
     "kiosk menu and App Launcher",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/kiosk.md#staying-in-front"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/kiosk.md#staying-in-front"
    ],
    "return-home": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#around-the-dashboard"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#around-the-dashboard"
    ],
    "orientation": [
     "Yes",
     "set in the app",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screen.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screen.md"
    ],
    "keep-screen-on": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screen.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screen.md"
    ],
    "ui-scale": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/lib/managers/settings/definitions.dart"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/lib/managers/settings/definitions.dart"
    ],
    "clock": [
     "Yes",
     "Digital, Flip, Roller, Hand",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#clock"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#clock"
    ],
    "weather": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#weather"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#weather"
    ],
    "screensaver": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md"
    ],
    "photos": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#the-modes"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#the-modes"
    ],
    "immich": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/immich.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/immich.md"
    ],
    "glance-chips": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/at-a-glance.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/at-a-glance.md"
    ],
    "screen-messages": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#notifications"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#notifications"
    ],
    "timers-on-screen": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/at-a-glance.md#voice-timers"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/at-a-glance.md#voice-timers"
    ],
    "calendar": [
     "Yes",
     "HA calendars in Day, Week, Month and Schedule views; Up next widget; Calendar screensaver mode",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#calendar"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#calendar"
    ],
    "todo-lists": [
     "Not found",
     "only via an HA dashboard card",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md"
    ],
    "answer-views": [
     "Yes",
     "result panels need an admin token",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#set-up"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#set-up"
    ],
    "display-modes": [
     "Yes",
     "hold, view rotation, lockdown, Now Playing, screensaver mode",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#configuration"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#configuration"
    ],
    "weather-radar": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md"
    ],
    "night-mode": [
     "Yes",
     "Clock screensaver; needs a light sensor",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#clock"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#clock"
    ],
    "auto-brightness": [
     "Yes",
     "device sensor or HA entity",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screen.md#adaptive-brightness"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screen.md#adaptive-brightness"
    ],
    "themes": [
     "Partly",
     "light/dark only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/lib/managers/settings/definitions.dart"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/lib/managers/settings/definitions.dart"
    ],
    "fonts": [
     "Yes",
     "clock, widgets, At a Glance",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#clock"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#clock"
    ],
    "screen-control": [
     "Yes",
     "screen-off needs Device admin",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#controls"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#controls"
    ],
    "camera-view": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/cameras.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/cameras.md"
    ],
    "go2rtc": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/cameras.md#add-a-go2rtc-server"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/cameras.md#add-a-go2rtc-server"
    ],
    "camera-sound": [
     "Yes",
     "single camera only; off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/cameras.md#sound"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/cameras.md#sound"
    ],
    "device-camera-entity": [
     "Yes",
     "off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/camera.md#home-assistant"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/camera.md#home-assistant"
    ],
    "device-camera-stream": [
     "Yes",
     "ONVIF motion events, off by default; no PTZ or ONVIF snapshots",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/camera.md#motion-events"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/camera.md#motion-events"
    ],
    "camera-preview": [
     "Partly",
     "brief preview after a face wake",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#camera-preview"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#camera-preview"
    ],
    "camera-vision": [
     "Yes",
     "camera off by default",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/camera.md#motion-detection"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/camera.md#motion-detection"
    ],
    "announcements": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#announcements"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#announcements"
    ],
    "intercom": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md"
    ],
    "broadcast": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md#announce-to-all"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md#announce-to-all"
    ],
    "auto-answer": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md#a-call-coming-in"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md#a-call-coming-in"
    ],
    "call-by-voice": [
     "Yes",
     "needs an LLM agent and admin token",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md#calling-by-voice"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md#calling-by-voice"
    ],
    "video-calls": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md"
    ],
    "phone-calls": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md"
    ],
    "buttons": [
     "Partly",
     "Echo Dot Action button via gesture \"Fire an event\"",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/echo-dot.md#the-buttons"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/echo-dot.md#the-buttons"
    ],
    "mic-mute": [
     "Yes",
     "VS Mute switch",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#home-assistant-entities-and-actions"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#home-assistant-entities-and-actions"
    ],
    "light-sensor": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#controls"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#controls"
    ],
    "ble-proxy": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#bluetooth-proxy"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#bluetooth-proxy"
    ],
    "led-ring": [
     "Yes",
     "idle lights only: a light (on/off, brightness, color) and a Solid/Breathing select; other states are set on the device",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/led-control.md#home-assistant"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/led-control.md#home-assistant"
    ],
    "ring-styles": [
     "Partly",
     "Echo Dot only; Echo-style states, colors adjustable",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/led-control.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/led-control.md"
    ],
    "touch-gestures": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/gestures.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/gestures.md"
    ],
    "clap": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/gestures.md#claps"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/gestures.md#claps"
    ],
    "proximity": [
     "Yes",
     "few kiosk tablets have the sensor",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/screensavers.md#proximity-detection"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/screensavers.md#proximity-detection"
    ],
    "room-loudness": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#ambient-noise"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#ambient-noise"
    ],
    "camera-shutter": [
     "No",
     "closed shutter looks like no camera",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/camera.md#hardware-notes"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/camera.md#hardware-notes"
    ],
    "dnd": [
     "Partly",
     "intercom only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md#a-call-coming-in"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md#a-call-coming-in"
    ],
    "health-sensors": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#diagnostics"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#diagnostics"
    ],
    "sound-events": [
     "Partly",
     "loudness level only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#ambient-noise"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#ambient-noise"
    ],
    "wifi-motion": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md"
    ],
    "ring-visualizer": [
     "Partly",
     "Echo Dot ring shows music as solid or breathing white (Media Player group, off by default, own switch); no level or beat reaction found.",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/led-control.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/led-control.md"
    ],
    "ha-link": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#setup"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#setup"
    ],
    "settings-entities": [
     "Partly",
     "about 30 settings exposed, of several hundred",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#configuration"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#configuration"
    ],
    "ha-actions": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#notifications"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#notifications"
    ],
    "ha-events": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/events.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/events.md"
    ],
    "navigate": [
     "Yes",
     "Dashboard view select",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#controls"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#controls"
    ],
    "launch-apps": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#launch-an-app"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#launch-an-app"
    ],
    "time-from-ha": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md"
    ],
    "timers": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/voice-satellite.md#timers-announcements-and-conversations"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/voice-satellite.md#timers-announcements-and-conversations"
    ],
    "alarms": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/alarms.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/alarms.md"
    ],
    "reminders": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/alarms.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/alarms.md"
    ],
    "wake-light": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/alarms.md#sunrise"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/alarms.md#sunrise"
    ],
    "ha-down": [
     "Yes",
     "alarms and intercom need no HA",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/alarms.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/alarms.md"
    ],
    "device-groups": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md"
    ],
    "ota": [
     "Yes",
-    "Echo Dot image updates itself from the image repo releases, also from the remote admin or an HA Firmware entity",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/echo-dot.md#system-updates"
+    "Echo Dot and Echo Show 5 images update themselves from the image repo releases, also from the remote admin or an HA Firmware entity",
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/echo-dot.md#system-updates"
    ],
    "update-channels": [
     "No",
     "pre-releases never offered",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/app/lib/managers/update/update_manager.dart"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/app/lib/managers/update/update_manager.dart"
    ],
    "update-rollback": [
     "Not found",
     "downgrades refused",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/updates.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/updates.md"
    ],
    "signed-updates": [
     "Yes",
     "Android APK signature check",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/updates.md#custom-repository"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/updates.md#custom-repository"
    ],
    "settings-page": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#remote-ui"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#remote-ui"
    ],
    "logs": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#rest-surface"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#rest-surface"
    ],
    "screenshot": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#rest-surface"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#rest-surface"
    ],
    "diag-bundle": [
     "Partly",
     "raw logs only",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#rest-surface"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#rest-surface"
    ],
    "remote-shell": [
     "Yes",
-    "Echo Dot image: adb over Wi-Fi without a password. Elsewhere one Shizuku command at a time from an HA action or the remote API",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md#network"
+    "Echo images: adb over Wi-Fi without a password. Elsewhere one Shizuku command at a time from an HA action or the remote API",
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md#network"
    ],
    "remote-api": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md"
    ],
    "copy-settings": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/fleet.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/fleet.md"
    ],
    "settings-backup": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#rest-surface"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#rest-surface"
    ],
    "wifi-change": [
     "Partly",
-    "Echo Dot only: adb command joins a network; other devices use Android settings",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/echo-dot.md#device-commands"
+    "Echo images only: adb command joins a network; other devices use Android settings",
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md#device-commands"
    ],
    "restart": [
     "Yes",
     "device reboot needs device owner or Shizuku",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#controls"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#controls"
    ],
    "auto-recover": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/kiosk.md#staying-in-front"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/kiosk.md#staying-in-front"
    ],
    "recovery": [
     "Partly",
-    "Echo Dot image: TWRP and Preloader repair are documented; no way back to the stock OS found. Elsewhere n/a",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/docs/twrp.md"
+    "Echo Dot and Echo Show 5 images: TWRP is documented; no way back to the stock OS found. Elsewhere n/a",
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/twrp.md"
    ],
    "peer-list": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#kiosk-switcher"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#kiosk-switcher"
    ],
    "rename": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md#node-name"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md#node-name"
    ],
    "reset-unpair": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/esphome.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/esphome.md"
    ],
    "controller": [
     "Partly",
     "leader kiosk, no separate server",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/fleet.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/fleet.md"
    ],
    "browser-install": [
     "No",
     "APK sideload; browser only finishes setup",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md#get-started"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md#get-started"
    ],
    "vendor-services-off": [
     "n/a",
     "app on a stock OS",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ],
    "inbound-firewall": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/tls.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/tls.md"
    ],
    "encrypted-peers": [
     "Partly",
     "intercom and fleet keyed; arbitration UDP not",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/intercom.md#remote-api"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/intercom.md#remote-api"
    ],
    "admin-auth": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/remote-api.md#authentication"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/remote-api.md#authentication"
    ],
    "sendspin-pairing": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/sendspin.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/sendspin.md"
    ],
    "tls-options": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/tls.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/tls.md"
    ],
    "privacy-indicators": [
     "Not found",
     "relies on Android's own mic indicator",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/gestures.md#claps"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/gestures.md#claps"
    ],
    "no-telemetry": [
     "No",
     "analytics on by default, can be turned off",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/analytics.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/analytics.md"
    ],
    "kiosk-lock": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/kiosk.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/kiosk.md"
    ],
    "custom-pages": [
     "Yes",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/custom-pages.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-pages.md"
    ],
    "plugins": [
     "Yes",
@@ -4776,12 +4779,12 @@
    "wake-training": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/docs/custom-wake-words.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-wake-words.md"
    ],
    "deck": [
     "Not found",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.40/README.md"
+    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
    ]
   },
   "techo5": {
@@ -5729,8 +5732,8 @@
    ],
    "arbitration": [
     "In progress",
-    "app dev branch (unreleased): devices in the same area compare wake scores over UDP; highest wins",
-    "https://github.com/msp1974/ViewAssistCompanionApp/commit/152a57319"
+    "app dev branch (unreleased): devices in the same area compare wake scores over UDP; highest wins; reworked 2026-10-26",
+    "https://github.com/msp1974/ViewAssistCompanionApp/commit/5ead3817934eed85e6702e91029a63a3b560768b"
    ],
    "echo-cancel": [
     "Partly",
@@ -6313,9 +6316,9 @@
     "https://github.com/msp1974/ViewAssist_Companion_App/wiki/Settings-Menu"
    ],
    "logs": [
-    "Not found",
-    "",
-    ""
+    "In progress",
+    "app dev branch (unreleased): Home Assistant can request the device log (logcat) and the app sends it back",
+    "https://github.com/msp1974/ViewAssistCompanionApp/commit/0296716825a4f6110d606953cc58ae4465c9da1f"
    ],
    "screenshot": [
     "Not found",
