@@ -412,7 +412,7 @@ Projects are in alphabetical order.
 - **Weather radar and alerts**: echo-dot-assist: released models have no screen; EchoLocal: alerts US only (NWS), off by default; EchoMuse: no screen; LibreEcho: No screen; TECHO5: alerts U.S. only
 - **Night mode**: echo-dot-assist: released models have no screen; EchoMuse: no screen; Kiosk Satellite: Clock screensaver; needs a light sensor; LibreEcho: No screen; the light ring has a night mode; View Assist: night mode set by voice or automation; experimental
 - **Automatic brightness**: echo-dot-assist: no screen; light ring follows room light; EchoMuse: no screen; Kiosk Satellite: device sensor or HA entity; LibreEcho: No screen; TECHO5: light sensor uncalibrated on Show 8 gen 2; View Assist: Android adaptive brightness switch
-- **Themes**: echo-dot-assist: released models have no screen; EchoLocal: 18 themes, 9 styles, plus custom themes; EchoMuse: no screen; Kiosk Satellite: light/dark only; LibreEcho: No screen; TECHO5: dark, light or auto by room light; custom colors; skins (Pip-Boy, LCARS, Commodore 64 and more); View Assist: dark mode
+- **Themes**: echo-dot-assist: released models have no screen; EchoLocal: 18 themes, 9 styles, plus custom themes; EchoMuse: no screen; Kiosk Satellite: light/dark only; LibreEcho: No screen; TECHO5: dark, light or auto by room light; custom colors; skins (LCARS, Commodore 64, Big and plain and more); View Assist: dark mode
 - **Fonts**: echo-dot-assist: released models have no screen; EchoLocal: one style uses a mono font; size setting; EchoMuse: no screen; Kiosk Satellite: clock, widgets, At a Glance; LibreEcho: No screen; View Assist: font name typed in config
 - **Screen on/off and brightness from HA**: echo-dot-assist: Echo Show light band only, branch checkers; EchoLocal: brightness only; no screen on/off entity found; EchoMuse: no screen; Kiosk Satellite: screen-off needs Device admin; LibreEcho: No screen
 
@@ -612,7 +612,7 @@ Released features that no row covers, as each project's reviewer picked them.
 - Custom boot logo replacing Amazon's
 - Volume down, volume up and next song words over music, no wake word
 - Importable HA blueprints for voice commands and events (21 automation blueprints, 2 scripts)
-- Screen skins (Pip-Boy, LCARS and more) and turn screens (Face, Rainbow, Orb)
+- Screen skins (LCARS, Commodore 64, a Nebraska prairie photo and more) and turn screens (Face, Rainbow, Orb)
 - Calls show the contact's name (phone_call_named action)
 - Phone without encryption switch for a home SIP server (FRITZ!Box)
 - Presence sensitivity above 50 sees across the room

@@ -619,15 +619,16 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   the clock are the Show's. The theme and custom colors you chose, and your font when the skin has
   its own, are kept for when the skin is taken off, and their rows say so. The red night clock stays
   red under any skin, and on the Spot so do the muted ring and the camera's mark: while one of them is
-  up, the one-color skins' tint is off. On the Show it's the same for the "microphone off" pill at the
-  top and the red Talk button while a camera's Talk is on: while either is on the screen, the tint is
-  off. **Pip-Boy** turns the screen into a green phosphor terminal: every screen in one
-  green, in Go Mono, with faint scanlines and edges darker like an old tube's. Photos and cameras turn
-  green too; a video plays in its own colors. **LCARS** is a starship console: black, with orange,
+  up, E-ink's paper-and-ink filter is off. On the Show it's the same for the "microphone off" pill at
+  the top and the red Talk button while a camera's Talk is on: while either is on the screen, the
+  filter is off. **Big and plain** is white on black with yellow for what stands out, in Inter, with
+  nothing behind the clock: the easiest to read across a room. **Control room** is near-white on dark
+  gray with green, inside a thin console frame with three status lights at the top left. **Prairie**
+  is a sunrise over the Nebraska Sandhills behind the home clock (a public domain U.S. Fish and
+  Wildlife Service photo, darkened so the words stay clear), warm white with wheat gold. All three keep
+  their words at 7:1 contrast or more. **LCARS** is a starship console: black, with orange,
   peach, lavender and blue, the tall narrow Antonio font, and the console's frame of elbows and colored
-  bars around the home clock. **Amber terminal** is Pip-Boy in amber. **E-ink** is ink on paper, and
-  photos turn black and white. **Blueprint** is white on blueprint blue over a faint grid. **Game Boy**
-  is the handheld's four greens. **Matrix** is green on black with code falling behind the clock.
+  bars around the home clock. **E-ink** is ink on paper, and photos turn black and white.
   **Synthwave** is a neon sunset over a grid, the sun only behind a clock in the middle. **HAL 9000** is
   black and red with the computer's eye at the top right (not behind the Overlap style, whose figures
   reach into that corner). **Commodore 64** is the home computer's blue screen in its light blue
@@ -641,6 +642,9 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
   much of it is free. On the Spot both bring their colors and font. On the turn screens a skin brings
   its ground and colors too, except at
   night. **None** puts back the theme and font you chose. It costs a little time on each frame.
+  Pip-Boy, Amber terminal, Matrix, Blueprint and Game Boy were taken out in v1.6.9, being hard to read
+  on some screens: a screen that wore Pip-Boy, Amber terminal or Matrix wears Control room, Blueprint
+  Prairie, and Game Boy Big and plain.
 - **Swipe between clock styles**: on by default. Turn it off (setup page, Screen & Photos, or the
   switch in Home Assistant) so a swipe across the clock leaves its style alone. It's off whenever
   **Tap on the clock** is *Nothing*, too.

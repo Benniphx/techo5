@@ -141,9 +141,9 @@ type Screen struct {
 	TimerStyle string `json:"timer_style,omitempty"`
 
 	// Skin is a whole look for the screen over the theme and the font, on the Show, the Spot and the
-	// Panel app: empty for none, "pipboy" for the green phosphor terminal, "amber" for the amber one,
-	// "lcars" for the starship console, "eink" for ink on paper, "blueprint", "gameboy" for the
-	// handheld's four greens, "matrix", "synthwave" or "hal9000".
+	// Panel app: empty for none, "lcars" for the starship console, "eink" for ink on paper,
+	// "synthwave", "hal9000", "c64", "techo5basic", "bigplain", "controlroom" or "prairie".
+	// The one-color skins taken out in v1.6.9 read as their replacements (display.skinsGone).
 	Skin string `json:"skin,omitempty"`
 
 	// CallButton puts a Call button on the home screen, which opens the list of devices in the house

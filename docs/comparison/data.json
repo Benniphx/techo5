@@ -223,7 +223,7 @@
     "Custom boot logo replacing Amazon's",
     "Volume down, volume up and next song words over music, no wake word",
     "Importable HA blueprints for voice commands and events (21 automation blueprints, 2 scripts)",
-    "Screen skins (Pip-Boy, LCARS and more) and turn screens (Face, Rainbow, Orb)",
+    "Screen skins (LCARS, Commodore 64, a Nebraska prairie photo and more) and turn screens (Face, Rainbow, Orb)",
     "Calls show the contact's name (phone_call_named action)",
     "Phone without encryption switch for a home SIP server (FRITZ!Box)",
     "Presence sensitivity above 50 sees across the room",
@@ -5225,7 +5225,7 @@
    ],
    "themes": [
     "Yes",
-    "dark, light or auto by room light; custom colors; skins (Pip-Boy, LCARS, Commodore 64 and more)",
+    "dark, light or auto by room light; custom colors; skins (LCARS, Commodore 64, Big and plain and more)",
     "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
    ],
    "fonts": [

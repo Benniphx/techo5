@@ -123,6 +123,12 @@ echod (findings)
   designs as EchoMuse PR #687 read them out of the vendor's library: Zölzer's shelf and peak, the
   shelf taking no Q and root two written as 1.4142. Written here from those findings, not copied.
 
+Prairie skin photo (embedded in the Show's daemon), echod/internal/feature/display/skinphotos/prairie.jpg
+  "Crescent Lake National Wildlife Refuge" by the U.S. Fish and Wildlife Service, Mountain-Prairie
+  region, a work of the U.S. government in the public domain
+  (https://commons.wikimedia.org/wiki/File:Crescent_Lake_National_Wildlife_Refuge_(46254955375).jpg).
+  Cropped and scaled to 1280 by 800.
+
 Icon font (embedded in the daemon)
   Material Design Icons webfont 7.4.47, echod/internal/lib/mdi/materialdesignicons.ttf — Apache License 2.0
   Pictogrammers, https://pictogrammers.com/library/mdi/. The icons Home Assistant uses, for dashboards
