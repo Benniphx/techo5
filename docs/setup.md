@@ -421,6 +421,16 @@ captured login to the same page for a few minutes, and could see the pictures an
   the Dot is connected to a Bluetooth speaker. Tried on a Dot, a Show and a Spot.
   **Turn the Bluetooth proxy off** on a device a phone plays to: the proxy keeps scanning on the same
   radio, and the phone's sound stutters or drops while it does (#105).
+- **Bluetooth proxy connections.** On the Show and the Spot, the **Bluetooth proxy connections**
+  switch in Home Assistant, off by default, lets Home Assistant connect to BLE devices through the
+  device, up to three at a time, the way an ESP32 proxy does: an integration that controls a device (a
+  humidifier, a lock, a light) can reach it, not only read what it advertises. It works only while the
+  **Bluetooth proxy** is on too. With it on, Home Assistant may route any such device through this one
+  whenever it hears it best, and many BLE devices take one connection only, so leave it off unless a
+  device needs it. Connections end when Home Assistant disconnects or either switch is turned off.
+  Scanning pauses for the second or two a connection takes. Pairing (bonding) and clearing the cache
+  from Home Assistant are not offered; devices that authenticate in their own protocol work. Tried on
+  a Spot with a Boneco H400 through the Boneco integration; the Show has not made an LE connection yet.
 - **Bluetooth, the rest of it.** A phone playing to the device has one volume, the device's: its
   volume slider moves the device's volume, and the device's buttons and Home Assistant move the
   slider (night volume still caps a raise from the phone), unless **Bluetooth sets the volume** is
@@ -460,8 +470,8 @@ captured login to the same page for a few minutes, and could see the pictures an
   #183); with it off they pair the older way and stay. What it costs: a phone set to pair
   only with Secure Connections cannot pair at all, and Low Energy pairing falls back to the older,
   weaker kind too. The device itself pairs only over classic Bluetooth (speakers, earbuds and phones
-  playing to it), and the Bluetooth proxy only listens, so nothing of the device's own uses LE
-  pairing. Changing it turns Bluetooth off and on again: whatever is connected drops for a moment and
+  playing to it), and the Bluetooth proxy never pairs, its connections included, so nothing of
+  the device's own uses LE pairing. Changing it turns Bluetooth off and on again: whatever is connected drops for a moment and
   may need connecting again. It is this device's own, never shared with the other devices or carried
   by a settings file. The 2nd gen Show 8 on TECHO5's own kernel has it off already, and no switch.
 - **Radio.** The Radio drawer and its favorites are set with

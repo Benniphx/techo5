@@ -5320,7 +5320,7 @@
    ],
    "ble-proxy": [
     "Partly",
-    "scanning only; off by default; active connections in PR #184",
+    "scanning; off by default; active connections (Show and Spot, own switch, off by default) merged for the next release",
     "https://github.com/HuskerMinion/techo5/blob/v1.6.7/docs/overview.md#known-gaps"
    ],
    "led-ring": [
