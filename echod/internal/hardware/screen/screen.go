@@ -23,6 +23,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -609,11 +610,13 @@ func SetBacklight(level int) error {
 	defer backlightMu.Unlock()
 	if raw > 0 && backlightOff && layout.AthenaMainline() {
 		// Some 2nd gen Show 8 panels (JD9365, #253) stop following the level once it has been 0, until
-		// the PWM is driven full once; so a backlight coming back from off goes full first, for less
-		// than a millisecond, before the level it is set to.
+		// the PWM is driven full once; so a backlight coming back from off goes full first, before the
+		// level it is set to. It has to stay full a moment for the panel to take it: written straight
+		// after, the level was missed, and 5 ms was enough on the reporter's unit, so 10.
 		if err := os.WriteFile(path, []byte(strconv.Itoa(top)), 0o644); err != nil {
 			return fmt.Errorf("screen: backlight: %w", err)
 		}
+		time.Sleep(fullFirst)
 	}
 	if err := os.WriteFile(path, []byte(strconv.Itoa(raw)), 0o644); err != nil {
 		return fmt.Errorf("screen: backlight: %w", err)
@@ -628,6 +631,10 @@ var (
 	backlightMu  sync.Mutex
 	backlightOff = true
 )
+
+// fullFirst is how long a JD9365 panel's backlight stays full on its way back from off (SetBacklight).
+// A variable for the tests.
+var fullFirst = 10 * time.Millisecond
 
 // Backlight reads the level the driver holds. The bootloader's own setting reads as 0 until
 // something writes one.

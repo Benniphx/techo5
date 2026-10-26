@@ -158,6 +158,8 @@ say "overlay"
 find "$R/etc/techo5" "$R/usr/local/sbin" "$R/lib/techo5-lib.sh" "$R/etc/inittab" "$R/etc/profile.d/techo5.sh" "$R/etc/hostname" "$R/etc/motd" \
 	-type f -exec sed -i 's/\r$//' {} +
 chmod 755 "$R"/etc/techo5/*.sh "$R"/usr/local/sbin/*
+# License texts are read, never run: a checkout on Windows hands every file over as executable.
+[ -d "$R/usr/share/licenses" ] && find "$R/usr/share/licenses" -type f -exec chmod 644 {} +
 
 # Optional mainline modules and firmware, built from the same kernel as boot.
 if [ -f "$IN/inputs/kernel.tar.gz" ]; then
