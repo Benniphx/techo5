@@ -15,6 +15,9 @@ type Screen struct {
 	// Night is when the screen goes dark on its own, as "22-6" (from 22:00 to 06:00); empty
 	// never. A tap wakes it for a while.
 	Night string `json:"night,omitempty"`
+	// NightWeekend is the night hours of Friday's and Saturday's nights, when they differ (nights.go);
+	// empty is the same as every other night.
+	NightWeekend string `json:"night_weekend,omitempty"`
 
 	// NightLight keeps a Show's screen on at a faint glow through the night instead of putting it out;
 	// a touch brings it up to its brightness for a while.
@@ -334,6 +337,11 @@ func (w ScreenWriter) CameraBands(v string) error {
 
 func (w ScreenWriter) CameraShade(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.CameraShade = v })
+}
+
+// NightWeekend saves the weekend's night hours; empty is the same as every other night.
+func (w ScreenWriter) NightWeekend(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.NightWeekend = v })
 }
 
 func (w ScreenWriter) NightByHA(v bool) error {

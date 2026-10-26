@@ -1804,6 +1804,35 @@ data:
   end: "09:30"
 ```
 
+## Set the weekend's night hours
+
+In YAML, refer to this action as `esphome.<node>_screen_weekend_night_hours`.
+
+Gives the weekend its own night hours on a Show or a Spot: the nights that end on a Saturday or a
+Sunday morning, so Friday's and Saturday's nights. A night that crosses midnight starts the evening
+before, so `23:30` to `09:30` starts Friday at 11:30 PM and ends Saturday at 9:30 AM; Sunday evening
+is a weeknight's again. The same can be set with the **Weekend night starts** and **Weekend night
+ends** selects.
+
+### start (Required)
+
+*string*
+
+When the weekend's night starts, in 24-hour time: `23:30`.
+
+### end (Required)
+
+*string*
+
+When it ends: `09:30`. Both empty makes the weekend's nights the same as every other night.
+
+```yaml
+action: esphome.office_screen_weekend_night_hours
+data:
+  start: "23:30"
+  end: "09:30"
+```
+
 ### Turning the night on from an automation
 
 A Show or a Spot also has a **Night mode** switch, on while it is night. Turn it on or off from an automation,

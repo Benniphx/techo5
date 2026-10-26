@@ -557,7 +557,10 @@ like "kitchen screen" under its **Voice assistants** settings in Home Assistant.
 
 ### Night
 
-- **Night hours**: when the night starts and ends. **At night** picks what the night does: on a Show,
+- **Night hours**: when the night starts and ends. **Weekend night starts** and **Weekend night ends** in
+  Home Assistant give the weekend other hours, for the nights that end on a Saturday or a Sunday
+  morning, so Friday and Saturday nights can start later and end later; *Same as other nights* is the
+  default. **At night** picks what the night does: on a Show,
   dark, a faint glow, or a clock alone; on a Spot, dimmed, a clock alone, or dark. The clock alone is the
   night clock, the time in dim red on black (**Night clock** picks *Red*, *Red LED* or *Flip*), with
   **Night light brightness** in Home Assistant setting how bright it is; on a Spot also **Night clock

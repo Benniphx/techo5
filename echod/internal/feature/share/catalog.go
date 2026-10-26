@@ -52,6 +52,7 @@ var groups = []group{
 		"screen_weather_animation", "screen_auto_brightness", "screen_auto_brightness_dimmest",
 		"screen_ignores_room_lights"}},
 	{"Night", []string{"screen_at_night", "screen_night_start", "screen_night_end", "screen_night_hours",
+		"screen_weekend_night_start", "screen_weekend_night_end",
 		"screen_night_clock_style", "screen_night_light_level", "screen_night_tap_lifts"}},
 	{"Photos", []string{"slideshow_interval", "slideshow_shuffle", "slideshow_subfolders", "slideshow_whole_photo",
 		"slideshow_pairs", "slideshow_caption", "slideshow_weather_art", "slideshow_screensaver_idle",

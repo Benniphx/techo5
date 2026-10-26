@@ -188,6 +188,8 @@ var registered = []string{
 	"screen_night_start",
 	"screen_night_tap_lifts",
 	"screen_night_warmth",
+	"screen_weekend_night_end",
+	"screen_weekend_night_start",
 	"screen_now_playing",
 	"screen_power",
 	"screen_theme",

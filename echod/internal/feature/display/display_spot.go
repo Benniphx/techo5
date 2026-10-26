@@ -265,8 +265,10 @@ type Display struct {
 	// ends to the quarter hour, what it does to the face, the red clock's look and brightness.
 	nightHours, atNight  *esphome.Select
 	nightStart, nightEnd *esphome.Select
-	nightStyle           *esphome.Select
-	glowLevel            *esphome.Number
+	// weekendStart and weekendEnd are the weekend's nights, when they differ (#305).
+	weekendStart, weekendEnd *esphome.Select
+	nightStyle               *esphome.Select
+	glowLevel                *esphome.Number
 	// nightMode is Night mode: Home Assistant turning the night on and off; nightShown what it last said.
 	nightMode  *esphome.Switch
 	nightShown bool
@@ -390,6 +392,7 @@ func build() *Display {
 	d.muteRing = muteRingSwitch(d.wake)
 	d.nightHours = nightHoursSelect(d)
 	d.nightStart, d.nightEnd = nightEndSelect(d, true), nightEndSelect(d, false)
+	d.weekendStart, d.weekendEnd = weekendEndSelect(d, true), weekendEndSelect(d, false)
 	d.atNight = atNightSelect(d)
 	d.nightStyle = nightStyleSelect(d)
 	d.glowLevel = glowNumber(d)
@@ -455,7 +458,7 @@ func (d *Display) skinSel() *esphome.Select { return d.skinSl }
 
 func (d *Display) Entities() []esphome.Entity {
 	return []esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.camTime, d.answerTime, d.turnStyle, d.skinSl, d.callBtn, d.weatherFx, d.muteRing, d.lang, d.styleSwipeSw, d.volumeSwipeSw, d.fontSel,
-		d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel}
+		d.nightHours, d.nightStart, d.nightEnd, d.weekendStart, d.weekendEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel}
 }
 
 // Restore lights the panel the way it was left.

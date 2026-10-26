@@ -267,6 +267,8 @@ type Display struct {
 	nightHours, atNight *esphome.Select
 	// nightStart and nightEnd are the night's custom hours, to the quarter hour.
 	nightStart, nightEnd *esphome.Select
+	// weekendStart and weekendEnd are the weekend's nights, when they differ (#305).
+	weekendStart, weekendEnd *esphome.Select
 	// nightStyle is the red night clock's look.
 	nightStyle *esphome.Select
 	glowLevel  *esphome.Number
@@ -499,6 +501,7 @@ func build() *Display {
 	d.themeModeSel = themeModeSelect(d.wake)
 	d.nightHours = nightHoursSelect(d)
 	d.nightStart, d.nightEnd = nightEndSelect(d, true), nightEndSelect(d, false)
+	d.weekendStart, d.weekendEnd = weekendEndSelect(d, true), weekendEndSelect(d, false)
 	d.nightStyle = nightStyleSelect(d)
 	d.warmthSw = nightWarmthSwitch(d)
 	d.buildPopupEntities()
@@ -593,7 +596,7 @@ func (d *Display) skinSel() *esphome.Select { return d.skinSl }
 func (d *Display) clockTapSel() *esphome.Select { return d.clockTap }
 
 func (d *Display) Entities() []esphome.Entity {
-	ents := append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.weatherPos, d.camTime, cameraFitSel, cameraBandsSel, cameraShadeSel, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.warmthSw, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
+	ents := append([]esphome.Entity{d.light, d.power, d.roomSw, d.auto, d.clock, d.clockStyleSel, d.clockPos, d.dateCol, d.weatherPos, d.camTime, cameraFitSel, cameraBandsSel, cameraShadeSel, d.answerTime, d.turnStyle, d.timerStyle, d.skinSl, d.callBtn, d.weatherFx, d.warmthSw, d.lang, d.strip, d.themeSel, d.lightThemeSel, d.themeModeSel, d.nightHours, d.nightStart, d.nightEnd, d.weekendStart, d.weekendEnd, d.nightMode, d.atNight, d.nightStyle, d.glowLevel, d.dimmestNum,
 		d.pop.on, d.pop.lead, d.pop.chime, d.pop.allDay, d.clockTap, d.styleSwipeSw, d.volumeSwipeSw, d.nightTapSw, d.fontSel}, d.lookEnts...)
 	if !screen.CanTint {
 		// Night warmth tints the frame on its way to the panel, which a tablet's screen does not take.
@@ -2502,7 +2505,7 @@ func (d *Display) frame() (next time.Duration) {
 	if !on {
 		// Dark panel: nothing to draw, and nothing to redraw until told, or until the night ends.
 		d.answerShots()
-		if config.Get().Screen.Night != "" {
+		if config.Get().Screen.Night != "" || config.Get().Screen.NightWeekend != "" {
 			return time.Minute
 		}
 		return time.Hour

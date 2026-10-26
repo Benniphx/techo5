@@ -23,12 +23,19 @@ func nightHoursSet() string { return config.Get().Screen.Night }
 const nightNever = ""
 
 // Actions: screen_night_hours sets the night to any start and end, "19:00" and "09:30"; both empty is
-// no night. The rest put a page up from an automation: the calendar, the forecast, the rain map.
+// no night. screen_weekend_night_hours sets the weekend's the same way; both empty is the same as every
+// other night. The rest put a page up from an automation: the calendar, the forecast, the rain map.
 func (d *Display) Actions() []*esphome.Action {
 	return []*esphome.Action{{
 		Name: "screen_night_hours",
 		Args: []esphome.Arg{{Name: "start", Type: esphome.ArgString}, {Name: "end", Type: esphome.ArgString}},
 		Run:  func(c esphome.Call) (any, error) { return nil, d.setNightHours(c.String("start"), c.String("end")) },
+	}, {
+		Name: "screen_weekend_night_hours",
+		Args: []esphome.Arg{{Name: "start", Type: esphome.ArgString}, {Name: "end", Type: esphome.ArgString}},
+		Run: func(c esphome.Call) (any, error) {
+			return nil, d.setWeekendNightHours(c.String("start"), c.String("end"))
+		},
 	}, {
 		Name: "calendar_popup_sources",
 		Args: []esphome.Arg{{Name: "calendars", Type: esphome.ArgString}},
