@@ -1059,7 +1059,13 @@ with Home Assistant's MCP server.
 
 Most microWakeWord models work, from a collection like
 [TaterTotterson/microWakeWords](https://github.com/TaterTotterson/microWakeWords) or one you train
-yourself ([training-wake-word.md](training-wake-word.md) covers how, other languages too). Each comes as two files, a `.json` and a `.tflite` with the same name (for example
+yourself. To train one, use [wakesmith](https://github.com/HuskerMinion/wakesmith): it runs on your
+own computer, from a page in your browser, and mixes synthetic speech with takes you record and the
+device's [wake word clips](#wake-word-clips), so the model learns your voices and your room. Each
+model is scored on recordings it never trained on, so you can compare runs before you pick one.
+[training-wake-word.md](training-wake-word.md) is the manual way with microWakeWord's own tools, other languages too.
+
+Each model comes as two files, a `.json` and a `.tflite` with the same name (for example
 `echo.json` and `echo.tflite`).
 
 Not every one does: the device runs microWakeWord models with its own small engine, which doesn't
@@ -1077,6 +1083,8 @@ The quickest way is the device's setup page:
    up once the device is idle, usually within seconds (it reconnects to the device, so it waits for
    any request, call or alarm to finish), and then has it in the device's **Wake word** list on the
    Assist satellite.
+4. Say it a few times from where you'll use it, and watch it on the setup page's
+   [wake word scores](#watching-the-wake-word-scores) to pick its **Wake word threshold**.
 
 Only microWakeWord models are taken (`"type": "micro"` in the `.json`), with a `.tflite` of at most
 1 MB, and up to 20 sent this way. **Remove** takes one sent from the page off the device; the wake
@@ -1160,7 +1168,8 @@ speaker muted, no allowance while the speaker plays), and is off until you choos
 ### Wake word clips
 
 For training a wake word model of your own on what your room really says and hears, the device can
-keep short clips of the wake word itself. Turn on **Keep wake clips** in Home Assistant, on the
+keep short clips of the wake word itself ([wakesmith](https://github.com/HuskerMinion/wakesmith) takes a
+folder of them as real voices). Turn on **Keep wake clips** in Home Assistant, on the
 device's microphone (for example "Office microphone"). It is off by default, and set for each device.
 
 While it is on, the device keeps the four seconds of audio up to each of these, sorted by kind:
