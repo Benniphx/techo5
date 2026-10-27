@@ -510,6 +510,71 @@ set the **Local network** (internal) URL there to an address the device can reac
 Home Assistant answers on: `https://` if Home Assistant serves HTTPS itself, since a plain `http://`
 address then gets no answer.
 
+## If the install stops at the slot store
+
+Once the installer has flashed TECHO5's boot image, the unit runs its rescue environment (the screen
+says RESCUE, or shows color bars with TECHO5 and a clock) while the installer saves LineageOS's vendor
+tree, erases the system partition into the slot store and installs the release into slot a. If the
+installer stops there, for example because the unit restarted partway or its USB went away, the unit
+isn't lost. The installer's message says whether anything was erased:
+
+- **Nothing was erased yet** (it stopped while saving the vendor tree): LineageOS is still on the unit.
+  Run the installer again, or put LineageOS back as in "To go back to LineageOS" below.
+- **The system partition may be, or is, erased**: finish by hand as below.
+
+Finish on the unit's USB console: a terminal on the port the installer named, at 115200 (`screen
+/dev/ttyACM0 115200` on Linux or macOS, PuTTY on Windows). The port can come back under another name
+after a restart.
+
+If the unit restarted by itself, also run these once it is back on the console, and attach what they
+print to an issue (the installer saves the same to `slot-store-restart.txt` in the unit's folder under
+`backups/` when it sees the unit come back):
+
+```
+mount -t pstore pstore /sys/fs/pstore 2>/dev/null
+cat /sys/fs/pstore/console-ramoops* /proc/last_kmsg 2>/dev/null | tail -200
+tail -100 /data/techo5-linux/rescue.log
+```
+
+1. Keep the rescue environment up, and see how far it got:
+   ```
+   touch /tmp/stay
+   PATH=/usr/local/sbin:$PATH
+   STORE=/store slotctl status; ls /store; ls -la /data/techo5-linux /data/media/0/Download
+   ```
+2. If `slotctl status` says there is no store (no `/store/.techo5-store`), the store was not made yet.
+   Run [step 4](#4-create-the-slot-store-and-install) from the top, with the file names `ls` showed. If
+   `vendor.tar` isn't in `/data/techo5-linux`, stop here and open an issue with what step 1 printed.
+3. If `/store` has no `vendor` folder, put this unit's vendor tree there from the copy the installer
+   kept:
+   ```
+   tar -xf /data/techo5-linux/vendor.tar -C /store
+   ls /store/vendor/lib/modules/mt76x8_wlan.ko
+   ```
+4. Install the release into slot a (it takes a few minutes; use the file name `ls` showed), and give slot
+   a the vendor tree:
+   ```
+   STORE=/store slotctl install /data/media/0/Download/techo5-rootfs-<version>.tar.gz
+   [ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || cp -a /store/vendor/. /store/slots/a/vendor/
+   rm -f /data/techo5-linux/vendor.tar
+   STORE=/store slotctl status
+   ```
+5. Write the unit's name and Home Assistant key as [step 5](#5-provision-before-the-first-boot) does.
+   The installer keeps the key in `backups/<serial>/home-assistant.key`; use that one, so Home Assistant
+   keeps the device:
+   ```
+   mkdir -p /data/misc/techo5
+   printf 'Kitchen\n' > /data/misc/techo5/name
+   (umask 077; printf '%s\n' '<the key from home-assistant.key>' > /data/misc/techo5/psk)
+   sync
+   ```
+6. Restart, and add it to Home Assistant as after any install:
+   ```
+   /bin/busybox.static reboot -f
+   ```
+   If the screen then stops at "hacked fastboot", run `fastboot -s <serial> continue` on the computer.
+   After five healthy minutes the slot keeps itself (`slotctl status` shows `good`).
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |

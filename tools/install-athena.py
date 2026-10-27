@@ -896,6 +896,7 @@ def write_partition(adb, parts, n, image, want):
     if free.isdigit() and int(free) * 1024 < size + (32 << 20):
         fail("TWRP's /tmp has %d MiB free, and the image needs %d MiB" % (int(free) >> 10, size >> 20))
     remote = '/tmp/techo5-%s.img' % name
+    note('pushing the %s image (%d MiB) through TWRP; this is silent and takes a few minutes' % (name, size >> 20))
     adb.push(image, remote)
     if first_word(adb.sh('sha256sum ' + remote)) != want:
         adb.sh('rm -f ' + remote)
@@ -908,6 +909,7 @@ def write_partition(adb, parts, n, image, want):
 
     for attempt in (1, 2):
         target_ok(adb, parts, n)
+        note('writing %s and reading it back from the flash; this is silent too' % dev(n))
         adb.sh('dd if=%s of=%s bs=1048576 2>/dev/null; sync' % (remote, dev(n)))
         if readback() == want:
             adb.sh('rm -f ' + remote)
@@ -1294,16 +1296,26 @@ def main(argv=None):
         console = Console(a.serial, CONSOLE_TECHO5)
         deadline = time.time() + 300
         seen = ''
+        started = False  # slot a was seen without the daemon yet; the console may go away after that
         while time.time() < deadline:
             seen = console.run('echo slot=$(cat /run/techo5/slot 2>/dev/null)- daemon=$(pidof techo5)-', 4) or ''
             if re.search(r'slot=a- daemon=\d', seen):
                 break
+            if 'slot=a-' in seen:
+                started = True
+            elif 'slot=-' in seen:
+                started = False  # back in rescue
             time.sleep(5)
         if re.search(r'slot=a- daemon=\d', seen):
             o = console.run('cat /etc/techo5-release; STORE=/store slotctl status | head -1; '
                             'tail -1 /data/techo5-linux/grow.log 2>/dev/null', 8) or ''
             for line in o.split('\n'):
                 note(line)
+        elif started:
+            note('the unit started slot a, and then its console went away, as it does once TECHO5 is up. The\n'
+                 "   install is probably done: check Home Assistant (a discovered ESPHome device named '%s') or\n"
+                 "   the unit's setup page. If the screen says RESCUE instead, /data/techo5-linux/ on the unit has\n"
+                 '   the boot logs.' % a.name)
         else:
             note('the USB serial console did not show slot a with the daemon within 5 minutes. That may only be\n'
                  '   this computer not seeing the console: the Show\'s screen says what it is doing (RESCUE if\n'
