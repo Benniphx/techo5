@@ -5615,8 +5615,8 @@
    ],
    "wake-training": [
     "Partly",
-    "written guide; the README also points to wakesmith, a separate trainer repo by the same author",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#training-a-wake-word-of-your-own"
+    "trainer: wakesmith, a separate repo by the same author (linked from the README); manual guide in docs/training-wake-word.md",
+    "https://github.com/HuskerMinion/wakesmith"
    ],
    "deck": [
     "Yes",

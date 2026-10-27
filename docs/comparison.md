@@ -316,7 +316,7 @@ Projects are in alphabetical order.
 | **Extensibility** | **echo-dot-assist** | **EchoLocal** | **EchoMuse** | **Kiosk Satellite** | **LibreEcho** | **TECHO5** | **View Assist** |
 | User-made screen pages | —† | ❔ | —† | [✅](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-pages.md) | [—](https://github.com/aslater3/LibreEcho/blob/radar-puffin-v0.14.4/README.md)† | [✅](https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md#web-pages)† | [✅](https://dinki.github.io/View-Assist/docs/community-contributions/cc-views)† |
 | Plugin system | ❔ | ❔ | ❔† | [✅](https://github.com/jxlarrea/kiosk-satellite-plugins) | ❔ | ❔ | [🟡](https://dinki.github.io/View-Assist/docs/developer-resources)† |
-| Wake word training | ❔ | ❔ | [✅](https://github.com/wilbowes/EchoMuse/blob/v2.18.1/oww_forge/README.md)† | [❔](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-wake-words.md) | ❔ | [🟡](https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#training-a-wake-word-of-your-own)† | ❔ |
+| Wake word training | ❔ | ❔ | [✅](https://github.com/wilbowes/EchoMuse/blob/v2.18.1/oww_forge/README.md)† | [❔](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/custom-wake-words.md) | ❔ | [🟡](https://github.com/HuskerMinion/wakesmith)† | ❔ |
 | Stream deck and computer control | —† | ❔ | —† | [❔](https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md) | [—](https://github.com/aslater3/LibreEcho/blob/radar-puffin-v0.14.4/README.md)† | [✅](https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/deck.md)† | ❔ |
 
 ## Notes to the table
@@ -511,7 +511,7 @@ Projects are in alphabetical order.
 
 - **User-made screen pages**: echo-dot-assist: released models have no screen; EchoMuse: no screen; LibreEcho: No screen; TECHO5: web pages via dashcast server; Tessera pages (preview), grid of your choosing; View Assist: custom views
 - **Plugin system**: EchoMuse: boundary proposed in issue #847; View Assist: custom views, blueprints, overlays
-- **Wake word training**: EchoMuse: separate oww_forge container; TECHO5: written guide; the README also points to wakesmith, a separate trainer repo by the same author
+- **Wake word training**: EchoMuse: separate oww_forge container; TECHO5: trainer: wakesmith, a separate repo by the same author (linked from the README); manual guide in docs/​training-wak​e-word.​md
 - **Stream deck and computer control**: echo-dot-assist: released models have no screen; EchoMuse: no screen; LibreEcho: No screen; TECHO5: Shows only
 
 ## Also does
