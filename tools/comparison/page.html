@@ -48,8 +48,6 @@ a { color: var(--accent); }
 .why button { margin-left: 8px; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 @media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-/* The device picker lines up with the table, not the detail panel beside it (320px + the 16px gap). */
-@media (min-width: 961px) { .picker { margin-right: 336px; } }
 .scroller { max-height: 75vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 table { border-collapse: separate; border-spacing: 0; font-size: 14px; width: 100%; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); }
@@ -80,6 +78,9 @@ footer { margin-top: 40px; font-size: 14px; color: var(--muted); }
 .picker { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 6px 0 14px; }
 .picker h2 { margin: 0 0 8px; font-size: 17px; }
 .picker p { margin: 8px 0 0; font-size: 14px; }
+/* The device picker lines up with the table, not the detail panel beside it (320px + the 16px gap);
+   after .picker, whose margin would undo it. */
+@media (min-width: 961px) { .picker { margin-right: 336px; } }
 .dev { display: block; margin-top: 3px; font: 600 11px var(--body); text-transform: none; letter-spacing: 0; }
 .d-yes { color: var(--yes); background: var(--yes-bg); } .d-lineage { color: var(--part); background: var(--part-bg); }
 .d-progress { color: var(--prog); background: var(--prog-bg); } .d-no { color: var(--no); background: var(--no-bg); }
