@@ -225,6 +225,18 @@ if ($AthenaRootfs) {
     } else {
         Write-Warning "$AthenaRootfs carries no kernel: updates leave each unit's kernel as it is"
     }
+    # The GPU helper and its Mesa (tools/gpu/build.sh, tools/linux/build-mesa.sh) ship together, with
+    # Mesa's licenses: without them every unit falls back to drawing on the cores, so a release says so.
+    $names = @(& tar -tzf $AthenaRootfs) -replace '^\./', ''
+    $gpu = $names -contains 'usr/local/bin/techo5-gpu'
+    $mesa = [bool]($names | Where-Object { $_ -match '^usr/lib/libgallium-.*\.so$' } | Select-Object -First 1)
+    $mesaLicense = $names -contains 'usr/share/licenses/mesa/MIT'
+    if ($gpu -ne $mesa) { throw "$AthenaRootfs carries the GPU helper or Mesa without the other: build both (bin/techo5-gpu-arm, bin/techo5-mesa-arm.tar.gz)" }
+    if ($gpu -and -not $mesaLicense) { throw "$AthenaRootfs carries Mesa without its licenses (usr/share/licenses/mesa)" }
+    if (-not $gpu) { throw "$AthenaRootfs has no GPU helper: build bin/techo5-gpu-arm and bin/techo5-mesa-arm.tar.gz before deploy-rootfs.sh" }
+}
+foreach ($t in @($Rootfs, $SkylightRootfs) | Where-Object { $_ }) {
+    if (@(& tar -tzf $t) -replace '^\./', '' -contains 'usr/local/bin/techo5-gpu') { throw "$t carries the GPU helper, which only athena's rootfs does" }
 }
 # A kernel is published only with its source (the GPL), and the source must be what built it.
 if ($AthenaBoot -and -not $AthenaKernelSource) {

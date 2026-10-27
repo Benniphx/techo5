@@ -357,8 +357,17 @@ librespot, https://github.com/librespot-org/librespot (MIT)
   Apache-2.0), from crates.io. tools/linux/build-librespot.sh builds it. Its license is in
   tools/linux/licenses/librespot and, where it is carried, /usr/share/licenses/librespot.
 
-The source archives of FFmpeg, Shairport Sync, nqptp and librespot, with the patches, licenses and build
-scripts, are also attached to each release from v1.6.8 on as techo5-third-party-sources-<version>.tar.gz.
+Mesa, https://mesa3d.org (MIT, with some files under other licenses)
+  The Echo Show 8 2nd gen's (athena) root filesystem carries Mesa 26.1.6's libraries in /usr/lib for its
+  GPU helper (/usr/local/bin/techo5-gpu, TECHO5's own): built with only the panfrost driver, EGL, GLES
+  and GBM, unmodified, by tools/linux/build-mesa.sh from https://mesa.freedesktop.org/archive/mesa-26.1.6.tar.xz
+  (its SHA-512 is in the build script). Most of Mesa is MIT; each source file names its own license, and
+  the others it uses are with it in tools/linux/licenses/mesa and, where it is carried,
+  /usr/share/licenses/mesa.
+
+The source archives of FFmpeg, Shairport Sync, nqptp, librespot and Mesa, with the patches, licenses and
+build scripts, are also attached to each release from v1.6.8 on (Mesa's from the first release that
+carries it) as techo5-third-party-sources-<version>.tar.gz.
 
 Tailscale, https://github.com/tailscale/tailscale (BSD 3-Clause License)
   Every root filesystem carries tailscaled, Copyright (c) 2020 Tailscale Inc & contributors, built from its
