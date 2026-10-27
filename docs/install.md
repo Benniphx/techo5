@@ -225,7 +225,7 @@ PATH=/usr/local/sbin:$PATH
 slotctl mkstore /dev/mmcblk0p12 --i-know-this-erases-it
 tar -xf /data/techo5-linux/vendor.tar -C /store   # kept in the store from now on
 STORE=/store slotctl install /data/media/0/Download/techo5-rootfs-<version>.tar.gz
-[ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || cp -a /store/vendor/. /store/slots/a/vendor/
+[ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || { mkdir -p /store/slots/a/vendor && cp -a /store/vendor/. /store/slots/a/vendor/; }
 rm /data/techo5-linux/vendor.tar
 STORE=/store slotctl status                       # slot a: trial 3
 ```
@@ -543,8 +543,20 @@ tail -100 /data/techo5-linux/rescue.log
    STORE=/store slotctl status; ls /store; ls -la /data/techo5-linux /data/media/0/Download
    ```
 2. If `slotctl status` says there is no store (no `/store/.techo5-store`), the store was not made yet.
-   Run [step 4](#4-create-the-slot-store-and-install) from the top, with the file names `ls` showed. If
-   `vendor.tar` isn't in `/data/techo5-linux`, stop here and open an issue with what step 1 printed.
+   First check that the saved vendor tree is this unit's and whole: the serial is the unit you mean,
+   and the list shows the Wi-Fi driver.
+   ```
+   cat /proc/idme/serial
+   tar -tf /data/techo5-linux/vendor.tar | grep mt76x8_wlan.ko
+   ```
+   If it does, make the store (this erases the system partition), then go on with step 3:
+   ```
+   umount /android 2>/dev/null
+   slotctl mkstore /dev/mmcblk0p12 --i-know-this-erases-it
+   ```
+   Don't run the `tar -cf` line from [step 4](#4-create-the-slot-store-and-install) here: it would
+   overwrite the saved copy, which may be the only one left. If `vendor.tar` is missing or doesn't list
+   the driver, stop here and open an issue with what step 1 printed.
 3. If `/store` has no `vendor` folder, put this unit's vendor tree there from the copy the installer
    kept:
    ```
@@ -552,10 +564,11 @@ tail -100 /data/techo5-linux/rescue.log
    ls /store/vendor/lib/modules/mt76x8_wlan.ko
    ```
 4. Install the release into slot a (it takes a few minutes; use the file name `ls` showed), and give slot
-   a the vendor tree:
+   a the vendor tree. If `slotctl status` in step 1 already showed slot a, skip the `slotctl install`
+   line.
    ```
    STORE=/store slotctl install /data/media/0/Download/techo5-rootfs-<version>.tar.gz
-   [ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || cp -a /store/vendor/. /store/slots/a/vendor/
+   [ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || { mkdir -p /store/slots/a/vendor && cp -a /store/vendor/. /store/slots/a/vendor/; }
    rm -f /data/techo5-linux/vendor.tar
    STORE=/store slotctl status
    ```
