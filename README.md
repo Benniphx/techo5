@@ -475,8 +475,8 @@ synthetic speech with real voices: takes you record in the browser, your device'
 recordings it never trained on, so you can compare runs before you pick a cutoff. Load the result on
 the setup page like any other ([A wake word of your own](docs/setup.md#a-wake-word-of-your-own)),
 and the setup page's wake word scores show how it does in your room.
-[docs/training-wake-word.md](docs/training-wake-word.md) is the manual path with microWakeWord's own
-tools.
+[docs/training-wake-word.md](docs/training-wake-word.md) walks through it step by step, and the manual
+way with microWakeWord's own tools for a language other than English.
 
 On my Show 5 it hears me fine from across the room without raising my voice. With music playing I
 have to raise my voice, and sometimes still need to tap the screen or a button to get it to hear me.
@@ -559,8 +559,8 @@ the backup. Every step: **[docs/install-skylight.md](docs/install-skylight.md)**
 - [docs/building.md](docs/building.md): building it yourself: where every input comes from
   (`tools/fetch-inputs.py`), and the daemon, kernel, boot image and root filesystem builds, for each OS.
 - [tools/linux/README.md](tools/linux/README.md): the image tooling in detail.
-- [docs/training-wake-word.md](docs/training-wake-word.md): training a wake word of your own, in any language,
-  by hand; [wakesmith](https://github.com/HuskerMinion/wakesmith) does it from a page in your browser.
+- [docs/training-wake-word.md](docs/training-wake-word.md): training a wake word of your own with
+  [wakesmith](https://github.com/HuskerMinion/wakesmith), or by hand in any language.
 - [CONTRIBUTING.md](CONTRIBUTING.md): reporting problems, trying a build on your device, and pull requests.
 
 ## Sister projects

@@ -1063,7 +1063,8 @@ yourself. To train one, use [wakesmith](https://github.com/HuskerMinion/wakesmit
 own computer, from a page in your browser, and mixes synthetic speech with takes you record and the
 device's [wake word clips](#wake-word-clips), so the model learns your voices and your room. Each
 model is scored on recordings it never trained on, so you can compare runs before you pick one.
-[training-wake-word.md](training-wake-word.md) is the manual way with microWakeWord's own tools, other languages too.
+[training-wake-word.md](training-wake-word.md) walks through it step by step, and the manual way
+with microWakeWord's own tools for a language other than English.
 
 Each model comes as two files, a `.json` and a `.tflite` with the same name (for example
 `echo.json` and `echo.tflite`).
