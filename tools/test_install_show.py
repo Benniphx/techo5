@@ -320,6 +320,14 @@ class FirstBoot(unittest.TestCase):
         with self.assertRaises(lib.Fail):
             self.watch([])
 
+    def test_slot_a_without_its_daemon_to_the_end_is_a_failure(self):
+        # The console answers to the end, so it did not go away: the daemon never started.
+        class Stuck(FakeConsole):
+            def run(self, command, wait=8):
+                return 'slot=a- daemon=-'
+        with self.assertRaises(lib.Fail), contextlib.redirect_stdout(io.StringIO()):
+            inst.first_boot(Stuck([]), NoFastboot, [False], seconds=1, every=0)
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)

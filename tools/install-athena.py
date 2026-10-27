@@ -1311,7 +1311,7 @@ def main(argv=None):
                             'tail -1 /data/techo5-linux/grow.log 2>/dev/null', 8) or ''
             for line in o.split('\n'):
                 note(line)
-        elif started:
+        elif started and 'slot=' not in seen:
             note('the unit started slot a, and then its console went away, as it does once TECHO5 is up. The\n'
                  "   install is probably done: check Home Assistant (a discovered ESPHome device named '%s') or\n"
                  "   the unit's setup page. If the screen says RESCUE instead, /data/techo5-linux/ on the unit has\n"

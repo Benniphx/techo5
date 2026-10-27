@@ -481,10 +481,11 @@ def first_boot(console, fastboot, nudged, seconds=300, every=5):
     there to say so (it started slot a, and then the console went away, as it does once TECHO5 runs);
     False when the console saw slot a with the daemon. Fails when the unit is in rescue, or was never
     seen, at the end of the time."""
-    seen = {'slot': False, 'rescue': False}
+    seen = {'slot': False, 'rescue': False, 'last': ''}
 
     def slot_up():
         o = console.run('echo slot=$(cat /run/techo5/slot 2>/dev/null)- daemon=$(pidof techo5)-', 4) or ''
+        seen['last'] = o
         if re.search(r'slot=a- daemon=\d', o):
             return True
         if 'slot=a-' in o:
@@ -502,7 +503,9 @@ def first_boot(console, fastboot, nudged, seconds=300, every=5):
     except Fail:
         # The unit started a slot and was never seen back in rescue: it is most likely running, with a
         # console this computer no longer sees. A unit seen in rescue, or never seen, is a real failure.
-        if seen['slot'] and not seen['rescue']:
+        # Only when the console has gone quiet: one still answering slot a without the daemon at
+        # the end is a daemon that did not start.
+        if seen['slot'] and not seen['rescue'] and 'slot=' not in seen['last']:
             note('the unit started slot a, and its console is gone since: it is most likely running TECHO5')
             return True
         raise
