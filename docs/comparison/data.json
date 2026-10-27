@@ -1,5 +1,5 @@
 {
- "checked": "2026-10-26",
+ "checked": "2026-10-27",
  "sections": [
   "Basics",
   "Voice",
@@ -1461,9 +1461,9 @@
     "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/LICENSE"
    ],
    "devices": [
-    "Released: Echo Dot 3 (2018, donut), Echo Dot 2 (biscuit), Echo 2 (radar). In progress: Echo Show 5 1st gen, Show 8 1st and 2nd gen",
+    "Released: Echo Dot 3 (2018, donut), Echo Dot 2 (biscuit), Echo 2 (radar). In progress: Echo Show 5 1st gen, Echo Show 5 2nd gen, Show 8 1st and 2nd gen",
     "",
-    "https://github.com/Gamer92000/echo-dot-assist/blob/v2026.10.17.151309/devices/README.md"
+    "https://github.com/Gamer92000/echo-dot-assist/blob/6d62d82cd24b5ea178d31e6c71b38fed2ef6bea6/devices/cronos/README.md"
    ],
    "on-device": [
     "Fire OS stays, with Amazon's audio front end and wake word engine; hassmic daemon replaces Alexa. Needs only Home Assistant",
@@ -3952,9 +3952,9 @@
   },
   "kiosk-satellite": {
    "type": [
-    "Android app installed on a stock OS; optional plugin SDK; blueprint scripts for HA; separate LineageOS images for Echo Dot and Echo Show 5 2nd gen (Echo Show 8 1st gen in progress)",
+    "Android app installed on a stock OS; optional plugin SDK; blueprint scripts for HA; separate LineageOS images for Echo Dot, Echo Show 5 2nd gen and Echo Show 8 1st gen (Show 8 image listed as ready, no GitHub release yet)",
     "",
-    "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/README.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/6480dbe56c150fae6034b14bf7da0aee1383f987/README.md"
    ],
    "started": [
     "2026-07-15 (app repo); 2026-09-10 (plugins repo); 2026-10-24 (LineageOS 18.1 Echo image repo)",
@@ -3972,9 +3972,9 @@
     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/LICENSE"
    ],
    "devices": [
-    "Android 7.0+ phones, tablets, panels; guides: Fire tablets, Meta Portal, Raspberry Pi 4, Echo Dot 2nd gen (headless) and Echo Show 5 2nd gen (own LineageOS 18.1 images). In progress: Echo Show 8 1st gen image",
+    "Android 7.0+ phones, tablets, panels; guides: Fire tablets, Meta Portal, Raspberry Pi 4, Echo Dot 2nd gen (headless), Echo Show 5 2nd gen and Echo Show 8 1st gen (own LineageOS 18.1 images; Show 8 marked ready, tag crown-2026.10.1 exists, no GitHub release listed yet)",
     "",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/README.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/6480dbe56c150fae6034b14bf7da0aee1383f987/README.md"
    ],
    "on-device": [
     "Stock Android or Fire OS stays (Echo Dot and Echo Show 5: Kiosk Satellite Edition LineageOS 18.1 image); the app and its foreground service run; no separate server",
@@ -3982,9 +3982,9 @@
     "https://github.com/jxlarrea/kiosk-satellite/blob/2026.10.41/docs/echo-dot.md"
    ],
    "install": [
-    "Sideload APK; optional adb grants or device-owner command from a PC; Echo Dot and Echo Show 5: unlock (Dot with firebreak on Linux, macOS or Windows; Show with fastbrick), flash the image from TWRP with adb, app installs on first boot",
+    "Sideload APK; optional adb grants or device-owner command from a PC; Echo Dot, Echo Show 5 and Echo Show 8: unlock (Dot with firebreak on Linux, macOS or Windows; Shows with fastbrick), flash the image from TWRP with adb, app installs on first boot",
     "",
-    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/30602c310749130d6f3e6b58047508f67313fda6/docs/echo-dot.md"
+    "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/6480dbe56c150fae6034b14bf7da0aee1383f987/docs/echo-show-8.md"
    ],
    "os-replaced": [
     "No",
@@ -4799,7 +4799,7 @@
     "https://github.com/HuskerMinion/techo5/commits/main"
    ],
    "releases": [
-    "v1.6.8 (2026-10-26), 131 releases incl. 3 pre-releases; Dot dot-v1.0.35 (96, 1 pre); Spot spot-v1.4.8 (105, 1 pre); Panel app v0.1.425910 (2026-10-23, 2)",
+    "v1.6.10 (2026-10-27), 133 releases incl. 3 pre-releases; Dot dot-v1.0.37 (98, 1 pre); Spot spot-v1.4.10 (107, 1 pre); Panel app v0.1.425910 (2026-10-23, 2)",
     "",
     "https://github.com/HuskerMinion/techo5/releases"
    ],
@@ -4835,8 +4835,8 @@
    ],
    "ui-languages": [
     "Partly",
-    "date, forecast, weather in 8 languages; rest English; Japanese screen text in open PR #270",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
+    "date, forecast and weather in 8 languages, rest English; Japanese also translates settings and other screen controls (v1.6.9)",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#clock-and-home-screen"
    ],
    "porting": [
     "Partly",
@@ -5025,8 +5025,8 @@
    ],
    "airplay": [
     "Partly",
-    "every device but the Panel app; off by default; AirPlay 2 grouping",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "every device but the Panel app; off by default; AirPlay 2 grouping, kept in step with other AirPlay 2 speakers since v1.6.9",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "dlna": [
     "Yes",
@@ -5085,8 +5085,8 @@
    ],
    "follow-player": [
     "Yes",
-    "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "one or several players can be followed; the one that started last is shown",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "lyrics": [
     "Yes",
@@ -5225,8 +5225,8 @@
    ],
    "themes": [
     "Yes",
-    "dark, light or auto by room light; custom colors; skins (LCARS, Commodore 64, Big and plain and more)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
+    "dark, light or auto by room light; custom colors; skins (LCARS, Commodore 64, Big and plain, Control room, Prairie, Earthrise and more)",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#clock-and-home-screen"
    ],
    "fonts": [
     "Yes",
@@ -5325,8 +5325,8 @@
    ],
    "ble-proxy": [
     "Yes",
-    "off by default; active connections on the Show and the Spot (own switch, off by default), scanning only on the Dot",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md#known-gaps"
+    "off by default; active connections on the Show and the Spot (own switch, off by default, needs an API encryption key), scanning only on the Dot",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md"
    ],
    "led-ring": [
     "Yes",
@@ -5615,8 +5615,8 @@
    ],
    "wake-training": [
     "Partly",
-    "written guide",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/training-wake-word.md"
+    "written guide; the README also points to wakesmith, a separate trainer repo by the same author",
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#training-a-wake-word-of-your-own"
    ],
    "deck": [
     "Yes",
@@ -7386,9 +7386,9 @@
      "https://github.com/Gamer92000/echo-dot-assist/blob/checkers/devices/checkers/README.md"
     ],
     "echo-show-5-2": [
-     "unknown",
-     "",
-     ""
+     "progress",
+     "cronos on checkers branch (PR #65, merged into checkers 2026-10-26); one unit, not on main",
+     "https://github.com/Gamer92000/echo-dot-assist/blob/6d62d82cd24b5ea178d31e6c71b38fed2ef6bea6/devices/cronos/README.md"
     ],
     "echo-show-8-1": [
      "progress",
@@ -7603,13 +7603,13 @@
     ],
     "echo-show-5-2": [
      "lineage",
-     "Named in bug reports on community LineageOS 18.1 (discussion 186, issue 601). Project's own image (cronos) is in progress, no release yet",
-     "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/README.md"
+     "Project's own image (cronos) released 2026-10-26 (release cronos-2026.10.1); also named in bug reports on community LineageOS 18.1",
+     "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/releases/tag/cronos-2026.10.1"
     ],
     "echo-show-8-1": [
      "lineage",
-     "Runs on community LineageOS 18.1 per user reports (issues 49, 416). Project's own image (crown) is in progress, no release yet",
-     "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/biscuit-2026.10.10/README.md"
+     "Project's own image (crown) documented as ready in the repo README and a guide; tag crown-2026.10.1 exists, no GitHub release listed at check time. Also runs on community LineageOS 18.1 per user reports (issues 49, 416)",
+     "https://github.com/jxlarrea/lineageos-echo-kiosk-satellite/blob/6480dbe56c150fae6034b14bf7da0aee1383f987/README.md"
     ],
     "echo-show-8-2": [
      "lineage",
