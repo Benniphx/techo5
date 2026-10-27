@@ -403,7 +403,7 @@ class Adb:
         self.run('wait-for-device')
 
     def reboot(self, target=None):
-        self.run(*(['reboot'] + ([target] if target else [])))
+        return self.run(*(['reboot'] + ([target] if target else [])))
 
 
 class Fastboot:
