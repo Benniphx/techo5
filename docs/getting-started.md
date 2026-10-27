@@ -157,12 +157,13 @@ loops. Every command runs the same on Windows, Linux and macOS once the Dot is u
    Use the release ZIP attached to the thread, not the bare git repository: it has `fastbrick.sh`
    (Linux/macOS), `fastbrick.bat`/`fastbrick.ps1` (Windows), `boot-root.zip` and the files they
    need — same as the Show's and Spot's amonet forks, so Windows works directly here too.
-   - Hold the **Action** button while plugging in power; the light turns **green** (Amazon's factory
-     fastboot mode). Connect USB.
+   - The Dot's only power input is its micro-USB port, and the same cable carries USB, so plug it
+     into the computer, not a wall adapter. Hold the **Action** button while plugging the cable into
+     the Dot; the light turns **green** (Amazon's factory fastboot mode).
    - Run `fastbrick.bat` (or `./fastbrick.sh` on Linux/macOS), check the device it found, and type
      `YES`. It ends with `Exploit most likely successful!` and reboots into TWRP (a **white** light).
-   - To get back into TWRP later: unplug power, hold **Volume Up**, plug power back in, and wait for the
-     white light.
+   - To get back into TWRP later: unplug the micro-USB cable, hold **Volume Up**, plug it back in, and
+     wait for the white light.
 
    *Check:* `adb devices` lists the Dot as `recovery`.
 2. **Flash Fire OS 6574.1 into both slots.** TECHO5 Dot's Bluetooth kernel is built from this exact
