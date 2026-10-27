@@ -433,7 +433,7 @@ try {
     foreach ($n in @("techo5-boot-$Version.img", "techo5-boot-checkers-$Version.img", "techo5-boot-crown-$Version.img")) {
         if ($carried -contains $n) { continue }
         if ($null -eq $earlier) {
-            $earlier = @(& gh api "repos/$repo/releases?per_page=100" --paginate -q '.[].tag_name' | Where-Object { $_ -ne $Version })
+            $earlier = @(& gh api "repos/$repo/releases?per_page=100" --paginate -q '.[].tag_name' | Where-Object { $_ -ne $Version -and $_ -match '^v\d+\.\d+\.\d+$' })
             if ($LASTEXITCODE -ne 0) { throw 'could not list the earlier releases to copy boot images from' }
         }
         $generic = $n.Replace($Version, '*')
