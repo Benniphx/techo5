@@ -126,6 +126,7 @@ func build() *Proxy {
 	// Home Assistant stopping listening is usually its connection gone (the library notices on the
 	// next batch of advertisements), and the devices it connected have nobody to answer to.
 	b.proxy.OnSubscribed = func(on bool) {
+		b.showConnections()
 		b.apply()
 		if !on {
 			b.links.ReleaseGone()
@@ -150,7 +151,16 @@ func build() *Proxy {
 		component.Reconnect.Emit(struct{}{})
 	}
 
-	b.connect.Set(config.Get().Bluetooth.ProxyConnections)
+	// The switch shows what is lent, not only what was saved: connections saved on from before the key
+	// rule stay saved, so adding a key brings them back, but they read off until then.
+	// A key given later (adoption) comes with a new connection from Home Assistant, which is when the
+	// switch is shown again (OnSubscribed, and Reconnect).
+	saved := config.Get().Bluetooth.ProxyConnections
+	b.showConnections()
+	component.Reconnect.Listen(func(struct{}) { b.showConnections() })
+	if saved && !linkKeyed() {
+		slog.Warn("bluetooth proxy connections are on but off until the device has an API encryption key")
+	}
 	b.connect.OnCommand = func(on bool) {
 		if on && !linkKeyed() {
 			b.connect.Set(false)
@@ -215,6 +225,11 @@ func (b *Proxy) Enabled() bool { return Here && config.Get().Bluetooth.Proxy }
 // its connections switch on, a GATT client to lend, and the Home Assistant link keyed.
 func (b *Proxy) ConnectionsEnabled() bool {
 	return b.Enabled() && openCentral != nil && config.Get().Bluetooth.ProxyConnections && linkKeyed()
+}
+
+// showConnections sets the connections switch to what is lent: saved on, and the link keyed.
+func (b *Proxy) showConnections() {
+	b.connect.Set(config.Get().Bluetooth.ProxyConnections && linkKeyed())
 }
 
 // linkKeyed reports whether the Home Assistant link has an encryption key of its own. Connections are
