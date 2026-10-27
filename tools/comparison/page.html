@@ -48,6 +48,8 @@ a { color: var(--accent); }
 .why button { margin-left: 8px; }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 @media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+/* The device picker lines up with the table, not the detail panel beside it (320px + the 16px gap). */
+@media (min-width: 961px) { .picker { margin-right: 336px; } }
 .scroller { max-height: 75vh; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
 table { border-collapse: separate; border-spacing: 0; font-size: 14px; width: 100%; }
 th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); }
