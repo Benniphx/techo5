@@ -4791,7 +4791,7 @@
    "type": [
     "Replacement firmware: Alpine Linux image plus one Go daemon (echod) on Echo devices and the Skylight Calendar; the same daemon in an Android app (TECHO5 Panel) for tablets and the Portal; optional dashcast server and Deck PC agent",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md"
    ],
    "started": [
     "techo5 2026-09-14; techo5-dot 2026-09-16; techo5-spot 2026-09-16; techo5-athena 2026-10-15; techo5-panel 2026-10-18 (public 2026-10-19)",
@@ -4811,27 +4811,27 @@
    "devices": [
     "Echo Show 5 gen 1/2, Show 8 gen 1/2, Spot gen 1, Dot gen 2, Dot gen 3 2018 (one unit), Echo gen 2 (one unit), Skylight Calendar 15 (no microphone: screen and speaker only); with the TECHO5 Panel app: Fire HD 8 (10th gen), Galaxy Tab S6 Lite, Meta Portal (2nd gen); in progress: Fire HD 8 8th gen (Panel issue #1)",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md"
    ],
    "on-device": [
     "Echos and Skylight: no Android/Fire OS, Alpine Linux with the echod daemon; tablets and Portal: Android app with echod inside; no separate server needed (dashcast optional for streamed dashboards)",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "install": [
     "Unlock (amonet; saiyaku for Show 8 gen 2; kamakiri-donut kit for Dot gen 3); Show 5 and Show 8 gen 1 need LineageOS 18.1 drivers; USB; Python installer on Windows/Linux/macOS; Echo gen 2 and Dot gen 3 need soldering to pads; Skylight: no unlock, adb on stock firmware; tablets and Portal: no unlock, adb install of the Panel app",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md"
    ],
    "os-replaced": [
     "Partly",
     "Echos and Skylight: yes; the Panel app runs on Android; Show 8 gen 2 can also keep Amazon's kernel",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md"
    ],
    "third-party-parts": [
     "Partly",
     "Show, Skylight and Panel app can be a screen for the Tessera HA add-on (preview)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md#tessera-screens-preview"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/dashboards.md#tessera-screens-preview"
    ],
    "ui-languages": [
     "Partly",
@@ -4841,82 +4841,82 @@
    "porting": [
     "Partly",
     "porting plans and hardware notes per device, no porting guide",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/porting-plan.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/porting-plan.md"
    ],
    "assist-satellite": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "follow-up": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "ask-question": [
     "Yes",
     "start_conversation feature flag in code",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/voice/voice.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/voice/voice.go"
    ],
    "wake-word": [
     "Yes",
     "microWakeWord",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "custom-wake": [
     "Yes",
     "most microWakeWord models, incl. ADD and pooling layers; a model needing an unsupported operation is refused",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#a-wake-word-of-your-own"
+    "https://github.com/HuskerMinion/techo5/blob/main/docs/setup.md#a-wake-word-of-your-own"
    ],
    "two-wake": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "server-wake": [
     "Yes",
     "off by default; confirm-only mode also offered",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#wake-word-on-home-assistant"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#wake-word-on-home-assistant"
    ],
    "no-wake-start": [
     "Yes",
     "screen tap, action button, HA Wake button",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#7-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#7-voice"
    ],
    "cancel-turn": [
     "Yes",
     "action button or HA Cancel request button",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#7-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#7-voice"
    ],
    "stop-word": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "arbitration": [
     "Yes",
     "on by default; needs same house word",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#the-nearest-device-answers"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#the-nearest-device-answers"
    ],
    "echo-cancel": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#how-well-does-it-hear"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#how-well-does-it-hear"
    ],
    "noise-suppression": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#how-well-does-it-hear"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#how-well-does-it-hear"
    ],
    "mic-gain": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#how-well-does-it-hear"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#how-well-does-it-hear"
    ],
    "mic-array": [
     "Yes",
     "beamformer off on Show 8 gen 2",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#how-well-does-it-hear"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#how-well-does-it-hear"
    ],
    "external-mic": [
     "Not found",
@@ -4926,37 +4926,37 @@
    "end-of-speech": [
     "Partly",
     "on-device VAD on/off switch; no timing setting found",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#whats-new"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#whats-new"
    ],
    "no-wake-gap": [
     "Partly",
     "listens after wake sound; wake sound can be None; open PR #217 would keep speech said in one breath with the word",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#sounds-of-your-own"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#sounds-of-your-own"
    ],
    "streaming-replies": [
     "Yes",
     "Reply delivery setting: whole file or streamed",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "voice-recordings": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#list-saved-voice-recordings"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#list-saved-voice-recordings"
    ],
    "turn-history": [
     "Partly",
     "last-turn sensors, kept in HA history",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "last-turn-sensors": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#two-wake-words-two-assistants"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#two-wake-words-two-assistants"
    ],
    "wake-clips": [
     "Yes",
     "off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#wake-word-clips"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#wake-word-clips"
    ],
    "vendor-frontend": [
     "Partly",
@@ -4971,52 +4971,52 @@
    "realtime-voice": [
     "Yes",
     "off by default; paid cloud; HA control via MCP token",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#realtime-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#realtime-voice"
    ],
    "voice-without-ha": [
     "Yes",
     "needs own Wyoming and chat-model servers; no house control",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#voice-without-home-assistant"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#voice-without-home-assistant"
    ],
    "voice-command-library": [
     "Yes",
     "10 voice blueprints (alarms, reminders, volume, calls, help) plus 11 event blueprints and 2 scripts, with import buttons; all now branded with steps and links",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/blueprints/README.md#voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/blueprints/README.md#voice"
    ],
    "music-by-voice": [
     "Yes",
     "through Music Assistant",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "chatgpt-assistant": [
     "Partly",
     "Direct mode uses any OpenAI-style local endpoint (llama.cpp, Ollama); no ChatGPT subscription sign-in found. Cloud realtime needs an API key",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#L936-L944"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#realtime-voice"
    ],
    "media-player": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#under-the-hood"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#under-the-hood"
    ],
    "ducking": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#whats-new"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#whats-new"
    ],
    "sendspin": [
     "Yes",
     "on by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "bluetooth-in": [
     "Partly",
     "Show, Spot, Dot and Echo gen 2; the Panel app has no Bluetooth",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/panel.md#L41-L42"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/panel.md#L50-L52"
    ],
    "bluetooth-out": [
     "Yes",
     "Echos; not the Panel app (no Bluetooth)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/panel.md#L41-L42"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/panel.md#L50-L52"
    ],
    "line-out": [
     "Partly",
@@ -5031,32 +5031,32 @@
    "dlna": [
     "Yes",
     "off by default; no seeking yet",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "cast-receiver": [
     "No",
     "video.md: not a Google Cast target",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/video.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/video.md"
    ],
    "volume-streams": [
     "Partly",
     "separate alarm/timer ring volume only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#7-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#7-voice"
    ],
    "equalizer": [
     "Yes",
     "bass and treble Â±6 dB",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "speaker-gain": [
     "Partly",
     "Show 5 gen 2, Show 8 gen 2, Dot and Echo 2nd gen; not the other Shows or the Spot",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md"
    ],
    "custom-sounds": [
     "Yes",
     "timer, chime and alarm sounds (alarm.wav added in v1.6.6)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#sounds-of-your-own"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#sounds-of-your-own"
    ],
    "route-to-player": [
     "Not found",
@@ -5066,22 +5066,22 @@
    "radio": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "sleep-sounds": [
     "Yes",
     "generated on the device",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "sleep-timer": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "now-playing": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#screenshots"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#screenshots"
    ],
    "follow-player": [
     "Yes",
@@ -5091,47 +5091,47 @@
    "lyrics": [
     "Yes",
     "Shows only; off by default; LRCLIB",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#5-music"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#5-music"
    ],
    "video": [
     "Yes",
     "Show, Spot and Skylight; off by default; H.264; H.265, VP8 and VP9 on Show 8 gen 2 and Skylight",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/video.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/video.md"
    ],
    "nursery-monitor": [
     "Not found",
     "No live room-audio stream to a phone or browser; mic is used for voice, calls and Drop In (off by default)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/intercom-plan.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/intercom-plan.md"
    ],
    "speaker-tuning": [
     "Partly",
     "Per-model speaker setup with EQ tables and vendor limiter on Dot and Cronos devices, plus bass/treble; no shipped crossover or multiband profile found",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/hardware/speaker/paths_dot.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/hardware/speaker/paths_dot.go"
    ],
    "ha-dashboard": [
     "Yes",
     "drawn on device, or streamed via separate dashcast server",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/dashboards.md"
    ],
    "web-pages": [
     "Yes",
     "needs dashcast server",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md#web-pages"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/dashboards.md#web-pages"
    ],
    "on-screen-settings": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#screenshots"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#screenshots"
    ],
    "app-drawer": [
     "Partly",
     "fixed drawer tabs (Cameras, Radio, Call)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "return-home": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md#turning-it-on"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/dashboards.md#turning-it-on"
    ],
    "orientation": [
     "Not found",
@@ -5151,47 +5151,47 @@
    "clock": [
     "Yes",
     "15 styles, incl. Nixie, Stack and Overlap; bottom left, center or right position",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#clock-and-home-screen"
    ],
    "weather": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#3-weather"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#3-weather"
    ],
    "screensaver": [
     "Yes",
     "photos, dashboard or web page",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#2-photos"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#2-photos"
    ],
    "photos": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#2-photos"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#2-photos"
    ],
    "immich": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#2-photos"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#2-photos"
    ],
    "glance-chips": [
     "Yes",
     "Shows only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#show-chips-along-the-foot-of-the-clock"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#show-chips-along-the-foot-of-the-clock"
    ],
    "screen-messages": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#show-a-notification"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#show-a-notification"
    ],
    "timers-on-screen": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "calendar": [
     "Yes",
     "HA calendars or iCal links; Month, Week, Day or Coming up opens by setting",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#calendar"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#calendar"
    ],
    "todo-lists": [
     "Not found",
@@ -5201,27 +5201,27 @@
    "answer-views": [
     "Yes",
     "forecast, radar, camera pages for voice requests",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "display-modes": [
     "Partly",
     "night mode switch and dashboard show/hide",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#night"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#night"
    ],
    "weather-radar": [
     "Yes",
     "alerts U.S. only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "night-mode": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#night"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#night"
    ],
    "auto-brightness": [
     "Yes",
     "light sensor uncalibrated on Show 8 gen 2",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#clock-and-home-screen"
    ],
    "themes": [
     "Yes",
@@ -5231,72 +5231,72 @@
    "fonts": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#clock-and-home-screen"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#clock-and-home-screen"
    ],
    "screen-control": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#the-screen-and-the-rooms-lights"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#the-screen-and-the-rooms-lights"
    ],
    "camera-view": [
     "Yes",
     "grid of up to six on the Show",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#show-several-cameras-at-once"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#show-several-cameras-at-once"
    ],
    "go2rtc": [
     "Yes",
     "go2rtc camera sound not played yet",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#cameras-from-go2rtc"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#cameras-from-go2rtc"
    ],
    "camera-sound": [
     "Partly",
     "HA stream or RTSP; not go2rtc or Reolink recorder",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#4-cameras"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#4-cameras"
    ],
    "device-camera-entity": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "device-camera-stream": [
     "Yes",
     "off by default; RTP/JPEG, not H.264; ONVIF discovery switch, off by default; login settable from HA (opt-in)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#recording-this-devices-camera"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#recording-this-devices-camera"
    ],
    "camera-preview": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "camera-vision": [
     "Partly",
     "motion, person with confidence sensor; palm-over-lens stop; no face/hand detection; off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#presence-and-gestures"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#presence-and-gestures"
    ],
    "announcements": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/voice/announce.go#L16-L19"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/voice/announce.go#L16-L19"
    ],
    "intercom": [
     "Yes",
     "needs same house word",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md#calling-another-device-in-the-house"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md#calling-another-device-in-the-house"
    ],
    "broadcast": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#announce-to-the-house"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#announce-to-the-house"
    ],
    "auto-answer": [
     "Yes",
     "Drop In off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md#calling-another-device-in-the-house"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md#calling-another-device-in-the-house"
    ],
    "call-by-voice": [
     "Yes",
     "built in: the device's phone book handles 'call Mom'; a blueprint covers 'call the kitchen' and HA contacts",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md#calling-a-contact-by-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md#calling-a-contact-by-voice"
    ],
    "video-calls": [
     "Not found",
@@ -5306,22 +5306,22 @@
    "phone-calls": [
     "Yes",
     "needs own SIP provider; off until signed in",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md"
    ],
    "buttons": [
     "Yes",
     "press, hold, long hold events",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/buttons/buttons.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/buttons/buttons.go"
    ],
    "mic-mute": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/mute/mute.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/mute/mute.go"
    ],
    "light-sensor": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/diag/diag.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/diag/diag.go"
    ],
    "ble-proxy": [
     "Yes",
@@ -5331,52 +5331,52 @@
    "led-ring": [
     "Yes",
     "Dot, Echo gen 2 and Dot gen 3",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/light/light.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/light/light.go"
    ],
    "ring-styles": [
     "Yes",
     "Wake word, Thinking and Replying effects, per wake word",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#7-voice"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#7-voice"
    ],
    "touch-gestures": [
     "Yes",
     "hold-on-clock event off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#presence-and-gestures"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#presence-and-gestures"
    ],
    "clap": [
     "Yes",
     "off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#presence-and-gestures"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#presence-and-gestures"
    ],
    "proximity": [
     "Not found",
     "Show 5 light chip has no proximity half; other models not documented",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/hardware.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/hardware.md"
    ],
    "room-loudness": [
     "Yes",
     "off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#how-loud-the-room-is"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#how-loud-the-room-is"
    ],
    "camera-shutter": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/diag/diag.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/diag/diag.go"
    ],
    "dnd": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md#calling-another-device-in-the-house"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md#calling-another-device-in-the-house"
    ],
    "health-sensors": [
     "Yes",
     "Wi-Fi signal, load, memory, free space",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/diag/diag.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/diag/diag.go"
    ],
    "sound-events": [
     "Not found",
     "smoke alarm listed only as future research",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/standalone-plan.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/standalone-plan.md"
    ],
    "wifi-motion": [
     "Not found",
@@ -5386,32 +5386,32 @@
    "ring-visualizer": [
     "Partly",
     "Ring effects include a room-sound meter and fixed animations, but none follow playing music",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/hardware/led/effect_room_meter.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/hardware/led/effect_room_meter.go"
    ],
    "ha-link": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#after-installing-every-device"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#after-installing-every-device"
    ],
    "settings-entities": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#under-the-hood"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#under-the-hood"
    ],
    "ha-actions": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md"
    ],
    "ha-events": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#voice-request-events"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#voice-request-events"
    ],
    "navigate": [
     "Yes",
     "dashboard, forecast, radar, calendar, camera actions",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#show-or-hide-the-dashboard"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#show-or-hide-the-dashboard"
    ],
    "launch-apps": [
     "n/a",
@@ -5421,52 +5421,52 @@
    "time-from-ha": [
     "Yes",
     "time zone from HA; clock from NTP, or from HA when no time server answers",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "timers": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#start-a-timer"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#start-a-timer"
    ],
    "alarms": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#set-an-alarm"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#set-an-alarm"
    ],
    "reminders": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#set-a-reminder"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#set-a-reminder"
    ],
    "wake-light": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#sounds-of-your-own"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#sounds-of-your-own"
    ],
    "ha-down": [
     "Yes",
     "alarms, intercom, announcements, go2rtc, doorbell",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "device-groups": [
     "Partly",
     "stop-all or mute-all blueprint script and a dashboard script, for every TECHO5 device (not a chosen group)",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/blueprints/script/techo5/stop_every_device.yaml"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/blueprints/script/techo5/stop_every_device.yaml"
    ],
    "ota": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#after-installing-every-device"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#after-installing-every-device"
    ],
    "update-channels": [
     "Yes",
     "Echos; the Panel app has no Stable or Dev channel",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#after-installing-every-device"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#after-installing-every-device"
    ],
    "update-rollback": [
     "Yes",
     "Echos (A/B slots); the Panel app has no A/B slots",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "signed-updates": [
     "Yes",
@@ -5476,77 +5476,77 @@
    "settings-page": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md"
    ],
    "logs": [
     "Partly",
     "signed API log stream, SSH, diagnostics download",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#11-the-remote-api"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#11-the-remote-api"
    ],
    "screenshot": [
     "Yes",
     "off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md#working-on-it"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md#working-on-it"
    ],
    "diag-bundle": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#questions-and-problems"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#questions-and-problems"
    ],
    "remote-shell": [
     "Yes",
     "SSH keys only; off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#set-the-ssh-authorized-keys"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#set-the-ssh-authorized-keys"
    ],
    "remote-api": [
     "Yes",
     "off by default; everyday settings only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#11-the-remote-api"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#11-the-remote-api"
    ],
    "copy-settings": [
     "Yes",
     "sharing off by default",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#sharing-settings-with-the-other-devices"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#sharing-settings-with-the-other-devices"
    ],
    "settings-backup": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#10-saving-the-settings"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#10-saving-the-settings"
    ],
    "wifi-change": [
     "Yes",
     "Dot: wifi-set over SSH or USB tool",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md"
    ],
    "restart": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#whats-new"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#whats-new"
    ],
    "auto-recover": [
     "Yes",
     "supervisor restarts daemon; slot fallback",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/overview.md#working-on-it"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/overview.md#working-on-it"
    ],
    "recovery": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#going-back-to-twrp-or-fire-os"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#going-back-to-twrp-or-fire-os"
    ],
    "peer-list": [
     "Partly",
     "other devices listed for settings sharing, no links",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#sharing-settings-with-the-other-devices"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#sharing-settings-with-the-other-devices"
    ],
    "rename": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/setup/rename.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/setup/rename.go"
    ],
    "reset-unpair": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/actions.md#disconnect-the-device-from-home-assistant-for-good"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/actions.md#disconnect-the-device-from-home-assistant-for-good"
    ],
    "controller": [
     "Not found",
@@ -5556,57 +5556,57 @@
    "browser-install": [
     "Partly",
     "one-command Python installer on a PC",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/tools/install-show.py"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/tools/install-show.py"
    ],
    "vendor-services-off": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "inbound-firewall": [
     "Yes",
     "",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#after-installing-every-device"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#after-installing-every-device"
    ],
    "encrypted-peers": [
     "Yes",
     "signed with house word; intercom encrypted",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/phone.md#calling-another-device-in-the-house"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/phone.md#calling-another-device-in-the-house"
    ],
    "admin-auth": [
     "Yes",
     "setup page needs on-device Allow; PIN and API lockouts",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#8-settings-lock"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#8-settings-lock"
    ],
    "sendspin-pairing": [
     "No",
     "docs: no key, no pairing, by design",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/getting-started.md#after-installing-every-device"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/getting-started.md#after-installing-every-device"
    ],
    "tls-options": [
     "Partly",
     "only a skip-certificate-checks switch",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/echod/internal/feature/diag/diag.go"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/echod/internal/feature/diag/diag.go"
    ],
    "privacy-indicators": [
     "Partly",
     "camera off with mute; Show's camera dot for RTSP and camera pages, not HA views",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#recording-this-devices-camera"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#recording-this-devices-camera"
    ],
    "no-telemetry": [
     "Yes",
     "none found; internet use listed in README",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/README.md#why-techo5"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/README.md#why-techo5"
    ],
    "kiosk-lock": [
     "Partly",
     "settings PIN only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/setup.md#8-settings-lock"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/setup.md#8-settings-lock"
    ],
    "custom-pages": [
     "Yes",
     "web pages via dashcast server; Tessera pages (preview), grid of your choosing",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/dashboards.md#web-pages"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/dashboards.md#web-pages"
    ],
    "plugins": [
     "Not found",
@@ -5621,7 +5621,7 @@
    "deck": [
     "Yes",
     "Shows only",
-    "https://github.com/HuskerMinion/techo5/blob/v1.6.8/docs/deck.md"
+    "https://github.com/HuskerMinion/techo5/blob/v1.6.10/docs/deck.md"
    ]
   },
   "view-assist": {
