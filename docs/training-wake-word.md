@@ -5,6 +5,11 @@ can pick in Home Assistant were trained on English voices. If you speak another 
 you want isn't in any collection, you can train a model yourself and load it like any other
 ([A wake word of your own](setup.md#a-wake-word-of-your-own)).
 
+**The easier way:** [wakesmith](https://github.com/HuskerMinion/wakesmith) trains microWakeWord models
+from a page in your browser, on an NVIDIA or Intel Arc GPU or the CPU, with synthetic speech plus takes
+you record and the clips your device kept, and scores each model on recordings it never trained on.
+This page is the manual path with microWakeWord's own tools.
+
 This is how we trained a two-word English wake word of our own. The tools are microWakeWord by Kevin Ahrendt and
 [Piper](https://github.com/OHF-Voice/piper1-gpl) with
 [piper-sample-generator](https://github.com/rhasspy/piper-sample-generator) by the Rhasspy and Open

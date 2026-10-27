@@ -79,6 +79,21 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🎚️ **Wake word scores, and wakesmith for words of your own** (v1.6.10). The setup page shows
+  each wake word's score as it comes, so you can see how close a word gets in your room and pick a
+  threshold that fits ([#314](https://github.com/HuskerMinion/techo5/pull/314)). To train a word
+  of your own, [wakesmith](https://github.com/HuskerMinion/wakesmith) does it on your own computer
+  from synthetic speech plus real voices: takes you record in the browser and the clips your devices
+  kept. [Training a wake word](#training-a-wake-word-of-your-own)
+- 🎵 **Now Playing follows several players** (v1.6.10). Pick more than one media player, and the
+  screen shows whichever is playing. Also in v1.6.10: the 2nd gen Show 8's JD9365 backlight comes
+  back from off ([#253](https://github.com/HuskerMinion/techo5/issues/253)), reminders speak on a
+  Home Assistant that isn't in English ([#294](https://github.com/HuskerMinion/techo5/issues/294)),
+  and Bluetooth proxy connections need an API encryption key.
+- 🇯🇵 **Japanese, Louder speech and Dim after idle** (v1.6.9). The screen in Japanese
+  ([#270](https://github.com/HuskerMinion/techo5/pull/270)), AirPlay 2 groups that play in step
+  ([#311](https://github.com/HuskerMinion/techo5/pull/311)), a **Louder speech** switch for replies
+  and announcements, **Dim after idle**, and four new skins.
 - 🎵 **AirPlay 2 on every device** (v1.6.8). With the AirPlay switch on, an iPhone can group the
   device with other AirPlay 2 speakers, like a HomePod or a Sonos. The **AirPlay 2** switch keeps it
   to classic AirPlay if a group doesn't play in step. Its firewall ports are open only while the
@@ -450,6 +465,19 @@ If the device's own models don't hear your voice well, Home Assistant's wake wor
 what your room really says, so a model you train fits it:
 [Wake word clips](docs/setup.md#wake-word-clips).
 
+### Training a wake word of your own
+
+For a word that isn't in the list, or one that hears your voice better, use
+**[wakesmith](https://github.com/HuskerMinion/wakesmith)**, our wake word trainer. It trains microWakeWord models
+(what TECHO5 runs) and openWakeWord models on your own computer, on an NVIDIA or Intel Arc GPU or the CPU alone, from a page in your browser. It mixes
+synthetic speech with real voices: takes you record in the browser, your device's saved
+[wake word clips](docs/setup.md#wake-word-clips), and Common Voice. Every model is scored on
+recordings it never trained on, so you can compare runs before you pick a cutoff. Load the result on
+the setup page like any other ([A wake word of your own](docs/setup.md#a-wake-word-of-your-own)),
+and the setup page's wake word scores show how it does in your room.
+[docs/training-wake-word.md](docs/training-wake-word.md) is the manual path with microWakeWord's own
+tools.
+
 On my Show 5 it hears me fine from across the room without raising my voice. With music playing I
 have to raise my voice, and sometimes still need to tap the screen or a button to get it to hear me.
 
@@ -531,7 +559,8 @@ the backup. Every step: **[docs/install-skylight.md](docs/install-skylight.md)**
 - [docs/building.md](docs/building.md): building it yourself: where every input comes from
   (`tools/fetch-inputs.py`), and the daemon, kernel, boot image and root filesystem builds, for each OS.
 - [tools/linux/README.md](tools/linux/README.md): the image tooling in detail.
-- [docs/training-wake-word.md](docs/training-wake-word.md): training a wake word of your own, in any language.
+- [docs/training-wake-word.md](docs/training-wake-word.md): training a wake word of your own, in any language,
+  by hand; [wakesmith](https://github.com/HuskerMinion/wakesmith) does it from a page in your browser.
 - [CONTRIBUTING.md](CONTRIBUTING.md): reporting problems, trying a build on your device, and pull requests.
 
 ## Sister projects
