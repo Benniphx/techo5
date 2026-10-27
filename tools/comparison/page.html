@@ -29,13 +29,13 @@
   --nf: #a9b5bb; --nf-bg: #263036; --prog: #a9b6f2; --prog-bg: #232a48; --na: #6c7980; color-scheme: dark; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.5; }
-.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+.wrap { margin: 0 auto; padding: 24px 16px 64px; } /* as wide as the window: the tables scroll inside their boxes when it's narrower */
 h1 { font-size: 28px; margin: 0 0 8px; text-wrap: balance; }
 h2 { font-size: 20px; margin: 36px 0 10px; }
 p { max-width: 75ch; }
 a { color: var(--accent); }
 .intro p { margin: 0 0 10px; }
-.banner { display: block; width: 100%; height: auto; aspect-ratio: 2600 / 470; border-radius: 14px; margin: 0 0 22px; background: #5b2a86; }
+.banner { display: block; width: 100%; max-width: 1280px; height: auto; aspect-ratio: 2600 / 470; border-radius: 14px; margin: 0 0 22px; background: #5b2a86; }
 .muted { color: var(--muted); }
 .label { font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 16px 0 12px; font-size: 14px; }
