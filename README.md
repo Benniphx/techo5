@@ -79,6 +79,15 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🖥️ **The 2nd gen Show 8 draws its screen on its GPU** (v1.6.11). The Show 8 2nd gen's
+  Mali GPU now draws the panel, which leaves the cores free, and an **Adaptive backlight** switch
+  turns the backlight down on dark screens and draws the pixels brighter by as much, so the screen
+  looks the same for less light
+  ([#308](https://github.com/HuskerMinion/techo5/pull/308)). Its camera no longer hangs on a
+  picture too big for the encoder's buffer ([#309](https://github.com/HuskerMinion/techo5/pull/309)).
+  Also in v1.6.11: the **Bluetooth Secure Connections** switch now really reaches the controller
+  ([#183](https://github.com/HuskerMinion/techo5/issues/183)), and the installers say when a unit
+  restarts partway, what was erased and how to finish by hand.
 - 🎚️ **Wake word scores, and wakesmith for words of your own** (v1.6.10). The setup page shows
   each wake word's score as it comes, so you can see how close a word gets in your room and pick a
   threshold that fits ([#314](https://github.com/HuskerMinion/techo5/pull/314)). To train a word
