@@ -172,5 +172,56 @@ class Whereabouts(unittest.TestCase):
         self.assertIn('RESCUE', inst.SCREEN_HINT)
 
 
+class FakeRelease:
+    def __init__(self, version, names):
+        self.version = version
+        self.names = names
+
+    def signed(self, name):
+        return {'sha256': 'x'} if name in self.names else None
+
+    def asset(self, name):
+        return '/work/' + name
+
+
+class BootImage(unittest.TestCase):
+    def setUp(self):
+        self.saved = (inst.fetch_json, inst.Release)
+        self.pages = {}
+        self.urls = []
+
+        def fetch_json(url):
+            self.urls.append(url)
+            page = int(url.split('&page=')[1])
+            if isinstance(self.pages.get(page), Exception):
+                raise self.pages[page]
+            return self.pages.get(page, [])
+        inst.fetch_json = fetch_json
+        inst.Release = lambda repo, tag, work: FakeRelease(tag, ['techo5-boot-crown-%s.img' % tag])
+
+    def tearDown(self):
+        inst.fetch_json, inst.Release = self.saved
+
+    def test_walks_past_the_first_page(self):
+        self.pages[1] = [{'tag_name': 'v1.2.%d' % n, 'assets': []} for n in range(30, 10, -1)]
+        self.pages[2] = [{'tag_name': 'v1.2.10', 'assets': [{'name': 'techo5-boot-crown-v1.2.10.img'}]}]
+        got = inst.boot_image(FakeRelease('v1.2.40', []), '/work', 'crown')
+        self.assertEqual(got, '/work/techo5-boot-crown-v1.2.10.img')
+        self.assertEqual(len(self.urls), 3)
+
+    def test_own_image_needs_no_list(self):
+        rel = FakeRelease('v1.2.40', ['techo5-boot-crown-v1.2.40.img'])
+        self.assertEqual(inst.boot_image(rel, '/work', 'crown'), '/work/techo5-boot-crown-v1.2.40.img')
+        self.assertEqual(self.urls, [])
+
+    def test_unreadable_list_says_so(self):
+        self.pages[1] = lib.urllib.error.HTTPError('u', 403, 'rate limit exceeded', {}, None)
+        with self.assertRaises(lib.Fail) as c:
+            inst.boot_image(FakeRelease('v1.2.40', []), '/work', 'crown')
+        self.assertIn('could not be read', str(c.exception))
+        self.assertIn('60 requests an hour', str(c.exception))
+        self.assertIn('--boot', str(c.exception))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

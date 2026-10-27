@@ -310,6 +310,19 @@ def boot_name(dev, tag):
     return 'techo5-boot-%s.img' % tag if dev == 'cronos' else 'techo5-boot-%s-%s.img' % (dev, tag)
 
 
+def list_releases():
+    """Every release GitHub lists, newest first. The list comes a page at a time, and there are far
+    more releases than one page holds, so it is read until a page comes back empty."""
+    releases = []
+    page = 1
+    while True:
+        got = fetch_json('https://api.github.com/repos/%s/releases?per_page=100&page=%d' % (REPO, page))
+        if not got:
+            return releases
+        releases += got
+        page += 1
+
+
 def boot_image(rel, work, dev):
     """The release's boot image for this generation, or, when it carries none (the boot image changes
     rarely, so most releases don't), the one from the newest earlier Show release that does."""
@@ -318,10 +331,14 @@ def boot_image(rel, work, dev):
         return rel.asset(name)
     want = show_version(rel.version)
     try:
-        releases = fetch_json('https://api.github.com/repos/%s/releases?per_page=100' % REPO)
+        releases = list_releases()
     except Exception as e:
-        fail('release %s has no boot image, and the list of earlier releases could not be read: %s'
-             % (rel.version, e))
+        code = getattr(e, 'code', None)
+        hint = (' GitHub allows an anonymous computer only 60 requests an hour, so wait a while and run '
+                'this again.') if code in (403, 429) else ''
+        fail('release %s has no boot image of its own, and the GitHub list of earlier releases could not '
+             'be read (%s).%s Run this again later, or pass the boot image with --boot.'
+             % (rel.version, e, hint))
     for r in releases:
         v = show_version(r['tag_name'])
         name = boot_name(dev, r['tag_name'])

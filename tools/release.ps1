@@ -423,6 +423,42 @@ try {
         Copy-Item $img.Path $named -Force
         $bootAssets += $named
     }
+    # install-show.py looks a release's boot image up in that release's own signed manifest, and walks
+    # back through older releases when it is not there. That walk is bounded (GitHub lists releases a
+    # page at a time), so every release carries the Show boot images itself: one this release does not
+    # build is copied forward from the newest earlier release whose signed manifest names it, after its
+    # SHA-256 is checked against that manifest.
+    $carried = @($bootAssets | ForEach-Object { Split-Path -Leaf $_ })
+    $earlier = $null
+    foreach ($n in @("techo5-boot-$Version.img", "techo5-boot-checkers-$Version.img", "techo5-boot-crown-$Version.img")) {
+        if ($carried -contains $n) { continue }
+        if ($null -eq $earlier) {
+            $earlier = @(& gh api "repos/$repo/releases?per_page=100" --paginate -q '.[].tag_name' | Where-Object { $_ -ne $Version })
+            if ($LASTEXITCODE -ne 0) { throw 'could not list the earlier releases to copy boot images from' }
+        }
+        $generic = $n.Replace($Version, '*')
+        $found = $false
+        foreach ($tag in $earlier) {
+            $old = $generic.Replace('*', $tag)
+            $m = (& gh release download $tag --repo $repo -p manifest.json -O - 2>$null) -join "`n"
+            if ($LASTEXITCODE -ne 0 -or -not $m) { continue }
+            $entry = ($m | ConvertFrom-Json).assets.$old
+            if (-not $entry) { continue }
+            $dir = Join-Path $bin "carry-$tag"
+            New-Item -ItemType Directory -Force $dir | Out-Null
+            & gh release download $tag --repo $repo -p $old -D $dir --clobber
+            if ($LASTEXITCODE -ne 0) { throw "could not download $old from $tag" }
+            $got = (Get-FileHash -Algorithm SHA256 (Join-Path $dir $old)).Hash.ToLower()
+            if ($got -ne $entry.sha256) { throw "$old from $tag is not the one its signed manifest names ($got, not $($entry.sha256))" }
+            $named = Join-Path $bin $n
+            Copy-Item (Join-Path $dir $old) $named -Force
+            $bootAssets += $named
+            Write-Host "== $n`: copied forward from $tag (sha256 $got)"
+            $found = $true
+            break
+        }
+        if (-not $found) { throw "no earlier release names $generic in its signed manifest, and this release builds none: give it with -Boot, -CheckersBoot or -CrownBoot" }
+    }
     # athena's store image: what install-athena.py writes to a new unit's system partition. The rescue
     # environment on it takes SSH keys from the image (root/.ssh/authorized_keys), so a published one
     # must carry none; a key line in the image is an "ssh-<type> AAAA" string anywhere in its blocks.
@@ -485,6 +521,14 @@ try {
             $there = @(& gh release view $pinTag --repo $repo --json assets -q '.assets[].name')
             if ($there -notcontains $p.Asset) { throw "$($p.Pin)'s $($p.Asset) is not in release $pinTag" }
         }
+    }
+
+    # Every Show must have a boot image named in this manifest, or install-show.py (or the athena and
+    # Skylight installers) fails for it on a release that was published without one.
+    $have = @($bootAssets | ForEach-Object { Split-Path -Leaf $_ })
+    foreach ($n in @("techo5-boot-$Version.img", "techo5-boot-checkers-$Version.img", "techo5-boot-crown-$Version.img",
+                     "techo5-boot-athena-$Version.img", "techo5-boot-skylight-$Version.img")) {
+        if ($have -notcontains $n) { throw "this release would be published without $n in its signed manifest: -AthenaBoot and -SkylightBoot are needed on every release" }
     }
 
     Write-Host "== manifest"
