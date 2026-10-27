@@ -151,6 +151,17 @@ These steps follow [@proffalken](https://github.com/proffalken)'s [write-up](htt
 of installing TECHO5 Dot from Linux, which found the exact Fire OS build that avoids SELinux boot
 loops. Every command runs the same on Windows, Linux and macOS once the Dot is unlocked.
 
+**Files you need**, and where each comes from:
+- The **amonet-biscuit release ZIP**, attached to the
+  [XDA thread](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-dot-2nd-gen-2016-biscuit.4761416/)
+  (free XDA account needed). It holds `fastbrick.sh`, `fastbrick.bat`/`fastbrick.ps1`, `boot-root.zip` and
+  the files they need. The unlock puts TWRP on the Dot.
+- The **Fire OS update file**
+  `update-kindle-biscuit_puffin-NS6574_user_7623_0013121734532.bin`, which the same thread links.
+- `boot-root.zip`, from inside the release ZIP (step 3).
+- The **TECHO5 Dot installer**, from `git clone https://github.com/HuskerMinion/techo5-dot` (step 6). It
+  downloads the rest itself.
+
 1. **Unlock it with amonet-biscuit.** Follow
    [[UNLOCK][ROOT][TWRP][UNBRICK] Echo Dot 2nd Gen / 2016 (biscuit)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-dot-2nd-gen-2016-biscuit.4761416/)
    (source: [R0rt1z2/amonet, branch mt8163-biscuit](https://github.com/R0rt1z2/amonet/tree/mt8163-biscuit)).
@@ -196,8 +207,9 @@ loops. Every command runs the same on Windows, Linux and macOS once the Dot is u
    ```
    On Windows the key is `%USERPROFILE%\.android\adbkey.pub`. (Run `adb devices` once first if the
    file doesn't exist yet.)
-5. **Join Wi-Fi once in Fire OS.** Complete the Alexa app's Wi-Fi step; skipping the rest of the Alexa
-   setup is fine. The installer reads the saved network. (Skip this and it asks for a network instead.)
+5. **Join Wi-Fi once in Fire OS (optional).** Complete the Alexa app's Wi-Fi step; skipping the rest of
+   the Alexa setup is fine. The installer reads the saved network. You can skip this step and give the
+   network to the installer instead with `--wifi "<network name>"` (it asks for the passphrase).
    *Check:* `adb devices` lists the Dot as `device`, and `adb shell id` says `uid=0`.
 6. **Install TECHO5 Dot.**
    ```
