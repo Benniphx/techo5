@@ -7,6 +7,8 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"net"
+	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -150,6 +152,11 @@ func build() *Proxy {
 
 	b.connect.Set(config.Get().Bluetooth.ProxyConnections)
 	b.connect.OnCommand = func(on bool) {
+		if on && !linkKeyed() {
+			b.connect.Set(false)
+			slog.Warn("bluetooth proxy connections need an API encryption key first")
+			return
+		}
 		b.connect.Set(on)
 		// Saved first: until it is, a connection asked for would still be let in, after the release.
 		if err := config.Set().Bluetooth().ProxyConnections(on); err != nil {
@@ -205,9 +212,21 @@ func (b *Proxy) SetEnabled(on bool) { b.enable.OnCommand(on) }
 func (b *Proxy) Enabled() bool { return Here && config.Get().Bluetooth.Proxy }
 
 // ConnectionsEnabled reports whether Home Assistant may connect to devices through the proxy: the proxy on,
-// its connections switch on, and a GATT client to lend.
+// its connections switch on, a GATT client to lend, and the Home Assistant link keyed.
 func (b *Proxy) ConnectionsEnabled() bool {
-	return b.Enabled() && openCentral != nil && config.Get().Bluetooth.ProxyConnections
+	return b.Enabled() && openCentral != nil && config.Get().Bluetooth.ProxyConnections && linkKeyed()
+}
+
+// linkKeyed reports whether the Home Assistant link has an encryption key of its own. Connections are
+// lent only then: over a link in the clear, anyone who can reach the device's port could read and write
+// the Bluetooth devices around it. A variable, for tests.
+var linkKeyed = func() bool {
+	b, err := os.ReadFile(layout.KeyPath)
+	if err != nil {
+		return false
+	}
+	k, err := esphome.ParsePSK(strings.TrimSpace(string(b)))
+	return err == nil && !k.IsZero()
 }
 
 // Reports is how many advertisements the radio has heard, for diagnostics.

@@ -48,6 +48,9 @@ func pictureSource(src string) (live bool, path string, err error) {
 	lower := strings.ToLower(src) // a scheme in any case, as the video player takes it
 	switch {
 	case strings.HasPrefix(src, "camera."):
+		if !CameraEntity(src) {
+			return false, "", fmt.Errorf("picture %q: not a camera's entity ID", src)
+		}
 		return true, src, nil
 	case strings.HasPrefix(src, "image."):
 		return false, "/api/image_proxy/" + src, nil

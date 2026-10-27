@@ -427,7 +427,9 @@ captured login to the same page for a few minutes, and could see the pictures an
   switch in Home Assistant, off by default, lets Home Assistant connect to BLE devices through the
   device, up to three at a time, the way an ESP32 proxy does: an integration that controls a device (a
   humidifier, a lock, a light) can reach it, not only read what it advertises. It works only while the
-  **Bluetooth proxy** is on too. With it on, Home Assistant may route any such device through this one
+  **Bluetooth proxy** is on too, and only when Home Assistant's link to the device has an
+  encryption key (the API encryption key you added it with): in the clear, anyone on the network could
+  reach those devices. With it on, Home Assistant may route any such device through this one
   whenever it hears it best, and many BLE devices take one connection only, so leave it off unless a
   device needs it. Connections end when Home Assistant disconnects or either switch is turned off.
   Scanning pauses for the second or two a connection takes. Pairing (bonding) and clearing the cache
