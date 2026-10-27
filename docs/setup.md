@@ -500,10 +500,13 @@ captured login to the same page for a few minutes, and could see the pictures an
   are not named here. The Spot has no AirPlay or Spotify Connect, so those never show there. Anyone
   who can play to the device can put a title there, and the titles go into Home Assistant's history
   and logbook like any sensor's.
-- **Now playing follows** (also the **Now Playing follows** select in Home Assistant): another of Home
-  Assistant's media players, a Sonos in the same room for example. While this device plays nothing of
-  its own, Now Playing shows that player's song and cover, and its buttons control it. **Done** puts it
-  away until the next song without stopping it. Needs the home_assistant action (address and token).
+- **Now playing follows** (also the **Now Playing follows** select in Home Assistant): other Home
+  Assistant media players, a Sonos in the same room for example. Tick as many as you like on the
+  screen; the select in Home Assistant picks one and shows the first one ticked. While this device
+  plays nothing of its own, Now Playing shows a followed player's song and cover, and its buttons
+  control it. With several playing, it shows the one that started last, and when that one stops,
+  another that is still playing. **Done** puts it away until the next song without stopping it. Needs
+  the home_assistant action (address and token).
   On the Spot, a swipe across a followed player's page skips to the next or previous song. **Stop**
   on a followed page puts it away and leaves the other player playing.
 - **Lyrics** (Show, also a switch in Home Assistant, off by default): the words of the song on Now

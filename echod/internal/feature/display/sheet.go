@@ -751,11 +751,8 @@ func pickerForRaw(id string, sv sheetView) (pickerView, bool) {
 	case "awayoff":
 		return pickerView{title: tr("screen_off_when_nobody_is_near"), opts: awayLabels(), cur: awayIndex()}, true
 	case "follow":
-		_, names, cur := home.Get().FollowChoices()
-		if sv.st.demo {
-			names = demoPlayers(names)
-		}
-		return pickerView{title: tr("now_playing_follows"), opts: names, cur: cur}, len(names) > 0
+		p := followPicker(sv.st.demo)
+		return p, len(p.opts) > 0
 	case "screenlang":
 		return pickerView{title: tr("screen_language"), opts: langOptions, cur: langIndex()}, true
 	case "newtimer":
@@ -926,9 +923,8 @@ func (d *Display) choose(id string, i int) {
 			safe.Go("presence wait from the screen", func() { presence.Get().SetScreenOff(m) })
 		}
 	case "follow":
-		if entities, _, _ := home.Get().FollowChoices(); i < len(entities) {
-			e := entities[i]
-			safe.Go("followed player from the screen", func() { home.Get().ChooseFollow(e) })
+		if chooseFollow(i) {
+			d.openPicker("follow") // stays open, for ticking another
 		}
 	case "weather":
 		if entities, _, _ := home.Get().WeatherChoices(); i < len(entities) {
