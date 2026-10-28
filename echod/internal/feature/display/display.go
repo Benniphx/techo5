@@ -2789,13 +2789,7 @@ func (d *Display) frame() (next time.Duration) {
 	wait := home.Get().SlideshowIdleTimeout()
 	d.mu.Lock()
 	d.clockUp = boring && s.sunrise == 0 && s.slideshowScreensaver == nil && !s.redClock
-	if !boring {
-		d.slideshowIdleSince = time.Time{}
-	} else if d.slideshowIdleSince.IsZero() || (s.cue != "" && now.Sub(d.slideshowIdleSince) < wait) {
-		// A turn under a cue is somebody at the screen, as any turn is: the screensaver's wait starts
-		// again from it. One already up stays up under the light, as any page under a cue does.
-		d.slideshowIdleSince = now
-	}
+	d.slideshowIdleSince = saverIdleSince(d.slideshowIdleSince, now, boring, s.cue != "", presence.Present(), wait)
 	idleSince := d.slideshowIdleSince
 	d.mu.Unlock()
 	// The clock's next-up card, only for a frame that draws the clock with an empty glance strip.

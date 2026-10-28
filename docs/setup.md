@@ -90,7 +90,8 @@ usual one, and the steps below start with it.
    can see them, the device can too.
 3. **On the device**, swipe down for Settings, then **Display**:
    - **Slideshow**: **Background** puts the photos behind the clock. **Screensaver** takes over the
-     whole screen after a while with nothing happening.
+     whole screen after a while with nothing happening. With **Presence detection** on, it waits
+     until nobody has been near for that long, and somebody coming near ends it.
    - **Photo folder**: pick the folder, then **Use this folder**.
    - **Time per photo**, **Shuffle photos** and **Include subfolders** are optional.
    - **Show whole photo** shows each photo in full, with a blurred copy of it filling the sides.
@@ -825,7 +826,8 @@ device's fonts folder over SSH ([Set the SSH authorized keys](actions.md#set-the
   somebody across the room is seen, at the cost of more false triggers. It was named Presence before; on
   a device already set up its entity ID still ends in `_presence`, so automations keep working.
   **Screen off when nobody is near** (5 minutes to start with, or Never) puts the screen out once the
-  room has been empty that long and lights it again when somebody comes near. Never at night, and never during a conversation,
+  room has been empty that long and lights it again when somebody comes near. With Presence detection
+  on, the screensaver also waits for an empty room, and ends when somebody comes near. Never at night, and never during a conversation,
   a call, an alarm or with the settings open. Nothing the camera sees is kept or sent: a couple of
   times a second the newest frame is compared with the last as a small grid of brightness, on the
   device. The mute button and the lens shutter stop it, and then the screen is left as it is. On a
