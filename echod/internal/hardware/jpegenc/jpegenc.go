@@ -178,6 +178,9 @@ type session struct {
 	broken   bool // failed a picture: closed once nobody uses it, and opened afresh next time
 	users    int
 	used     time.Time
+	// planes are the v4l2_plane arrays the kernel is handed by address in a buffer's m, a uintptr. They
+	// live here, on the heap with the session, because a goroutine's stack can move under a uintptr.
+	planes [4]plane
 }
 
 var (
@@ -371,13 +374,14 @@ func (s *session) mapBuffer(typ uint32) ([]byte, error) {
 	if err := ioctl(s.fd, vidiocReqbufs, unsafe.Pointer(&rb)); err != nil || rb.count < 1 {
 		return nil, fmt.Errorf("jpegenc: buffers: %v (%d)", err, rb.count)
 	}
-	var p [1]plane
-	b := buffer{typ: typ, memory: memoryMmap, m: uintptr(unsafe.Pointer(&p[0])), length: 1}
+	p := &s.planes[0]
+	*p = plane{}
+	b := buffer{typ: typ, memory: memoryMmap, m: uintptr(unsafe.Pointer(p)), length: 1}
 	if err := ioctl(s.fd, vidiocQuerybuf, unsafe.Pointer(&b)); err != nil {
 		return nil, fmt.Errorf("jpegenc: query buffer: %w", err)
 	}
-	runtime.KeepAlive(&p)
-	m, err := unix.Mmap(s.fd, int64(uint32(p[0].m)), int(p[0].length), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	runtime.KeepAlive(s)
+	m, err := unix.Mmap(s.fd, int64(uint32(p.m)), int(p.length), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
 	if err != nil {
 		return nil, fmt.Errorf("jpegenc: map: %w", err)
 	}
@@ -386,12 +390,13 @@ func (s *session) mapBuffer(typ uint32) ([]byte, error) {
 
 // encode queues the picture in s.in and an empty JPEG buffer, and waits for the JPEG.
 func (s *session) encode() ([]byte, error) {
-	var pin, pout [1]plane
-	pin[0].bytesused = uint32(s.w * s.h * 2)
-	pin[0].length = uint32(len(s.in))
-	pout[0].length = uint32(len(s.out))
-	in := buffer{typ: bufTypeOutputMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(&pin[0])), length: 1, field: fieldNone}
-	out := buffer{typ: bufTypeCaptureMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(&pout[0])), length: 1}
+	pin, pout, dout, din := &s.planes[0], &s.planes[1], &s.planes[2], &s.planes[3]
+	s.planes = [4]plane{}
+	pin.bytesused = uint32(s.w * s.h * 2)
+	pin.length = uint32(len(s.in))
+	pout.length = uint32(len(s.out))
+	in := buffer{typ: bufTypeOutputMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(pin)), length: 1, field: fieldNone}
+	out := buffer{typ: bufTypeCaptureMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(pout)), length: 1}
 	if err := ioctl(s.fd, vidiocQbuf, unsafe.Pointer(&out)); err != nil {
 		return nil, fmt.Errorf("jpegenc: queue jpeg buffer: %w", err)
 	}
@@ -412,24 +417,19 @@ func (s *session) encode() ([]byte, error) {
 		}
 		break
 	}
-	var dout [1]plane
-	got := buffer{typ: bufTypeCaptureMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(&dout[0])), length: 1}
+	got := buffer{typ: bufTypeCaptureMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(dout)), length: 1}
 	if err := ioctl(s.fd, vidiocDqbuf, unsafe.Pointer(&got)); err != nil {
 		return nil, fmt.Errorf("jpegenc: take jpeg: %w", err)
 	}
-	var din [1]plane
-	done := buffer{typ: bufTypeOutputMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(&din[0])), length: 1}
+	done := buffer{typ: bufTypeOutputMplane, memory: memoryMmap, m: uintptr(unsafe.Pointer(din)), length: 1}
 	if err := ioctl(s.fd, vidiocDqbuf, unsafe.Pointer(&done)); err != nil {
 		return nil, fmt.Errorf("jpegenc: take picture back: %w", err)
 	}
-	runtime.KeepAlive(&pin)
-	runtime.KeepAlive(&pout)
-	runtime.KeepAlive(&dout)
-	runtime.KeepAlive(&din)
+	runtime.KeepAlive(s)
 	if got.flags&bufFlagError != 0 {
 		return nil, errors.New("jpegenc: the encoder flagged the picture")
 	}
-	return jpegOf(s.out, dout[0].bytesused, dout[0].dataOffset)
+	return jpegOf(s.out, dout.bytesused, dout.dataOffset)
 }
 
 // jpegOf copies the JPEG out of the mapped buffer: bytesused counts from the start of the plane, the
