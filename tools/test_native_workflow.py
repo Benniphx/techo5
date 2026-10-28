@@ -8,7 +8,7 @@ import unittest
 
 
 class NativeWorkflowTests(unittest.TestCase):
-    def test_complete_image_build_produces_video_decoder_before_staging(self):
+    def test_complete_image_build_produces_required_helpers_before_staging(self):
         workflow = (Path(__file__).resolve().parents[1] / '.github/workflows/native-daily.yml').read_text()
         step = workflow.split('      - name: Build complete experimental Show firmware\n', 1)[1]
         command = textwrap.dedent(step.split('        run: |\n', 1)[1].split('      - uses:', 1)[0])
@@ -26,10 +26,18 @@ class NativeWorkflowTests(unittest.TestCase):
             for helper in ('aec', 'ffmpeg'):
                 (root / f'tools/linux/build-{helper}.sh').write_text(
                     f"printf binary > bin/techo5-{helper}-arm\n")
+            (root / 'tools/linux/build-shairport-sync.sh').write_text(
+                "printf binary > bin/techo5-shairport-sync-arm\nprintf binary > bin/techo5-nqptp-arm\n")
+            (root / 'tools/linux/build-tailscaled.sh').write_text(
+                "printf binary > bin/tailscaled-arm64\nprintf license > bin/tailscaled-arm64.LICENSE\n")
             (root / 'tools/linux/deploy-rootfs.sh').write_text(textwrap.dedent('''\
                 set -eu
                 test -s bin/techo5-aec-arm
                 test -s bin/techo5-ffmpeg-arm
+                test -s bin/techo5-shairport-sync-arm
+                test -s bin/techo5-nqptp-arm
+                test -s bin/tailscaled-arm64
+                test -s bin/tailscaled-arm64.LICENSE
                 printf daemon > bin/echod-arm
                 printf metadata > bin/build-info.json
                 '''))

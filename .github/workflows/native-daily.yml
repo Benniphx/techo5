@@ -75,7 +75,7 @@ jobs:
         if: steps.prepare.outputs.changed == 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y qemu-user-static binfmt-support uidmap
+          sudo apt-get install -y qemu-user-static binfmt-support uidmap autoconf automake libtool pkg-config xxd libplist-utils xz-utils
           sudo update-binfmts --enable qemu-arm
           # Ubuntu's AppArmor namespace restriction applies to this disposable
           # GitHub runner only. No developer or device host is changed.
@@ -87,6 +87,17 @@ jobs:
             sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 "$runner_user"
           fi
           test -e /proc/sys/fs/binfmt_misc/qemu-arm
+          # Existing upstream AirPlay builders cross-compile with this verified
+          # compiler in the disposable runner; no device or signing job uses it.
+          zig_dir="$RUNNER_TEMP/techo5-zig-0.15.2"
+          mkdir -p "$zig_dir"
+          curl --fail --silent --show-error --location \
+            --output "$zig_dir/compiler.tar.xz" \
+            https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+          printf '%s  %s\n' 02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239 \
+            "$zig_dir/compiler.tar.xz" | sha256sum -c -
+          tar -xJf "$zig_dir/compiler.tar.xz" -C "$zig_dir"
+          echo "$zig_dir/zig-x86_64-linux-0.15.2" >> "$GITHUB_PATH"
       - name: Build complete experimental Show firmware
         if: steps.prepare.outputs.changed == 'true'
         env:
@@ -99,6 +110,12 @@ jobs:
           chmod +x "$HOME/apk/apk.static"
           bash tools/linux/build-aec.sh
           test -s bin/techo5-aec-arm
+          bash tools/linux/build-shairport-sync.sh
+          test -s bin/techo5-shairport-sync-arm
+          test -s bin/techo5-nqptp-arm
+          bash tools/linux/build-tailscaled.sh
+          test -s bin/tailscaled-arm64
+          test -s bin/tailscaled-arm64.LICENSE
           bash tools/linux/build-ffmpeg.sh
           test -s bin/techo5-ffmpeg-arm
           # No PREBUILT_DAEMON override: build directly from the tested candidate.
