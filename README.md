@@ -79,6 +79,14 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 📡 **The Panel is a Bluetooth proxy, and AirPlay can set the volume** (v1.6.12). On TECHO5 Panel,
+  Android's Bluetooth now feeds Home Assistant's Bluetooth proxy, with one active connection lent
+  through it ([#278](https://github.com/HuskerMinion/techo5/pull/278)); the Panel app also bridges the
+  front camera and, on the JBL Link View, the raw microphone. On the Echos, **AirPlay sets the volume**
+  makes an iPhone's or Mac's AirPlay slider the device's own volume
+  ([#312](https://github.com/HuskerMinion/techo5/issues/312)), and Home Assistant can turn an alarm
+  off and back on without deleting it (`alarm_turn_off` / `alarm_turn_on`,
+  [#317](https://github.com/HuskerMinion/techo5/issues/317)).
 - 🖥️ **The 2nd gen Show 8 draws its screen on its GPU** (v1.6.11). The Show 8 2nd gen's
   Mali GPU now draws the panel, which leaves the cores free, and an **Adaptive backlight** switch
   turns the backlight down on dark screens and draws the pixels brighter by as much, so the screen
