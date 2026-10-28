@@ -24,6 +24,14 @@ func TestDeviceUpdateChannels(t *testing.T) {
 	if Stable.Label() != "stable" || Dev.Label() != "dev" || releaseKey != upstreamReleaseKey {
 		t.Fatal("upstream device labels or signing key changed")
 	}
+	if !Published() {
+		for _, c := range channels {
+			if c.URL() != "" {
+				t.Fatalf("unpublished app build offers firmware URL %q", c.URL())
+			}
+		}
+		return
+	}
 	if Stable.URL() != releases+"/latest/download/manifest.json" || Dev.URL() != releases+"/download/dev/manifest.json" {
 		t.Fatal("upstream device channel paths changed")
 	}
