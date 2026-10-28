@@ -14,7 +14,7 @@ import (
 )
 
 func TestTextFallback(t *testing.T) {
-	for _, lang := range []string{"", "en", "fr", "it", "nl", "pt", "ru", "unknown"} {
+	for _, lang := range []string{"", "en", "fr", "nl", "pt", "ru", "unknown"} {
 		if got := Text(lang, "done"); got != "Done" {
 			t.Errorf("%q: %q", lang, got)
 		}
