@@ -269,6 +269,7 @@ func withStreaming(rows []settingRow) []settingRow {
 				settingRow{id: "airplay2", label: "AirPlay 2", sub: tr("ui_group_it_with_other_airplay_2_speakers"), kind: ctlToggle, on: !c.AirPlayClassic})
 		}
 		rows = append(rows,
+			settingRow{id: "airplayvolume", label: "AirPlay sets the volume", sub: tr("ui_the_iphone_slider_is_the_device_s_volume"), kind: ctlToggle, on: c.AirPlaySetsVolume},
 			settingRow{id: "spotify", label: "Spotify Connect", sub: tr("play_to_it_from_the_spotify_app_premium"), kind: ctlToggle, on: c.Spotify})
 	}
 	return append(rows,
@@ -1202,6 +1203,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		streaming.Get().SetAirPlay(!config.Get().Streaming.AirPlay)
 	case "airplay2":
 		streaming.Get().SetAirPlay2(config.Get().Streaming.AirPlayClassic)
+	case "airplayvolume":
+		streaming.Get().SetAirPlaySetsVolume(!config.Get().Streaming.AirPlaySetsVolume)
 	case "spotify":
 		streaming.Get().SetSpotify(!config.Get().Streaming.Spotify)
 	case "dlna":

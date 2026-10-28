@@ -49,6 +49,7 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 		safe.Go("airplay metadata", func() { readAirPlayMetadata(ctx, meta) })
 	}
 	conf := filepath.Join(runDir, "shairport-sync.conf")
+	setsVolume := config.Get().Streaming.AirPlaySetsVolume
 	// The sender is reached only while this receiver runs, and a track left paused for it has nothing to
 	// wait for once it stops: the session goes with shairport-sync, and no end of it will come.
 	defer func() {
@@ -58,7 +59,7 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 	safe.Go("airplay audio", func() { pump(ctx, home.AirPlayName, r, nil, airplayStarts) })
 	if why := airplay2Missing(); why != "" {
 		slog.Info("streaming: AirPlay is the classic receiver here", "why", why)
-	} else if writeConf(conf, shairportConf(name, meta, true)) {
+	} else if writeConf(conf, shairportConf(name, meta, true, setsVolume)) {
 		// Its senders are let in through the firewall only while it runs (airplay2_door.go).
 		airplay2Door(true)
 		failed := runAirPlay2(ctx, conf, w, cred)
@@ -68,7 +69,7 @@ func runAirPlayReceiver(ctx context.Context, name string) {
 		}
 		slog.Warn("streaming: AirPlay 2 would not start; the classic receiver takes over until AirPlay starts again")
 	}
-	if writeConf(conf, shairportConf(name, meta, false)) {
+	if writeConf(conf, shairportConf(name, meta, false, setsVolume)) {
 		supervise(ctx, program{name: "shairport-sync", path: shairportPath, args: []string{"-c", conf}, stdout: w, cred: cred})
 	}
 }
@@ -203,19 +204,24 @@ func airplayPending(pending time.Duration) {
 // shairportConf is shairport-sync's configuration: the name phones show, the audio to standard output
 // as 16-bit stereo at 44.1 kHz, and what is playing to the metadata pipe, with its cover where there is
 // a screen to show it. Its volume stays its own: the phone's slider scales what it sends, and the
-// device's volume is applied on top as for anything else. A second sender is turned away while one
+// device's volume is applied on top as for anything else. With AirPlay sets the volume (setsVolume,
+// #312) shairport-sync is told to ignore the slider and pass the audio as it comes, and the slider
+// moves the device's volume instead (airplayvolume.go); it still reports every move of it (pvol). A second sender is turned away while one
 // plays (allow_session_interruption is left off): the metadata then tells of one session at a time,
 // which airplaySession counts on, and allows for the end of one coming late.
 //
 // The name is cut to fit the mDNS instance it is advertised as (airplayName). airplay2 is the configuration
 // for the AirPlay 2 receiver: AirPlay 2 only, so it never quietly falls back to classic AirPlay under a name
 // with "(Classic)" after it, and earlier by airplay2Offset.
-func shairportConf(name, metaPipe string, airplay2 bool) string {
+func shairportConf(name, metaPipe string, airplay2, setsVolume bool) string {
 	name = airplayName(name)
 	listen := fmt.Sprintf("\tport = %d;\n\tudp_port_base = %d;\n\tudp_port_range = %d;\n", airplayPort, airplayUDPBase, airplayUDPCount)
 	if airplay2 {
 		listen = fmt.Sprintf("\tservice_type = \"airplay2\";\n\taudio_backend_latency_offset_in_seconds = %.3f;\n", airplay2Offset.Seconds()) +
 			fmt.Sprintf("\taudio_backend_buffer_desired_length_in_seconds = %.3f;\n", airplayLead.Seconds())
+	}
+	if setsVolume {
+		listen += "\tignore_volume_control = \"yes\";\n"
 	}
 	return fmt.Sprintf(`general = {
 	name = %s;
@@ -301,6 +307,7 @@ func readAirPlayMetadata(ctx context.Context, path string) {
 	session := &airplaySession{remote: airplayRemote, starts: airplayStarts,
 		paused: func(paused bool) { media.Get().ReceiverPaused(home.AirPlayName, paused) },
 		gone:   func() { media.Get().ReceiverGone(home.AirPlayName) },
+		volume: airplayVolume,
 	}
 	followAirPlayMetadata(f, func(title, artist, album string) {
 		media.Get().SetReceivedTrack(home.AirPlayName, title, artist, album)
@@ -340,6 +347,7 @@ type airplaySession struct {
 	next   dacpSender        // what the session being set up has said of its sender so far
 	from   netip.Addr        // where the open session came from (clip), as it was given
 	open   bool              // a session has begun (pbeg) and not ended (pend, disc)
+	volume func(data string) // the sender's volume slider moved (pvol), told the item's data as it comes
 	kept   *time.Timer       // the wait for a sender that ended its session as it paused, if one is running
 }
 
@@ -376,6 +384,10 @@ func (s *airplaySession) heard(typ, code string, d []byte) (another bool) {
 		// A session announced: whatever was said of a sender before it is from a setup that never
 		// played.
 		s.next = dacpSender{}
+	case code == "pvol":
+		if s.volume != nil {
+			s.volume(string(d))
+		}
 	case code == "acre":
 		s.next.token = string(d)
 	case code == "daid":
@@ -693,7 +705,7 @@ func (e *readErr) Read(p []byte) (int, error) {
 // rest) say all they do by coming.
 func usesData(code string) bool {
 	switch code {
-	case "acre", "daid", "clip", "dapo", "disc":
+	case "acre", "daid", "clip", "dapo", "disc", "pvol":
 		return true
 	}
 	return false

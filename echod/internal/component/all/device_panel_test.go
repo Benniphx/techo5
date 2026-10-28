@@ -15,7 +15,7 @@ func init() { panelscreen.DialWait = 0 }
 // radio, so there is no proxy (bluetooth.Here) and no Bluetooth audio (btaudio stands down on
 // Android); and the tablet's camera is Android's, so there is no camera page (security's cameraPage).
 var notOnPanel = []string{
-	"update_channel", "airplay", "spotify_connect",
+	"update_channel", "airplay", "airplay_sets_volume", "spotify_connect",
 	"video", "dlna_video", "video_state", "video_title", "video_error", "camera_live", "camera_sound",
 	"bluetooth_proxy", "bluetooth_proxy_connections", "ble_advertisements",
 	"bluetooth_audio", "bluetooth_disconnect", "bluetooth_forget", "bluetooth_forget_phones", "bluetooth_pairing",

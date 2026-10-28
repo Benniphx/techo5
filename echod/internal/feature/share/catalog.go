@@ -40,7 +40,7 @@ type group struct {
 // weather, the rain map, lyrics). The test in component/all keeps them off (neverShared).
 var groups = []group{
 	{"Speaker", []string{"bass", "treble", "speaker_eq", "night_volume", "home_assistant_sounds", "louder_speech",
-		"media_duck_level", "duck_on_near_miss", "bluetooth_sets_volume"}},
+		"media_duck_level", "duck_on_near_miss", "bluetooth_sets_volume", "airplay_sets_volume"}},
 	{"Voice: first wake word", []string{"thinking_effect_1", "replying_effect_1", "reply_delivery_1",
 		"reply_buffer_1", "max_think_1"}},
 	{"Voice: second wake word", []string{"thinking_effect_2", "replying_effect_2", "reply_delivery_2",

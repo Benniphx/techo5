@@ -19,6 +19,7 @@ var privacyish = regexp.MustCompile(`(^|_)(ssh|remote|adb|tls|lock|talk|clips|re
 
 // harmless is every entity whose name says privacy or security and that is not: the API may change it.
 var harmless = []string{
+	"airplay_sets_volume",            // whose volume a sender's slider is, with AirPlay itself read-only
 	"phone_ring_sound",               // how a call rings
 	"bluetooth_reconnect_phone",      // reconnect the phone already paired
 	"microphone_noise_reduction",     // how much the microphones' own noise is taken out
