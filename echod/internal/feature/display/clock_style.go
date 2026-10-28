@@ -36,6 +36,9 @@ const (
 	styleWorld     = "world"
 	styleAgenda    = "agenda"
 	styleGlow      = "glow"
+	styleNixie     = "nixie"
+	styleStack     = "stack"
+	styleOverlap   = "overlap"
 )
 
 // clockStyles are the choices, as the screen and Home Assistant name them, with what the config keeps.
@@ -54,6 +57,9 @@ var clockStyles = []struct {
 	{"World", styleWorld},
 	{"Agenda", styleAgenda},
 	{"Glow", styleGlow},
+	{"Nixie", styleNixie},
+	{"Stack", styleStack},
+	{"Overlap", styleOverlap},
 }
 
 func clockStyleIndex() int {
@@ -79,12 +85,12 @@ func clockStyleOptions() []string {
 
 // clockStyleRow is the setting on the screen, under Display.
 func clockStyleRow() settingRow {
-	return settingRow{id: "clockstyle", label: "Clock style", sub: "How the clock looks all day", kind: ctlChoice,
+	return settingRow{id: "clockstyle", label: tr("clock_style_label"), sub: tr("clock_style_description"), kind: ctlChoice,
 		value: clockStyles[clockStyleIndex()].label}
 }
 
 func clockStylePicker() (pickerView, bool) {
-	return pickerView{title: "Clock style", opts: clockStyleOptions(), cur: clockStyleIndex()}, true
+	return pickerView{title: tr("clock_style_label"), opts: clockStyleOptions(), cur: clockStyleIndex()}, true
 }
 
 // setClockStyle saves the clock's look and shows it at once, so it can be chosen while looking.
@@ -208,6 +214,22 @@ var worldZones struct {
 	locs map[string]*time.Location
 }
 
+// cachedZone is a time zone by its name, read once and kept with the style's (worldZones): the World
+// clock plugin's tiles (tessera_plugins.go) ask for theirs every frame too. Nil for a name not known.
+func cachedZone(z string) *time.Location {
+	worldZones.mu.Lock()
+	defer worldZones.mu.Unlock()
+	if worldZones.locs == nil {
+		worldZones.locs = map[string]*time.Location{}
+	}
+	loc, seen := worldZones.locs[z]
+	if !seen {
+		loc, _ = time.LoadLocation(z)
+		worldZones.locs[z] = loc
+	}
+	return loc
+}
+
 // worldPlaces is the places named, those whose zone is known, at most maxWorld; none named are the
 // style's own.
 func worldPlaces(zones []string) []worldPlace {
@@ -272,6 +294,17 @@ func binaryDigits(now time.Time) [6]int {
 // binaryBits is how many lights each of binaryDigits' columns needs: a tens column only ever counts
 // to 2 (hours) or 5.
 var binaryBits = [6]int{2, 4, 3, 4, 3, 4}
+
+// stackLead is the space between the Stack style's two lines, as a share of the figures' height: close,
+// so the hours and the minutes stand as one block.
+const stackLead = 0.16
+
+// stackDigits is the time's four figures for the Stack style, the hours as the clock format has them:
+// on a 12-hour clock too the hours keep their 0 ("02" over "07"), so the two lines stand as one block.
+func stackDigits(now time.Time) [4]int {
+	d := binaryDigits(now)
+	return [4]int(d[:4])
+}
 
 // style is the frame's clock style: the one the facts were gathered for, or the one in force.
 func (f styleFacts) style() string {

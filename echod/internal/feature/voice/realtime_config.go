@@ -49,7 +49,7 @@ func readRealtimeConfig() (pilotConfig, error) {
 	_, err := os.Lstat(realtimePilotFile)
 	if errors.Is(err, os.ErrNotExist) {
 		b := config.Get().Brain
-		if b.Realtime() && (b.STT != "" || b.TTS != "" || b.Voice != "" || b.LLM != "" || b.Model != "" || b.Search != "") {
+		if b.Realtime() && (b.STT != "" || b.TTS != "" || b.Voice != "" || b.LLM != "" || b.Model != "" || b.Search != "" || b.Reader != "") {
 			return pilotConfig{}, errors.New("realtime configuration contains incompatible direct settings")
 		}
 		return pilotConfig{Enabled: b.Realtime(), Model: b.RealtimeModelName(), Voice: b.RealtimeVoiceName(), Language: b.Language, Prompt: b.Prompt, Tools: b.RealtimeTools, key: b.Key}, nil

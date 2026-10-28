@@ -27,14 +27,20 @@ tested end to end, though on one unit so far. The Show 8 is newer still: it has 
 install, a slot update and a reboot on one unit, with the screen, microphones, wake word, speaker,
 camera, lens cover and mute latch all working, and nothing else has run on it for long. Two things a
 Show 8 owner should know before starting. The 1st gen's label says C7H6N3; the 2nd gen (2021) looks
-almost the same, says A8H3N2, and isn't supported yet: it can now be unlocked (thanks to R0rt1z2 on
-XDA), and TECHO5 support for it is in progress. When buying second-hand go by that label, not the
+almost the same, says A8H3N2, and has its own install: it can be unlocked (thanks to R0rt1z2 on
+XDA) and runs TECHO5 on its own kernel, see [install-athena.md](install-athena.md). When buying second-hand go by that label, not the
 serial number or the box: serials starting G6G1 turn up on both generations, and a box can belong to another
 unit. The 1st gen also has a 1 MP camera where the 2nd gen has 13 MP, and the board a 1st gen reports
 is `crown`. On boot images before v1.0.1, a quick tap of the mute button to unmute leaves the camera
 off until the unit is rebooted; the v1.0.1 boot image fixes that, and a unit installed earlier gets it
-by [updating its boot image](install.md#updating-the-boot-image). Other
-Echos (the Dot 3rd gen and later, and so on) are **not** supported.
+by [updating its boot image](install.md#updating-the-boot-image). The Echo Dot 3rd gen from 2018
+(`donut`, model D9N29T) runs TECHO5 Dot, see [below](#the-echo-dot-3rd-gen-donut). Other Echos (the
+2019 Dot 3rd gen, the Dot with a clock, later Dots, and so on) are **not** supported.
+
+**Not an Echo: the Skylight Calendar 15 (150-CAL).** TECHO5 runs on this wall calendar too, with no
+unlock: an installer works over adb from its stock firmware, after a full backup of the unit. It has
+no microphone, so it's a screen and a speaker. It has its own guide:
+[install-skylight.md](install-skylight.md).
 
 ## What every device needs
 
@@ -145,18 +151,30 @@ These steps follow [@proffalken](https://github.com/proffalken)'s [write-up](htt
 of installing TECHO5 Dot from Linux, which found the exact Fire OS build that avoids SELinux boot
 loops. Every command runs the same on Windows, Linux and macOS once the Dot is unlocked.
 
+**Files you need**, and where each comes from:
+- The **amonet-biscuit release ZIP**, attached to the
+  [XDA thread](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-dot-2nd-gen-2016-biscuit.4761416/)
+  (free XDA account needed). It holds `fastbrick.sh`, `fastbrick.bat`/`fastbrick.ps1`, `boot-root.zip` and
+  the files they need. The unlock puts TWRP on the Dot.
+- The **Fire OS update file**
+  `update-kindle-biscuit_puffin-NS6574_user_7623_0013121734532.bin`, which the same thread links.
+- `boot-root.zip`, from inside the release ZIP (step 3).
+- The **TECHO5 Dot installer**, from `git clone https://github.com/HuskerMinion/techo5-dot` (step 6). It
+  downloads the rest itself.
+
 1. **Unlock it with amonet-biscuit.** Follow
    [[UNLOCK][ROOT][TWRP][UNBRICK] Echo Dot 2nd Gen / 2016 (biscuit)](https://xdaforums.com/t/unlock-root-twrp-unbrick-amazon-echo-dot-2nd-gen-2016-biscuit.4761416/)
    (source: [R0rt1z2/amonet, branch mt8163-biscuit](https://github.com/R0rt1z2/amonet/tree/mt8163-biscuit)).
    Use the release ZIP attached to the thread, not the bare git repository: it has `fastbrick.sh`
    (Linux/macOS), `fastbrick.bat`/`fastbrick.ps1` (Windows), `boot-root.zip` and the files they
    need — same as the Show's and Spot's amonet forks, so Windows works directly here too.
-   - Hold the **Action** button while plugging in power; the light turns **green** (Amazon's factory
-     fastboot mode). Connect USB.
+   - The Dot's only power input is its micro-USB port, and the same cable carries USB, so plug it
+     into the computer, not a wall adapter. Hold the **Action** button while plugging the cable into
+     the Dot; the light turns **green** (Amazon's factory fastboot mode).
    - Run `fastbrick.bat` (or `./fastbrick.sh` on Linux/macOS), check the device it found, and type
      `YES`. It ends with `Exploit most likely successful!` and reboots into TWRP (a **white** light).
-   - To get back into TWRP later: unplug power, hold **Volume Up**, plug power back in, and wait for the
-     white light.
+   - To get back into TWRP later: unplug the micro-USB cable, hold **Volume Up**, plug it back in, and
+     wait for the white light.
 
    *Check:* `adb devices` lists the Dot as `recovery`.
 2. **Flash Fire OS 6574.1 into both slots.** TECHO5 Dot's Bluetooth kernel is built from this exact
@@ -189,8 +207,9 @@ loops. Every command runs the same on Windows, Linux and macOS once the Dot is u
    ```
    On Windows the key is `%USERPROFILE%\.android\adbkey.pub`. (Run `adb devices` once first if the
    file doesn't exist yet.)
-5. **Join Wi-Fi once in Fire OS.** Complete the Alexa app's Wi-Fi step; skipping the rest of the Alexa
-   setup is fine. The installer reads the saved network. (Skip this and it asks for a network instead.)
+5. **Join Wi-Fi once in Fire OS (optional).** Complete the Alexa app's Wi-Fi step; skipping the rest of
+   the Alexa setup is fine. The installer reads the saved network. You can skip this step and give the
+   network to the installer instead with `--wifi "<network name>"` (it asks for the passphrase).
    *Check:* `adb devices` lists the Dot as `device`, and `adb shell id` says `uid=0`.
 6. **Install TECHO5 Dot.**
    ```
@@ -219,6 +238,20 @@ dot-v1.0.19 the release carries its own Bluetooth kernel. Supported, tested on o
 Its USB is only on pads inside the case, so the install starts with opening it. The steps are in
 the [TECHO5 Dot README](https://github.com/HuskerMinion/techo5-dot#echo-2nd-gen). It plays without
 Amazon's sound tuning files, and the volume curve is a first guess.
+
+### The Echo Dot 3rd gen (donut)
+
+The 2018 Echo Dot 3rd gen (model D9N29T, `donut`) is a different machine from the Dot 2, with four
+microphones and another chip, but it takes the same release, installer and updates, with a build of
+the daemon of its own. It keeps its own kernel, and Bluetooth comes as modules built for it.
+Supported, tested on one unit so far. The 2019 refresh and the Dot with a clock have no known unlock.
+
+It's unlocked with the kamakiri-donut kit, over wires soldered to test pads under the base. TECHO5
+goes where the kit put TWRP (`swdl`, which the unlock boots as recovery), and its store is on
+userdata. The steps are in the
+[TECHO5 Dot README](https://github.com/HuskerMinion/techo5-dot#echo-dot-3rd-gen). The way back to
+TWRP is the same `to-twrp --yes`; from TWRP,
+`adb shell sh /data/techo5-store/techo5/back-to-linux.sh` returns to TECHO5.
 
 ### Going back to TWRP or Fire OS
 

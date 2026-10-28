@@ -273,8 +273,12 @@ func (d *Driver) release(c *Claim) {
 
 // settle tells the background whether it may play, which is whenever nothing holds the speaker. Every
 // change to now goes through here, so the two cannot drift apart.
+//
+// It tells the player too, which wakes an amplifier asleep while idle (idle.go) as soon as a claim
+// is taken, before the errand has anything queued, so the wake is over by the time the sound is.
 func (d *Driver) settle() {
 	d.mu.Lock()
+	d.p.Hold(d.now != nil)
 	want := d.now != nil && !d.now.over
 	if want == d.yielded {
 		d.mu.Unlock()
@@ -317,6 +321,17 @@ func (d *Driver) Busy() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.now != nil && !d.now.Finished()
+}
+
+// Holder is the name of the claim that holds the speaker, empty when nothing does: what a word heard
+// now may have come out of.
+func (d *Driver) Holder() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.now == nil || d.now.Finished() {
+		return ""
+	}
+	return d.now.name
 }
 
 // HardwareTail is how long the playback buffer goes on sounding after the queue has run out, so

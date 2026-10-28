@@ -15,6 +15,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/privacy"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/alsa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/audio"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/denoise"
@@ -211,18 +212,6 @@ type capture interface {
 	Close() error
 }
 
-// openPlain opens the one capture device that carries the microphones and the loopback together.
-func openPlain() (capture, error) {
-	return alsa.Open(Card, CaptureDevice, alsa.Config{
-		Channels:   Channels,
-		Rate:       Rate,
-		Format:     alsa.FormatS24_3LE,
-		Bits:       Bits,
-		PeriodSize: period,
-		Periods:    periods,
-	})
-}
-
 func (s *Source) open() error {
 	pcm, err := openDevice()
 	if err != nil {
@@ -233,8 +222,7 @@ func (s *Source) open() error {
 	s.pcm = pcm
 	s.devMu.Unlock()
 
-	routeInputs()
-	applyGain(config.Get().Microphone.Gain)
+	afterOpen()
 	return nil
 }
 
@@ -255,13 +243,17 @@ type listener struct {
 // Listen returns a channel of mono frames and a function that stops the subscription. The name is
 // what a dropped frame is reported against.
 func (s *Source) Listen(name string) (<-chan []int16, func()) {
-	l := &listener{name: name, ch: make(chan []int16, 8)}
-
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.listenLocked(name)
+}
+
+// listenLocked registers a listener with mu held, including while history is copied.
+func (s *Source) listenLocked(name string) (<-chan []int16, func()) {
+	l := &listener{name: name, ch: make(chan []int16, 8)}
 	id := s.next
 	s.next++
 	s.listeners[id] = l
-	s.mu.Unlock()
 
 	return l.ch, func() {
 		s.mu.Lock()
@@ -525,4 +517,21 @@ func Mono(raw []byte) []int16 {
 		out[i] = int16(audio.DecodeS24LE3(raw[o:o+3]) >> 8)
 	}
 	return out
+}
+
+func captureDevice() (int, int, alsa.Config, error) {
+	cfg := alsa.Config{Channels: Channels, Rate: Rate, Format: alsa.FormatS24_3LE,
+		Bits: Bits, PeriodSize: period, Periods: periods}
+	if layout.Board == "cronos" {
+		card, device, found, err := alsa.FindPCM("mt8163cronos", "Microphones", true)
+		if err != nil {
+			return 0, 0, cfg, fmt.Errorf("mic: selecting capture: %w", err)
+		}
+		if found {
+			// Match the FPGA's complete ring; application frames remain 20 ms.
+			cfg.PeriodSize, cfg.Periods = 257, 10
+			return card, device, cfg, nil
+		}
+	}
+	return Card, CaptureDevice, cfg, nil
 }

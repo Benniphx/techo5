@@ -14,8 +14,9 @@ firmware): releases don't carry it, so it is copied into the store before the pa
 `recovery`, so LineageOS can be put back with TWRP and its zip.
 
 The 2nd gen Show 8 (`athena`) installs differently: no LineageOS, TECHO5's own 64-bit mainline kernel
-written to `boot` and the TECHO5 image written to `system`, both from TWRP. Only units with the ILI9881C
-(BOE) screen panel are supported so far; the installer checks. See [install-athena.md](install-athena.md).
+written to `boot` and the TECHO5 image written to `system`, both from TWRP. Two screen panels
+are tested so far (ILI9881C with BOE glass, JD9365 with KD/HSD glass); the installer checks, and tries
+the others with `--force-panel`. See [install-athena.md](install-athena.md).
 
 ## Unlock the bootloader first
 
@@ -224,7 +225,7 @@ PATH=/usr/local/sbin:$PATH
 slotctl mkstore /dev/mmcblk0p12 --i-know-this-erases-it
 tar -xf /data/techo5-linux/vendor.tar -C /store   # kept in the store from now on
 STORE=/store slotctl install /data/media/0/Download/techo5-rootfs-<version>.tar.gz
-[ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || cp -a /store/vendor/. /store/slots/a/vendor/
+[ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || { mkdir -p /store/slots/a/vendor && cp -a /store/vendor/. /store/slots/a/vendor/; }
 rm /data/techo5-linux/vendor.tar
 STORE=/store slotctl status                       # slot a: trial 3
 ```
@@ -286,7 +287,8 @@ ESPHome integration by hand with host `<address>` and port 6053.
 Then:
 
 - **Time zone**: nothing to set. The unit starts on UTC and takes Home Assistant's zone as soon as it
-  connects, and keeps it from then on.
+  connects, and keeps it from then on. A unit with no internet can use a time server on your own
+  network (setup page, General, Time server), or takes Home Assistant's time when it connects.
 - **Wake word**: the default is "Alexa". Change it on the device (swipe down from the top, Sound,
   Wake word) or in Home Assistant; the other follows.
 - **Home Assistant token** (optional, for the forecast page, local radio stations and the radio's
@@ -508,6 +510,84 @@ set the **Local network** (internal) URL there to an address the device can reac
 Home Assistant answers on: `https://` if Home Assistant serves HTTPS itself, since a plain `http://`
 address then gets no answer.
 
+## If the install stops at the slot store
+
+Once the installer has flashed TECHO5's boot image, the unit runs its rescue environment (the screen
+says RESCUE, or shows color bars with TECHO5 and a clock) while the installer saves LineageOS's vendor
+tree, erases the system partition into the slot store and installs the release into slot a. If the
+installer stops there, for example because the unit restarted partway or its USB went away, the unit
+isn't lost. The installer's message says whether anything was erased:
+
+- **Nothing was erased yet** (it stopped while saving the vendor tree): LineageOS is still on the unit.
+  Run the installer again, or put LineageOS back as in "To go back to LineageOS" below.
+- **The system partition may be, or is, erased**: finish by hand as below.
+
+Finish on the unit's USB console: a terminal on the port the installer named, at 115200 (`screen
+/dev/ttyACM0 115200` on Linux or macOS, PuTTY on Windows). The port can come back under another name
+after a restart.
+
+If the unit restarted by itself, also run these once it is back on the console, and attach what they
+print to an issue (the installer saves the same to `slot-store-restart.txt` in the unit's folder under
+`backups/` when it sees the unit come back):
+
+```
+mount -t pstore pstore /sys/fs/pstore 2>/dev/null
+cat /sys/fs/pstore/console-ramoops* /proc/last_kmsg 2>/dev/null | tail -200
+tail -100 /data/techo5-linux/rescue.log
+```
+
+1. Keep the rescue environment up, and see how far it got:
+   ```
+   touch /tmp/stay
+   PATH=/usr/local/sbin:$PATH
+   STORE=/store slotctl status; ls /store; ls -la /data/techo5-linux /data/media/0/Download
+   ```
+2. If `slotctl status` says there is no store (no `/store/.techo5-store`), the store was not made yet.
+   First check that the saved vendor tree is this unit's and whole: the serial is the unit you mean,
+   and the list shows the Wi-Fi driver.
+   ```
+   cat /proc/idme/serial
+   tar -tf /data/techo5-linux/vendor.tar | grep mt76x8_wlan.ko
+   ```
+   If it does, make the store (this erases the system partition), then go on with step 3:
+   ```
+   umount /android 2>/dev/null
+   slotctl mkstore /dev/mmcblk0p12 --i-know-this-erases-it
+   ```
+   Don't run the `tar -cf` line from [step 4](#4-create-the-slot-store-and-install) here: it would
+   overwrite the saved copy, which may be the only one left. If `vendor.tar` is missing or doesn't list
+   the driver, stop here and open an issue with what step 1 printed.
+3. If `/store` has no `vendor` folder, put this unit's vendor tree there from the copy the installer
+   kept:
+   ```
+   tar -xf /data/techo5-linux/vendor.tar -C /store
+   ls /store/vendor/lib/modules/mt76x8_wlan.ko
+   ```
+4. Install the release into slot a (it takes a few minutes; use the file name `ls` showed), and give slot
+   a the vendor tree. If `slotctl status` in step 1 already showed slot a, skip the `slotctl install`
+   line.
+   ```
+   STORE=/store slotctl install /data/media/0/Download/techo5-rootfs-<version>.tar.gz
+   [ -e /store/slots/a/vendor/lib/modules/mt76x8_wlan.ko ] || { mkdir -p /store/slots/a/vendor && cp -a /store/vendor/. /store/slots/a/vendor/; }
+   rm -f /data/techo5-linux/vendor.tar
+   STORE=/store slotctl status
+   ```
+5. Write the unit's name and Home Assistant key as [step 5](#5-provision-before-the-first-boot) does.
+   The installer keeps the key in `backups/<serial>/home-assistant.key`; use that one, so Home Assistant
+   keeps the device:
+   ```
+   mkdir -p /data/misc/techo5
+   printf 'Kitchen\n' > /data/misc/techo5/name
+   (umask 077; printf '%s\n' '<the key from home-assistant.key>' > /data/misc/techo5/psk)
+   sync
+   ```
+6. Restart, and add it to Home Assistant as after any install:
+   ```
+   /bin/busybox.static reboot -f
+   ```
+   If the screen then stops at "hacked fastboot", run `fastboot -s <serial> continue` on the computer.
+   After five healthy minutes the slot keeps itself (`slotctl status` shows `good`).
+
 ## Troubleshooting
 
 | Symptom | Cause and fix |
@@ -517,6 +597,8 @@ address then gets no answer.
 | An update from Home Assistant is slow, or fails with `nothing arrived` or `gave up after 2h0m0s` | The download is slow or keeps stalling. Newer builds keep what they fetched and carry on from there, on their own and on the next press of Install, and give up only after two hours. A download from the internet that crawls under 50 kB/s while the Wi-Fi is up gets one Wi-Fi reassociation (at most once every 6 hours); the log says `a download from the internet is crawling`. If it is still slow, reconnect the unit's Wi-Fi or restart it, then press Install again. |
 | The screen shows "hacked fastboot" | A leftover `reboot bootloader` request: `fastboot -s <serial> continue`. |
 | No SSH after the switch to the slot | SSH is off unless step 5 was done: turn on the SSH switch in Home Assistant and send a key with the `ssh_keys` action, or use the USB serial console. |
+| A phone pairs over Bluetooth, then drops after a second or two | Some newer phones are dropped while the controller has Secure Connections on (#183). Turn off **Bluetooth Secure Connections** (Settings > Connections, the setup page's Connections tab, or Home Assistant), forget the device on the phone and pair again. See [Music](setup.md#5-music) for what it costs. |
+| The device jumps to full volume when a computer plays to it over Bluetooth | The computer reports full volume once and turns its own sound down itself, often on Linux (#245). Turn off **Bluetooth sets the volume** (the setup page's Connections tab, or Home Assistant): the device then keeps its own volume. See [Music](setup.md#5-music). |
 | The radio says playing and stays quiet | The stream never arrived. See "If it says playing and nothing comes out" at the end of [Radio](#radio). |
 | Picking a favorite station shows "Home Assistant didn't start the stream" | Home Assistant refused the device's call to the radio script. Turn on **Allow the device to perform Home Assistant actions** in the device's ESPHome entry (Configure), then pick the station again. See [Radio](#radio). |
 | The unit sits in rescue | The screen says so: **RESCUE**, with the reason on the last line. No bootable slot. `slotctl status` shows why; the daemon still runs from a slot in rescue, so Home Assistant keeps working while you look. |

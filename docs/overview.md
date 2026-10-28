@@ -20,12 +20,17 @@ Android, with one Go daemon, `echod`, doing everything the device does:
   Connections, Privacy, General) and each one's settings on a card beside them, a drawer in from the
   right edge with Cameras and Radio, and Wi-Fi setup with an on-screen keyboard. A first-run card
   shows once.
+
+  What each touch and swipe on a Show's clock does:
+
+  ![Touch map of the clock](images/touch-map.svg)
+
 - **Timers and alarms**: voice timers from Home Assistant count down under the clock; alarms are set
   on the settings screen (Alarms) or with the `alarm_set` action, or followed from Home Assistant `input_datetime`
   helpers (`alarms_follow`), and ring from the device's own clock even when Home Assistant is down.
   A ringing timer or alarm takes the whole screen, lights a dark one, and offers Stop and Snooze
-  (9 minutes unless changed); the alarm sound (Home Assistant, Beeps, Chimes, Bells, Gentle or Pulse) and the snooze
-  length are set on the Alarms card or in Home Assistant; the stop word, the action button and Home Assistant's Stop/Snooze buttons work too.
+  (9 minutes unless changed); the alarm sound (Home Assistant, Beeps, Chimes, Bells, Gentle, Pulse or a recording of your own), whether it
+  starts quiet and gets louder, and the snooze length are set on the Alarms card or in Home Assistant; the stop word, the action button and Home Assistant's Stop/Snooze buttons work too.
   Home Assistant can see one ringing: `binary_sensor.sounding` is on while any ring is active (including one a button silenced and not yet answered), `alarm_sounding` and `timer_sounding` say which kind, and the `sounding_what` text sensor names them (`alarm "Wake up", timer "Pasta"`). All three devices have them.
 - **Weather**: a new device shows Home Assistant's own forecast (`weather.forecast_home`), or, when
   Home Assistant has none, the first weather entity it lists; any other
@@ -59,7 +64,9 @@ Android, with one Go daemon, `echod`, doing everything the device does:
   `esphome.techo5_phone` event per step. Off until `phone_account` signs the device in. See
   [phone.md](phone.md).
 - **Bluetooth audio** to earbuds or a speaker, and from a phone on the Show, the Spot and the Dot; a
-  Bluetooth proxy for Home Assistant (scanning through BlueZ on the Show), off by default.
+  Bluetooth proxy for Home Assistant, off by default: scanning, and on the Show and the Spot active
+  connections too (through BlueZ) behind a switch of their own, also off by default, so integrations
+  that control a BLE device can reach it.
 - **Security**: nothing is open to the network by default except Home Assistant's encrypted link
   and the Sendspin player. SSH (keys only), the camera page and the screen page each have a switch
   on the settings screen (Privacy) and in Home Assistant, all off on a new device. SSH keys come only from Home
@@ -69,6 +76,11 @@ Android, with one Go daemon, `echod`, doing everything the device does:
   away; a new unit is on UTC until its first connection. A zone chosen on the device (Settings,
   General, Time zone) holds over Home Assistant's until Home Assistant is chosen again; the Common
   zones work even on an early image with no zone database.
+- **Clock**: set from time servers on the internet (NTP). A time server on your own network, like a
+  router's, can be set on the setup page (General, Time server) and is asked first. A device that
+  reaches no time server at all takes Home Assistant's time when it connects; once NTP has set the
+  clock, Home Assistant's time doesn't change it. On a Dot, a new time server is asked from its next
+  restart.
 - **Updates**: two root filesystem slots with a trial and automatic fallback; a release that
   carries a rootfs tarball installs over the air from Home Assistant's update entity.
 
@@ -113,8 +125,9 @@ Android, with one Go daemon, `echod`, doing everything the device does:
 
 ## Known gaps
 
-- The Bluetooth proxy on the Show only scans: BlueZ owns the controller, so there is no beacon
-  and no active connections for Home Assistant. It stays off by default until it has run a while.
+- The Bluetooth proxy on the Show and the Spot has no beacon: BlueZ owns the controller. Its active
+  connections have no pairing or cache clearing, and the Dot's proxy only scans. It stays off by
+  default until it has run a while.
 - The camera and screen pages have no login: they are for a trusted network, and off until
   switched on. The rescue environment (boot image) still trusts the key built into that image.
 - Song metadata rests on two undocumented service endpoints; when one changes shape the page

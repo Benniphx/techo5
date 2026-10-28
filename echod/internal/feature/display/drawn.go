@@ -24,6 +24,10 @@ type dashTile struct {
 	action *dashboard.Action
 	adjust *dashboard.Adjust
 	entity string // the entity it shows, for a long press to open its sheet
+	// tess is a Tessera tile's place in its layout, one past it (zero for none); page is a page of the
+	// Tessera page a tap goes to, one past it; ctl is one of a Tessera tile's controls (tessera.go).
+	tess, page int
+	ctl        string
 }
 
 // drawnDrag is a finger moving on the drawn dashboard: undecided until it has moved far enough to
@@ -161,6 +165,14 @@ func (r *paint) wrapLines(face font.Face, text string, w int) []string {
 	var lines []string
 	line := ""
 	for _, word := range strings.Fields(text) {
+		if parts := r.characterLines(face, word, w); len(parts) > 0 {
+			if line != "" {
+				lines = append(lines, line)
+			}
+			lines = append(lines, parts[:len(parts)-1]...)
+			line = parts[len(parts)-1]
+			continue
+		}
 		try := word
 		if line != "" {
 			try = line + " " + word

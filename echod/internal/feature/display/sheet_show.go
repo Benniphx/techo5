@@ -54,12 +54,29 @@ func (s scene) view() sheetView {
 		snooze: s.snooze, now: s.now, radio: s.radio, timers: s.timers}
 }
 
-// themeRows are the Display card's rows for the theme.
+// themeRows are the Display card's rows for the theme. Under a skin they still change the theme, which
+// comes back when the skin is taken off, and say so.
 func themeRows() []settingRow {
-	return []settingRow{
-		{id: "theme", label: "Theme", kind: ctlChoice, value: current().name},
-		{id: "colors", label: "Custom colors", sub: "Make the theme your own", kind: ctlButton, button: "Edit"},
+	theme, colors := "", tr("theme_personalize")
+	if skin() != skinNone {
+		theme, colors = tr("skin_keeps"), tr("skin_keeps")
 	}
+	return []settingRow{
+		{id: "theme", label: themeRowLabel(), sub: theme, kind: ctlChoice, value: current().name},
+		{id: "colors", label: tr("ui_custom_colors"), sub: colors, kind: ctlButton, button: tr("ui_edit")},
+	}
+}
+
+// themeRowLabel names the theme the row changes: the one worn. In Dark mode that is simply Theme, as it
+// always was; in Light or Auto it is the dark theme or the light one, whichever the screen wears now.
+func themeRowLabel() string {
+	switch {
+	case themeModeIndex() == 0:
+		return tr("ui_theme")
+	case lightShown(config.Get().Screen):
+		return tr("ui_light_theme")
+	}
+	return tr("ui_dark_theme")
 }
 
 // deviceCard is a card of the Show's own in place of the category's: the custom colors editor.
@@ -74,8 +91,8 @@ func deviceCard(sv sheetView) (cardView, bool) {
 // on one makes the theme Custom with that color.
 func colorsCard() cardView {
 	v := cardView{
-		title: "Custom colors", blurb: "Tap a color for each part; the theme becomes Custom",
-		actions: []headerAction{{id: "colorsdone", label: "Done", style: btnPrimary}},
+		title: tr("ui_custom_colors"), blurb: tr("ui_tap_a_color_for_each_part_the_theme_becomes_custom"),
+		actions: []headerAction{{id: "colorsdone", label: tr("done"), style: btnPrimary}},
 	}
 	for role := range roles {
 		v.rows = append(v.rows, settingRow{id: "role:" + strconv.Itoa(role), label: roleNames[role], kind: ctlSwatches, role: role})
@@ -90,8 +107,8 @@ func adaptRows(rows []settingRow, _ sheetView) []settingRow { return rows }
 func devicePicker(id string, sv sheetView) (pickerView, bool) {
 	switch id {
 	case "theme":
-		p := pickerView{title: "Theme", cur: -1}
-		name := config.Get().Screen.Theme
+		p := pickerView{title: themeRowLabel(), cur: -1}
+		name := shownName()
 		for i, t := range themes {
 			p.opts = append(p.opts, t.name)
 			p.swatches = append(p.swatches, [2]color.RGBA{t.colors[roleGround], t.colors[roleAccent]})
@@ -100,7 +117,7 @@ func devicePicker(id string, sv sheetView) (pickerView, bool) {
 			}
 		}
 		// Custom, once there is one to go back to.
-		if c, ok := savedCustom(); ok {
+		if c, ok := savedCustom(lightShown(config.Get().Screen)); ok {
 			if name == customName {
 				p.cur = len(p.opts)
 			}
@@ -109,9 +126,9 @@ func devicePicker(id string, sv sheetView) (pickerView, bool) {
 		}
 		return p, true
 	case "radiosource":
-		p := pickerView{title: "Stations", cur: -1}
+		p := pickerView{title: tr("ui_stations"), cur: -1}
 		for i, src := range home.RadioSources() {
-			p.opts = append(p.opts, home.SourceLabel(src))
+			p.opts = append(p.opts, radioSourceText(src))
 			if src == sv.radio.Source {
 				p.cur = i
 			}
@@ -130,7 +147,7 @@ func (d *Display) deviceChoose(id string, i int) {
 	case i < len(themes):
 		d.SetTheme(themes[i].name)
 	case i == len(themes):
-		if err := config.Set().Screen().Theme(customName); err != nil {
+		if err := config.Set().Screen().ThemeFor(lightShown(config.Get().Screen), customName); err != nil {
 			slog.Warn("saving the theme failed", "err", err)
 		}
 	}
@@ -162,6 +179,12 @@ func (d *Display) deviceRowTap(id string, p part, opt int) bool {
 			d.openAddress()
 			d.showSheet(false)
 		}
+	case "camtest":
+		// The same way round as the address page.
+		if camTestAvailable() {
+			d.openCameraTest()
+			d.showSheet(false)
+		}
 	default:
 		return d.lookRowTap(id)
 	}
@@ -186,3 +209,5 @@ func (d *Display) showForecast() { d.ShowWeather(false) }
 
 // restartNow restarts the device.
 func restartNow() { restart() }
+
+func atNightSubText() string { return tr("night_description_show") }

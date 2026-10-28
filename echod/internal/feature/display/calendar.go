@@ -13,9 +13,28 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 )
 
-// OpenCalendar puts the calendar up on this month. It reports false, and does nothing, on a device
-// that shows no calendar.
-func (d *Display) OpenCalendar() bool { return d.openCalendar(false) }
+// OpenCalendar puts the calendar up on the view it opens on (Opens on): this month, this week, today
+// or Coming up. The week falls back to the month while the week view is off. It reports false, and
+// does nothing, on a device that shows no calendar.
+func (d *Display) OpenCalendar() bool {
+	l := deviceLook()
+	if l.opens == opensAgenda {
+		return d.openCalendar(true)
+	}
+	if !d.openCalendar(false) {
+		return false
+	}
+	now := time.Now()
+	d.mu.Lock()
+	switch {
+	case l.opens == opensWeek && l.week:
+		d.calWeek, d.calDay = true, weekStart(now)
+	case l.opens == opensDay:
+		d.calDay = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+	}
+	d.mu.Unlock()
+	return true
+}
 
 // OpenAgenda puts the calendar up as the coming days' events in one list, as OpenCalendar does the month.
 func (d *Display) OpenAgenda() bool { return d.openCalendar(true) }
@@ -111,7 +130,7 @@ func firstOfMonth(t time.Time) time.Time {
 func (d *Display) calendarUp() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return time.Now().Before(d.calUntil) && d.view.Phase == "idle"
+	return time.Now().Before(d.calUntil) && pageIdle(d.view.Phase)
 }
 
 // calendarScene fills in what the calendar page shows, when it is up.

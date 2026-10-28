@@ -50,6 +50,8 @@ func newHouse(t *testing.T) *house {
 	n.canAnswer = func(int) bool { return true }
 	n.wakeWord = func(int) string { return "okay_nabu" }
 	n.score = func() float64 { return 20 }
+	n.hears = func() bool { return true }
+	n.onCall = func() bool { return false }
 	n.peers = func() []announce.Peer { return []announce.Peer{{Name: "Kitchen", Address: "192.0.2.1", Port: 8181}} }
 	n.fanout = func(_ []announce.Peer, mine *pending) { h.sent = append(h.sent, mine.claim); h.mine = mine }
 	n.now = func() time.Time { return h.now }
@@ -90,6 +92,42 @@ func TestNobodyToAskAnswersAtOnce(t *testing.T) {
 	h.n.Woke(0)
 	if h.at0 != 1 || len(h.sent) != 0 {
 		t.Errorf("alone: answered at once %d times, sent %d claims", h.at0, len(h.sent))
+	}
+}
+
+// Only devices that can hear are asked: a Skylight never claims a wake word, so a house of it alone is
+// a house of one, and the turn opens at once. A device that says nothing either way is asked.
+func TestADeviceThatCannotHearIsNotAsked(t *testing.T) {
+	h := newHouse(t)
+	h.n.peers = func() []announce.Peer {
+		return []announce.Peer{{Name: "Office Skylight", Address: "192.0.2.2", NoMicrophone: true}}
+	}
+	h.n.Woke(0)
+	if h.at0 != 1 || len(h.sent) != 0 || len(h.later) != 0 {
+		t.Errorf("with only a Skylight: answered at once %d times, sent %d claims, waiting %d", h.at0, len(h.sent), len(h.later))
+	}
+
+	h = newHouse(t)
+	var asked []announce.Peer
+	h.n.peers = func() []announce.Peer {
+		return []announce.Peer{{Name: "Kitchen", Address: "192.0.2.1"}, {Name: "Office Skylight", Address: "192.0.2.2", NoMicrophone: true}}
+	}
+	h.n.fanout = func(p []announce.Peer, mine *pending) { asked = p; h.sent = append(h.sent, mine.claim) }
+	h.n.Woke(0)
+	if h.at0 != 0 || len(asked) != 1 || asked[0].Name != "Kitchen" {
+		t.Errorf("asked %v, answered at once %d times; want only the Kitchen asked", asked, h.at0)
+	}
+}
+
+// A device without microphones takes no claims: it has no wake word to weigh them against.
+func TestADeviceWithoutMicrophonesTakesNoClaims(t *testing.T) {
+	h := newHouse(t)
+	if !h.n.open() {
+		t.Fatal("not open with a house word and the switch on")
+	}
+	h.n.hears = func() bool { return false }
+	if h.n.open() {
+		t.Error("a Skylight takes claims")
 	}
 }
 
@@ -498,5 +536,72 @@ func TestASlowClaimIsAnsweredAndLetGo(t *testing.T) {
 			t.Errorf("signed %v: the connection was kept", header != "")
 		}
 		c.Close()
+	}
+}
+
+// A device on a call leads by onCallLead: it wins a wake word another device heard about as well, the
+// call being what somebody most likely meant, but not one another device heard clearly better, which
+// was somebody in that room talking to that device.
+func TestOnCallLeadsByAMargin(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		theirs float64
+		opened bool
+	}{
+		{"heard about as well elsewhere", 20 + onCallLead - 1, true},
+		{"heard clearly better elsewhere", 20 + onCallLead + 1, false},
+	} {
+		h := newHouse(t)
+		h.n.onCall = func() bool { return true }
+		h.n.Woke(0)
+		if len(h.sent) != 1 || h.sent[0].Score != 20+onCallLead {
+			t.Fatalf("%s: claims sent %+v, want one at %v", c.name, h.sent, 20+onCallLead)
+		}
+		h.claimFrom("Kitchen", c.theirs)
+		h.wait(300 * time.Millisecond)
+		if got := len(h.opened) == 1; got != c.opened {
+			t.Errorf("%s: opened %v, want %v", c.name, got, c.opened)
+		}
+	}
+}
+
+// The next song word goes through the same claims: the device that heard it best acts, the others do not.
+func TestAnswerActsOnlyOnTheNearestDevice(t *testing.T) {
+	const w = "command:next_song_word"
+	acted := 0
+	h := newHouse(t)
+	h.n.Answer(w, func() bool { return true }, func() { acted++ })
+	if acted != 0 || len(h.sent) != 1 || h.sent[0].Word != w {
+		t.Fatalf("acted %d, sent %v: it should claim and wait", acted, h.sent)
+	}
+	h.n.took(claim{From: "Kitchen", Turn: "t", Word: w, Score: 40})
+	h.wait(300 * time.Millisecond)
+	if acted != 0 {
+		t.Errorf("acted %d times with a device that heard it better", acted)
+	}
+
+	h = newHouse(t)
+	h.n.Answer(w, func() bool { return true }, func() { acted++ })
+	h.n.took(claim{From: "Kitchen", Turn: "t", Word: w, Score: 1})
+	h.wait(300 * time.Millisecond)
+	if acted != 1 {
+		t.Errorf("acted %d times as the nearest, want 1", acted)
+	}
+
+	// A wake word's claim is not this word's.
+	h = newHouse(t)
+	h.n.Answer(w, func() bool { return true }, func() { acted++ })
+	h.claimFrom("Kitchen", 40)
+	h.wait(300 * time.Millisecond)
+	if acted != 2 {
+		t.Errorf("a wake word's claim stood the command down")
+	}
+
+	// With nobody to ask it acts at once.
+	h = newHouse(t)
+	h.n.peers = func() []announce.Peer { return nil }
+	h.n.Answer(w, func() bool { return true }, func() { acted++ })
+	if acted != 3 {
+		t.Errorf("alone: acted %d, want at once", acted)
 	}
 }

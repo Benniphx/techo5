@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -57,6 +58,7 @@ func (f *Feature) Run(ctx context.Context) error {
 			return nil
 		case <-t.C:
 		}
+		f.showAsking() // a browser that gave up asking is not still asking in Home Assistant
 		if !f.On() {
 			f.mu.Lock()
 			stale := !f.openedAt.IsZero()
@@ -72,7 +74,8 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 	// Only a browser that has been let in keeps the page open. Anything else on the network can ask
 	// for this path as often as it likes, and the idle time is there to close the page when the
 	// person who opened it has walked away — a scanner or a stale tab must not hold it open for them.
-	if _, in := f.session(r); in {
+	// A view polling on its own is not somebody there either (watching).
+	if _, in := f.session(r); in && !watching[strings.TrimSuffix(r.URL.Path, "/")] {
 		f.used()
 	}
 	switch strings.TrimSuffix(r.URL.Path, "/") {
@@ -106,6 +109,10 @@ func (f *Feature) serve(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
+
+// watching is the paths a view left up on the page asks for by itself. Answering them is not the page
+// being used: a tab left watching the scores would otherwise hold the page open for as long as it ran.
+var watching = map[string]bool{"/setup/scores": true}
 
 // diagnostics hands over everything worth having when something is wrong, with the addresses, names,
 // keys and serial numbers already replaced — so that somebody can send it to an issue without
@@ -157,7 +164,11 @@ func (f *Feature) wait(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "post to ask", http.StatusMethodNotAllowed)
 		return
 	}
-	token, ok := f.await()
+	from, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		from = r.RemoteAddr
+	}
+	token, ok := f.awaitFrom(from, web.AwayRequest(r)) // for Home Assistant's let in (remote.go)
 	if !ok {
 		if f.ShutOut() {
 			http.Error(w, "too many tries without a press on the device; try again in a few minutes",
@@ -175,8 +186,9 @@ func (f *Feature) wait(w http.ResponseWriter, r *http.Request) {
 		Name: cookieName, Value: token, Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: int(life / time.Second),
 	})
+	f.showAsking()
 	f.Changed.Emit(struct{}{}) // the device says a browser is asking
-	slog.Info("setup page: a browser is asking to be let in")
+	slog.Info("setup page: a browser is asking to be let in", "from", from)
 	http.Redirect(w, r, "/setup", http.StatusSeeOther)
 }
 
@@ -264,10 +276,16 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveMusic(r)
 	case "streaming":
 		problem = saveStreaming(r)
+	case "bluetooth":
+		problem = saveBluetooth(r)
 	case "speaker":
 		problem = saveSpeaker(r)
 	case "screen":
 		problem = saveScreen(r)
+	case "themes":
+		problem = saveThemes(r)
+	case "theme-colors":
+		problem = saveThemeColors(r)
 	case "listening":
 		problem = saveListening(r)
 	case "photos-remove":
@@ -288,6 +306,8 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = removeSound(r)
 	case "wakeword-remove":
 		problem = removeWakeWord(r)
+	case "hacameras":
+		problem = saveHACameras(r)
 	case "reolink":
 		problem = saveReolink(r)
 	case "doorbell":
@@ -324,6 +344,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 		problem = saveDeckPC(r)
 	case "video":
 		problem = saveVideo(r)
+	case "tailscale":
+		problem = saveTailscale(r)
+	case "netbird":
+		problem = saveNetbird(r)
 	case "timezone":
 		zone := strings.TrimSpace(r.PostFormValue("zone"))
 		switch {
@@ -335,6 +359,10 @@ func (f *Feature) save(w http.ResponseWriter, r *http.Request) {
 			if err := timezone.Get().Choose(zone); err != nil {
 				problem = "that is not a time zone this device knows: " + err.Error()
 			}
+		}
+	case "timeserver":
+		if err := timezone.SetServer(r.PostFormValue("server")); err != nil {
+			problem = err.Error()
 		}
 	default:
 		if save, ok := saves[what]; ok {
@@ -381,7 +409,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 	fmt.Fprintf(w, `<div class="wrap"><h1>%s</h1><p class="sub">Setup</p><div class="layout">`, html.EscapeString(deviceName()))
 	nav(w, tab)
 	fmt.Fprint(w, `<section>`)
-	for _, t := range tabs {
+	for _, t := range shownTabs() {
 		if t.id == tab {
 			fmt.Fprintf(w, `<h2>%s</h2>`, html.EscapeString(t.title))
 		}
@@ -405,12 +433,21 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		stationsSection(w, token)
 		musicSection(ctx, w, token)
 		streamingSection(w, token)
-		fmt.Fprint(w, `<h3>Voice</h3>`)
-		brainSection(w, token)
-		realtimeSection(w, token)
-		listeningSection(w, token)
-		houseSection(w, token)
-		wakeWordsSection(w, token)
+		// A device that cannot hear has no voice assistant, wake words or listening to set up: only the
+		// announcements it plays and its sounds are left of the group.
+		if layout.HasMicrophone() {
+			fmt.Fprint(w, `<h3>Voice</h3>`)
+			brainSection(w, token)
+			realtimeSection(w, token)
+			listeningSection(w, token)
+			houseSection(w, token)
+			phoneBookSection(w, token)
+			wakeWordsSection(w, token)
+			scoresSection(w)
+		} else {
+			fmt.Fprint(w, `<h3>Announcements and sounds</h3>`)
+			houseSection(w, token)
+		}
 		soundsSection(w, token)
 	case "alarms":
 		alarmsSection(w, token)
@@ -422,13 +459,22 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 			fmt.Fprint(w, `<fieldset><legend>Wi-Fi</legend><p class="note" style="margin:0">This device's network
 			 is not one this page can change.</p></fieldset>`)
 		}
+		bluetoothSection(w, token)
+		haCamerasSection(w, token)
 		reolinkSection(w, token)
 		go2rtcSection(w, token)
+		cameraListSection(w, token)
+		cameraButtonsSection(w, token)
 		doorbellSection(w, token)
-		talkBackSection(w, token)
+		tailscaleSection(w, token)
+		netbirdSection(w, token)
+		if layout.HasMicrophone() {
+			talkBackSection(w, token) // the microphones to a camera's speaker
+		}
 		dashboardSection(w, token)
 	case "photos":
 		screenSection(w, token)
+		themeSection(w, token)
 		ownFontsSection(w, token)
 		dashboardPanelSection(w, token)
 		deckSection(w, token)
@@ -448,6 +494,7 @@ func (f *Feature) settingsPage(ctx context.Context, w http.ResponseWriter, token
 		nameSection(w, token)
 		updatesSection(w, token)
 		timezoneSection(w, token)
+		timeServerSection(w, token)
 		homeAssistantSection(w, token)
 		settingsFileSection(w, token)
 		shareSection(w, token)
@@ -485,6 +532,22 @@ func timezoneSection(w http.ResponseWriter, token string) {
 	 which zone it shows.</p><p><button type="submit">Save</button></p></fieldset></form>`)
 }
 
+// timeServerSection is a time server of the home's own, asked before the internet's.
+func timeServerSection(w http.ResponseWriter, token string) {
+	if !timezone.ServerSettable {
+		return
+	}
+	fmt.Fprint(w, `<form method="post" action="/setup/save"><fieldset><legend>Time server</legend>`)
+	hidden(w, token, "timeserver", "general")
+	fmt.Fprintf(w, `<label for="ntp">Your own time server (optional)</label>
+	 <input id="ntp" name="server" value="%s" placeholder="192.168.1.1" maxlength="253" autocomplete="off">
+	 <p class="note">The device sets its clock from time servers on the internet. A device that cannot
+	  reach them can use one on your network, like your router: it is asked first, and the internet's
+	  after it. %s Leave it empty for the internet's only. Without any time server, the clock is set
+	  from Home Assistant's when it connects.</p>
+	 <p><button type="submit">Save</button></p></fieldset></form>`, html.EscapeString(timezone.Server()), timezone.ServerWhen)
+}
+
 // privacySection says what the device has open, and what this page will never do. It shows and does
 // not change: a web page that could open SSH would be a bigger hole than the convenience is worth, so
 // these stay on the device's own screen and in Home Assistant.
@@ -496,10 +559,22 @@ func privacySection(w http.ResponseWriter) {
 		}
 		return "off"
 	}
+	// A panel has no SSH and no camera page at all (privacy_panel.go): "off" would send somebody
+	// looking for a switch that is not there.
+	ssh, camera, missing := onOff(s.SSH), onOff(s.Camera), ""
+	if !sshHere {
+		ssh = "not available on this device"
+	}
+	if !cameraWebHere {
+		camera = "not available on this device"
+	}
+	if !sshHere || !cameraWebHere {
+		missing = " " + notHereWhy
+	}
 	fmt.Fprintf(w, `<fieldset><legend>What is switched on</legend>
 	 <p style="margin:0">SSH: %s · Camera on the network: %s · Screen on the network: %s</p>
 	 <p class="note">Shown here, not changed here. Change them on the device's own screen, or in Home
-	  Assistant.</p></fieldset>`, onOff(s.SSH), onOff(s.Camera), onOff(s.Screen))
+	  Assistant.%s</p></fieldset>`, ssh, camera, onOff(s.Screen), missing)
 	fmt.Fprint(w, `<fieldset><legend>This page</legend>
 	 <p class="note" style="margin:0">It opens only after a press on the device, and closes itself when it
 	  is left alone. It is on your own network, without encryption. It never touches SSH keys or the

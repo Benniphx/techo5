@@ -103,6 +103,7 @@ func servers(c Config) []ServerChange {
 		{What: "The assistant's text to speech", New: c.Brain.TTS},
 		{What: "The assistant's chat model", New: c.Brain.LLM},
 		{What: "The assistant's web search", New: c.Brain.Search},
+		{What: "The assistant's page reader", New: c.Brain.Reader},
 		{What: "The dashboard server", New: c.Dashboard.Server},
 		{What: "Music Assistant", New: c.MusicAssistant.URL},
 		{What: "Immich", New: c.Home.Immich.Server},
@@ -289,6 +290,9 @@ func ClearSecrets(c *Config) {
 	for i := range c.Calendar.Links {
 		c.Calendar.Links[i].URL = ""
 	}
+	// Whether this device is on a tailnet is its own, and never in a file; NetBird's alike.
+	c.Tailscale = Tailscale{}
+	c.Netbird = Netbird{}
 	scrubUserinfo(reflect.ValueOf(c).Elem())
 }
 
@@ -356,6 +360,16 @@ func KeepOwn(c *Config, from Config) {
 	// What has the microphones or the camera take in the room: listening in, sending it to Home
 	// Assistant, keeping clips of it, watching for people.
 	c.Home.DropIn = from.Home.DropIn
+	// Buttons on a camera's view can open gates and unlock doors: never brought in by a settings file.
+	c.Home.CameraButtons = from.Home.CameraButtons
+	// What may listen during a call or end one by voice: the wake word let through, its answer sent up
+	// the call, the far end played under it, and the hang-up word.
+	c.Home.CallWake, c.Home.CallReplies, c.Home.CallUnderlay = from.Home.CallWake, from.Home.CallReplies, from.Home.CallUnderlay
+	// A call's encryption turned off for a local SIP server: never brought in by a settings file.
+	c.Home.PhonePlain = from.Home.PhonePlain
+	// And what may place one: a contact called by voice.
+	c.Home.CallByVoiceOff = from.Home.CallByVoiceOff
+	c.Wake.Hangup = from.Wake.Hangup
 	c.Wake.OnHA.Stream, c.Wake.OnHA.Confirm = from.Wake.OnHA.Stream, from.Wake.OnHA.Confirm
 	c.Wake.KeepClips = from.Wake.KeepClips
 	c.Presence.On, c.Presence.Gestures = from.Presence.On, from.Presence.Gestures
@@ -364,6 +378,12 @@ func KeepOwn(c *Config, from Config) {
 	c.Video.On, c.Video.DLNA = from.Video.On, from.Video.DLNA
 	c.Video.Allowed = slices.Clone(from.Video.Allowed)
 	c.Home.CameraLive = from.Home.CameraLive
+	// Which of Home Assistant's cameras the device lists: a file that says All (or is from a build that
+	// had no choice) does not undo None or a list chosen here, so a device that shares a Home Assistant
+	// with other homes is not given every camera in it by a file.
+	if c.Home.AllHACameras() && !from.Home.AllHACameras() {
+		c.Home.Cameras, c.Home.CamerasChosen = slices.Clone(from.Home.Cameras), from.Home.CamerasChosen
+	}
 	// Keeping the audio of a slot's turns on disk is this device's: the file's words come in, kept
 	// to as many turns as the device kept for that slot before, none for a slot it did not have.
 	for i := range c.Wake.Words {
@@ -390,6 +410,9 @@ func KeepOwn(c *Config, from Config) {
 	c.Microphone.Claps = from.Microphone.Claps
 	c.CamStream = from.CamStream
 	c.Remote.On = from.Remote.On
+	// Being on a tailnet is this device's: a restore never turns Tailscale or NetBird on or off.
+	c.Tailscale = from.Tailscale
+	c.Netbird = from.Netbird
 	// Answering for the others when this one heard best keeps measuring the room and talks to them on the
 	// network; a finger held on the clock goes to Home Assistant. Both this device's to turn on.
 	c.Nearest = from.Nearest
@@ -397,6 +420,9 @@ func KeepOwn(c *Config, from Config) {
 	// Sharing settings with the other devices, and which of them, is this device's to set up: a file
 	// from another device names that device's links, not this one's.
 	c.Share = from.Share.clone()
+	// Being a screen for the Tessera add-on puts a device of its own in Home Assistant and lets the add-on
+	// send it layouts, and a change to it restarts the daemon: this device's to turn on, never a file's.
+	c.Tessera = from.Tessera
 
 	// "No wake word" chosen on purpose is a device that is not to listen: a file with words in it does
 	// not start it listening.

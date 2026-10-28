@@ -17,10 +17,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	"log/slog"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +31,7 @@ import (
 
 	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/security"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/web"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/camera"
 	"github.com/HuskerMinion/techo5/echod/internal/layout"
@@ -67,7 +71,10 @@ var errFull = errors.New("as many viewers as the stream takes are watching")
 
 // Feature is the switch, the server and the pictures they share.
 type Feature struct {
-	on *esphome.Switch
+	on        *esphome.Switch
+	discovery *esphome.Switch
+	// loginFromHA lets Home Assistant set the login (camera_credentials).
+	loginFromHA *esphome.Switch
 
 	// frames starts the camera and hands its pictures over until release, each still to be developed, so
 	// one skipped costs nothing; replaced in tests.
@@ -94,6 +101,8 @@ type Feature struct {
 	since   map[net.Conn]waiter // each connection not logged in yet, and when it came
 	subs    map[chan rtpjpeg.Frame]struct{}
 	stopPic func() // ends the pictures, while anybody watches
+	pages   int    // camera web pages being sent (webpages.go)
+	pageGen uint64 // moves on when open page streams must end: a new login, the lens cover (PageGen)
 }
 
 var (
@@ -120,11 +129,33 @@ func build() *Feature {
 		since:     map[net.Conn]waiter{},
 		subs:      map[chan rtpjpeg.Frame]struct{}{},
 	}
+	f.discovery = &esphome.Switch{
+		Base: esphome.Base{ObjectID: "camera_discovery", Name: "Camera discovery (ONVIF)", Icon: "mdi:access-point-network",
+			Category: esphome.CategoryConfig},
+		OnCommand: func(on bool) {
+			f.discovery.Set(on)
+			if err := config.Set().CamStream().Discovery(on); err != nil {
+				slog.Error("saving the camera's discovery failed", "err", err)
+			}
+			f.poke()
+		},
+	}
+	f.loginFromHA = &esphome.Switch{
+		Base: esphome.Base{ObjectID: "camera_login_from_ha", Name: "Camera login from Home Assistant", Icon: "mdi:key-chain",
+			Category: esphome.CategoryConfig},
+		OnCommand: func(on bool) {
+			f.loginFromHA.Set(on)
+			if err := config.Set().CamStream().LoginFromHA(on); err != nil {
+				slog.Error("saving camera login from Home Assistant failed", "err", err)
+			}
+		},
+	}
 	f.on.OnCommand = func(on bool) {
 		f.on.Set(on)
 		if err := config.Set().CamStream().On(on); err != nil {
 			slog.Error("saving camera streaming failed", "err", err)
 		}
+		panelCameraSwitch(on)
 		f.poke()
 	}
 	return f
@@ -132,15 +163,55 @@ func build() *Feature {
 
 func (f *Feature) Name() string { return "camera streaming" }
 
-// Entities are the switch, on a device with a camera only.
+// Entities are the switch, the discovery switch and the switch that lets Home Assistant set the login,
+// on a device with a camera only.
 func (f *Feature) Entities() []esphome.Entity {
 	if !f.available() {
 		return nil
 	}
-	return []esphome.Entity{f.on}
+	return []esphome.Entity{f.on, f.discovery, f.loginFromHA}
 }
 
-func (f *Feature) Restore(c config.Config) { f.on.Set(c.CamStream.On) }
+// Actions: camera_credentials sets the stream's login from Home Assistant, by the setup page's rules
+// (SetLogin), only with the Camera login from Home Assistant switch on (off by default) and only over a
+// Home Assistant link encrypted with the device's key: a password sent in the clear is not one to trust.
+func (f *Feature) Actions() []*esphome.Action {
+	if !f.available() {
+		return nil
+	}
+	return []*esphome.Action{{
+		Name: "camera_credentials",
+		Args: []esphome.Arg{{Name: "username", Type: esphome.ArgString}, {Name: "password", Type: esphome.ArgString}},
+		Run: func(c esphome.Call) (any, error) {
+			return nil, setCredentials(c.String("username"), c.String("password"))
+		},
+	}}
+}
+
+// setCredentials is camera_credentials, with what it asks of the device to be allowed.
+var setCredentials = func(user, pass string) error {
+	if !config.Get().CamStream.LoginFromHA {
+		slog.Warn("camera streaming: login from Home Assistant refused: its switch is off")
+		return errors.New("camera_credentials: turn on Camera login from Home Assistant first")
+	}
+	if !security.Encrypted() {
+		slog.Warn("camera streaming: login refused while Home Assistant's link has no device key")
+		return errors.New("camera_credentials: the device has no API encryption key; set one first")
+	}
+	user = strings.TrimSpace(user)
+	if err := SetLogin(user, pass); err != nil {
+		return fmt.Errorf("camera_credentials: %w", err)
+	}
+	slog.Info("camera streaming: login set from Home Assistant")
+	return nil
+}
+
+func (f *Feature) Restore(c config.Config) {
+	f.on.Set(c.CamStream.On)
+	panelCameraSwitch(c.CamStream.On)
+	f.discovery.Set(c.CamStream.Discovery)
+	f.loginFromHA.Set(c.CamStream.LoginFromHA)
+}
 
 // poke has the listener looked at again, for a change to the switch.
 func (f *Feature) poke() {
@@ -155,19 +226,35 @@ func (f *Feature) poke() {
 func Poke() {
 	f := Get()
 	f.dropAll()
+	f.endPages()
 	f.poke()
+}
+
+// PageGen is the generation a camera page stream started in; once it moves on, the stream ends: the
+// login it came in with may be gone, or the lens cover closed.
+func PageGen() uint64 {
+	f := Get()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.pageGen
+}
+
+func (f *Feature) endPages() {
+	f.mu.Lock()
+	f.pageGen++
+	f.mu.Unlock()
 }
 
 // Offered is whether the device has a camera to stream, for the setup page.
 func Offered() bool { return Get().available() }
 
-// Watching is whether anybody is being sent the camera, for the screen.
+// Watching is whether anybody is being sent the camera, over the stream or a camera page, for the screen.
 func Watching() bool { return Get().watching() }
 
 func (f *Feature) watching() bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.subs) > 0
+	return len(f.subs) > 0 || f.pages > 0
 }
 
 // wanted is whether the camera is to be served: on, with a password, on a device with a camera.
@@ -178,8 +265,14 @@ func (f *Feature) wanted() bool {
 
 // Run keeps the port open while the camera is to be served, and shut while it is not.
 func (f *Feature) Run(ctx context.Context) error {
+	var stopDiscovery context.CancelFunc
+	defer func() {
+		if stopDiscovery != nil {
+			stopDiscovery()
+		}
+	}()
 	defer f.close()
-	defer onCover(f.dropAll)()
+	defer onCover(func() { f.dropAll(); f.endPages() })()
 	tick := time.NewTicker(30 * time.Second)
 	defer tick.Stop()
 	for {
@@ -198,6 +291,17 @@ func (f *Feature) Run(ctx context.Context) error {
 		case !want && f.listener() != nil:
 			f.close()
 			slog.Info("camera streaming: off")
+		}
+		// WS-Discovery while the stream is served and its own switch is on.
+		switch discover := f.listener() != nil && config.Get().CamStream.Discovery; {
+		case discover && stopDiscovery == nil:
+			dctx, cancel := context.WithCancel(ctx)
+			stopDiscovery = cancel
+			go f.discover(dctx)
+			slog.Info("camera streaming: answering discovery")
+		case !discover && stopDiscovery != nil:
+			stopDiscovery()
+			stopDiscovery = nil
 		}
 		select {
 		case <-ctx.Done():
@@ -239,6 +343,9 @@ func (f *Feature) dropAll() {
 	}
 }
 
+// away is web.AwayConn; a test sets its own, since nothing here can dial from a tailnet address.
+var away = web.AwayConn
+
 // serve takes connections until the listener is closed.
 func (f *Feature) serve(ln net.Listener) {
 	for {
@@ -246,7 +353,8 @@ func (f *Feature) serve(ln net.Listener) {
 		if err != nil {
 			return
 		}
-		if !f.admit(ln, conn, hostOf(conn.RemoteAddr())) {
+		// Never one from away, over the tailnet: RTSP has its own listener, outside the web server's gate.
+		if away(conn.RemoteAddr().String(), conn.LocalAddr().String()) || !f.admit(ln, conn, hostOf(conn.RemoteAddr())) {
 			_ = conn.Close()
 			continue
 		}
@@ -375,14 +483,30 @@ func (f *Feature) unsubscribe(ch chan rtpjpeg.Frame) {
 }
 
 // pump encodes the camera's pictures, at most maxFPS a second, and hands each to every viewer, the newest
-// only to one that is behind. When the camera stops by itself, every viewer is let go.
+// only to one that is behind. When the camera stops by itself, every viewer is let go. A frame that
+// comes too soon is kept and sent when its time comes, so the last one always goes out: when the
+// sensor stops for the mute, its last frame is the black one, and none follows it.
 func (f *Feature) pump(frames <-chan frame, stop <-chan struct{}) {
+	interval := time.Second / maxFPS
+	if layout.OnAndroid() {
+		interval = time.Second / 15 // Android already encoded the frame; the daemon only packetizes it.
+	}
 	var last time.Time
+	var held frame
+	var due <-chan time.Time
 	for {
+		var develop frame
 		select {
 		case <-stop:
 			return
-		case develop, ok := <-frames:
+		case <-due:
+			select {
+			case <-stop: // both ready: stopping wins
+				return
+			default:
+			}
+			develop, held, due = held, nil, nil
+		case next, ok := <-frames:
 			if !ok {
 				f.mu.Lock()
 				subs := make([]chan rtpjpeg.Frame, 0, len(f.subs))
@@ -395,40 +519,49 @@ func (f *Feature) pump(frames <-chan frame, stop <-chan struct{}) {
 				}
 				return
 			}
-			now := time.Now()
-			if now.Sub(last) < time.Second/maxFPS {
-				continue
-			}
-			last = now
-			img := develop()
-			if img == nil {
-				continue
-			}
-			b, err := encode(eighths(img))
-			if err != nil {
-				continue
-			}
-			pic, err := rtpjpeg.Parse(b)
-			if err != nil {
-				slog.Warn("camera streaming: a picture that cannot be sent", "err", err)
-				continue
-			}
-			f.mu.Lock()
-			for ch := range f.subs {
-				select {
-				case <-ch: // behind: the older picture goes
-				default:
+			if wait := interval - time.Since(last); wait > 0 {
+				held = next // the newest waiting one
+				if due == nil {
+					due = time.After(wait)
 				}
-				ch <- pic
+				continue
 			}
-			f.mu.Unlock()
+			develop, held, due = next, nil, nil
 		}
+		last = time.Now()
+		img := develop()
+		if img == nil {
+			continue
+		}
+		var b []byte
+		var err error
+		if raw, ok := img.(interface{ RawJPEG() []byte }); ok {
+			b = raw.RawJPEG()
+		} else {
+			b, err = encode(eighths(img))
+		}
+		if err != nil {
+			continue
+		}
+		pic, err := rtpjpeg.Parse(b)
+		if err != nil {
+			slog.Warn("camera streaming: a picture that cannot be sent", "err", err)
+			continue
+		}
+		f.mu.Lock()
+		for ch := range f.subs {
+			select {
+			case <-ch: // behind: the older picture goes
+			default:
+			}
+			ch <- pic
+		}
+		f.mu.Unlock()
 	}
 }
 
-// offered is a camera, on the Linux image: under Android, the vendor's firewall drops the port, and the
-// camera is Android's.
-func offered() bool { return camera.Available() && !layout.OnAndroid() }
+// offered is a camera whose Android or Linux capture path is available.
+func offered() bool { return camera.Available() }
 
 // cameraFrames starts the camera and hands its pictures over, the newest only.
 func cameraFrames() (<-chan frame, func(), error) {
@@ -438,17 +571,52 @@ func cameraFrames() (<-chan frame, func(), error) {
 	}
 	out := make(chan frame, 1)
 	stop := camera.Get().Frames.Listen(func(fr *camera.Frame) {
-		select {
-		case out <- func() image.Image {
+		next := func() image.Image {
+			if raw, ok := any(fr).(interface{ RawJPEG() []byte }); ok && len(raw.RawJPEG()) > 0 {
+				return panelJPEGImage{frame: fr, jpeg: raw.RawJPEG()}
+			}
 			if img := fr.Image(); img != nil {
 				return img
 			}
 			return nil // a typed nil would not compare as nil
-		}:
-		default: // the stream is slower than the sensor: skip, never queue
+		}
+		// The stream is slower than the sensor: skip, never queue, but keep the newest (the black
+		// frame of a sensor that stopped is the last one; see camera.ListenLatest).
+		for {
+			select {
+			case out <- next:
+				return
+			default:
+			}
+			select {
+			case <-out:
+			default:
+			}
 		}
 	})
 	return out, func() { stop(); release() }, nil
+}
+
+// panelJPEGImage lets RTP/JPEG send Android's already encoded preview frame. Its
+// image methods decode only when another consumer actually needs pixels.
+type panelJPEGImage struct {
+	frame *camera.Frame
+	jpeg  []byte
+}
+
+func (p panelJPEGImage) RawJPEG() []byte         { return p.jpeg }
+func (p panelJPEGImage) ColorModel() color.Model { return color.RGBAModel }
+func (p panelJPEGImage) Bounds() image.Rectangle {
+	if img := p.frame.Image(); img != nil {
+		return img.Bounds()
+	}
+	return image.Rectangle{}
+}
+func (p panelJPEGImage) At(x, y int) color.Color {
+	if img := p.frame.Image(); img != nil {
+		return img.At(x, y)
+	}
+	return color.Black
 }
 
 // encode is a picture as the stream's JPEG.

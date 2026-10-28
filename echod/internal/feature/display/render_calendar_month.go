@@ -14,6 +14,7 @@ import (
 	"golang.org/x/image/vector"
 
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // calendarMonth is the month as a grid, Sunday first. An event of several days is one bar across its
@@ -23,16 +24,16 @@ import (
 // bigger than the Show 5's, and the coming week's days carry their weather; simple keeps the timed
 // events as bars of their color. A day with more than fits says how many more.
 func (r *renderer) calendarMonth(v calendarView, l calLook) {
-	title := v.month.Format("January 2006")
+	title := locale.MonthYear(v.month, screenLang())
 	r.text(r.title, title, r.margin, r.margin+r.s(34), cream)
-	x := r.calButton("Done", r.w-r.margin, calDone)
+	x := r.calButton(tr("done"), r.w-r.margin, calDone)
 	if v.month.Year() != v.now.Year() || v.month.Month() != v.now.Month() {
-		x = r.calButton("Today", x, calToday)
+		x = r.calButton(tr("today"), x, calToday)
 	}
-	x = r.calButton("›", x, calNext)
-	x = r.calButton("‹", x, calPrev)
+	x = r.calIconButton("chevron-right", "›", x, calNext)
+	x = r.calIconButton("chevron-left", "‹", x, calPrev)
 	if l.week {
-		x = r.calSegmented("Month", x, true)
+		x = r.calSegmented(calMonthView, x, true)
 	}
 
 	top := r.margin + r.s(58)
@@ -57,7 +58,8 @@ func (r *renderer) calendarMonth(v calendarView, l calLook) {
 
 	colW := (r.w - 2*r.margin) / 7
 	for i := range 7 {
-		label := time.Weekday(i).String()[:3]
+		day := v.month.AddDate(0, 0, i-int(v.month.Weekday()))
+		label := locale.ShortWeekday(day, screenLang())
 		r.text(r.tiny, label, r.margin+i*colW+(colW-r.width(r.tiny, label))/2, top+r.s(20), dim)
 	}
 	gridTop := top + r.s(28)
@@ -81,15 +83,22 @@ func (r *renderer) calendarMonth(v calendarView, l calLook) {
 		r.monthWeekEvents(v, l, row, cells, today)
 	}
 	if !v.loaded {
-		msg := "Reading the calendar…"
+		msg := tr("reading_the_calendar")
 		r.text(r.tiny, msg, r.w-r.margin-r.width(r.tiny, msg), top+r.s(20), dim)
 	}
 }
 
+// monthRoomy is whether the month's cells are tall enough for the bigger panel's numbers and lines: on
+// a panel as tall for its width as the Show 8's. The Skylight Calendar's 1920 by 1080 is wide but
+// hardly taller for its width than the Show 5, and there the bigger numbers left a day with two
+// events a single line, "+2 more" and nothing else; it keeps the Show 5's spacing, scaled, and the
+// rest of what a bigger panel shows.
+func (r *renderer) monthRoomy(l calLook) bool { return l.wide && r.h*10 >= r.w*6 }
+
 // monthNumber is the day's number's face, and its baseline below the cell's top: a little smaller on
 // the Show 5, where the cells are short.
 func (r *renderer) monthNumber(l calLook) (face numFaces, base int) {
-	if l.wide {
+	if r.monthRoomy(l) {
 		return numFaces{r.tiny, r.textFace(true, 26)}, r.s(25)
 	}
 	return numFaces{r.textFace(false, 22), r.textFace(true, 22)}, r.s(20)
@@ -115,7 +124,7 @@ func (r *renderer) monthCell(v calendarView, l calLook, day time.Time, in image.
 	if today {
 		w := r.width(nf.bold, num)
 		hh := r.s(15)
-		if !l.wide {
+		if !r.monthRoomy(l) {
 			hh = r.s(23) / 2
 		}
 		cy := base - capHeight(nf.bold)/2
@@ -151,7 +160,7 @@ type numFaces struct{ face, bold font.Face }
 // has, as many as fit, and "+2 more" for the rest.
 func (r *renderer) monthWeekEvents(v calendarView, l calLook, row time.Time, cells []image.Rectangle, today time.Time) {
 	lh, ev0 := r.s(19), r.s(33)
-	if !l.wide {
+	if !r.monthRoomy(l) {
 		lh, ev0 = r.s(18), r.s(24)
 	}
 	spans := weekSpans(v.events, row, 7)

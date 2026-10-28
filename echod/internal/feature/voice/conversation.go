@@ -18,6 +18,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/light"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/recording"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
@@ -210,8 +211,10 @@ type conversation struct {
 	followUp  bool
 	followUps int
 
-	// woke is the open turn's nextTurn.woke, and opened when it was asked for (nextTurn.at).
+	// woke is the open turn's nextTurn.woke, asked its nextTurn.asked, and opened when it was asked
+	// for (nextTurn.at).
 	woke   bool
+	asked  bool
 	opened time.Time
 
 	// lookHere says this turn's answer put a page on the screen (the rain map, the forecast), so it is
@@ -565,6 +568,11 @@ func (c *conversation) turnEvent(e event) {
 			Mistaken.Emit(Mistake{Slot: slot, Heard: e.text, Opened: opened})
 			return
 		}
+		// "Call Mom", with Mom in the phone book: the device places the call itself (callvoice.go).
+		if who, words, ready, ok := c.heardCall(e.text, rt); ok {
+			c.callFromTurn(who, words, ready)
+			return
+		}
 		// Realtime voice's listening is ended by this device hearing the speaker finish (evSpokeEnd),
 		// never by a transcript, which can be of part of the question.
 		if c.phase == phaseListening && !rt {
@@ -864,6 +872,7 @@ func (c *conversation) start(n nextTurn) bool {
 	c.slot = slot
 	c.followUp = n.followUp
 	c.woke = n.woke
+	c.asked = n.asked
 	c.opened = n.at
 	if c.opened.IsZero() {
 		c.opened = time.Now()
@@ -995,7 +1004,9 @@ func (c *conversation) speak(url string) {
 	// The deadline is left as it was. Text arriving is not the pipeline delivering: it still owes the
 	// audio, and the limit it was given when the device stopped listening goes on running until some
 	// of that audio turns up.
-	errand := func(ctx context.Context, p *speaker.Player) error { return c.play(ctx, url, playing) }
+	errand := func(ctx context.Context, p *speaker.Player) error {
+		return c.play(ctx, url, playing, phone.RepliesIntoCall())
+	}
 	if url == "" {
 		s := newStream(c.speaker.Splices(), c.speaker.Underruns(), wakeword.Buffer(c.slot))
 		c.reply.stream = s
@@ -1004,12 +1015,15 @@ func (c *conversation) speak(url string) {
 		}
 	}
 
+	// A call up meanwhile sends the reply, not the room, until it and its echo are over (phone's uplink).
+	replied := phone.Get().ReplyStarted()
 	held := c.sound.ClaimSpeech("reply", errand)
 	// The slot is read here, on the loop: by the time the reply is over, the loop may be on another
 	// turn, and the slot is not the reply goroutine's to read.
 	slot := c.slot
 	safe.Go("reply", func() {
 		<-held.Done()
+		time.AfterFunc(speaker.HardwareTail, replied)
 
 		// A reply that was stopped - canceled, interrupted by a wake word, or cut off by another sound -
 		// fails its fetch with the context canceled, which says nothing about the url. Taken as a
@@ -1325,9 +1339,13 @@ func (c *conversation) startAudio(slot int, followUp, continued bool, waited tim
 	// be kept out of the microphone.
 	id := c.turn.ID()
 	be := c.be
+	// A call up meanwhile holds the far end back from the room for as long as this listens (phone's
+	// playFarEnd), so the caller does not speak into the turn.
+	listened := phone.Get().TurnListening()
 	streams.Add(1)
 	safe.Go("turn audio", func() {
 		defer streams.Done()
+		defer listened()
 		c.stream(ctx, be, slot, followUp, continued, id, waited)
 	})
 }
@@ -1348,19 +1366,18 @@ func (c *conversation) stopStreaming() {
 
 // stream sends microphone frames until it is told to stop.
 func (c *conversation) stream(ctx context.Context, be backend, slot int, followUp, continued bool, id string, waited time.Duration) {
-	frames, unlisten := c.source.Listen("turn")
+	frames, pre, unlisten := c.source.ListenHistory("turn", mic.History+waited)
 	defer unlisten()
 
 	buf := make([]byte, 0, mic.FrameSamples*2)
 
 	// Send what was already said before this turn began. The wake word can only be recognized after
 	// it has been spoken, and people run straight on into the request, so the opening words exist only
-	// in the microphone's history. Subscribing first means no audio falls between the two.
+	// in the microphone's history. History and subscription share one capture boundary.
 	//
 	// A slot that chimes does not send it: whoever is talking waits for the tone, so the history holds
 	// the wake word rather than the request, and the tone itself is louder at the array than they are.
 	// That is as true of a wake Home Assistant's engine heard.
-	pre := c.source.Recent(mic.History + waited)
 	if wakeword.Tones(slot, followUp) {
 		pre = nil
 	}

@@ -171,6 +171,10 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	if streamed && d.r != nil {
 		s.dash = f.Stream(d.r.w, d.r.h)
 	}
+	if want && mode == config.DashboardTessera {
+		d.tessScene(s)
+		d.tessSheetViews(s)
+	}
 	if want && mode == config.DashboardDrawn {
 		s.drawn = f.Drawn(d.r.w)
 		s.dashTiles = config.Get().Dashboard.Tiles
@@ -201,10 +205,12 @@ func (d *Display) dashScene(s *scene, sheetOrDrawer bool) {
 	// needs holds reported; the color sheet goes with the page. Not while something that takes only a
 	// tap is drawn over the page (overDashboard): with holds on, a slow press on it would be a hold
 	// and a release, which it does not answer, and which the page under it would.
-	holds := want && mode == config.DashboardDrawn && !over
+	// The Tessera page's long press opens the same sheets.
+	sheeted := want && (mode == config.DashboardDrawn || mode == config.DashboardTessera)
+	holds := sheeted && !over
 	holdsChanged := holds != d.dashHolds
 	d.dashHolds = holds
-	if !(want && mode == config.DashboardDrawn) {
+	if !sheeted {
 		d.dashColor, d.dashMedia, d.dashClimate = nil, nil, nil
 	}
 	d.mu.Unlock()
@@ -264,12 +270,16 @@ func (d *Display) dashGesture(g touch.Gesture) {
 	edge := d.r.drawerEdge()
 	f := dashboard.Get()
 	streamed := f.Mode() == config.DashboardStreamed
+	tess := f.Mode() == config.DashboardTessera
 
 	switch g.Kind {
 	case touch.Tap:
-		if streamed {
+		switch {
+		case streamed:
 			f.Touch("tap", g.X, g.Y)
-		} else {
+		case tess:
+			d.tessTap(g.X, g.Y)
+		default:
 			d.drawnTap(g.X, g.Y)
 		}
 	case touch.Hold:
@@ -294,9 +304,12 @@ func (d *Display) dashGesture(g touch.Gesture) {
 		d.dashDrag = drawnDrag{startScroll: d.dashScroll}
 		d.mu.Unlock()
 		if from == edgeNone {
-			if streamed {
+			switch {
+			case streamed:
 				f.Touch("down", g.X, g.Y)
-			} else {
+			case tess:
+				d.tessHold(g.X, g.Y)
+			default:
 				d.drawnHold(g.X, g.Y)
 			}
 		}
@@ -307,9 +320,12 @@ func (d *Display) dashGesture(g touch.Gesture) {
 		if from != edgeNone {
 			return
 		}
-		if streamed {
+		switch {
+		case streamed:
 			f.Touch("move", g.X, g.Y)
-		} else {
+		case tess:
+			d.tessMove(g.X, g.Y)
+		default:
 			d.drawnMove(g.X, g.Y)
 		}
 	case touch.Release:
@@ -320,9 +336,12 @@ func (d *Display) dashGesture(g touch.Gesture) {
 		far := d.r.s(80)
 		switch from {
 		case edgeNone:
-			if streamed {
+			switch {
+			case streamed:
 				f.Touch("up", g.X, g.Y)
-			} else {
+			case tess:
+				d.tessRelease(g.X, g.Y)
+			default:
 				d.drawnRelease(g.X, g.Y)
 			}
 		case edgeLeft:
@@ -359,8 +378,15 @@ func (r *renderer) drawnDashboard(s scene) {
 
 // dashboardPage draws the dashboard over the whole panel.
 func (r *renderer) dashboardPage(s scene) {
-	if s.dashMode == config.DashboardDrawn {
+	switch s.dashMode {
+	case config.DashboardDrawn:
 		r.drawnDashboard(s)
+		return
+	case config.DashboardTessera:
+		r.tesseraPage(s.tessera, s.tessOn, s.tessPage, s.dashAdjust, s.now)
+		r.colorSheet(s.dashColor, dashboard.Theme{})
+		r.mediaSheet(s.dashMedia, dashboard.Theme{})
+		r.climateSheet(s.dashClimate, dashboard.Theme{})
 		return
 	}
 	v := s.dash

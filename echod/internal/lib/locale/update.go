@@ -92,6 +92,18 @@ var updateTranslations = map[string]map[string]string{
 		UpdatePowerHint:    "Laat het apparaat aan",
 		UpdateRetryHint:    "Opnieuw proberen via Settings > General > Updates",
 	},
+	"pt": {
+		UpdateSystemTitle:  "Atualização do sistema",
+		UpdateFailedTitle:  "Falha na atualização",
+		UpdateDownloading:  "Baixando atualização · %d%%",
+		UpdateInstalling:   "Instalando…",
+		UpdateRestartingIn: "O app reinicia em %d…",
+		UpdateRestarting:   "Reiniciando o app…",
+		UpdateRebootingIn:  "O aparelho reinicia em %d…",
+		UpdateRebooting:    "Reiniciando o aparelho…",
+		UpdatePowerHint:    "Mantenha o aparelho ligado",
+		UpdateRetryHint:    "Tente de novo em Settings > General > Updates",
+	},
 	"ru": {
 		UpdateSystemTitle:  "Обновление системы",
 		UpdateFailedTitle:  "Ошибка обновления",
@@ -110,11 +122,8 @@ var updateTranslations = map[string]map[string]string{
 // used for English, empty or unsupported languages, and unknown keys are returned as-is so a missing
 // translation cannot silently render an empty label.
 func UpdateText(lang, key string) string {
-	if translated, ok := updateTranslations[lang][key]; ok {
-		return translated
-	}
 	if english, ok := updateEnglish[key]; ok {
-		return english
+		return translated(lang, key, updateTranslations, english)
 	}
 	return key
 }

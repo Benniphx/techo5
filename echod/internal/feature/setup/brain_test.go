@@ -80,6 +80,7 @@ func TestInvalidBrainFormNeverChangesSettingsOrKey(t *testing.T) {
 		{"mode": {"realtime"}, "voice": {"local-voice"}},
 		{"mode": {"realtime"}, "model": {"local-model"}},
 		{"mode": {"realtime"}, "search": {"http://localhost:8888"}},
+		{"mode": {"realtime"}, "reader": {"http://localhost:8891"}},
 		{"mode": {"realtime"}, "realtime_url": {"https://service.invalid"}},
 		{"mode": {"realtime"}, "realtime_token_file": {"/private/key"}},
 		{"mode": {"realtime"}, "realtime_ca_file": {"/private/ca"}},
@@ -160,5 +161,29 @@ func TestProviderSwitchRequiresAnExplicitCredentialDecision(t *testing.T) {
 	}
 	if b := config.Get().Brain; !b.Direct() || b.Key != "" {
 		t.Fatal("explicit keyless direct mode failed")
+	}
+}
+
+// The stable page-reader field and native fields occupy adjacent parts of the form.
+func TestPageReaderSurvivesDirectFormRoundTrip(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	values := url.Values{"mode": {"direct"}, "stt": {"localhost:10300"}, "tts": {"localhost:10200"}, "llm": {"http://localhost:8080/v1"}, "reader": {"http://localhost:8891/"}, "language": {"de"}, "prompt": {"Reader test"}}
+	if why := saveBrain(form(values)); why != "" {
+		t.Fatal(why)
+	}
+	b := config.Get().Brain
+	if b.Reader != "http://localhost:8891" || b.Language != "de" || b.Prompt != "Reader test" {
+		t.Fatal("direct fields lost or reordered")
+	}
+	w := httptest.NewRecorder()
+	brainSection(w, "page-token")
+	page := w.Body.String()
+	for _, want := range []string{`name="reader" value="http://localhost:8891"`, `name="language" value="de"`, `name="prompt" rows="3" maxlength="2000">Reader test`, `name="realtime_model" value=""`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(page, "%!") {
+		t.Fatal("form format arguments shifted")
 	}
 }

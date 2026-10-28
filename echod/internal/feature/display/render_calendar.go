@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"strconv"
+	"strings"
 	"time"
 
+	"golang.org/x/image/font"
+
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // The calendar page (docs/calendar-and-night-plan.md): the month as a grid with each day's events on
@@ -138,12 +141,40 @@ func (r *renderer) calendarPage(s scene) {
 	}
 }
 
+// calArrowIcon is the size the header's chevrons are drawn at. The program's icon buttons draw the
+// transport marks at transportIcon's 32 pixels in a 54-pixel button; the header's buttons are 48
+// tall, so 28 is the same share of the button.
+const calArrowIcon = 28
+
+// calIconButtonAt draws a button in b whose label is an icon-font glyph: the program's button face,
+// with the mark centered by the ink of the glyph itself, as the transport controls are.
+func (r *renderer) calIconButtonAt(b image.Rectangle, icon string) {
+	col := r.buttonFace(b, float64(b.Dy())/2, btnSecondary)
+	r.iconIn(b, icon, calArrowIcon, col)
+}
+
+// calButtonBox is the box a header button takes: the one the page's small face measured, so the
+// header stays where it was. The button face is narrower and fits inside it.
+func (r *renderer) calButtonBox(label string, right int) image.Rectangle {
+	w := r.width(r.small, label) + r.s(36)
+	return image.Rect(right-w, r.margin-r.s(8), right, r.margin+r.s(40))
+}
+
 // calButton draws a button with its right edge at right, on the header line, and says where it is.
 func (r *renderer) calButton(label string, right int, kind calHitKind) int {
-	w := r.width(r.small, label) + r.s(36)
-	b := image.Rect(right-w, r.margin-r.s(8), right, r.margin+r.s(40))
-	r.roundRect(b, b.Dy()/2, calWash(26))
-	r.text(r.small, label, b.Min.X+r.s(18), b.Min.Y+r.s(36), cream)
+	b := r.calButtonBox(label, right)
+	r.labelButton(b, label, btnSecondary)
+	r.calHitAdd(calHit{r: b.Inset(-r.s(6)), kind: kind})
+	return b.Min.X - r.s(14)
+}
+
+// calIconButton draws a button whose label is an icon-font glyph, with its right edge at right, on the
+// header line, and says where it is. label is the words the icon replaces: the box is still the one
+// they measured, so every button and hit rectangle on the header line stays where it was, on any
+// screen font, and only the ink changes.
+func (r *renderer) calIconButton(icon, label string, right int, kind calHitKind) int {
+	b := r.calButtonBox(label, right)
+	r.calIconButtonAt(b, icon)
 	r.calHitAdd(calHit{r: b.Inset(-r.s(6)), kind: kind})
 	return b.Min.X - r.s(14)
 }
@@ -152,15 +183,15 @@ func (r *renderer) calButton(label string, right int, kind calHitKind) int {
 func (r *renderer) calendarDay(v calendarView) {
 	// Done here goes back to the month or the agenda it was opened from; their own Done puts the
 	// calendar away.
-	x := r.calButton("Done", r.w-r.margin, calBack)
-	r.text(r.title, clipText(r, r.title, v.day.Format("Monday, January 2"), x-r.margin-r.s(10)), r.margin, r.margin+r.s(34), cream)
+	x := r.calButton(tr("done"), r.w-r.margin, calBack)
+	r.text(r.title, clipText(r, r.title, locale.LongDate(v.day, screenLang()), x-r.margin-r.s(10)), r.margin, r.margin+r.s(34), cream)
 
 	evs := eventsOn(v.events, v.day)
 	top := r.margin + r.s(74)
 	if len(evs) == 0 {
-		msg := "Nothing on this day"
+		msg := tr("ui_nothing_on_this_day")
 		if !v.loaded {
-			msg = "Reading the calendar…"
+			msg = tr("reading_the_calendar")
 		}
 		r.text(r.body, msg, r.margin, top+r.s(60), dim)
 		return
@@ -236,19 +267,19 @@ func agendaRows(events []hass.Event, now time.Time) []agendaRow {
 func agendaDayName(day, now time.Time) string {
 	switch {
 	case sameDay(day, now):
-		return "Today"
+		return locale.Today(screenLang())
 	case sameDay(day, now.AddDate(0, 0, 1)):
-		return "Tomorrow"
+		return locale.Tomorrow(screenLang())
 	}
-	return day.Format("Monday, January 2")
+	return locale.LongDate(day, screenLang())
 }
 
 // calendarAgenda is the coming days' events as one list, each day under its heading. A tap on an event
 // opens its window, a tap on a heading that day's list.
 func (r *renderer) calendarAgenda(v calendarView) {
-	x := r.calButton("Done", r.w-r.margin, calDone)
-	x = r.calButton("Month", x, calMonthView)
-	r.text(r.title, clipText(r, r.title, "Coming up", x-r.margin-r.s(10)), r.margin, r.margin+r.s(34), cream)
+	x := r.calButton(tr("done"), r.w-r.margin, calDone)
+	x = r.calButton(tr("month"), x, calMonthView)
+	r.text(r.title, clipText(r, r.title, tr("coming_up"), x-r.margin-r.s(10)), r.margin, r.margin+r.s(34), cream)
 
 	rows := agendaRows(v.events, v.now)
 	top := r.margin + r.s(74)
@@ -264,9 +295,9 @@ func (r *renderer) calendarAgenda(v calendarView) {
 	r.calAgendaStep = max(r.calendarDayRows()-1, 1)
 	r.calMu.Unlock()
 	if len(rows) == 0 {
-		msg := "Nothing in the next two weeks"
+		msg := tr("nothing_in_the_next_two_weeks")
 		if !v.loaded {
-			msg = "Reading the calendar…"
+			msg = tr("reading_the_calendar")
 		}
 		r.text(r.body, msg, r.margin, top+r.s(60), dim)
 		return
@@ -325,7 +356,7 @@ func eventWhen(e hass.Event, day time.Time) string {
 	if e.AllDay {
 		last := e.End.AddDate(0, 0, -1)
 		if sameDay(e.Start, last) || !last.After(e.Start) {
-			return "All day"
+			return tr("all_day")
 		}
 		return "All day, " + e.Start.Format("Jan 2") + " – " + last.Format("Jan 2")
 	}
@@ -347,9 +378,9 @@ func eventWhenFull(e hass.Event) (day, at string) {
 	if e.AllDay {
 		last := e.End.AddDate(0, 0, -1)
 		if !last.After(e.Start) {
-			return e.Start.Format("Monday, January 2"), "All day"
+			return e.Start.Format("Monday, January 2"), tr("all_day")
 		}
-		return e.Start.Format("Mon, Jan 2") + " – " + last.Format("Mon, Jan 2"), "All day"
+		return e.Start.Format("Mon, Jan 2") + " – " + last.Format("Mon, Jan 2"), tr("all_day")
 	}
 	if !e.End.After(e.Start) {
 		return e.Start.Format("Monday, January 2"), clockText(e.Start)
@@ -364,7 +395,7 @@ func eventWhenFull(e hass.Event) (day, at string) {
 // calendarDetail is one event's window: the title, when, the calendar, and the location and the
 // description when it has them.
 func (r *renderer) calendarDetail(v calendarView, e hass.Event) {
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(color.NRGBA{0, 0, 0, 150}), image.Point{}, draw.Over)
+	washOver(r.dst, r.dst.Rect, color.NRGBA{0, 0, 0, 150})
 	r.calHitAdd(calHit{r: r.dst.Rect, kind: calOutside})
 	w, h := r.w*76/100, r.h*80/100
 	card := image.Rect((r.w-w)/2, (r.h-h)/2, (r.w+w)/2, (r.h+h)/2)
@@ -373,40 +404,62 @@ func (r *renderer) calendarDetail(v calendarView, e hass.Event) {
 	c := v.color(e.Calendar)
 	r.fillRect(image.Rect(card.Min.X+r.s(18), card.Min.Y+r.s(22), card.Min.X+r.s(24), card.Min.Y+r.s(74)), c)
 	x, textW := card.Min.X+r.s(40), card.Dx()-r.s(64)
-	y := card.Min.Y + r.s(58)
-	for i, line := range r.wrap(r.title, e.Summary, textW) {
-		if i == 2 {
-			break
-		}
-		r.text(r.title, line, x, y, cream)
-		y += r.s(54)
+	closeB := image.Rect(card.Max.X-r.s(150), card.Max.Y-r.s(66), card.Max.X-r.s(22), card.Max.Y-r.s(18))
+	y := card.Min.Y + r.s(48)
+	titleFace, lineH := r.title, r.s(54)
+	if r.width(titleFace, e.Summary) > textW {
+		titleFace, lineH = r.small, r.s(40)
+	}
+	for _, line := range r.calendarDetailLines(titleFace, e.Summary, textW, 3) {
+		r.text(titleFace, line, x, y, cream)
+		y += lineH
 	}
 	dayLine, atLine := eventWhenFull(e)
-	r.text(r.small, clipText(r, r.small, dayLine, textW), x, y, cream)
-	y += r.s(40)
-	r.text(r.small, clipText(r, r.small, atLine, textW), x, y, cream)
-	y += r.s(42)
-	r.text(r.tiny, clipText(r, r.tiny, v.name(e.Calendar), textW), x, y, c)
-	y += r.s(38)
+	r.text(r.tiny, clipText(r, r.tiny, dayLine, textW), x, y, cream)
+	y += r.s(32)
+	r.text(r.tiny, clipText(r, r.tiny, atLine, textW), x, y, cream)
+	y += r.s(32)
+	r.text(r.micro, clipText(r, r.micro, v.name(e.Calendar), textW), x, y, c)
+	y += r.s(28)
 	if e.Location != "" {
-		r.text(r.small, clipText(r, r.small, e.Location, textW), x, y, dim)
-		y += r.s(42)
-	}
-	closeB := image.Rect(card.Max.X-r.s(150), card.Max.Y-r.s(66), card.Max.X-r.s(22), card.Max.Y-r.s(18))
-	if e.Description != "" {
-		lines := r.wrap(r.tiny, e.Description, textW)
-		for _, line := range lines {
-			if y+r.s(32) > closeB.Min.Y-r.s(6) {
-				break
-			}
+		room := min(2, calendarDetailRoom(closeB.Min.Y-r.s(12), y, r.s(32)))
+		for _, line := range r.calendarDetailLines(r.tiny, e.Location, textW, room) {
 			r.text(r.tiny, line, x, y, dim)
 			y += r.s(32)
 		}
 	}
-	r.roundRect(closeB, closeB.Dy()/2, color.NRGBA{255, 255, 255, 30})
-	label := "Close"
-	r.text(r.small, label, closeB.Min.X+(closeB.Dx()-r.width(r.small, label))/2, closeB.Min.Y+r.s(35), cream)
+	if e.Description != "" {
+		room := calendarDetailRoom(closeB.Min.Y-r.s(12), y, r.s(32))
+		lines := r.calendarDetailLines(r.tiny, e.Description, textW, room)
+		for _, line := range lines {
+			r.text(r.tiny, line, x, y, dim)
+			y += r.s(32)
+		}
+	}
+	r.labelButton(closeB, tr("close"), btnSecondary)
 	r.calHitAdd(calHit{r: closeB.Inset(-r.s(8)), kind: calClose})
+}
+
+// calendarDetailLines wraps readable detail text, reserving room for metadata
+// and the close button. Compact month/agenda cells keep their existing clipping.
+func (r *renderer) calendarDetailLines(face font.Face, text string, width, maxLines int) []string {
+	if maxLines <= 0 {
+		return nil
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	lines := r.calWrap(face, text, width)
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+		lines[maxLines-1] = clipText(r, face, restOf(text, lines[:maxLines-1]), width)
+	}
+	return lines
+}
+
+func calendarDetailRoom(bottom, baseline, lineHeight int) int {
+	if baseline > bottom {
+		return 0
+	}
+	return (bottom-baseline)/lineHeight + 1
 }
 
 func sameDay(a, b time.Time) bool {
