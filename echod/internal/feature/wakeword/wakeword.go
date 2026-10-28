@@ -386,8 +386,12 @@ func (w *WakeWord) Name() string { return "wake word settings" }
 func (w *WakeWord) Entities() []esphome.Entity {
 	ents := []esphome.Entity{w.cancel}
 	for _, s := range w.slots {
-		ents = append(ents, s.wake, s.threshold, s.tone, s.effect, s.thinking, s.replying,
-			s.delivery, s.buffer, s.followUp, s.followUps, s.followUpTone, s.maxListen, s.maxThink)
+		ents = append(ents, s.wake, s.threshold, s.tone)
+		// What the ring shows for each phase, where there is a ring to show it (#325).
+		if led.HasRing {
+			ents = append(ents, s.effect, s.thinking, s.replying)
+		}
+		ents = append(ents, s.delivery, s.buffer, s.followUp, s.followUps, s.followUpTone, s.maxListen, s.maxThink)
 	}
 	return ents
 }

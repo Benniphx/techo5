@@ -921,8 +921,8 @@ Under Settings → **Sound**, or on the device's Assist satellite in Home Assist
   nothing. The device's Assist satellite says whether one is running, so a tile can show it and start
   or stop it.
 - **Wake word effect**, **Thinking effect** and **Replying effect**, for each wake word in Home
-  Assistant: what the ring shows while the device listens, waits on an answer and replies. An
-  automation can show another for the step a request is in, without changing these, with
+  Assistant, on the Dot: what the ring shows while the device listens, waits on an answer and
+  replies. An automation can show another for the step a request is in, without changing these, with
   [`voice_effect`](actions.md#show-an-effect-on-the-ring-during-a-request).
 - **Quiet hours** and **Do not disturb**.
 
@@ -950,7 +950,7 @@ Each wake word's own settings are on a sub-device of its own in Home Assistant, 
 - **Wake**: a button that starts that assistant by hand, as its wake word would.
 - **Wake word threshold**: how sure the device has to be (see above).
 - **Wake word tone**: the sound it makes when it wakes.
-- **Wake word effect**, **Thinking effect** and **Replying effect**: what the ring shows.
+- **Wake word effect**, **Thinking effect** and **Replying effect**: what the ring shows (the Dot only: a Show or Spot has no ring).
 - **Reply delivery**: the answer as a whole file, or streamed as it comes.
 - **Follow-up time**, **Follow-ups in a row** and **Follow-up tone**: listening after an answer,
   below.
