@@ -204,7 +204,7 @@ func TestPanelTimeoutClosesSession(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("slot owner not notified")
 	}
-	// A new session cannot consume a late callback from the cancelled socket.
+	// A new session cannot consume a late callback from the canceled socket.
 	connectPanel(t, c)
 }
 func TestPanelUnexpectedDisconnect(t *testing.T) {
