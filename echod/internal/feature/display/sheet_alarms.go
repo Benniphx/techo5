@@ -14,6 +14,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/alarm"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/ring"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
 
 // The settings screen's Alarms & Timers card: the alarms, then how they ring. A tap on an alarm opens
@@ -142,20 +143,20 @@ var (
 // back at once.
 func alarmEditorCard(sv sheetView, d alarmDraft) cardView {
 	a := d.alarm
-	title := "Edit alarm"
+	title := tr("ui_edit_alarm")
 	if d.isNew {
 		title = tr("ui_new_alarm")
 	}
 	when := clockTime(a.Hour, a.Minute)
-	does := "Rings"
+	at, once := tr("alarm_rings_at"), tr("alarm_rings_once")
 	if a.LightOnly {
-		does = "Lights the room, no sound,"
+		at, once = tr("alarm_lights_at"), tr("alarm_lights_once")
 	}
-	blurb := does + " at " + when + ", " + config.DaysLabel(a.Days)
+	blurb := fmt.Sprintf(at, when, daysLabel(a.Days))
 	if a.Days&config.DaysEvery == config.DaysOnce {
-		blurb = does + " once, at " + when
+		blurb = fmt.Sprintf(once, when)
 		if t, ok := a.OnDate(); ok {
-			blurb += ", " + t.Format("Monday, January 2")
+			blurb += ", " + locale.LongDate(t, screenLang())
 		}
 	}
 	v := cardView{
@@ -195,6 +196,30 @@ func repeatName(days uint8) string {
 		}
 	}
 	return tr("ui_custom")
+}
+
+// daysLabel is config.DaysLabel in the screen's language: "every day", "weekdays", or the days' short
+// names.
+func daysLabel(days uint8) string {
+	switch days & config.DaysEvery {
+	case config.DaysOnce:
+		return tr("days_once")
+	case config.DaysEvery:
+		return tr("days_every_day")
+	case config.DaysWeekdays:
+		return tr("days_weekdays")
+	case config.DaysWeekends:
+		return tr("days_weekends")
+	}
+	// 2023-01-01 was a Sunday, the first of config's days.
+	sunday := time.Date(2023, time.January, 1, 12, 0, 0, 0, time.UTC)
+	var out []string
+	for i := range 7 {
+		if days&(1<<i) != 0 {
+			out = append(out, locale.ShortWeekday(sunday.AddDate(0, 0, i), screenLang()))
+		}
+	}
+	return strings.Join(out, " ")
 }
 
 func capitalize(s string) string {

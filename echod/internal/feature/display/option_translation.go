@@ -2,7 +2,10 @@
 
 package display
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // optionLabel translates known generic labels at the presentation boundary.
 // Canonical tables and Home Assistant option values remain unchanged.
@@ -170,6 +173,9 @@ func optionLabel(english string) string {
 	case "Speaker and headphones":
 		return tr("option_speaker_and_headphones")
 
+	// The weather source the device itself offers; other sources are Home Assistant's names.
+	case "Home Assistant forecast":
+		return tr("weather_ha_forecast")
 	}
 
 	var minutes int
@@ -185,9 +191,18 @@ func optionLabel(english string) string {
 	return english
 }
 
+// weekdayInitials are the day chips' letters, Sunday first, in the screen's language.
+func weekdayInitials() []string {
+	if days := strings.Fields(tr("weekday_initials")); len(days) == 7 {
+		return days
+	}
+	return []string{"S", "M", "T", "W", "T", "F", "S"}
+}
+
 func builtinOptionRow(id string) bool {
 	switch id {
-	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "timerstyle", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_month_details", "calpopallday", "calpopwhen":
+	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "timerstyle", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_month_details", "calpopallday", "calpopwhen",
+		"skin", "weather":
 		return true
 	}
 	return false

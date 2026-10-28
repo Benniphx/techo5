@@ -189,9 +189,24 @@ func (r *renderer) addressPage(s scene) {
 				draw.Draw(r.dst, rect, image.NewUniform(shift(walnut, 6)), image.Point{}, draw.Src)
 				continue
 			}
-			r.key(rect, k, k == "Save")
+			r.key(rect, addrKeyLabel(k), k == "Save")
 		}
 	}
+}
+
+// addrKeyLabel is a keypad key as the screen shows it; the keys keep their English names for the taps.
+func addrKeyLabel(k string) string {
+	switch k {
+	case "Del":
+		return tr("del")
+	case "Clear":
+		return tr("clear")
+	case "Back":
+		return tr("back")
+	case "Save":
+		return tr("ui_save")
+	}
+	return k
 }
 
 // openAddress shows the network address page.

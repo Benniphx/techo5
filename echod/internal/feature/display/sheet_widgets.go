@@ -683,7 +683,7 @@ func (r *paint) settingRow(card image.Rectangle, top int, row settingRow) {
 	case ctlDays:
 		chipW, chipGap := r.dayChip()
 		x0 := right - 7*chipW - 6*chipGap
-		for i, name := range []string{"S", "M", "T", "W", "T", "F", "S"} {
+		for i, name := range weekdayInitials() {
 			b := image.Rect(x0+i*(chipW+chipGap), cy-r.s(21), x0+i*(chipW+chipGap)+chipW, cy+r.s(21))
 			ink, rad := cream, r.sf(21)
 			if row.days&(1<<i) != 0 {

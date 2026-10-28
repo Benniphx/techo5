@@ -583,7 +583,33 @@ var uiEnglish = map[string]string{
 	"weekdays":                                             "Weekdays",
 	"weekends":                                             "Weekends",
 	"where_the_sound_goes_with_headphones_in": "Where the sound goes with headphones in",
-	"wi_fi": "Wi-Fi",
+	"wi_fi":                   "Wi-Fi",
+	"pin_enter":               "Enter the PIN",
+	"pin_new":                 "A new PIN, 4 to 8 digits",
+	"pin_again":               "The same PIN again",
+	"pin_wrong":               "Wrong PIN",
+	"pin_too_short":           "At least 4 digits",
+	"pin_no_match":            "They did not match",
+	"pin_try_again_in":        "Try again in %s",
+	"pin_wait_seconds":        "%d s",
+	"pin_wait_minutes":        "%d min",
+	"pin_not_saved":           "Could not save it",
+	"ok":                      "OK",
+	"clear":                   "Clear",
+	"del":                     "Del",
+	"ui_edit_alarm":           "Edit alarm",
+	"alarm_rings_at":          "Rings at %s, %s",
+	"alarm_lights_at":         "Lights the room, no sound, at %s, %s",
+	"alarm_rings_once":        "Rings once, at %s",
+	"alarm_lights_once":       "Lights the room, no sound, once, at %s",
+	"days_once":               "once",
+	"days_every_day":          "every day",
+	"days_weekdays":           "weekdays",
+	"days_weekends":           "weekends",
+	"weekday_initials":        "S M T W T F S",
+	"airplay_sets_the_volume": "AirPlay sets the volume",
+	"spot_threshold":          "Threshold",
+	"weather_ha_forecast":     "Home Assistant forecast",
 }
 
 var uiTranslations = map[string]map[string]string{
@@ -1151,7 +1177,33 @@ var uiTranslations = map[string]map[string]string{
 		"weekdays":                                             "平日",
 		"weekends":                                             "週末",
 		"where_the_sound_goes_with_headphones_in": "ヘッドホン接続時の音声出力先",
-		"wi_fi": "Wi-Fi",
+		"wi_fi":                   "Wi-Fi",
+		"pin_enter":               "PINを入力",
+		"pin_new":                 "新しいPIN（4〜8桁）",
+		"pin_again":               "同じPINをもう一度",
+		"pin_wrong":               "PINが違います",
+		"pin_too_short":           "4桁以上にしてください",
+		"pin_no_match":            "一致しません",
+		"pin_try_again_in":        "%s後に再試行できます",
+		"pin_wait_seconds":        "%d秒",
+		"pin_wait_minutes":        "%d分",
+		"pin_not_saved":           "保存できませんでした",
+		"ok":                      "OK",
+		"clear":                   "クリア",
+		"del":                     "削除",
+		"ui_edit_alarm":           "アラームを編集",
+		"alarm_rings_at":          "%sに鳴ります（%s）",
+		"alarm_lights_at":         "%sに部屋を照らします、音なし（%s）",
+		"alarm_rings_once":        "%sに一度鳴ります",
+		"alarm_lights_once":       "%sに一度部屋を照らします、音なし",
+		"days_once":               "一度",
+		"days_every_day":          "毎日",
+		"days_weekdays":           "平日",
+		"days_weekends":           "週末",
+		"weekday_initials":        "日 月 火 水 木 金 土",
+		"airplay_sets_the_volume": "AirPlayで音量を調整",
+		"spot_threshold":          "しきい値",
+		"weather_ha_forecast":     "Home Assistantの予報",
 	},
 
 	// de is the German catalog. The English of every entry is above it, so a
@@ -2286,5 +2338,57 @@ var uiTranslations = map[string]map[string]string{
 		"where_the_sound_goes_with_headphones_in": "Wohin der Ton geht, wenn Kopfhörer stecken",
 		// Wi-Fi
 		"wi_fi": "WLAN",
+		// Enter the PIN
+		"pin_enter": "PIN eingeben",
+		// A new PIN, 4 to 8 digits
+		"pin_new": "Neue PIN, 4 bis 8 Ziffern",
+		// The same PIN again
+		"pin_again": "Dieselbe PIN noch einmal",
+		// Wrong PIN
+		"pin_wrong": "Falsche PIN",
+		// At least 4 digits
+		"pin_too_short": "Mindestens 4 Ziffern",
+		// They did not match
+		"pin_no_match": "Sie stimmen nicht überein",
+		// Try again in %s
+		"pin_try_again_in": "Erneut versuchen in %s",
+		// %d s
+		"pin_wait_seconds": "%d s",
+		// %d min
+		"pin_wait_minutes": "%d min",
+		// Could not save it
+		"pin_not_saved": "Konnte nicht gespeichert werden",
+		// OK
+		"ok": "OK",
+		// Clear
+		"clear": "Löschen",
+		// Del
+		"del": "Entf",
+		// Edit alarm
+		"ui_edit_alarm": "Wecker bearbeiten",
+		// Rings at %s, %s
+		"alarm_rings_at": "Klingelt um %s, %s",
+		// Lights the room, no sound, at %s, %s
+		"alarm_lights_at": "Erhellt den Raum ohne Ton, um %s, %s",
+		// Rings once, at %s
+		"alarm_rings_once": "Klingelt einmal, um %s",
+		// Lights the room, no sound, once, at %s
+		"alarm_lights_once": "Erhellt den Raum ohne Ton, einmal, um %s",
+		// once
+		"days_once": "einmal",
+		// every day
+		"days_every_day": "jeden Tag",
+		// weekdays
+		"days_weekdays": "werktags",
+		// weekends
+		"days_weekends": "am Wochenende",
+		// S M T W T F S
+		"weekday_initials": "S M D M D F S",
+		// AirPlay sets the volume
+		"airplay_sets_the_volume": "AirPlay regelt die Lautstärke",
+		// Threshold
+		"spot_threshold": "Schwelle",
+		// Home Assistant forecast
+		"weather_ha_forecast": "Home Assistant-Vorhersage",
 	},
 }
