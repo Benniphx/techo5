@@ -282,6 +282,9 @@ type Display struct {
 	warmthSw *esphome.Switch
 	// liftSw is Adaptive backlight (adaptive_backlight.go), offered only where the GPU draws the panel.
 	liftSw *esphome.Switch
+	// liftListed is whether the last entity list Home Assistant was given had liftSw in it, and liftAsked
+	// whether a reconnect has been asked for since to bring it in (offerLiftLate).
+	liftListed, liftAsked atomic.Bool
 	// dimmestNum is the Dimmest setting in Home Assistant: how dark auto-brightness goes.
 	dimmestNum *esphome.Number
 	// nightMode is Night mode: Home Assistant turning the night on and off; nightShown what it last said.
@@ -612,9 +615,12 @@ func (d *Display) Entities() []esphome.Entity {
 		// Night warmth tints the frame on its way to the panel, which a tablet's screen does not take.
 		ents = slices.DeleteFunc(ents, func(e esphome.Entity) bool { return e == esphome.Entity(d.warmthSw) })
 	}
-	if liftOffered() {
+	listed := liftOffered()
+	if listed {
 		ents = append(ents, d.liftSw)
 	}
+	d.liftListed.Store(listed)
+	d.liftAsked.Store(false)
 	return ents
 }
 
@@ -2408,6 +2414,7 @@ func (d *Display) frame() (next time.Duration) {
 			d.dev.SetTint(t)
 		}
 		d.dev.SetLift(config.Get().Screen.AdaptiveBacklight && liftOffered())
+		d.offerLiftLate()
 	}
 	if !on && (call.Phase != phone.Idle || (!night && (ring.any() || reminding))) {
 		// A call lights a dark panel, at night to half brightness (relight): its page is how it is

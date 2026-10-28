@@ -7,6 +7,7 @@ import (
 
 	esphome "github.com/ygelfand/go-esphome-device"
 
+	"github.com/HuskerMinion/techo5/echod/internal/component"
 	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/screen"
 )
@@ -44,4 +45,15 @@ func (d *Display) setAdaptiveBacklight(on bool) {
 		d.liftSw.Set(on)
 	}
 	d.wake()
+}
+
+// offerLiftLate brings Adaptive backlight to Home Assistant when the GPU took the panel after the entity
+// list went out, as when it comes back from a failure a while after boot: what the device offers is read
+// once per connection, so only a reconnect lists it. Asked once per list; a GPU that fails afterwards
+// leaves the switch listed and idle rather than reconnecting again.
+func (d *Display) offerLiftLate() {
+	if liftOffered() && !d.liftListed.Load() && d.liftAsked.CompareAndSwap(false, true) {
+		slog.Info("screen: the GPU draws the panel now; listing Adaptive backlight")
+		component.Reconnect.Emit(struct{}{})
+	}
 }
