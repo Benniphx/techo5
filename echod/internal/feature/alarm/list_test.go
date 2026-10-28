@@ -94,3 +94,54 @@ func TestDeleteByIDTellsATimerFromAnAlarm(t *testing.T) {
 		t.Errorf("the alarm is still there: %+v", config.Get().Alarms.List)
 	}
 }
+
+// alarm_turn_off and alarm_turn_on switch alarms without deleting them (#317), by time and label or
+// by id, and say so when nothing matches.
+func TestSwitchFromHA(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	wake, err := a.Set(6, 45, config.DaysWeekdays, "Wake up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gym, err := a.Set(6, 45, config.DaysWeekdays, "Gym")
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := func() map[string]bool {
+		m := map[string]bool{}
+		for _, al := range config.Get().Alarms.List {
+			m[al.ID] = al.On
+		}
+		return m
+	}
+
+	if err := a.switchFromHA(false, "6:45 am", "wake UP", ""); err != nil {
+		t.Fatal(err)
+	}
+	if m := on(); m[wake.ID] || !m[gym.ID] || len(m) != 2 {
+		t.Errorf("after turning off Wake up: %v", m)
+	}
+	if err := a.switchFromHA(false, "6:45", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if m := on(); m[wake.ID] || m[gym.ID] || len(m) != 2 {
+		t.Errorf("after turning off both: %v", m)
+	}
+	if err := a.switchFromHA(true, "", "", gym.ID); err != nil {
+		t.Fatal(err)
+	}
+	if m := on(); m[wake.ID] || !m[gym.ID] {
+		t.Errorf("after turning Gym on by id: %v", m)
+	}
+	for _, c := range []struct{ clock, label, id, want string }{
+		{"7:00", "", "", "none at 7:00"},
+		{"6:45", "Nap", "", "none at 6:45"},
+		{"", "", "nope", "no alarm"},
+		{"", "", "", ""},
+	} {
+		if err := a.switchFromHA(true, c.clock, c.label, c.id); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%+v: %v, want it to say %q", c, err, c.want)
+		}
+	}
+}
