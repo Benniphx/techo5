@@ -9,6 +9,7 @@ package alarm
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -1096,18 +1097,34 @@ func (a *Alarms) Actions() []*esphome.Action {
 		},
 		{
 			// alarm_turn_off and alarm_turn_on switch alarms the way the device's own toggle does (#317):
-			// the alarm stays on the device, and off it drops its snooze.
+			// the alarm stays on the device, and off it drops its snooze. Home Assistant asks for every
+			// field an action has, so the alarm an id names is switched by actions of their own, as
+			// alarm_delete_id deletes it.
 			Name: "alarm_turn_off",
-			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}, {Name: "id", Type: esphome.ArgString}},
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}},
 			Run: func(c esphome.Call) (any, error) {
-				return nil, a.switchFromHA(false, c.String("time"), c.String("label"), c.String("id"))
+				return nil, a.switchFromHA(false, c.String("time"), c.String("label"), "")
 			},
 		},
 		{
 			Name: "alarm_turn_on",
-			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}, {Name: "id", Type: esphome.ArgString}},
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}},
 			Run: func(c esphome.Call) (any, error) {
-				return nil, a.switchFromHA(true, c.String("time"), c.String("label"), c.String("id"))
+				return nil, a.switchFromHA(true, c.String("time"), c.String("label"), "")
+			},
+		},
+		{
+			Name: "alarm_turn_off_id",
+			Args: []esphome.Arg{{Name: "id", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				return nil, a.switchByID(false, c.String("id"))
+			},
+		},
+		{
+			Name: "alarm_turn_on_id",
+			Args: []esphome.Arg{{Name: "id", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				return nil, a.switchByID(true, c.String("id"))
 			},
 		},
 		{
@@ -1244,6 +1261,14 @@ func (a *Alarms) followed(now time.Time) []Followed {
 
 func (a *Alarms) helperSource(entity string, now time.Time) (source, bool) {
 	return fromHelper(entity, hastate.Get().State(entity), now.Location())
+}
+
+// switchByID is alarm_turn_on_id and alarm_turn_off_id.
+func (a *Alarms) switchByID(on bool, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("no alarm id: give one from alarms_list")
+	}
+	return a.switchFromHA(on, "", "", id)
 }
 
 // switchFromHA is alarm_turn_on and alarm_turn_off: it turns on or off the alarm id names, or with no

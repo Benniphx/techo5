@@ -886,27 +886,21 @@ In YAML, refer to these actions as `esphome.<node>_alarm_turn_off` and `esphome.
 
 Switches device alarms off or back on without deleting them, the same as the switch next to an
 alarm on the screen. An alarm that is off keeps its time, days and label and doesn't ring, and
-turning it off drops its snooze. Fails if no alarm matches.
+turning it off drops its snooze. Fails if no alarm matches. To switch one alarm by its `id`, use
+[`alarm_turn_off_id` and `alarm_turn_on_id`](#turn-an-alarm-off-or-on-by-its-id).
 
-### time (Can be empty)
+### time
 
 *string*
 
 Same formats as `alarm_set`'s `time`. Every alarm at that time is switched (reminders are left alone).
-Leave it blank when you give an `id`.
 
 ### label (Can be empty)
 
 *string*
 
-Only switch alarms at that time whose label matches (case-insensitive).
-
-### id (Can be empty)
-
-*string*
-
-An alarm's `id` from `alarms_list`. When given, only that alarm is switched, and `time` and `label`
-are ignored.
+Only switch alarms at that time whose label matches (case-insensitive). Leave it blank for every
+alarm at that time.
 
 ```yaml
 action: esphome.office_alarm_turn_off
@@ -917,6 +911,27 @@ data:
 
 ```yaml
 action: esphome.office_alarm_turn_on
+data:
+  time: "6:45 am"
+  label: ""
+```
+
+## Turn an alarm off or on by its id
+
+In YAML, refer to these actions as `esphome.<node>_alarm_turn_off_id` and
+`esphome.<node>_alarm_turn_on_id`.
+
+The same as [`alarm_turn_off` and `alarm_turn_on`](#turn-an-alarm-off-or-on), for the one alarm an
+`id` names. Fails if no alarm has that id.
+
+### id
+
+*string*
+
+An alarm's `id` from `alarms_list`.
+
+```yaml
+action: esphome.office_alarm_turn_on_id
 data:
   id: "{{ listing.alarms[0].id }}"
 ```
