@@ -270,3 +270,31 @@ func TestAQuestionWithNoTurnToAnswerItLeavesTheScreen(t *testing.T) {
 		t.Fatalf("the screen was told %v, want it back to idle last", *got)
 	}
 }
+
+// A question whose turn is only put off, here behind a mistaken turn's run still closing, stays on the
+// screen until that turn opens: no flash of the idle page in between.
+func TestAQuestionWaitingForItsTurnStaysOnTheScreen(t *testing.T) {
+	c := idleTurn(t)
+	got := shownStates(t)
+	c.draining = true
+
+	c.turnEvent(event{kind: evAnnouncing, text: "Soll das Licht aus?"})
+	c.turnEvent(event{kind: evStart, slot: 0, asked: true, at: time.Now()})
+
+	if c.pending == nil {
+		t.Fatal("the turn was not put off; this test needs one that is")
+	}
+	if n := len(*got); n == 0 || (*got)[n-1].Phase != "replying" {
+		t.Fatalf("the screen was told %v, want the question still up", *got)
+	}
+
+	// The run closes and the turn still cannot open (here, as in the test before, there is no
+	// pipeline): the question goes then.
+	c.startPending()
+	if c.phase != phaseIdle {
+		t.Skipf("a turn opened (%s); this step needs one that cannot", c.phase)
+	}
+	if n := len(*got); (*got)[n-1].Phase != "idle" {
+		t.Fatalf("after the put-off turn could not open the screen was told %v, want it back to idle last", *got)
+	}
+}

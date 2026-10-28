@@ -494,10 +494,12 @@ func (c *conversation) dropQuestion() {
 func (c *conversation) turnEvent(e event) {
 	switch e.kind {
 	case evStart:
-		c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited})
 		// A turn that could not open (no pipeline, the microphones on a camera call) leaves no answer
-		// to follow an announced question, so the question goes as a cut-off one does.
-		c.dropQuestion()
+		// to follow an announced question, so the question goes as a cut-off one does. One only put off
+		// (a wake word run or a mistaken turn still closing) opens in a moment: the question stays.
+		if !c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited}) && c.pending == nil {
+			c.dropQuestion()
+		}
 
 	case evSpeaking:
 		if c.followUp && c.phase == phaseListening {
@@ -1183,8 +1185,10 @@ func (c *conversation) startPending() {
 	next := c.pending
 	c.clearPending()
 
-	if next != nil {
-		c.start(*next)
+	if next != nil && !c.start(*next) && c.pending == nil {
+		// The turn put off could not open after all (muted by now, no pipeline): an announced question
+		// waiting for it goes, as it does when a turn cannot open at once.
+		c.dropQuestion()
 	}
 }
 
