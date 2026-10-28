@@ -61,7 +61,11 @@ func TestNativeAndUpstreamRealtimeKeepTheirSelectedOwner(t *testing.T) {
 }
 
 func TestNativeRealtimeRejectsSavedPageReader(t *testing.T) {
- config.Use(filepath.Join(t.TempDir(), "state.json"))
- if err := config.Set().Brain().Set(config.Brain{Mode: config.BrainRealtime, Reader: "http://localhost:8891"}); err != nil { t.Fatal(err) }
- if _, err := readRealtimeConfig(); err == nil { t.Fatal("native Realtime accepted a direct page-reader setting") }
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Brain().Set(config.Brain{Mode: config.BrainRealtime, Reader: "http://localhost:8891"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readRealtimeConfig(); err == nil {
+		t.Fatal("native Realtime accepted a direct page-reader setting")
+	}
 }
