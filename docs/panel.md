@@ -48,8 +48,8 @@ Android does for the app instead:
   video-frame gap of 0.38 seconds. Other devices need testing. RTP/JPEG's 2040-pixel dimension
   limit applies to live video, not to the full-size stills.
 - **Bluetooth LE proxy.** Android forwards nearby advertisements through the existing Bluetooth
-  proxy, which is on by default. The app requests location/nearby-device permission when that proxy
-  is enabled and the app is in front. A separate **Bluetooth proxy connections** switch is off by
+  proxy, which is off by default: turn on **Bluetooth proxy** to forward them. The app requests
+  location/nearby-device permission once that proxy is on and the app is in front. A separate **Bluetooth proxy connections** switch is off by
   default and requires an API encryption key. It lends one active GATT connection through Android;
   the shared proxy manager owns requests, retries and cleanup. Service discovery, characteristic
   and descriptor reads/writes, and notifications use real ATT handles, including when Home

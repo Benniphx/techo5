@@ -37,9 +37,11 @@ type androidScanner struct {
 	running  bool
 	scanning bool
 	reports  atomic.Uint64
+	// lost is told of a scan the app ended (ScanLost; a test sets its own).
+	lost func()
 }
 
-var panelRadio = &androidScanner{}
+var panelRadio = &androidScanner{lost: func() { ScanLost.Emit(struct{}{}) }}
 
 func Default() Scanner { return panelRadio }
 
@@ -108,11 +110,15 @@ func (s *androidScanner) Stop() {
 func (s *androidScanner) read(c net.Conn, found func(Advertisement)) {
 	defer func() {
 		s.mu.Lock()
-		if s.conn == c {
+		lost := s.conn == c
+		if lost {
 			s.conn, s.running, s.scanning = nil, false, false
 		}
 		s.mu.Unlock()
 		_ = c.Close()
+		if lost && s.lost != nil {
+			s.lost()
+		}
 	}()
 	for {
 		var size [2]byte

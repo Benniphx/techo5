@@ -88,3 +88,38 @@ func TestPanelReportPreservesAddressRSSIAndPayload(t *testing.T) {
 	}
 	_ = server.Close()
 }
+
+// A scan socket the app closes is a lost scan, so the proxy starts it again (ScanLost); one the daemon
+// stopped itself is not.
+func TestPanelScanLostWhenTheAppCloses(t *testing.T) {
+	lost := make(chan struct{}, 2)
+	scanner := func() (*androidScanner, net.Conn, chan struct{}) {
+		client, server := net.Pipe()
+		s := &androidScanner{conn: client, running: true, scanning: true, lost: func() { lost <- struct{}{} }}
+		done := make(chan struct{})
+		go func() { s.read(client, func(Advertisement) {}); close(done) }()
+		return s, server, done
+	}
+
+	s, server, done := scanner()
+	_ = server.Close()
+	<-done
+	select {
+	case <-lost:
+	default:
+		t.Fatal("the app closing the scan was not said lost")
+	}
+	if s.Running() || s.Scanning() {
+		t.Fatal("still running after the app closed the scan")
+	}
+
+	s, server, done = scanner()
+	defer server.Close()
+	s.Stop()
+	<-done
+	select {
+	case <-lost:
+		t.Fatal("a scan the daemon stopped was said lost")
+	default:
+	}
+}

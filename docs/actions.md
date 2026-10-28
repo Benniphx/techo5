@@ -892,8 +892,8 @@ turning it off drops its snooze. Fails if no alarm matches.
 
 *string*
 
-Same formats as `alarm_set`'s `time`. Every alarm at that time is switched. Leave it blank when you
-give an `id`.
+Same formats as `alarm_set`'s `time`. Every alarm at that time is switched (reminders are left alone).
+Leave it blank when you give an `id`.
 
 ### label (Can be empty)
 

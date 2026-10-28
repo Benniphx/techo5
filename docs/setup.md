@@ -408,7 +408,7 @@ captured login to the same page for a few minutes, and could see the pictures an
   way does not work: AirPlay gives the device no way to move the phone's slider, so it stays where
   the phone left it when a button or Home Assistant moves the device's volume, and the next move of
   the slider sets the device's volume again. It works for AirPlay and AirPlay 2 alike. Turning it
-  restarts AirPlay for a moment. Shared with the other devices like the rest of the speaker
+  restarts AirPlay and Spotify Connect for a moment. Shared with the other devices like the rest of the speaker
   settings, when sharing is on.
 - **DLNA.** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to
   this device box, or Home Assistant) makes the device a DLNA speaker, a "media renderer", under its

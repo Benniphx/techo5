@@ -1260,7 +1260,7 @@ func (a *Alarms) switchFromHA(on bool, clock, label, id string) error {
 	n := 0
 	for _, al := range config.Get().Alarms.List {
 		if id != "" && al.ID != id ||
-			id == "" && (al.Hour != hour || al.Minute != minute || label != "" && !strings.EqualFold(al.Label, label)) {
+			id == "" && (al.Remind || al.Hour != hour || al.Minute != minute || label != "" && !strings.EqualFold(al.Label, label)) {
 			continue
 		}
 		n++

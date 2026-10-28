@@ -191,6 +191,7 @@ func build() *Proxy {
 		safe.Go("ble links", b.links.watch)
 	}
 	safe.Go("ble rest", b.restWhilePlaying)
+	ble.ScanLost.Listen(func(struct{}) { b.apply() })
 	b.apply()
 	return b
 }

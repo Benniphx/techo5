@@ -145,3 +145,28 @@ func TestSwitchFromHA(t *testing.T) {
 		}
 	}
 }
+
+// Switching by time leaves reminders at that time alone; by id it switches what it names.
+func TestSwitchByTimeLeavesReminders(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	wake, err := a.Set(7, 0, config.DaysWeekdays, "Wake up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pills, err := a.SetReminder(7, 0, config.DaysWeekdays, "Pills", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.switchFromHA(false, "7:00", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, al := range config.Get().Alarms.List {
+		if al.ID == wake.ID && al.On || al.ID == pills.ID && !al.On {
+			t.Errorf("after turning off 7:00: %+v", al)
+		}
+	}
+	if err := a.switchFromHA(false, "", "", pills.ID); err != nil {
+		t.Fatal(err)
+	}
+}
