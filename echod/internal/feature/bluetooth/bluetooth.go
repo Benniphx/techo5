@@ -5,6 +5,7 @@ package bluetooth
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"log/slog"
 	"net"
 	"os"
@@ -94,6 +95,9 @@ func Get() *Proxy {
 func build() *Proxy {
 	mac, _ := layout.FactoryMAC()
 	minor := beaconMinor(mac)
+	if !proxyBeaconSupported {
+		minor = -1
+	}
 	b := &Proxy{
 		proxy:   &esphome.BluetoothProxy{},
 		radio:   ble.Default(),
@@ -135,6 +139,7 @@ func build() *Proxy {
 	b.proxy.OnMode = func(bool) { b.apply() }
 
 	b.enable.Set(config.Get().Bluetooth.Proxy)
+	proxyPermission(config.Get().Bluetooth.Proxy)
 	b.enable.OnCommand = func(on bool) {
 		b.enable.Set(on)
 		// Saved first: until it is, a connection asked for would still be let in, after the release.
@@ -145,6 +150,7 @@ func build() *Proxy {
 		if !on {
 			b.links.ReleaseAll()
 		}
+		proxyPermission(on)
 		b.apply()
 
 		// What the device advertises has changed, and that is only read when a client connects.
@@ -311,6 +317,10 @@ func (b *Proxy) tune(beacon beaconState) bool {
 	}
 
 	if err := b.radio.Start(scan, active, beacon.advertisement, b.found); err != nil {
+		if errors.Is(err, ble.ErrScanUnavailable) {
+			slog.Debug("ble scan waiting for permission or adapter", "err", err)
+			return false
+		}
 		slog.Error("ble radio failed to start", "err", err)
 		if scan {
 			_ = b.proxy.Report(esphome.ScannerFailed)
