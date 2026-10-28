@@ -189,17 +189,32 @@ func TestABurstOfStillsIsFetchedOneAtATime(t *testing.T) {
 	ha := newSlowHA(t)
 	f := newFeature(t)
 	decoded := stillsDecoded.Load()
-	for i := 1; i <= 5; i++ {
-		if i == 2 {
-			// The first is on its way when the rest replace it, so it is the one whose bytes arrive
-			// for a view that is gone.
-			eventually(t, "the first fetch to start", func() bool { return ha.started.Load() == 1 })
-		}
+	if err := f.ShowPicture("/local/door.png", Caption{ID: "1", Message: "x"}, time.Minute, ""); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "the first fetch to start", func() bool { return ha.started.Load() == 1 })
+	// Replacing a view cancels its fetch immediately, releasing its turn before
+	// the whole burst necessarily arrives. Hold that turn while queueing the
+	// replacements so this checks pictures replaced before their turn, rather
+	// than assuming the HTTP client cannot notice a cancellation during the loop.
+	f.mu.Lock()
+	f.cancelStill()
+	f.mu.Unlock()
+	select {
+	case stillTurn <- struct{}{}:
+	case <-time.After(time.Second):
+		t.Fatal("the canceled first fetch did not release its turn")
+	}
+	var release sync.Once
+	unblock := func() { release.Do(func() { <-stillTurn }) }
+	defer unblock()
+	for i := 2; i <= 5; i++ {
 		if err := f.ShowPicture("/local/door.png", Caption{ID: strconv.Itoa(i), Message: "x"}, time.Minute, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
 	ha.open.Do(func() { close(ha.release) })
+	unblock()
 	eventually(t, "the last picture", func() bool { v, _ := f.Camera(); return v.Frame != nil && v.Caption.ID == "5" })
 	time.Sleep(200 * time.Millisecond) // long enough for a stale fetch to start, were one going to
 	if m := ha.mostServed(); m != 1 {
