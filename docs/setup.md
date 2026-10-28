@@ -397,6 +397,19 @@ captured login to the same page for a few minutes, and could see the pictures an
   play in step with. The receiver keeps in step on its own, from how much of what it sent is still
   to be heard on the device, so it lands in the same place each time it starts or joins a group.
   If something doesn't work, open an issue.
+- **AirPlay sets the volume (new).** Wherever AirPlay is (the Show, the Spot and the Dot), the
+  **AirPlay sets the volume** switch (Settings > Sound, the setup page's Play to this device, or Home
+  Assistant) is off by default, so nothing changes for a device that has AirPlay already (#312). Off,
+  the volume slider on an iPhone, iPad or Mac only scales the stream, and the device's own volume,
+  the one Home Assistant shows, stays where it is: two volumes, one on top of the other. On, the
+  device passes the stream as it comes and the slider sets the device's volume: the slider's range
+  (-30 dB to the top) is spread evenly over the device's 30 steps, and the slider at the bottom is
+  step 0 (the device's mute is left alone). Night volume still caps a raise from the phone. The other
+  way does not work: AirPlay gives the device no way to move the phone's slider, so it stays where
+  the phone left it when a button or Home Assistant moves the device's volume, and the next move of
+  the slider sets the device's volume again. It works for AirPlay and AirPlay 2 alike. Turning it
+  restarts AirPlay and Spotify Connect for a moment. Shared with the other devices like the rest of the speaker
+  settings, when sharing is on.
 - **DLNA.** On every device, the **DLNA** switch (Settings → Sound, the setup page's Play to
   this device box, or Home Assistant) makes the device a DLNA speaker, a "media renderer", under its
   own name. Music apps and servers on the network find it and play to it: BubbleUPnP on a phone,

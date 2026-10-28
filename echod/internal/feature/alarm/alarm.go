@@ -1095,6 +1095,22 @@ func (a *Alarms) Actions() []*esphome.Action {
 			},
 		},
 		{
+			// alarm_turn_off and alarm_turn_on switch alarms the way the device's own toggle does (#317):
+			// the alarm stays on the device, and off it drops its snooze.
+			Name: "alarm_turn_off",
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}, {Name: "id", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				return nil, a.switchFromHA(false, c.String("time"), c.String("label"), c.String("id"))
+			},
+		},
+		{
+			Name: "alarm_turn_on",
+			Args: []esphome.Arg{{Name: "time", Type: esphome.ArgString}, {Name: "label", Type: esphome.ArgString}, {Name: "id", Type: esphome.ArgString}},
+			Run: func(c esphome.Call) (any, error) {
+				return nil, a.switchFromHA(true, c.String("time"), c.String("label"), c.String("id"))
+			},
+		},
+		{
 			Name:    "alarms_list",
 			Answers: true,
 			Run: func(esphome.Call) (any, error) {
@@ -1228,6 +1244,42 @@ func (a *Alarms) followed(now time.Time) []Followed {
 
 func (a *Alarms) helperSource(entity string, now time.Time) (source, bool) {
 	return fromHelper(entity, hastate.Get().State(entity), now.Location())
+}
+
+// switchFromHA is alarm_turn_on and alarm_turn_off: it turns on or off the alarm id names, or with no
+// id every alarm at clock whose label matches (any label when label is blank).
+func (a *Alarms) switchFromHA(on bool, clock, label, id string) error {
+	id, label = strings.TrimSpace(id), strings.TrimSpace(label)
+	hour, minute := -1, -1
+	if id == "" {
+		var err error
+		if hour, minute, err = parseClock(clock); err != nil {
+			return err
+		}
+	}
+	n := 0
+	for _, al := range config.Get().Alarms.List {
+		if id != "" && al.ID != id ||
+			id == "" && (al.Remind || al.Hour != hour || al.Minute != minute || label != "" && !strings.EqualFold(al.Label, label)) {
+			continue
+		}
+		n++
+		if al.On == on {
+			continue
+		}
+		al.On = on
+		if err := a.Put(al); err != nil {
+			return err
+		}
+	}
+	switch {
+	case n == 0 && id != "":
+		return fmt.Errorf("alarms: no alarm %.64q on this device", id)
+	case n == 0:
+		return fmt.Errorf("alarms: none at %d:%02d", hour, minute)
+	}
+	slog.Info("alarms switched from home assistant", "on", on, "count", n)
+	return nil
 }
 
 // deleteFromHA deletes the alarm alarm_delete_id names. A timer's id, from alarms_list's timers, is
