@@ -2643,7 +2643,7 @@ func (d *Display) frame() (next time.Duration) {
 		// A screen command: the screen it asked for is the answer, not the words.
 		s.phase, s.heard, s.reply = "idle", "", ""
 	}
-	if cueOn() {
+	if !s.realtime && cueOn() {
 		s.cue, s.phase, s.heard, s.reply = cueTurn(s.phase, s.heard, s.reply, captionsOn())
 	}
 	if !s.realtime && equalizerOn() && (s.phase == "listening" || s.phase == "thinking" || s.phase == "replying" || s.phase == "lingering") {

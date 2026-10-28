@@ -14,7 +14,7 @@ class Stable1611MergeTests(unittest.TestCase):
                     if available.returncode == 0 else "1537c3e5b0cea5cbe64c310a97c9a11606ea5f83")
         cases = {
             "detect": ("voice.RealtimeActive.Listen(e.Pause)", "RealtimeBusy()", "routeFor(slot, h)", "d.wakeHeard(slot)"),
-            "display": ("realtimeEnded && night", "view.Realtime", "SetTint(t)", "SetLift(", "cueTurn(", "!s.realtime && equalizerOn()"),
+            "display": ("realtimeEnded && night", "view.Realtime", "SetTint(t)", "SetLift(", "!s.realtime && cueOn()", "cueTurn(", "!s.realtime && equalizerOn()"),
             "setup": ("realtime-brain", "b.Reader", "b.RealtimeModel", "b.RealtimeTools"),
         }
         for feature, retained in cases.items():
