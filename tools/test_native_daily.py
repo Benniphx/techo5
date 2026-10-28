@@ -206,7 +206,11 @@ class Stable120MergeTests(unittest.TestCase):
 class Stable122MergeTests(unittest.TestCase):
     def test_actual_source_merges_upstream_realtime_and_streaming(self):
         root = Path(__file__).resolve().parents[1]
-        ancestor = "0d4cb94cb08dbae20f70b312ce7a265c20f8510f"
+        # Replay changes from the current common ancestor; an already merged
+        # old release must not conflict with later stock rendering changes.
+        stable = "747246a5811de76d3b16bf26f3b867772d4b8b0c"
+        ancestor = subprocess.check_output(["git", "merge-base", "HEAD", stable],
+                                           cwd=root, text=True).strip()
         for relative in ("internal/feature/display/render.go",
                          "internal/feature/voice/realtime.go",
                          "internal/feature/voice/realtime_test.go"):
