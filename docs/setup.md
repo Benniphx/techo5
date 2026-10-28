@@ -951,7 +951,8 @@ Each wake word's own settings are on a sub-device of its own in Home Assistant, 
 - **Wake**: a button that starts that assistant by hand, as its wake word would.
 - **Wake word threshold**: how sure the device has to be (see above).
 - **Wake word tone**: the sound it makes when it wakes.
-- **Wake word effect**, **Thinking effect** and **Replying effect**: what the ring shows (the Dot only: a Show or Spot has no ring).
+- **Wake word effect**, **Thinking effect** and **Replying effect**: what the ring shows (the Dot
+  only: a Show or Spot has no ring).
 - **Reply delivery**: the answer as a whole file, or streamed as it comes.
 - **Follow-up time**, **Follow-ups in a row** and **Follow-up tone**: listening after an answer,
   below.
@@ -963,6 +964,14 @@ Each wake word's own settings are on a sub-device of its own in Home Assistant, 
 Either wake word can also be answered by [realtime voice](#realtime-voice) instead. The
 [voice request events](actions.md#voice-request-events) say which one was heard (`slot` is `1` or
 `2`).
+
+**Both wake words share one conversation in Home Assistant.** Everything said through either of them
+joins the same chat, so the two assistants see each other's turns: ask the second one about a timer
+the first one set and it may say it knows nothing about it, or that the first one's answer was wrong.
+The chat ends after five minutes without a request. This is Home Assistant's, not the device's: it
+keeps one conversation for each Assist satellite rather than for each assistant, so a device can't
+separate them today ([#328](https://github.com/HuskerMinion/techo5/issues/328)). An assistant with a
+long-term memory of its own remembers across conversations too, whichever wake word was used.
 
 **Listening after an answer.** After an answer, the device can listen again without the wake word.
 **Follow-up time** (0 to 30 seconds) is how long, and **Follow-ups in a row** (0 to 10, 0 for no
