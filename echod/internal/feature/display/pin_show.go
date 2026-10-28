@@ -42,7 +42,7 @@ func (r *renderer) pinPage(p pinView) {
 		face = r.body
 	}
 	r.text(face, r.fit(face, heading, room), r.margin, r.s(130), cream)
-	r.text(r.body, p.title, r.margin, r.s(185), dim)
+	r.text(r.body, r.fit(r.body, p.title, room), r.margin, r.s(185), dim)
 	// The dots: one for each digit typed, rings for the rest of a four-digit PIN.
 	cx, cy, rad, gap := r.margin+r.s(16), r.s(245), r.s(12), r.s(40)
 	for i := range max(p.digits, 4) {
@@ -55,7 +55,7 @@ func (r *renderer) pinPage(p pinView) {
 		}
 	}
 	if p.msg != "" {
-		r.text(r.body, p.msg, r.margin, r.s(310), amber)
+		r.text(r.body, r.fit(r.body, p.msg, room), r.margin, r.s(310), amber)
 	}
 	c := r.pinCancel()
 	// The program's button. The keys are the page's own input grid and keep their bevel.
