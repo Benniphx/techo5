@@ -34,6 +34,9 @@ The volume caches downloads; each invocation unpacks a clean kernel tree and rec
 The fixed container name prevents concurrent builds from writing the same volume. The wrapper
 does not connect to a device.
 
+The image is linux/arm64. On an x86_64 Linux host Docker would emulate it and run very slowly, so
+run `build.sh` directly there.
+
 The native build downloads the kernel tarball and Wi-Fi firmware (checked against the sha256 sums
 in the script), unpacks a fresh tree under `$WORK` (default `~/techo5-athena-kbuild`), applies the patches
 below in order, builds `Image.gz` and the DTB, packs the boot image and checks it with
