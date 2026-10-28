@@ -483,10 +483,21 @@ func (c *conversation) handle(e event) {
 	c.consider()
 }
 
+// dropQuestion takes an announced question off the screen when no turn is there to answer it.
+func (c *conversation) dropQuestion() {
+	if c.phase == phaseIdle && c.shown.Phase == phaseReplying.String() {
+		c.shown.Phase = phaseIdle.String()
+		Changed.Emit(c.shown)
+	}
+}
+
 func (c *conversation) turnEvent(e event) {
 	switch e.kind {
 	case evStart:
 		c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited})
+		// A turn that could not open (no pipeline, the microphones on a camera call) leaves no answer
+		// to follow an announced question, so the question goes as a cut-off one does.
+		c.dropQuestion()
 
 	case evSpeaking:
 		if c.followUp && c.phase == phaseListening {
@@ -517,10 +528,7 @@ func (c *conversation) turnEvent(e event) {
 		}
 
 	case evAnnounced:
-		if c.phase == phaseIdle && c.shown.Phase == phaseReplying.String() {
-			c.shown.Phase = phaseIdle.String()
-			Changed.Emit(c.shown)
-		}
+		c.dropQuestion()
 
 	case evEffect:
 		c.effectPosted.Store(false)

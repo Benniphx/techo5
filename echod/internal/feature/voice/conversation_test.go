@@ -252,3 +252,21 @@ func TestAPlainAnnouncementIsNotOnTheScreen(t *testing.T) {
 		}
 	}
 }
+
+// A question whose answer's turn cannot open (here no pipeline at all) does not stay on the screen.
+func TestAQuestionWithNoTurnToAnswerItLeavesTheScreen(t *testing.T) {
+	c := idleTurn(t)
+	got := shownStates(t)
+	url, release := heldSpeech(t)
+	close(release)
+
+	c.announce(esphome.Announce{MediaID: url, Text: "Soll das Licht aus?", StartConversation: true})
+	c.turnEvent(next(t, c, evStart))
+
+	if c.phase != phaseIdle {
+		t.Skipf("a turn opened (%s); this test needs one that cannot", c.phase)
+	}
+	if n := len(*got); n == 0 || (*got)[n-1].Phase != "idle" {
+		t.Fatalf("the screen was told %v, want it back to idle last", *got)
+	}
+}
