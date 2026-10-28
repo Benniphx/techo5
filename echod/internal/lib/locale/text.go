@@ -2053,7 +2053,7 @@ var uiTranslations = map[string]map[string]string{
 		// Group it with other AirPlay 2 speakers
 		"ui_group_it_with_other_airplay_2_speakers": "Mit anderen AirPlay-2-Lautsprechern gruppieren",
 		// The iPhone's volume slider moves the device's volume
-		"ui_the_iphone_slider_is_the_device_s_volume": "Die Lautstärke folgt der Quelle",
+		"ui_the_iphone_slider_is_the_device_s_volume": "Der Lautstärkeregler des iPhones steuert die Gerätelautstärke",
 		// Home Assistant isn't set up here
 		"ui_home_assistant_isn_t_set_up_here": "Home Assistant ist hier nicht eingerichtet",
 		// Home Assistant refused the token

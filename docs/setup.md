@@ -328,8 +328,9 @@ address with a guesser (behind the same router, say) is refused with it.
 The device has no video encoder, so the stream is a series of JPEGs (RTP/JPEG, over TCP only), not
 H.264. On a 2nd gen Show 8 whose kernel has the MT8183's JPEG encoder, that encoder makes them rather
 than the cores: the same 1056x784 pictures at up to 15 a second instead of 10, for about the CPU the
-cores took for fewer, and about 5 Mbit/s in a lit room (15 in a dark one). ffmpeg, and Frigate and go2rtc with it, read
-it; a recorder that wants H.264 has to re-encode it, which in Frigate is an ffmpeg output argument:
+cores took for fewer, and about 5 Mbit/s in a lit room (15 in a dark one). ffmpeg, and Frigate and
+go2rtc with it, read it; a recorder that wants H.264 has to re-encode it, which in Frigate is an
+ffmpeg output argument:
 
 ```yaml
 cameras:
