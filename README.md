@@ -79,6 +79,14 @@ How it compares with EchoLocal, EchoMuse, echo-dot-assist, Kiosk Satellite and V
 
 The bigger changes of September and October 2026. Every release lists the rest.
 
+- 🌍 **German, Spanish and Italian on the screen** (v1.6.13). **Screen language** gains German
+  ([#322](https://github.com/HuskerMinion/techo5/pull/322)), Spanish
+  ([#327](https://github.com/HuskerMinion/techo5/pull/327)) and a first Italian draft
+  ([#310](https://github.com/HuskerMinion/techo5/issues/310)), and the PIN pad and alarm editor follow
+  the language too. The 2nd gen Show 8's camera pages and stream use its hardware JPEG encoder
+  ([#320](https://github.com/HuskerMinion/techo5/pull/320),
+  [#321](https://github.com/HuskerMinion/techo5/pull/321)), and calls can switch to WebRTC's echo
+  canceller for their length ([#331](https://github.com/HuskerMinion/techo5/pull/331)).
 - 📡 **The Panel is a Bluetooth proxy, and AirPlay can set the volume** (v1.6.12). On TECHO5 Panel,
   Android's Bluetooth now feeds Home Assistant's Bluetooth proxy, with one active connection lent
   through it ([#278](https://github.com/HuskerMinion/techo5/pull/278)); the Panel app also bridges the
