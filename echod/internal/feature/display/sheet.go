@@ -269,7 +269,7 @@ func withStreaming(rows []settingRow) []settingRow {
 				settingRow{id: "airplay2", label: "AirPlay 2", sub: tr("ui_group_it_with_other_airplay_2_speakers"), kind: ctlToggle, on: !c.AirPlayClassic})
 		}
 		rows = append(rows,
-			settingRow{id: "airplayvolume", label: "AirPlay sets the volume", sub: tr("ui_the_iphone_slider_is_the_device_s_volume"), kind: ctlToggle, on: c.AirPlaySetsVolume},
+			settingRow{id: "airplayvolume", label: tr("airplay_sets_the_volume"), sub: tr("ui_the_iphone_slider_is_the_device_s_volume"), kind: ctlToggle, on: c.AirPlaySetsVolume},
 			settingRow{id: "spotify", label: "Spotify Connect", sub: tr("play_to_it_from_the_spotify_app_premium"), kind: ctlToggle, on: c.Spotify})
 	}
 	return append(rows,
@@ -537,7 +537,7 @@ func gainText(db int) string {
 // nightRowValue is what the night row says: the hours, or that Home Assistant has the night.
 func nightRowValue(v string) string {
 	if config.Get().Screen.NightByHA {
-		return nightByHARow
+		return tr("night_by_ha")
 	}
 	return nightText(v)
 }

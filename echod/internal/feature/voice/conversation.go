@@ -101,6 +101,8 @@ const (
 	evCandidate                    // a wake the device was not sure of (event.slot, event.peak)
 	evWatch                        // something a stream to Home Assistant depends on may have changed
 	evRunStart                     // Home Assistant opened a run
+	evAnnouncing                   // an announcement that asks for an answer is being said (event.text)
+	evAnnounced                    // and was cut off, so no answer follows
 )
 
 type event struct {
@@ -481,10 +483,23 @@ func (c *conversation) handle(e event) {
 	c.consider()
 }
 
+// dropQuestion takes an announced question off the screen when no turn is there to answer it.
+func (c *conversation) dropQuestion() {
+	if c.phase == phaseIdle && c.shown.Phase == phaseReplying.String() {
+		c.shown.Phase = phaseIdle.String()
+		Changed.Emit(c.shown)
+	}
+}
+
 func (c *conversation) turnEvent(e event) {
 	switch e.kind {
 	case evStart:
-		c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited})
+		// A turn that could not open (no pipeline, the microphones on a camera call) leaves no answer
+		// to follow an announced question, so the question goes as a cut-off one does. One only put off
+		// (a wake word run or a mistaken turn still closing) opens in a moment: the question stays.
+		if !c.start(nextTurn{slot: e.slot, woke: e.woke, asked: e.asked, at: e.at, waited: e.waited}) && c.pending == nil {
+			c.dropQuestion()
+		}
 
 	case evSpeaking:
 		if c.followUp && c.phase == phaseListening {
@@ -505,6 +520,17 @@ func (c *conversation) turnEvent(e event) {
 		if c.phase != phaseIdle {
 			c.lookHere = true
 		}
+
+	case evAnnouncing:
+		// A question from Home Assistant (start_conversation) is on the screen as a reply would be,
+		// while it is said; the turn that answers it opens after it. Not over a turn of its own.
+		if c.phase == phaseIdle {
+			c.shown = State{Phase: phaseReplying.String(), Reply: e.text}
+			Changed.Emit(c.shown)
+		}
+
+	case evAnnounced:
+		c.dropQuestion()
 
 	case evEffect:
 		c.effectPosted.Store(false)
@@ -1159,8 +1185,10 @@ func (c *conversation) startPending() {
 	next := c.pending
 	c.clearPending()
 
-	if next != nil {
-		c.start(*next)
+	if next != nil && !c.start(*next) && c.pending == nil {
+		// The turn put off could not open after all (muted by now, no pipeline): an announced question
+		// waiting for it goes, as it does when a turn cannot open at once.
+		c.dropQuestion()
 	}
 }
 
@@ -1401,9 +1429,18 @@ func (c *conversation) stream(ctx context.Context, be backend, slot int, followU
 		sent += len(frame)
 		if endpointAt == 0 && ep.Feed(frame) {
 			endpointAt = float64(sent) / float64(mic.Rate)
+			// What the decision was made on, not just that it was made: the loudest window of the
+			// turn (usually the wake word), the level a window had to fall below to count as quiet,
+			// and how many windows counted as speech. A turn cut while someone was still talking
+			// shows a peak set by the wake word and a request too soft to reach off of it.
+			peak, off, speech := ep.Heard()
 			slog.Info("end of speech heard here", "slot", slot+1, "acted", acts,
 				"spoke_s", math.Round(float64(ep.EndedAt())/float64(mic.Rate)*10)/10,
-				"at_s", math.Round(endpointAt*10)/10)
+				"at_s", math.Round(endpointAt*10)/10,
+				"peak", math.Round(peak),
+				"off", math.Round(off),
+				"speech", speech,
+				"quiet_needed", ep.Settings().Quiet)
 			if acts {
 				c.post(event{kind: evSpokeEnd, text: id})
 			}

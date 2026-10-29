@@ -170,3 +170,44 @@ func TestSwitchByTimeLeavesReminders(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Home Assistant asks for every field an action has, so switching by id has actions of its own and the
+// time-and-label ones ask for no id (#317).
+func TestSwitchActionsAskOnlyForWhatTheyUse(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	a := build()
+	want := map[string]string{
+		"alarm_turn_off": "time label", "alarm_turn_on": "time label",
+		"alarm_turn_off_id": "id", "alarm_turn_on_id": "id",
+	}
+	for _, act := range a.Actions() {
+		w, ok := want[act.Name]
+		if !ok {
+			continue
+		}
+		delete(want, act.Name)
+		var names []string
+		for _, arg := range act.Args {
+			names = append(names, arg.Name)
+		}
+		if got := strings.Join(names, " "); got != w {
+			t.Errorf("%s asks for %q, want %q", act.Name, got, w)
+		}
+	}
+	if len(want) != 0 {
+		t.Errorf("missing actions: %v", want)
+	}
+	al, err := a.Set(6, 45, config.DaysWeekdays, "Wake up")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.switchByID(false, " "+al.ID+" "); err != nil {
+		t.Fatal(err)
+	}
+	if config.Get().Alarms.List[0].On {
+		t.Error("alarm_turn_off_id left the alarm on")
+	}
+	if err := a.switchByID(true, ""); err == nil || !strings.Contains(err.Error(), "no alarm id") {
+		t.Errorf("a blank id: %v", err)
+	}
+}
