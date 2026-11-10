@@ -9,7 +9,9 @@
 # feature/camstream) and DLNA's SSDP searches (1900/udp, IPv4), and AirPlay 2 (7000/tcp, 319-320/udp, and
 # its senders' own ports, from a chain of its own below),
 # which nothing listens on unless their switches are on; DHCP replies, ping,
-# IPv6 neighbor discovery, and anything answering a connection the device made (calls included).
+# IPv6 neighbor discovery, and anything answering a connection the device made (calls included). A TCP
+# segment for a connection that is no longer there is answered with a reset rather than dropped; a new
+# connection to anything else is dropped.
 # Out: everything, as before.
 #
 # Only wlan0 is filtered, from a chain of its own: loopback and any other interface are left as they
@@ -57,6 +59,13 @@ if [ -n "$ok" ]; then
 		iptables-legacy -A $CHAIN -p icmp -j ACCEPT &&
 		ip6tables-legacy -A $CHAIN -p ipv6-icmp -j ACCEPT &&
 		ip6tables-legacy -A $CHAIN -p udp --sport 547 --dport 546 -j ACCEPT &&
+		# What is left of a connection the device has already closed: a FIN lost while the network was
+		# down leaves the peer sending into it, and dropped, its retries go unanswered for as long as TCP
+		# keeps trying. A Snapserver holding such a connection sends the client's volume to it rather than
+		# to the one the client made since (feature/snapcast). A reset ends it at the peer's next send. Only
+		# a segment without SYN: a new connection to a port nobody serves is still dropped unanswered.
+		iptables-legacy -A $CHAIN -p tcp ! --syn -j REJECT --reject-with tcp-reset &&
+		ip6tables-legacy -A $CHAIN -p tcp ! --syn -j REJECT --reject-with tcp-reset &&
 		iptables-legacy -A $CHAIN -j DROP &&
 		ip6tables-legacy -A $CHAIN -j DROP || ok=
 fi
@@ -77,7 +86,12 @@ echo "techo5-firewall: Wi-Fi inbound closed except 6053, 5353, 22, 8928, 8181, 5
 # it fails, the chain goes, Wi-Fi stays closed as above, and /run/techo5-no-airplay2 tells the daemon to keep
 # the classic receiver. Made here but not jumped to: the daemon puts it first in TECHO5-IN only while the
 # AirPlay 2 receiver runs (feature/streaming, airplay2_door.go), where /run/techo5-airplay2-jump says, so a
-# sender is never let in to those ports while AirPlay is off.
+# sender is never let in to those ports while AirPlay is off. Over IPv6 a sender is marked by its /64: one with
+# privacy addresses (macOS by default) can open the session from its stable address and send the audio from a
+# temporary one (#343). On a home network that /64 is the whole LAN, so for those ten minutes any IPv6 host on
+# it reaches the ports above 1023, as the sender does. Each family has its own list, AIRPLAY and AIRPLAY6: the
+# kernel keeps one list per name for both, with the mask of the rule that made it, so a shared name kept the
+# IPv4 rules' whole-address mask and the /64 never took.
 APCHAIN=TECHO5-AP2
 rm -f /run/techo5-airplay2-jump
 for T in iptables-legacy ip6tables-legacy; do
@@ -88,12 +102,14 @@ done
 if [ -x /usr/local/bin/techo5-shairport-sync ] && [ -x /usr/local/bin/techo5-nqptp ]; then
 	apok=1
 	for T in iptables-legacy ip6tables-legacy; do
+		list=AIRPLAY mask=
+		[ "$T" = ip6tables-legacy ] && list=AIRPLAY6 mask="--mask ffff:ffff:ffff:ffff::"
 		$T -N $APCHAIN &&
-			$T -A $APCHAIN -p tcp --dport 7000 -m recent --name AIRPLAY --set &&
+			$T -A $APCHAIN -p tcp --dport 7000 -m recent --name $list $mask --set &&
 			$T -A $APCHAIN -p tcp --dport 7000 -j ACCEPT &&
 			$T -A $APCHAIN -p udp --dport 319:320 -j ACCEPT &&
-			$T -A $APCHAIN -p tcp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT &&
-			$T -A $APCHAIN -p udp --dport 1024:65535 -m recent --name AIRPLAY --rcheck --seconds 600 -j ACCEPT || apok=
+			$T -A $APCHAIN -p tcp --dport 1024:65535 -m recent --name $list $mask --rcheck --seconds 600 -j ACCEPT &&
+			$T -A $APCHAIN -p udp --dport 1024:65535 -m recent --name $list $mask --rcheck --seconds 600 -j ACCEPT || apok=
 	done
 	if [ -n "$apok" ]; then
 		echo "$CHAIN 1" > /run/techo5-airplay2-jump

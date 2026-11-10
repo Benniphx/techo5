@@ -7,6 +7,7 @@ The unlock check before the flash (#168) and what the wait for the rescue consol
 the unit is (#166), with adb and fastboot stood in for.
 """
 import contextlib
+import hashlib
 import importlib.util
 import io
 import os
@@ -327,6 +328,71 @@ class FirstBoot(unittest.TestCase):
                 return 'slot=a- daemon=-'
         with self.assertRaises(lib.Fail), contextlib.redirect_stdout(io.StringIO()):
             inst.first_boot(Stuck([]), NoFastboot, [False], seconds=1, every=0)
+
+
+class DownloadChecked(unittest.TestCase):
+    """A download that comes out wrong is tried once more, and the error says how much arrived (#393)."""
+
+    def fetch_with(self, bodies, want):
+        served = list(bodies)
+        old = lib._open
+        lib._open = lambda url: contextlib.closing(io.BytesIO(served.pop(0)))
+        self.addCleanup(setattr, lib, '_open', old)
+        out = os.path.join(tempfile.mkdtemp(), 'image.gz')
+        with contextlib.redirect_stdout(io.StringIO()):
+            lib.download_checked('https://example.invalid/image.gz', out, hashlib.sha256(want).hexdigest())
+        return out
+
+    def test_a_second_try_that_comes_out_right_is_kept(self):
+        out = self.fetch_with([b'cut', b'whole image'], b'whole image')
+        with open(out, 'rb') as f:
+            self.assertEqual(f.read(), b'whole image')
+
+    def test_two_wrong_says_how_much_arrived(self):
+        with self.assertRaises(lib.Fail) as e:
+            self.fetch_with([b'cut', b'cut'], b'whole image')
+        self.assertIn('3 bytes arrived', str(e.exception))
+
+
+class GiftInstall(unittest.TestCase):
+    def run_main(self, *argv):
+        old = sys.argv
+        sys.argv = ['install-show.py'] + list(argv)
+        try:
+            inst.main()
+        except lib.Fail as e:
+            return str(e)
+        finally:
+            sys.argv = old
+
+    def test_cannot_be_combined_with_name_wifi_or_key(self):
+        for extra in (['--name', 'Kitchen'], ['--wifi', 'Net'], ['--wifi-passphrase-file', 'p.txt'],
+                      ['--key-file', 'k.key']):
+            err = self.run_main('--for-someone-else', *extra)
+            self.assertIn('--for-someone-else', err or '', extra)
+            self.assertIn(extra[0], err, extra)
+
+    def test_gift_writes_the_marker_and_no_name_key_or_wifi(self):
+        cmd = inst.provision_command(True, None, None, None, None)
+        self.assertIn('/data/misc/techo5/firstrun', cmd)   # echod's layout.StateDir on the Shows
+        # an earlier install's name, key and networks are removed; the configuration holds no network
+        self.assertIn('rm -f /data/misc/techo5/name /data/misc/techo5/psk /data/techo5-linux/wifi.conf', cmd)
+        self.assertIn('/data/techo5-linux/wpa_supplicant.conf', cmd)
+        self.assertIn('ctrl_interface=/run/wpa update_config=0', cmd)
+        self.assertNotIn('network={', cmd)
+        self.assertNotIn('> /data/misc/techo5/name', cmd)
+        self.assertNotIn('> /data/misc/techo5/psk', cmd)
+
+    def test_usual_install_writes_name_and_key_and_no_marker(self):
+        cmd = inst.provision_command(False, 'Kitchen', 'KEY', None, None)
+        self.assertIn('/data/misc/techo5/name', cmd)
+        self.assertIn('/data/misc/techo5/psk', cmd)
+        self.assertNotIn('firstrun', cmd)
+
+    def test_gift_still_takes_an_ssh_key(self):
+        cmd = inst.provision_command(True, None, None, 'ssh-ed25519 AAAA', None)
+        self.assertIn('firstrun', cmd)
+        self.assertIn('authorized_keys', cmd)
 
 
 if __name__ == '__main__':

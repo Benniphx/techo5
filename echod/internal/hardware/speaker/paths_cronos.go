@@ -295,28 +295,28 @@ func showPaths(jack bool) (map[Output][]kctl, []kctl) {
 		return map[Output][]kctl{OutputSpeaker: {}, OutputHeadphone: {}, OutputBoth: {}}, []kctl{}
 	}
 	return map[Output][]kctl{
-			OutputSpeaker: {
-				{name: "OUT Playback Switch", level: 1},
-			},
-			OutputHeadphone: {
-				{name: "OUT Playback Switch", level: 0},
-				{name: "HPVOL Playback Switch", level: 1},
-				{name: "HPO MIX HPVOL Switch", level: 1},
-				{name: "HP Playback Switch", level: 1},
-			},
-			// Both is the headphone path with the line-out left open: the speaker and the jack play
-			// the same audio at the same volume.
-			OutputBoth: {
-				{name: "OUT Playback Switch", level: 1},
-				{name: "HPVOL Playback Switch", level: 1},
-				{name: "HPO MIX HPVOL Switch", level: 1},
-				{name: "HP Playback Switch", level: 1},
-			},
-		}, []kctl{
-			{name: "HP Playback Switch", level: 0},
-			{name: "HPO MIX HPVOL Switch", level: 0},
-			{name: "HPVOL Playback Switch", level: 0},
-		}
+		OutputSpeaker: {
+			{name: "OUT Playback Switch", level: 1},
+		},
+		OutputHeadphone: {
+			{name: "OUT Playback Switch", level: 0},
+			{name: "HPVOL Playback Switch", level: 1},
+			{name: "HPO MIX HPVOL Switch", level: 1},
+			{name: "HP Playback Switch", level: 1},
+		},
+		// Both is the headphone path with the line-out left open: the speaker and the jack play
+		// the same audio at the same volume.
+		OutputBoth: {
+			{name: "OUT Playback Switch", level: 1},
+			{name: "HPVOL Playback Switch", level: 1},
+			{name: "HPO MIX HPVOL Switch", level: 1},
+			{name: "HP Playback Switch", level: 1},
+		},
+	}, []kctl{
+		{name: "HP Playback Switch", level: 0},
+		{name: "HPO MIX HPVOL Switch", level: 0},
+		{name: "HPVOL Playback Switch", level: 0},
+	}
 }
 
 // jackState is the kernel's headphone jack switch: 1 while something is plugged in. Only read where
@@ -326,9 +326,19 @@ const jackState = "/sys/class/switch/h2w/state"
 // jackPoll is how often the jack switch is sampled.
 const jackPoll = 500 * time.Millisecond
 
+// jackSense, where a board of this build sets it, says whether headphones are in, in place of
+// jackState: a board whose jack the kernel reports some other way. Nil on every Show.
+var jackSense func() bool
+
 // DetectOutput picks the output to use. A board with no jack, or a missing switch, is the speaker.
 func DetectOutput() Output {
 	if !HasJack {
+		return OutputSpeaker
+	}
+	if jackSense != nil {
+		if jackSense() {
+			return OutputHeadphone
+		}
 		return OutputSpeaker
 	}
 	b, err := os.ReadFile(jackState)
@@ -448,8 +458,9 @@ const OutputBoost = 1.0
 // DriverTuning applies the vendor driver's volume-dependent EQ and limiter (lib/asp), read from the
 // unit's own vendor partition. Both generations of Show 5 declare the same four filters and the same
 // compressor in their AFE.cfg ("Cronos" and "Checkers"), which lib/asp knows as asp.Show; a unit
-// whose files are missing or are a set we do not know says so and plays untuned.
-const DriverTuning = true
+// whose files are missing or are a set we do not know says so and plays untuned. A variable: a board of
+// this build with no vendor partition at all turns it off, and plays untuned without the error.
+var DriverTuning = true
 
 // tuningSet is the tuning to load by name, where the files cannot tell it: nil, the Shows' can.
 var tuningSet *asp.Set

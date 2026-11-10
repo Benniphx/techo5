@@ -29,7 +29,8 @@ import (
 //     Connect, DLNA, video and the addresses allowed to send it), and what has its microphones or camera
 //     take in the room (drop-in calls, sending the room to Home Assistant's wake word engine, keeping
 //     wake word clips, presence and gestures), which are changed on purpose, one device at a time; the speaker it is paired with; the amplifier's gain, which is the hardware's; and what it
-//     is in the middle of (snoozes, timers, a held wake light, calendar pop-ups shown, the calendars hidden
+//     is in the middle of (snoozes, occurrences left out, timers, a held wake light, calendar pop-ups
+//     shown, the calendars hidden
 //     on its calendar page, the lock's count of wrong tries, the version it last ran).
 //
 // Everything else is the settings, and a restore replaces them. Settings this build has no field for,
@@ -279,6 +280,7 @@ func ClearSecrets(c *Config) {
 	c.Home.Reolink.Pass = ""
 	c.TalkBack = TalkBack{}
 	c.Security.LockPIN = ""
+	c.Security.BabyKey = ""
 	c.Deck.OBS.Password = ""
 	c.Remote.Secret = ""
 	c.CamStream.Pass = ""
@@ -334,6 +336,7 @@ func KeepSecrets(c *Config, from Config) (reenter []string) {
 	// These have no server of their own to follow: the device's own, kept whole.
 	c.Home.HouseWord = from.Home.HouseWord
 	c.Security.LockPIN = from.Security.LockPIN
+	c.Security.BabyKey = from.Security.BabyKey
 	c.Remote.Secret = from.Remote.Secret
 	c.CamStream.Pass = from.CamStream.Pass
 	c.TalkBack = from.TalkBack
@@ -351,11 +354,15 @@ func ClearOwn(c *Config) { KeepOwn(c, Config{}) }
 
 // KeepOwn puts from's own things into c, in place of whatever c has.
 func KeepOwn(c *Config, from Config) {
-	lockPIN := c.Security.LockPIN // a secret, kept or cleared by its own list
+	lockPIN, babyKey := c.Security.LockPIN, c.Security.BabyKey // secrets, kept or cleared by their own list
 	c.Security = from.Security
-	c.Security.LockPIN = lockPIN
+	c.Security.LockPIN, c.Security.BabyKey = lockPIN, babyKey
 
 	c.Diag = from.Diag
+
+	// Where this device is and whether it has been set up are its own, not a household's settings.
+	c.FirstRun = from.FirstRun
+	c.Home.Area = from.Home.Area
 
 	// What has the microphones or the camera take in the room: listening in, sending it to Home
 	// Assistant, keeping clips of it, watching for people.
@@ -382,6 +389,8 @@ func KeepOwn(c *Config, from Config) {
 	c.Video.On, c.Video.DLNA = from.Video.On, from.Video.DLNA
 	c.Video.Allowed = slices.Clone(from.Video.Allowed)
 	c.Home.CameraLive = from.Home.CameraLive
+	// The Spot's camera dot is how the room sees the camera running: a file does not make it quieter.
+	c.Screen.CameraDotWatchedOnly = from.Screen.CameraDotWatchedOnly
 	// Which of Home Assistant's cameras the device lists: a file that says All (or is from a build that
 	// had no choice) does not undo None or a list chosen here, so a device that shares a Home Assistant
 	// with other homes is not given every camera in it by a file.
@@ -397,7 +406,16 @@ func KeepOwn(c *Config, from Config) {
 		}
 		// Sending a slot's voice to a company is chosen on the device, never by a file.
 		c.Wake.Words[i].Realtime = i < len(from.Wake.Words) && from.Wake.Words[i].Realtime
+		// So is sending a slot's room audio into a call to a contact.
+		c.Wake.Words[i].CallContact = ""
+		if i < len(from.Wake.Words) {
+			c.Wake.Words[i].CallContact = from.Wake.Words[i].CallContact
+		}
 	}
+	// Hours off the network take the device out of reach: chosen on the device, never by a file.
+	c.WifiQuiet = from.WifiQuiet
+	// Which band a device stays on is about the network it is on and where it stands: its own.
+	c.WifiBand = from.WifiBand
 	// What realtime voice has used today is the device's count.
 	c.Realtime.UsedDay, c.Realtime.UsedSeconds = from.Realtime.UsedDay, from.Realtime.UsedSeconds
 
@@ -405,13 +423,27 @@ func KeepOwn(c *Config, from Config) {
 	// Home Assistant. Neither is a restore's to turn on: Sendspin is on by default, so a file from before
 	// it was turned off would turn it back on.
 	c.Sendspin = from.Sendspin
+	// Snapcast dials out to a server and plays whatever it sends: which server, and whether at all, is the
+	// device's own, not a file's from a device in another house.
+	c.Snapcast = from.Snapcast
 	c.Bluetooth = from.Bluetooth
+	// A wall clock is paired to this device's adapter, and one controller at a time: an address from
+	// another device's file would name a clock this one cannot pair with.
+	c.WallClock = from.WallClock
+
+	// Where this device's replies play is the speaker next to it, not the one next to the device the
+	// file came from.
+	c.Brain.ReplyPlayer = from.Brain.ReplyPlayer
+	// So are the to-do lists it shows: the kitchen's shopping list, a desk's chores.
+	c.Todo = from.Todo
 
 	// Measuring the room, listening for claps and serving the camera: new uses of the microphones and
 	// the camera, each this device's to turn on. The camera's login goes with it (its password is also
 	// a secret, kept by KeepSecrets). The remote API's switch too: a restore never opens a door.
+	c.Microphone.ASP = from.Microphone.ASP
 	c.Microphone.Noise = from.Microphone.Noise
 	c.Microphone.Claps = from.Microphone.Claps
+	c.Microphone.ClapSense = from.Microphone.ClapSense
 	c.CamStream = from.CamStream
 	c.Remote.On = from.Remote.On
 	// Being on a tailnet is this device's: a restore never turns Tailscale or NetBird on or off.
@@ -438,6 +470,9 @@ func KeepOwn(c *Config, from Config) {
 	c.Microphone.Muted = from.Microphone.Muted
 
 	c.Alarms.Snoozed = slices.Clone(from.Alarms.Snoozed)
+	// Which occurrence is left out is the device's own, like a snooze: it is what this device is in
+	// the middle of, not a setting for another one to inherit.
+	c.Alarms.Skipped = slices.Clone(from.Alarms.Skipped)
 	c.Alarms.Held = nil
 	if from.Alarms.Held != nil {
 		held := *from.Alarms.Held

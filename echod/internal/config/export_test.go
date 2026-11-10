@@ -303,15 +303,32 @@ func TestARestoreDoesNotStartListening(t *testing.T) {
 	from.Wake.OnHA.Stream, from.Wake.OnHA.Confirm = true, true
 	from.Wake.KeepClips = true
 	from.Presence.On, from.Presence.Gestures = true, true
+	from.Security.Takes = true
+	from.Security.Baby, from.Security.BabyKey = true, "the-file-s-key"
 	file, _ := Export(from, "m", "v0")
 	r, err := Restored(Defaults(), file, "m")
 	if err != nil {
 		t.Fatal(err)
 	}
 	c := r.Config
-	if c.Home.DropIn || c.Wake.OnHA.Stream || c.Wake.OnHA.Confirm || c.Wake.KeepClips || c.Presence.On || c.Presence.Gestures {
-		t.Errorf("a restore turned listening or watching on: drop-in %v stream %v confirm %v clips %v presence %v gestures %v",
-			c.Home.DropIn, c.Wake.OnHA.Stream, c.Wake.OnHA.Confirm, c.Wake.KeepClips, c.Presence.On, c.Presence.Gestures)
+	if c.Home.DropIn || c.Wake.OnHA.Stream || c.Wake.OnHA.Confirm || c.Wake.KeepClips || c.Presence.On || c.Presence.Gestures ||
+		c.Security.Takes || c.Security.Baby {
+		t.Errorf("a restore turned listening or watching on: drop-in %v stream %v confirm %v clips %v presence %v gestures %v takes %v baby %v",
+			c.Home.DropIn, c.Wake.OnHA.Stream, c.Wake.OnHA.Confirm, c.Wake.KeepClips, c.Presence.On, c.Presence.Gestures, c.Security.Takes, c.Security.Baby)
+	}
+	if strings.Contains(string(file), "the-file-s-key") || c.Security.BabyKey != "" {
+		t.Errorf("the baby monitor's link key travels in a settings file: %q", c.Security.BabyKey)
+	}
+
+	// A device that has the monitor on keeps its switch and its key through a restore.
+	here := Defaults()
+	here.Security.Baby, here.Security.BabyKey = true, "mine"
+	r, err = Restored(here, file, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Config.Security.Baby || r.Config.Security.BabyKey != "mine" {
+		t.Errorf("a restore changed this device's baby monitor: %v %q", r.Config.Security.Baby, r.Config.Security.BabyKey)
 	}
 }
 
@@ -420,6 +437,62 @@ func TestARestoreKeepsWhatIsOnByDefaultOff(t *testing.T) {
 	}
 }
 
+// Snapcast and its server are the device's own: a file can neither turn it on nor point it elsewhere,
+// nor turn off or move one this device has.
+func TestARestoreKeepsSnapcast(t *testing.T) {
+	here := Defaults()
+	from := Defaults()
+	from.Snapcast = Snapcast{Enabled: true, Server: "192.168.1.30"}
+	file, _ := Export(from, "m", "v0")
+	r, err := Restored(here, file, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Config.Snapcast != here.Snapcast {
+		t.Errorf("a restore set snapcast to %+v", r.Config.Snapcast)
+	}
+
+	here.Snapcast = Snapcast{Enabled: true, Server: "192.168.1.20"}
+	file, _ = Export(Defaults(), "m", "v0")
+	if r, err = Restored(here, file, "m"); err != nil {
+		t.Fatal(err)
+	}
+	if r.Config.Snapcast != here.Snapcast {
+		t.Errorf("a restore changed this device's snapcast to %+v", r.Config.Snapcast)
+	}
+}
+
+// Where replies play is the device's own: a file from another device does not move this one's replies.
+func TestARestoreKeepsWhereRepliesPlay(t *testing.T) {
+	here := Defaults()
+	from := Defaults()
+	from.Brain.ReplyPlayer = "media_player.kitchen"
+	file, _ := Export(from, "m", "v0")
+	r, err := Restored(here, file, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Config.Brain.ReplyPlayer; got != "" {
+		t.Errorf("a restore set the reply player to %q", got)
+	}
+}
+
+// The to-do lists a device shows are its own: a restore keeps them.
+func TestARestoreKeepsTheToDoLists(t *testing.T) {
+	here := Defaults()
+	here.Todo.Lists = []string{"todo.chores"}
+	from := Defaults()
+	from.Todo.Lists = []string{"todo.shopping_list"}
+	file, _ := Export(from, "m", "v0")
+	r, err := Restored(here, file, "m")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Config.Todo.Lists; len(got) != 1 || got[0] != "todo.chores" {
+		t.Errorf("a restore changed the to-do lists to %v", got)
+	}
+}
+
 // Secure Connections is this device's own both ways (#183): a file never carries it, a restore keeps
 // this device's whichever way the file's device had it, and clearing what is a device's own leaves it on.
 func TestSecureConnectionsAreTheDevicesOwn(t *testing.T) {
@@ -455,7 +528,8 @@ func TestManyAddressesAreQuick(t *testing.T) {
 	s := strings.Repeat("a://", 1<<18)
 	start := time.Now()
 	scrubAddress(s)
-	if d := time.Since(start); d > 2*time.Second {
+	// Quadratic work would take minutes; linear takes well under a second, or a few under -race.
+	if d := time.Since(start); d > 2*time.Second*raceSlowdown {
 		t.Errorf("a megabyte of addresses took %v", d)
 	}
 }
@@ -516,5 +590,38 @@ func TestARestoreKeepsTheNewSwitchesAndLogins(t *testing.T) {
 	}
 	if got.Config.Home.Go2RTC.Base != "http://192.0.2.77:1984" || !slices.Contains(got.Reenter, "go2rtc's login") {
 		t.Errorf("go2rtc %q, reenter %v: another server must not get this device's login", got.Config.Home.Go2RTC.Base, got.Reenter)
+	}
+}
+
+// An occurrence left out is this device's own, like a snooze: it does not travel in a settings file,
+// and a restore keeps the device's mark rather than a file's.
+func TestASkippedOccurrenceDoesNotTravelInASettingsFile(t *testing.T) {
+	at := time.Date(2026, 10, 19, 7, 0, 0, 0, time.UTC)
+	c := Defaults()
+	c.Alarms.Skipped = []Skip{{ID: "wake", At: at}}
+	file, err := Export(c, "test", "v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(file), `"skipped"`) || strings.Contains(string(file), at.Format(time.RFC3339)) {
+		t.Errorf("an occurrence left out traveled in the settings file: %s", file)
+	}
+
+	cleared := c
+	ClearOwn(&cleared)
+	if len(cleared.Alarms.Skipped) != 0 {
+		t.Errorf("clearing what is this device's own kept a skipped occurrence: %+v", cleared.Alarms.Skipped)
+	}
+
+	settings, err := Export(Defaults(), "test", "v0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Restored(c, settings, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Config.Alarms.Skipped; len(got) != 1 || got[0].ID != "wake" || !got[0].At.Equal(at) {
+		t.Errorf("a restore lost the occurrence this device left out: %+v", got)
 	}
 }

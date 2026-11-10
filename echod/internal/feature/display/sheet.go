@@ -19,6 +19,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/btaudio"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/dlna"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/firmware"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/firstrun"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/mute"
@@ -37,6 +38,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/wakeword"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/speaker"
 	"github.com/HuskerMinion/techo5/echod/internal/hardware/touch"
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/asp"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/wake"
@@ -97,7 +99,8 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			{id: "brightness", label: tr("brightness"), kind: ctlStepper, value: fmt.Sprintf("%d%%", st.brightness)},
 			{id: "auto", label: tr("auto_brightness"), sub: tr("follows_the_room_s_light"), kind: ctlToggle, on: st.auto},
 		}
-		if hasDimmest && st.auto {
+		// Dim after idle goes down to Dimmest too, so the row is there for it with auto-brightness off (#310).
+		if hasDimmest && (st.auto || idleDimAfter() > 0) {
 			rows = append(rows, settingRow{id: "dimmest", label: tr("dimmest"), sub: tr("how_dark_auto_brightness_goes_in_a_dark_room"),
 				kind: ctlStepper, value: fmt.Sprintf("%d%%", dimmestSetting())})
 		}
@@ -122,6 +125,8 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 					rows = append(rows, settingRow{id: "nightglow", label: tr("night_clock_brightness"), sub: tr("shown_as_you_change_it_at_night"),
 						kind: ctlStepper, value: fmt.Sprintf(tr("level_of"), glowLevelSet(), len(glowSteps))})
 				}
+				rows = append(rows, settingRow{id: "nightinfo", label: tr("night_clock_next_up_and_alerts"),
+					sub: tr("dim_red_and_no_brighter"), kind: ctlToggle, on: config.Get().Screen.NightInfo})
 			}
 			if hasNightTap && config.Get().Screen.NightLight {
 				rows = append(rows, settingRow{id: "nighttap", label: tr("tap_lifts_the_night_light"),
@@ -136,6 +141,7 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		rows = append(rows, themeRows()...)
 		rows = append(rows,
 			fontRow(),
+			textSizeRow(),
 			clockStyleRow(),
 			settingRow{id: "clock", label: tr("clock_format"), kind: ctlChoice, value: clockOptions[clockIndex()]},
 		)
@@ -149,12 +155,16 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		}
 		rows = append(rows,
 			settingRow{id: "musicstrip", label: tr("now_playing"), sub: tr("full_page_or_a_strip_over_the_clock"), kind: ctlChoice, value: stripOptionText()},
+			settingRow{id: "musiclayout", label: tr("now_playing_layout"), kind: ctlChoice, value: musicLayoutChoices()[musicLayoutIndex()]},
 			settingRow{id: "follow", label: tr("now_playing_follows"), sub: tr("another_speaker_s_music_while_this_one_is_quiet"), kind: ctlChoice, value: followText(st.demo)},
 			settingRow{id: "lyrics", label: tr("lyrics"), sub: tr("the_words_in_time_looked_up_at_lrclib"), kind: ctlToggle, on: home.LyricsOn()},
 		)
 		// Calls, Assist and the turn screen need a microphone: a screen without one leaves them out.
 		if hasMicrophone() {
 			rows = append(rows, settingRow{id: "callbutton", label: tr("call_button"), sub: tr("on_the_home_screen_devices_and_contacts"), kind: ctlToggle, on: callButton.Load()})
+			if hasCallScreen {
+				rows = append(rows, settingRow{id: "callscreen", label: tr("call_screen"), sub: tr("page_or_hang_up_button"), kind: ctlChoice, value: callScreenOptions()[callScreenIndex()]})
+			}
 		}
 		if hasClockTap {
 			sub := tr("ui_start_assist_open_the_dashboard_or_the_deck_or_nothing")
@@ -200,6 +210,8 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		// The speaker first, then each group under its name: what is changed most near the top.
 		rows := []settingRow{
 			{id: "volume", label: tr("volume"), kind: ctlStepper, value: fmt.Sprintf(tr("level_of"), st.volume, sheetVolumeSteps)},
+			{id: "voicevol", label: tr("ui_voice_volume"), sub: tr("replies_and_announcements"), kind: ctlStepper, value: offsetText(config.Get().Speaker.VoiceOffset)},
+			{id: "callvol", label: tr("ui_call_volume"), sub: tr("ui_steps_from_the_volume"), kind: ctlStepper, value: offsetText(config.Get().Speaker.CallOffset)},
 			{id: "bass", label: tr("bass"), sub: toneSub(), kind: ctlStepper, value: toneValue(config.Get().Speaker.Bass)},
 			{id: "treble", label: tr("treble"), kind: ctlStepper, value: toneValue(config.Get().Speaker.Treble)},
 		}
@@ -218,9 +230,11 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 			rows = append(rows, []settingRow{
 				{label: tr("voice"), kind: ctlHeading},
 				{id: "mic", label: tr("microphone"), sub: tr("the_mute_button_does_this_too"), kind: ctlToggle, on: !st.muted, value: mic},
-				{id: "wakeword", label: tr("wake_word"), kind: ctlChoice, value: st.wakeWord},
+				{id: "wakeword", label: tr("wake_word"), sub: repeatedWordNote(), kind: ctlChoice, value: st.wakeWord},
 				{id: "wakesens", label: tr("wake_word_threshold"), sub: tr("higher_wakes_by_mistake_less_often"), kind: ctlStepper,
 					value: fmt.Sprintf("%.2f", config.Get().Wake.Slot(0).Threshold)},
+				{id: "wakesensplaying", label: tr("wake_word_threshold_playing"), sub: tr("higher_wakes_by_mistake_less_often"), kind: ctlStepper,
+					value: fmt.Sprintf("%.2f", config.Get().Wake.Slot(0).PlayingThresholdAt())},
 				{id: "waketone", label: tr("wake_sound"), kind: ctlChoice, value: config.Get().Wake.Slot(0).Tone.Label()},
 				voiceRow(),
 				{id: "hasounds", label: tr("home_assistant_sounds"), sub: tr("for_muting_and_timers"), kind: ctlToggle, on: !config.Get().Speaker.ClassicSounds},
@@ -255,6 +269,15 @@ func categoryRows(sv sheetView) (rows []settingRow, note string) {
 		return generalRows(sv), ""
 	}
 	return nil, ""
+}
+
+// btStatus is what the Bluetooth audio feature says it is doing, in the screen's language when it is
+// the plain "Not connected" it starts out with; its other lines are about a pairing and stay as sent.
+func btStatus(s string) string {
+	if s == "Not connected" {
+		return tr("not_connected")
+	}
+	return s
 }
 
 // withStreaming adds AirPlay and Spotify Connect to the Sound card's rows, where the device has them
@@ -321,15 +344,22 @@ func securityRows(sv sheetView) []settingRow {
 	if !sec.Encrypted {
 		link.sub, link.value = tr("ui_add_the_device_in_home_assistant_to_encrypt_it"), tr("ui_not_encrypted")
 	}
-	certs := settingRow{label: tr("certificate_checks"), sub: tr("for_downloads_updates_always_check"), kind: ctlValue, value: tr("ui_on")}
+	certs := settingRow{label: tr("certificate_checks"), sub: tr("for_downloads_updates_always_check"), kind: ctlValue, value: tr("ui_certificate_checks_on")}
 	if st.insecureTLS {
-		certs.sub, certs.value = tr("ui_turned_off_in_home_assistant"), "Off"
+		certs.sub, certs.value = tr("ui_turned_off_in_home_assistant"), tr("ui_certificate_checks_off")
 	}
 	rows = append(rows, cameraTestRows()...)
-	return append(rows,
+	rows = append(rows,
 		settingRow{id: "camweb", label: tr("camera_on_the_network"), sub: tr("no_login"), kind: ctlToggle, on: sec.Camera},
 		settingRow{id: "screenweb", label: tr("screen_on_the_network"), sub: tr("no_login"), kind: ctlToggle, on: sec.Screen},
-		settingRow{id: "talkback", label: tr("talk_through_cameras"), sub: tr("talk_on_the_camera_page"), kind: ctlToggle, on: sec.TalkBack},
+		settingRow{id: "talkback", label: tr("talk_through_cameras"), sub: tr("talk_on_the_camera_page"), kind: ctlToggle, on: sec.TalkBack})
+	if layout.HasMicrophone() {
+		rows = append(rows, settingRow{id: "takes", label: tr("record_takes_of_a_word"), sub: tr("on_the_setup_page_started_here"),
+			kind: ctlToggle, on: sec.Takes})
+		rows = append(rows, settingRow{id: "baby", label: tr("baby_monitor"), sub: tr("room_sound_in_a_browser_with_the_link"),
+			kind: ctlToggle, on: sec.Baby})
+	}
+	return append(rows,
 		setupRow(st.demo),
 		link, certs)
 }
@@ -352,7 +382,7 @@ func generalRows(sv sheetView) []settingRow {
 	}
 	restart := settingRow{id: "restart", label: tr("restart"), sub: tr("back_in_about_a_minute"), kind: ctlDanger, button: tr("restart")}
 	if !st.restartArm.IsZero() && st.now.Sub(st.restartArm) < restartWindow {
-		restart.sub, restart.button = tr("ui_tap_again_to_restart_now"), "Confirm"
+		restart.sub, restart.button = tr("ui_tap_again_to_restart_now"), tr("ui_confirm")
 	}
 	rows := []settingRow{{label: tr("name"), sub: tr("change_it_on_the_setup_page"), kind: ctlValue, value: st.name}}
 	rows = append(rows, calendarRows()...)
@@ -360,11 +390,48 @@ func generalRows(sv sheetView) []settingRow {
 		settingRow{id: "weather", label: tr("weather"), sub: tr("shown_with_the_clock"), kind: ctlChoice, value: st.weather, button: tr("ui_show")},
 		settingRow{id: "timezone", label: tr("time_zone"), sub: zoneSub(), kind: ctlChoice, value: zoneValue()},
 		settingRow{id: "screenlang", label: tr("screen_language"), sub: tr("its_dates_its_weather_and_what_it_listens_for"),
-			kind: ctlChoice, value: langOptions[langIndex()]},
+			kind: ctlChoice, value: langLabels()[langIndex()]},
 		updates,
 		settingRow{label: tr("about"), kind: ctlValue, value: deviceModel + " · slot " + st.slot},
 		restart,
+		giftResetRow(st.now),
 	)
+}
+
+// giftArm is the first tap on Reset for someone else, which wants a second within restartWindow.
+var giftArm struct {
+	sync.Mutex
+	at time.Time
+}
+
+// giftResetRow clears the device for somebody else and starts first run (firstrun.Reset), asking twice.
+func giftResetRow(now time.Time) settingRow {
+	row := settingRow{id: "giftreset", label: "Reset for someone else", sub: "Clears it and starts setting it up again",
+		kind: ctlDanger, button: "Reset"}
+	giftArm.Lock()
+	armed := !giftArm.at.IsZero() && now.Sub(giftArm.at) < restartWindow
+	giftArm.Unlock()
+	if armed {
+		row.sub, row.button = "Wi-Fi, name, Home Assistant, alarms, everything: tap again", tr("ui_confirm")
+	}
+	return row
+}
+
+// giftResetTap is a tap on that row: the second, in time, resets.
+func giftResetTap() {
+	giftArm.Lock()
+	armed := !giftArm.at.IsZero() && time.Since(giftArm.at) < restartWindow
+	giftArm.at = time.Now()
+	if armed {
+		giftArm.at = time.Time{}
+	}
+	giftArm.Unlock()
+	if armed {
+		slog.Warn("reset for someone else asked for from the screen")
+		if err := firstrun.Reset(); err != nil {
+			slog.Error("reset for someone else failed", "err", err)
+		}
+	}
 }
 
 // forgetRow is Forget for the earbuds or speaker the device plays to, under its row: it asks twice,
@@ -372,7 +439,7 @@ func generalRows(sv sheetView) []settingRow {
 func forgetRow(sv sheetView, name string) settingRow {
 	row := settingRow{id: "btforget", label: fmt.Sprintf(tr("forget_device"), name), sub: tr("asks_twice"), kind: ctlDanger, button: tr("ui_forget")}
 	if !sv.st.forgetArm.IsZero() && sv.now.Sub(sv.st.forgetArm) < restartWindow {
-		row.sub, row.button = tr("ui_tap_again_to_forget_it"), "Confirm"
+		row.sub, row.button = tr("ui_tap_again_to_forget_it"), tr("ui_confirm")
 	}
 	return row
 }
@@ -383,7 +450,7 @@ func connectionRows(sv sheetView) []settingRow {
 	st, bt := sv.st, sv.bt
 	wifiRow := settingRow{label: tr("wi_fi"), sub: st.address, kind: ctlValue, value: st.wifiName}
 	if st.wifiOK {
-		wifiRow.id, wifiRow.kind, wifiRow.button = "wifi", ctlButton, "Change"
+		wifiRow.id, wifiRow.kind, wifiRow.button = "wifi", ctlButton, tr("ui_change")
 	}
 	if st.address == "-" {
 		wifiRow.sub = tr("ui_no_address_yet")
@@ -396,16 +463,16 @@ func connectionRows(sv sheetView) []settingRow {
 	case !bt.Available:
 		rows = append(rows, settingRow{label: tr("bluetooth_audio"), sub: tr("not_available_on_this_build"), kind: ctlValue})
 	case bt.Connected != "":
-		rows = append(rows, settingRow{id: "bt", label: bt.Connected, sub: cmpOr(bt.Status, tr("ui_bluetooth_audio_connected")), kind: ctlButton, button: tr("ui_disconnect")})
+		rows = append(rows, settingRow{id: "bt", label: bt.Connected, sub: cmpOr(btStatus(bt.Status), tr("ui_bluetooth_audio_connected")), kind: ctlButton, button: tr("ui_disconnect")})
 	case bt.Remembered != "":
 		// What it is doing, while it does something; otherwise plainly not connected.
 		row := settingRow{id: "bt", label: bt.Remembered, sub: tr("bluetooth_audio"), kind: ctlButton, value: tr("not_connected"), button: tr("connect")}
 		if bt.Status != "" {
-			row.sub, row.value = bt.Status, ""
+			row.sub, row.value = btStatus(bt.Status), ""
 		}
 		rows = append(rows, row)
 	default:
-		rows = append(rows, settingRow{label: tr("bluetooth_audio"), sub: cmpOr(bt.Status, tr("ui_earbuds_or_a_speaker")), kind: ctlValue, value: tr("ui_none_yet")})
+		rows = append(rows, settingRow{label: tr("bluetooth_audio"), sub: cmpOr(btStatus(bt.Status), tr("ui_earbuds_or_a_speaker")), kind: ctlValue, value: tr("ui_none_yet")})
 	}
 	if name := cmpOr(bt.Connected, bt.Remembered); bt.Available && name != "" {
 		rows = append(rows, forgetRow(sv, name))
@@ -713,9 +780,11 @@ func pickerForRaw(id string, sv sheetView) (pickerView, bool) {
 		return clockStylePicker()
 	case "font":
 		return fontPicker()
+	case "textsize":
+		return textSizePicker()
 	case "skin":
 		return pickerView{title: tr("skin"), opts: skinOptions(), cur: skinIndex()}, true
-	case "clockpos", "weatherpos", "datecolor":
+	case "clockpos", "weatherpos", "datecolor", "glancesize", "glancemusic":
 		return clockLayoutPicker(id)
 	case "camtime":
 		return pickerView{title: tr("camera_time"), opts: cameraTimeOptions(), cur: cameraTimeIndex()}, true
@@ -737,6 +806,8 @@ func pickerForRaw(id string, sv sheetView) (pickerView, bool) {
 		return pickerView{title: tr("turn_screen"), opts: turnStyleOptions(), cur: turnStyleIndex()}, true
 	case "clocktap":
 		return pickerView{title: tr("tap_on_the_clock"), opts: clockTapOptions(), cur: clockTapIndex()}, true
+	case "callscreen":
+		return pickerView{title: tr("call_screen"), opts: callScreenOptions(), cur: callScreenIndex()}, true
 	case "radarsrc":
 		return pickerView{title: tr("radar_source"), opts: home.RadarSourceOptions(), cur: home.RadarSourceIndex()}, true
 	case "calendars":
@@ -749,15 +820,17 @@ func pickerForRaw(id string, sv sheetView) (pickerView, bool) {
 		return popupCalendarsPicker(), true
 	case "musicstrip":
 		return pickerView{title: tr("now_playing"), opts: stripChoices(), cur: stripIndexShared()}, true
+	case "musiclayout":
+		return pickerView{title: tr("now_playing_layout"), opts: musicLayoutChoices(), cur: musicLayoutIndex()}, true
 	case "awayoff":
 		return pickerView{title: tr("screen_off_when_nobody_is_near"), opts: awayLabels(), cur: awayIndex()}, true
 	case "follow":
 		p := followPicker(sv.st.demo)
 		return p, len(p.opts) > 0
 	case "screenlang":
-		return pickerView{title: tr("screen_language"), opts: langOptions, cur: langIndex()}, true
+		return pickerView{title: tr("screen_language"), opts: langLabels(), cur: langIndex()}, true
 	case "newtimer":
-		return pickerView{title: tr("new_timer"), opts: timerLabels, cur: -1}, true
+		return pickerView{title: tr("new_timer"), opts: timerLabels(), cur: -1}, true
 	case "sleep":
 		return pickerView{title: tr("sleep_timer"), opts: sleepLabels(), cur: sleepIndex()}, true
 	case "quiet":
@@ -773,7 +846,7 @@ func pickerForRaw(id string, sv sheetView) (pickerView, bool) {
 	case "sunrise":
 		return pickerView{title: tr("wake_with_light"), opts: sunriseLabels(), cur: sunriseIndex()}, true
 	case "timezone":
-		p := pickerView{title: tr("time_zone"), opts: append([]string{followHA, common}, timezone.Regions()...), cur: -1}
+		p := pickerView{title: tr("time_zone"), opts: append([]string{tr("ui_tz_follow_ha"), tr("ui_tz_common")}, timezone.Regions()...), cur: -1}
 		if !timezone.Get().SetHere() {
 			p.cur = 0
 		}
@@ -852,13 +925,21 @@ func (d *Display) choose(id string, i int) {
 		d.nightHoursChanged()
 	case "musicstrip":
 		d.setMusicStrip(i)
+	case "musiclayout":
+		if i == 0 || i == 1 {
+			if err := config.Set().Screen().ModernNowPlaying(i == 1); err != nil {
+				slog.Warn("saving the now playing layout failed", "err", err)
+			}
+		}
 	case "clockstyle":
 		d.setClockStyle(i)
 	case "font":
 		d.setFont(i)
+	case "textsize":
+		d.setTextSize(i)
 	case "skin":
 		setSkin(d.skinSel(), i)
-	case "clockpos", "weatherpos", "datecolor":
+	case "clockpos", "weatherpos", "datecolor", "glancesize", "glancemusic":
 		d.chooseClockLayout(id, i)
 	case "clock":
 		on := i == 1
@@ -889,6 +970,8 @@ func (d *Display) choose(id string, i int) {
 		setTimerStyle(d.timerStyleSel(), i)
 	case "clocktap":
 		setClockTap(d.clockTapSel(), i)
+	case "callscreen":
+		d.chooseCallScreen(i)
 	case "radarsrc":
 		go home.Get().SetRadarSource(i)
 	case "calendars":
@@ -1071,9 +1154,9 @@ func (d *Display) rowTap(id string, p part, opt int) {
 	case "brightness":
 		switch p {
 		case partMinus:
-			d.stepBrightness(-25)
+			d.stepBrightness(-1)
 		case partPlus:
-			d.stepBrightness(+25)
+			d.stepBrightness(+1)
 		}
 	case "dimmest":
 		switch p {
@@ -1108,6 +1191,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetCameraSound(!home.CameraSound())
 	case "lyrics":
 		safe.Go("lyrics from the screen", func() { home.Get().SetLyricsOn(!home.LyricsOn()) })
+	case "nightinfo":
+		d.setNightInfo(!config.Get().Screen.NightInfo)
 	case "nighttap":
 		d.setNightTapLifts(!config.Get().Screen.NightTapLifts)
 	case "roomlights":
@@ -1128,6 +1213,22 @@ func (d *Display) rowTap(id string, p part, opt int) {
 			media.Get().Adjust(-1)
 		case partPlus:
 			media.Get().Adjust(+1)
+		}
+	case "voicevol":
+		n := media.Get().VoiceOffset()
+		switch p {
+		case partMinus:
+			media.Get().SetVoiceOffset(n - 1)
+		case partPlus:
+			media.Get().SetVoiceOffset(n + 1)
+		}
+	case "callvol":
+		n := media.Get().CallOffset()
+		switch p {
+		case partMinus:
+			media.Get().SetCallOffset(n - 1)
+		case partPlus:
+			media.Get().SetCallOffset(n + 1)
 		}
 	case "mic":
 		mute.Get().Flip()
@@ -1155,6 +1256,17 @@ func (d *Display) rowTap(id string, p part, opt int) {
 			return
 		}
 		wakeword.Get().SetThreshold(0, math.Round(min(max(v, 0.5), 0.99)*100)/100)
+	case "wakesensplaying":
+		v := config.Get().Wake.Slot(0).PlayingThresholdAt()
+		switch p {
+		case partMinus:
+			v -= 0.02
+		case partPlus:
+			v += 0.02
+		default:
+			return
+		}
+		wakeword.Get().SetPlayingThreshold(0, math.Round(min(max(v, 0.5), 0.99)*100)/100)
 	case "bass", "treble":
 		c := config.Get().Speaker
 		v := c.Bass
@@ -1199,6 +1311,10 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		security.Get().SetScreen(!config.Get().Security.Screen)
 	case "talkback":
 		security.Get().SetTalkBack(!config.Get().Security.TalkBack)
+	case "takes":
+		security.Get().SetTakes(!config.Get().Security.Takes)
+	case "baby":
+		security.Get().SetBaby(!config.Get().Security.Baby)
 	case "airplay":
 		streaming.Get().SetAirPlay(!config.Get().Streaming.AirPlay)
 	case "airplay2":
@@ -1219,6 +1335,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		} else {
 			openPINSet() // a new PIN, typed twice on the pad
 		}
+	case "allalarms":
+		alarm.Get().SetAllOn(config.Get().Alarms.AllOff)
 	case "sunface":
 		if err := config.Set().Alarms().SunriseFace(!config.Get().Alarms.SunriseFace); err != nil {
 			slog.Warn("saving the sun's face failed", "err", err)
@@ -1246,6 +1364,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		default:
 			d.checkUpdates()
 		}
+	case "giftreset":
+		giftResetTap()
 	case "restart":
 		d.mu.Lock()
 		armed := !d.restartArm.IsZero() && time.Since(d.restartArm) < restartWindow
@@ -1304,8 +1424,8 @@ func (d *Display) rowTap(id string, p part, opt int) {
 		home.Get().SetSlideshowCaption(!home.Get().SlideshowCaption())
 	case "immichfav":
 		home.Get().SetImmichFavorites(!home.Get().ImmichFavorites())
-	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "skin", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "callring", "turnstyle", "timerstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
-		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap":
+	case "night", "atnight", "nightstyle", "clock", "clockstyle", "font", "textsize", "skin", "clockpos", "weatherpos", "datecolor", "glancesize", "glancemusic", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "callring", "turnstyle", "timerstyle", "radarsrc", "calendars", "calpopwhen", "calpopallday", "calpopcals", "musicstrip", "follow", "awayoff", "slideshow", "photoevery", "screenlang", "newtimer", "sleep", "sunrise",
+		"timezone", "wakeword", "waketone", "ttsvoice", "quiet", "output", "clocktap", "callscreen", "musiclayout":
 		d.openPicker(id)
 	}
 }
@@ -1381,8 +1501,43 @@ func (d *Display) checkUpdates() {
 	})
 }
 
-// stepBrightness moves the brightness ceiling by pct, between a quarter and full.
+// brightnessSteps are the Brightness row's steps on the screen: fine at the bottom, like Dimmest's,
+// so a dark room can have a dim ceiling.
+var brightnessSteps = [...]int{5, 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100}
+
+// nextStep is the step by steps from cur in steps, cur being possibly between two of them, as
+// Home Assistant can set it.
+func nextStep(steps []int, cur, by int) int {
+	// Below the lowest step, as Home Assistant can set it, a step down is no step up.
+	if by < 0 && cur < steps[0] {
+		return cur
+	}
+	i := 0
+	for i < len(steps)-1 && steps[i] < cur {
+		i++
+	}
+	if steps[i] != cur {
+		// Between two steps, as Home Assistant can set it: i is the higher one, which is a step up;
+		// a step down is the lower one.
+		if by < 0 {
+			i--
+		}
+		by = 0
+	}
+	i = min(max(i+by, 0), len(steps)-1)
+	return steps[i]
+}
+
+// stepBrightness moves the brightness ceiling one of brightnessSteps.
 func (d *Display) stepBrightness(by int) {
-	pct := min(max(d.ceilingOrDefault()+by, 25), 100)
-	d.apply(true, pct, true)
+	d.apply(true, nextStep(brightnessSteps[:], d.ceilingOrDefault(), by), true)
+}
+
+// repeatedWordNote is the line under Wake word when the same word is in both slots (set in Home
+// Assistant): only one of them answers each time, which otherwise looks like missed requests.
+func repeatedWordNote() string {
+	if config.Get().Wake.RepeatedWord() != "" {
+		return tr("ui_same_wake_word_twice")
+	}
+	return ""
 }

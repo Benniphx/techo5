@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"math"
 	"strings"
 	"time"
 
+	"github.com/HuskerMinion/techo5/echod/internal/lib/fonts"
 	"golang.org/x/image/font"
 
 	"github.com/HuskerMinion/techo5/echod/internal/config"
@@ -20,6 +20,7 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/notify"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/phone"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/remind"
+	"github.com/HuskerMinion/techo5/echod/internal/feature/takes"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/talkback"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/timer"
 	"github.com/HuskerMinion/techo5/echod/internal/feature/video"
@@ -56,16 +57,27 @@ var (
 const ampmGap = 10
 
 // timeLine draws the time centered on the face at baseline, with its AM/PM beside it in the accent
-// the way the Show sets it; on a 24-hour clock the time stands alone.
+// the way the Show sets it; on a 24-hour clock the time stands alone. At a large text size the two
+// move left together as far as it takes to keep the AM/PM on the face.
 func (r *roundRenderer) timeLine(now time.Time, baseline int) {
-	hm := clockHM(now)
-	r.centered(r.clock, hm, baseline, colText)
-	if s := clockSuffix(now); s != "" {
-		r.text(r.title, s, center+r.width(r.clock, hm)/2+ampmGap, baseline, colAccent)
+	hm, s := clockHM(now), clockSuffix(now)
+	hw := r.width(r.clock, hm)
+	x := center - hw/2
+	if s != "" {
+		x -= max(0, x+hw+ampmGap+r.width(r.title, s)-(2*center-ampmEdge))
+		r.text(r.title, s, x+hw+ampmGap, baseline, colAccent)
 	}
+	r.text(r.clock, hm, x, baseline, colText)
 }
 
+// ampmEdge is how far in from the face's edge an AM/PM ends at the most: inside the ring around it.
+const ampmEdge = 48
+
 type roundScene struct {
+	// firstRunUp is first run still to do (firstrun_spot.go), and firstRun the step it shows.
+	firstRunUp bool
+	firstRun   firstRunView
+
 	pin pinView // the settings lock's PIN pad (pin.go), over everything but a call or a ring
 	// The dashboard face: whether it is up, how it is shown, and what it shows.
 	showDash   bool
@@ -78,10 +90,13 @@ type roundScene struct {
 	now          time.Time
 	phase        string // idle, listening, thinking, replying, lingering
 	heard, reply string
+	said         float64 // how much of the reply the voice has said, 0 to 1 (voice.Spoken)
 	eq           *eqView // a turn's picture, when turns are drawn as the wave or the bars
 	cue          string  // a turn's phase, when turns are a cue over the face and phase is idle (turn_cue.go)
 	muted        bool
 	mutedSubtle  bool // the muted ring drawn thin and dim (mutering_spot.go)
+	noIdleRing   bool // no gray track while nothing else is on the rim (rimdot_spot.go)
+	listening    bool // the room is being listened to in a browser (feature/babymon)
 	playing      bool
 	paused       bool
 	volume       int
@@ -113,7 +128,7 @@ type roundScene struct {
 
 	camera     home.CameraView
 	showCamera bool
-	cameraLive bool // the sensor is running
+	cameraLive bool // the camera dot: the sensor is running, or with Only when watched, a picture is going out
 
 	// cameraSound is whether that view has a sound of its own at all, which is when its control is drawn;
 	// cameraSoundLive is whether that sound is playing or on its way, which is what the control says: Mute
@@ -197,9 +212,12 @@ type roundScene struct {
 	alertIdx    int
 	alertScroll int
 
-	// setupAsking is a browser waiting to be let into the setup page, said on the face so that a
-	// request for a press is never something only the browser knows about.
+	// setupAsking is the setup page asking something of whoever is at the device: a browser waiting to
+	// be let in, or takes of a word to start or a recording of them running (takes, when nobody is
+	// waiting to be let in). Said on the face so that a request for a press is never something only the
+	// browser knows about.
 	setupAsking bool
+	takes       takes.Card
 
 	// sunrise is how far the light before an alarm has come, 0 to 1, and sunriseFace whether the sun
 	// is drawn with a face on it.
@@ -210,6 +228,8 @@ type roundScene struct {
 	// else has to be shown.
 	redClock bool
 	redStyle string
+	// nightInfo has a notification shown on the night clock, in the night's tone (render_night_spot.go).
+	nightInfo bool
 
 	// style is what the clock style in force shows beyond the time (clock_style.go).
 	style styleFacts
@@ -232,8 +252,9 @@ type roundScene struct {
 }
 
 type roundRenderer struct {
-	paint                                 // the canvas, and the settings screen's tap zones
-	callDrawn                        bool // the frame last drawn has the Call button on it; for taps
+	nightBuf                         *image.RGBA // the night layer kept between frames (nightLayerFor)
+	paint                                        // the canvas, and the settings screen's tap zones
+	callDrawn                        bool        // the frame last drawn has the Call button on it; for taps
 	clock, title, body, small, label font.Face
 	tiny                             font.Face
 
@@ -283,7 +304,8 @@ type roundRenderer struct {
 }
 
 func newRoundRenderer(dst *image.RGBA) *roundRenderer {
-	r := &roundRenderer{paint: paint{dst: dst, w: side, h: side, round: true}}
+	r := &roundRenderer{paint: paint{dst: dst, w: side, h: side, round: true,
+		rowCard: image.Rect(spotCardLeft, 0, spotCardRight, side)}}
 	k, _ := r.fontChanged()
 	r.makeFaces(k)
 	return r
@@ -291,15 +313,14 @@ func newRoundRenderer(dst *image.RGBA) *roundRenderer {
 
 // makeFaces makes the renderer's faces in the font named (font.go).
 func (r *roundRenderer) makeFaces(k fontKey) {
-	name := k.name
 	face := func(bold bool, size float64) font.Face {
-		fc := fontFace(name, bold, size)
+		fc := k.face(bold, size)
 		if fc == nil {
 			panic("no font face at all, not even Go's")
 		}
 		return fc
 	}
-	r.font, r.fontGen, r.fc, r.styleFaces = name, k.gen, spotFaces(k), nil
+	r.font, r.fontGen, r.textSize, r.fc, r.styleFaces = k.name, k.gen, k.size, spotFaces(k), nil
 	r.clock = face(true, 104)
 	r.title = face(true, 34)
 	r.body = face(false, 26)
@@ -308,8 +329,8 @@ func (r *roundRenderer) makeFaces(k fontKey) {
 	r.tiny = face(false, 16)
 }
 
-// useFont makes the faces again when the screen font, or the owner's own fonts, have changed since
-// they were made, so a new choice is drawn from the next frame on.
+// useFont makes the faces again when the screen font, the owner's own fonts or the text size have
+// changed since they were made, so a new choice is drawn from the next frame on.
 func (r *roundRenderer) useFont() {
 	if k, changed := r.fontChanged(); changed {
 		r.makeFaces(k)
@@ -318,6 +339,7 @@ func (r *roundRenderer) useFont() {
 
 func (r *roundRenderer) draw(s roundScene) {
 	r.useFont()
+	defer r.listeningDot(s) // over everything, however the frame ends
 	if !(s.menuOpen && s.menuMode == modeWeather && s.radarOn) {
 		r.shapes = alertOverlay{} // kept only while the rain map is up
 	}
@@ -334,7 +356,7 @@ func (r *roundRenderer) draw(s roundScene) {
 	r.zmu.Lock()
 	r.videoZones = nil
 	r.zmu.Unlock()
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(colBackground), image.Point{}, draw.Src)
+	fillCanvas(r.dst, colBackground)
 	r.callDrawn, r.artDrawn = false, false
 	r.clearAlertTaps()
 	r.clearCameraSoundTap()
@@ -372,11 +394,19 @@ func (r *roundRenderer) draw(s roundScene) {
 		return
 	}
 	if s.setupAsking {
-		r.setupAskFace(s)
+		if s.takes.Up() {
+			r.takesFace(s)
+		} else {
+			r.setupAskFace(s)
+		}
 		return
 	}
 	if s.showVideoAsk {
 		r.videoAskFace(s)
+		return
+	}
+	if s.firstRunUp {
+		r.firstRunFaceSpot(s.firstRun, s.now)
 		return
 	}
 	// This device taking an announcement, then one that arrived: both take the face, since a circle
@@ -504,6 +534,7 @@ func (r *roundRenderer) rim(s roundScene) {
 		r.arc(rimIn, rimOut, 0, 2*math.Pi*math.Min(math.Max(left, 0), 1), colTimer)
 	case s.style.style() == styleSun && s.style.sunOK && s.phase == "idle" && !s.nowPlaying && !s.showCamera && !s.showDash:
 		r.sunRim(s)
+	case s.noIdleRing: // the rim stays dark
 	default:
 		r.arc(rimIn, rimOut, 0, 2*math.Pi, colTrack)
 	}
@@ -578,7 +609,7 @@ func (r *roundRenderer) conversation(s roundScene) {
 		y += 12
 	}
 	if s.reply != "" && (s.phase == "replying" || s.phase == "lingering") {
-		r.paragraph(r.body, s.reply, y, colText, 5)
+		r.replyParagraph(r.body, s.reply, y, colText, 5, s.said)
 	}
 }
 
@@ -710,7 +741,7 @@ func (r *roundRenderer) triangle(ax, ay, bx, by, cx, cy float64, c color.RGBA) {
 
 // clear paints the canvas the icon ground.
 func (r *roundRenderer) clear() {
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(colIconGround), image.Point{}, draw.Src)
+	fillCanvas(r.dst, colIconGround)
 }
 
 // dim darkens the whole canvas by alpha.
@@ -736,7 +767,7 @@ func (r *roundRenderer) text(face font.Face, s string, x, baseline int, c color.
 }
 
 func (r *roundRenderer) width(face font.Face, s string) int {
-	return font.MeasureString(face, s).Round()
+	return fonts.MeasureString(face, s).Round()
 }
 
 // centered2 is centered about x rather than the middle of the panel.
@@ -755,7 +786,27 @@ func (r *roundRenderer) centered(face font.Face, s string, baseline int, c color
 // centered. It returns the baseline after the last line.
 func (r *roundRenderer) paragraph(face font.Face, s string, baseline int, c color.Color, maxLines int) int {
 	lineH := face.Metrics().Height.Round() + 4
-	words := strings.Fields(s)
+	lines, more := r.paragraphLines(face, strings.Fields(s), baseline, maxLines)
+	for n, line := range lines {
+		avail := chord(baseline-10) - 56
+		if n == len(lines)-1 && more {
+			line += "…"
+		}
+		// A word too long for the line on its own, or the ellipsis pushing the last line over: cut to
+		// fit, rather than drawn off the circle.
+		if r.width(face, line) > avail {
+			line = clipRunes(line, 1, func(l string) bool { return r.width(face, l) <= avail })
+		}
+		r.centered(face, line, baseline, c)
+		baseline += lineH
+	}
+	return baseline
+}
+
+// paragraphLines is how words wrap to the circle from baseline down, up to maxLines, and whether any
+// are left over.
+func (r *roundRenderer) paragraphLines(face font.Face, words []string, baseline, maxLines int) (lines []string, more bool) {
+	lineH := face.Metrics().Height.Round() + 4
 	for n := 0; n < maxLines && len(words) > 0; n++ {
 		avail := chord(baseline-10) - 56
 		line := words[0]
@@ -768,18 +819,28 @@ func (r *roundRenderer) paragraph(face font.Face, s string, baseline int, c colo
 			line = try
 		}
 		words = words[k:]
-		if n == maxLines-1 && len(words) > 0 {
-			line += "…"
-		}
-		// A word too long for the line on its own, or the ellipsis pushing the last line over: cut to
-		// fit, rather than drawn off the circle.
-		if r.width(face, line) > avail {
-			line = clipRunes(line, 1, func(l string) bool { return r.width(face, l) <= avail })
-		}
-		r.centered(face, line, baseline, c)
+		lines = append(lines, line)
 		baseline += lineH
 	}
-	return baseline
+	return lines, len(words) > 0
+}
+
+// replyParagraph is paragraph for a reply: one too long for maxLines is shown a page at a time as the
+// voice gets to it, said being how much of it has been said (voice.Spoken), as on the Show (replyPage).
+func (r *roundRenderer) replyParagraph(face font.Face, s string, baseline int, c color.Color, maxLines int, said float64) int {
+	words := strings.Fields(s)
+	at := int(said * float64(len([]rune(strings.Join(words, " ")))))
+	chars := 0
+	for {
+		lines, more := r.paragraphLines(face, words, baseline, maxLines)
+		page := len([]rune(strings.Join(lines, " "))) + 1
+		if !more || chars+page > at {
+			break
+		}
+		chars += page
+		words = words[len(strings.Fields(strings.Join(lines, " "))):]
+	}
+	return r.paragraph(face, strings.Join(words, " "), baseline, c, maxLines)
 }
 
 // chord is the width of the circle at height y.

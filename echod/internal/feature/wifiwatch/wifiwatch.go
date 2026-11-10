@@ -82,6 +82,8 @@ type Watch struct {
 	reassociate  func(context.Context) error
 	evidence     func(context.Context) []string
 	say          func(msg string, args ...any)
+	network      func(context.Context) (ssid string, joined bool)
+	renew        func()
 
 	sign    string     // signHA once Home Assistant has connected this boot, else signGroup once group traffic was heard
 	heardAt time.Time  // when traffic sent to everyone was last heard
@@ -94,6 +96,10 @@ type Watch struct {
 
 	// tried is when the last reassociation was, until what came of it has been said.
 	tried time.Time
+
+	ssid string // the network joined at the last look, empty before one was
+
+	mc *multicast // multicast that stops while the link is up (multicast.go)
 }
 
 // settle is how long after a reassociation the sign has to be back before it is said that it is not:
@@ -113,7 +119,13 @@ func New() *Watch {
 		reassociate: wifi.Reassociate,
 		evidence:    wifi.Evidence,
 		say:         func(msg string, args ...any) { slog.Warn(msg, args...) },
-		wait:        firstWait,
+		network: func(ctx context.Context) (string, bool) {
+			st := wifi.Current(ctx)
+			return st.SSID, st.Connected
+		},
+		renew: wifi.RenewLease,
+		wait:  firstWait,
+		mc:    newMulticast(),
 	}
 }
 
@@ -140,7 +152,11 @@ func (w *Watch) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-t.C:
+			w.moved(ctx)
 			w.look(ctx)
+			if w.mc != nil {
+				w.mc.look(ctx)
+			}
 		}
 	}
 }

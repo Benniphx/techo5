@@ -14,8 +14,8 @@ firmware): releases don't carry it, so it is copied into the store before the pa
 `recovery`, so LineageOS can be put back with TWRP and its zip.
 
 The 2nd gen Show 8 (`athena`) installs differently: no LineageOS, TECHO5's own 64-bit mainline kernel
-written to `boot` and the TECHO5 image written to `system`, both from TWRP. Two screen panels
-are tested so far (ILI9881C with BOE glass, JD9365 with KD/HSD glass); the installer checks, and tries
+written to `boot` and the TECHO5 image written to `system`, both from TWRP. Three screen panels
+are tested so far (ILI9881C with BOE glass, JD9365 with KD/HSD glass, JD9365 with BOE glass (new)); the installer checks, and tries
 the others with `--force-panel`. See [install-athena.md](install-athena.md).
 
 ## Unlock the bootloader first
@@ -79,7 +79,7 @@ script, give everything as switches instead: `--serial <serial> --name "Kitchen"
 nothing (it also asks nothing, and stops rather than guess, when its input or output isn't a terminal).
 
 It does steps 1 to 6 below: downloads the latest release and checks the boot image and root filesystem
-against their checksums, keeps LineageOS's boot image in `backups/<serial>/` when adb is root, flashes,
+against their checksums (a download that fails its checksum is tried once more, and the error says how many bytes arrived), keeps LineageOS's boot image in `backups/<serial>/` when adb is root, flashes,
 creates the slot store over the USB serial console, provisions the name and
 the Home Assistant key (kept in `backups/<serial>/home-assistant.key`), and waits for the first boot.
 `--ssh-key ~/.ssh/id_ed25519.pub` also turns SSH on with your key. Then go to
@@ -146,8 +146,8 @@ The boot image is the kernel plus the small rescue environment that sets a unit 
   `techo5-boot-crown-<version>.img`, each built against that board's own
   kernel and device tree — from the same
   [release](https://github.com/HuskerMinion/techo5/releases) as the root filesystem. The boot image
-  changes rarely, so most releases don't carry one; when yours doesn't, take it from the newest
-  earlier release that does. It carries no SSH key, so steps 4 and 5 are typed into the unit's
+  changes rarely, so a release may not carry one for your model; when yours doesn't, take it from
+  the newest earlier release that does. It carries no SSH key, so steps 4 and 5 are typed into the unit's
   **USB serial console**.
 - **Built yourself with your own SSH key**, to SSH into the rescue environment instead:
 
@@ -309,15 +309,16 @@ Then:
 ## Updating the boot image
 
 A firmware update replaces the root filesystem and leaves the boot image (the kernel) alone. When a
-release has a new boot image for your model, put it on over SSH. v1.2.10 has one for the 1st gen
-Show 5 (`techo5-boot-checkers-v1.2.10.img`) and the Show 8 (`techo5-boot-crown-v1.2.10.img`): with
-it, a unit starts with headphones plugged in instead of stopping at the logo, and it keeps v1.0.1's
-fix for the camera after a quick tap to unmute. The 2nd gen Show 5 doesn't need it.
+release has a new boot image for your model, put it on over SSH. The release's notes say what a new
+image changes. For the 1st gen Show 5 and the Show 8 it is `techo5-boot-checkers-<version>.img` or
+`techo5-boot-crown-<version>.img`. A unit installed before v1.2.10 needs one so that it starts with
+headphones plugged in instead of stopping at the logo, and one from before v1.0.1 needs one for the
+camera after a quick tap to unmute. The 2nd gen Show 5 uses `techo5-boot-<version>.img`.
 
 Turn **SSH** on, then from the folder you downloaded the image to:
 
 ```
-scp -O techo5-boot-<board>-v1.2.10.img root@<address>:/tmp/boot.img
+scp -O techo5-boot-<board>-<version>.img root@<address>:/tmp/boot.img
 ssh root@<address>
 ```
 
@@ -332,7 +333,7 @@ p=$(grep -l '^PARTNAME=boot$' /sys/class/block/mmcblk0p*/uevent); p=/dev/$(basen
 ```
 
 Settings, slots and Home Assistant are kept; only the kernel and the rescue environment change.
-To go back, do the same with the image from the release you had before (v1.0.1). If the unit no
+To go back, do the same with the image from the release you had before. If the unit no
 longer starts, flash that image with fastboot as in [step 3](#3-flash-the-boot-image).
 
 ## Radio

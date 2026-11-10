@@ -2,8 +2,10 @@ package config
 
 // Microphone is the array: whether it is cut, how it is combined, and how hard it is driven.
 type Microphone struct {
-	Muted     bool `json:"muted"`
-	LEDBright bool `json:"led_bright"`
+	// ASP is the persisted user selection; fallback never overwrites it.
+	ASP       ASPMode `json:"asp,omitempty"`
+	Muted     bool    `json:"muted"`
+	LEDBright bool    `json:"led_bright"`
 
 	// Gain is the analog gain on the array's converters, in dB.
 	Gain int `json:"gain"`
@@ -38,12 +40,21 @@ type Microphone struct {
 	// is the default, the device ends a turn itself when it hears the speaker stop.
 	PipelineEnds bool `json:"pipeline_ends,omitempty"`
 
+	// EndPause is how long the speaker has to stay quiet before the device ends a turn, in tenths of a
+	// second; 0 is DefaultEndPause. Longer lets a pause to think go by, at the cost of a turn that a
+	// television's words keep from ending.
+	EndPause int `json:"end_pause,omitempty"`
+
 	// Noise measures how loud the room is for the ambient noise sensor. Off unless somebody turns it on:
 	// it is a new use of the microphones, even if only a number leaves them.
 	Noise bool `json:"noise,omitempty"`
 	// Claps listens for a double clap and tells Home Assistant (feature/clap). Off unless somebody turns
 	// it on: it is a new use of the microphones, even if only an event leaves them.
 	Claps bool `json:"claps,omitempty"`
+
+	// ClapSense is how much it takes to be a double clap: Normal, or Strict for a room where a phone set
+	// down or a knock on a hard desk passes for one (#373).
+	ClapSense ClapSense `json:"clap_sense,omitempty"`
 }
 
 const (
@@ -71,10 +82,16 @@ const (
 	DefaultSensitivity = 8
 
 	DefaultDenoise = false
+
+	// What the recordings of real turns were measured at (lib/endpoint), and how far it can be set.
+	DefaultEndPause = 6
+	MinEndPause     = 6
+	MaxEndPause     = 20
 )
 
 func defaultMicrophone() Microphone {
 	return Microphone{
+		ASP:          ASPBuiltin,
 		Muted:        DefaultMuted,
 		LEDBright:    DefaultLEDBright,
 		Gain:         DefaultMicGain,
@@ -88,6 +105,25 @@ func defaultMicrophone() Microphone {
 }
 
 type MicrophoneWriter struct{ st *Store }
+
+// ASPMode is exactly the selected/active source, not a status framework.
+type ASPMode string
+
+const (
+	ASPBuiltin  ASPMode = "builtin"
+	ASPExternal ASPMode = "external"
+)
+
+func (v ASPMode) Label() string {
+	if v == ASPExternal {
+		return "External"
+	}
+	return "Built-in"
+}
+func ASPModes() []ASPMode { return []ASPMode{ASPBuiltin, ASPExternal} }
+func (w MicrophoneWriter) ASP(v ASPMode) error {
+	return w.st.Update(func(c *Config) { c.Microphone.ASP = v })
+}
 
 func (w MicrophoneWriter) Muted(v bool) error {
 	return w.st.Update(func(c *Config) { c.Microphone.Muted = v })
@@ -178,6 +214,25 @@ func (w MicrophoneWriter) DeviceEnds(v bool) error {
 	return w.st.Update(func(c *Config) { c.Microphone.PipelineEnds = !v })
 }
 
+// EndPause is how long the speaker has to stay quiet before the device ends a turn, in tenths of a
+// second.
+func (w MicrophoneWriter) EndPause(tenths int) error {
+	return w.st.Update(func(c *Config) { c.Microphone.EndPause = tenths })
+}
+
+// EndPauseTenths is EndPause with the default for none and within the range a number can be set to.
+func (m Microphone) EndPauseTenths() int {
+	switch {
+	case m.EndPause == 0:
+		return DefaultEndPause
+	case m.EndPause < MinEndPause:
+		return MinEndPause
+	case m.EndPause > MaxEndPause:
+		return MaxEndPause
+	}
+	return m.EndPause
+}
+
 // Noise is whether the room is measured for the ambient noise sensor.
 func (w MicrophoneWriter) Noise(v bool) error {
 	return w.st.Update(func(c *Config) { c.Microphone.Noise = v })
@@ -186,6 +241,29 @@ func (w MicrophoneWriter) Noise(v bool) error {
 // Claps is whether a double clap is listened for.
 func (w MicrophoneWriter) Claps(v bool) error {
 	return w.st.Update(func(c *Config) { c.Microphone.Claps = v })
+}
+
+// ClapSense is how much it takes to be a double clap.
+func (w MicrophoneWriter) ClapSense(v ClapSense) error {
+	return w.st.Update(func(c *Config) { c.Microphone.ClapSense = v })
+}
+
+// ClapSense is how much it takes to be a double clap.
+type ClapSense string
+
+const (
+	ClapNormal ClapSense = ""
+	ClapStrict ClapSense = "strict"
+)
+
+// ClapSenses is the choice, for a select.
+func ClapSenses() []ClapSense { return []ClapSense{ClapNormal, ClapStrict} }
+
+func (v ClapSense) Label() string {
+	if v == ClapStrict {
+		return "Strict"
+	}
+	return "Normal"
 }
 
 // Mixing is how a microphone array is reduced to the single channel recognition reads.

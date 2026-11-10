@@ -39,12 +39,19 @@ type Tile struct {
 	Adjust *Adjust
 	// Switch draws a row's tap as a switch at its end, for something that is on or off.
 	Switch bool
+	// Color is the card's color, as Home Assistant's tile card takes it: the badge, and the whole
+	// page when the tile is alone on it. Zero (no alpha) for the theme's.
+	Color color.RGBA
+	// Wide and High come from the card's grid_options. Wide spans the whole section instead of
+	// sitting next to another tile; High is the height in tiles (0 and 1 both mean one).
+	Wide bool
+	High int
 }
 
 // Adjust is a tile's level: what it is now and how far it goes.
 type Adjust struct {
 	Entity   string
-	Kind     string // brightness, position, temperature
+	Kind     string // brightness, position, temperature, speed, volume
 	Value    float64
 	Min, Max float64
 	Step     float64
@@ -91,6 +98,8 @@ type Block struct {
 	// picture a tap of its own.
 	Pictures []Picture
 	Columns  int
+	// Color is a heading's or markdown card's color, used when it is alone on the page. Zero for none.
+	Color color.RGBA
 }
 
 // Section is blocks that stay together, one column wide: a room, a section of a sections view, a card
@@ -169,6 +178,9 @@ type look struct {
 	history  map[string][]point
 	pictures map[string]shot
 	width    int // the screen's, for a card shown only on a wide or a narrow one
+	// room is the heading the cards are under in their section, often a room: an entity's own name
+	// is shown without it in front, as on the Rooms dashboard (withoutRoom).
+	room string
 }
 
 // source is where a drawn dashboard comes from.
@@ -390,6 +402,11 @@ func (f *Feature) CloseDrawn() {
 
 // Tap does what a tile's action says.
 func (f *Feature) Tap(a Action) {
+	if strings.HasPrefix(a.View, "#") {
+		// A hash names something of the screen's own (LibraryPath), which the screen opens itself; on
+		// a screen without it, it is nowhere to go rather than a view of that name.
+		return
+	}
 	if a.View != "" {
 		// A navigation path names the dashboard as well as the view: "home-refresh/climate".
 		path := navPath(a.View)
@@ -485,6 +502,9 @@ func (f *Feature) SetLevel(a Adjust, v float64) {
 	case "temperature":
 		domain, service = "climate", "set_temperature"
 		data["temperature"] = v
+	case "speed":
+		domain, service = "fan", "set_percentage"
+		data["percentage"] = int(v + 0.5)
 	case "volume":
 		domain, service = "media_player", "volume_set"
 		data["volume_level"] = float64(int(v+0.5)) / 100
@@ -526,7 +546,7 @@ func (s *session) callVia(entity, domain, service string, data map[string]any, p
 		if route != nil {
 			data["entity_id"] = route()
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), tapWait(domain, service))
 		defer cancel()
 		if err := callService(live, ctx, domain, service, data); err != nil {
 			slog.Warn("dashboard: a tap failed", "service", domain+"."+service, "err", err)
@@ -538,7 +558,18 @@ func (s *session) callVia(entity, domain, service string, data map[string]any, p
 	}()
 }
 
+// tapWait is how long a tap's call is given. Music Assistant answers a play only once its provider
+// has found the music and the player has taken it, which from a streaming service on a slow day takes
+// longer than any switch or light; a shuffle set from the music library goes with its play.
+func tapWait(domain, service string) time.Duration {
+	if domain == "music_assistant" || (domain == "media_player" && service == "shuffle_set") {
+		return 20 * time.Second
+	}
+	return 10 * time.Second
+}
+
 func (s *session) close() {
+
 	s.mu.Lock()
 	s.stopped = true
 	live := s.live

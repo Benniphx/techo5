@@ -25,11 +25,11 @@ type spotFaceKey struct {
 	size int
 }
 
-// styleFace is a face at size pixels in the screen font, kept once made; sizes are rounded to a few
-// pixels so a style that fits its words to the circle keeps a handful rather than one per pixel. A new
-// font empties the set (useFont).
+// styleFace is a face at size pixels in the screen font at the text size, kept once made; sizes are
+// rounded to a few pixels so a style that fits its words to the circle keeps a handful rather than one
+// per pixel. A new font or text size empties the set (useFont).
 func (r *roundRenderer) styleFace(bold bool, size int) font.Face {
-	px := max(size/2*2, 8)
+	px := max(r.atTextSize(size)/2*2, 8)
 	k := spotFaceKey{bold, px}
 	if f, ok := r.styleFaces[k]; ok {
 		return f
@@ -95,7 +95,7 @@ func (r *roundRenderer) styledClockFace(s roundScene, style string) {
 func (r *roundRenderer) footLine(s roundScene, baseline int, otherwise string) {
 	switch {
 	case len(s.timers) > 0:
-		r.centered(r.body, "Timer "+clockDuration(s.timers[0].Left), baseline, colTimer)
+		r.centered(r.body, tr("timer")+" "+clockDuration(s.timers[0].Left), baseline, colTimer)
 	case s.missed != "":
 		r.centered(r.small, s.missed, baseline, colTimer)
 	case s.slideshowTrouble != "":
@@ -327,7 +327,7 @@ func (r *roundRenderer) analogFace(s roundScene) {
 		}
 		r.text(r.small, w.Temp, left+int(2*u)+8, 150, colText)
 	}
-	day := strings.ToUpper(locale.DayAndNumber(s.now, screenLang()))
+	day := upper(locale.DayAndNumber(s.now, screenLang()))
 	dw := r.width(r.label, day) + 20
 	// The window a shade up from the ground, toward the track's color: on a light skin too.
 	window := lerpRGB(colBackground, colTrack, 0.6)
@@ -397,7 +397,7 @@ func (r *roundRenderer) sunFace(s roundScene) {
 		line += 34
 	}
 	warm := color.RGBA{230, 170, 120, 255}
-	r.centered(r.tiny, "Sun up "+clockText(s.style.rise)+"  ·  down "+clockText(s.style.set), line+4, warm)
+	r.centered(r.tiny, fmt.Sprintf(tr("ui_sunrise_sunset_times"), clockText(s.style.rise), clockText(s.style.set)), line+4, warm)
 }
 
 // sunRim is the rim as the whole day: noon at the top, midnight at the bottom, daylight from sunrise
@@ -491,7 +491,7 @@ func (r *roundRenderer) dashboardFace(s roundScene) {
 
 	f := r.styleFace(false, 20)
 	if len(s.style.next) == 0 {
-		r.centered(f, "Nothing coming up", 246, colDim)
+		r.centered(f, tr("calendar_nothing_coming_up"), 246, colDim)
 	}
 	for i, e := range s.style.next[:min(len(s.style.next), 2)] {
 		y := 232 + i*36
@@ -510,7 +510,7 @@ func (r *roundRenderer) dashboardFace(s roundScene) {
 		cx := center - 100 + i*100
 		name := locale.ShortWeekday(d.When, screenLang())
 		if i == 0 {
-			name = "Now"
+			name = tr("today")
 		}
 		r.centered2(r.styleFace(true, 18), name, cx, 318, colDim)
 		r.weatherIcon(d.Condition, float64(cx), 350, 13)
@@ -524,13 +524,13 @@ func dashWhenSpot(start time.Time, allDay bool, now time.Time) string {
 	tomorrow := today.AddDate(0, 0, 1)
 	switch {
 	case !allDay && !start.After(now):
-		return "Now"
+		return tr("ui_running")
 	case allDay && start.Before(tomorrow):
 		return tr("today")
 	case start.Before(tomorrow):
 		return clockText(start)
 	case start.Before(tomorrow.AddDate(0, 0, 1)):
-		return "Tmrw"
+		return tr("tomorrow")
 	}
 	return locale.ShortWeekday(start, screenLang())
 }

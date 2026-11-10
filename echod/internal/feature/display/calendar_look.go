@@ -13,11 +13,11 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/setup"
 )
 
-// How the calendar looks (docs/calendar-and-night-plan.md, 6): eight switches and the view it opens on, each on the screen
+// How the calendar looks (docs/calendar-and-night-plan.md, 6): ten switches and the view it opens on, each on the screen
 // under Settings, Display, Calendar, on the setup page's Weather & Calendar tab, and in Home Assistant,
 // where Shared settings can keep them the same on every screen in the house. Two go by the panel's
 // size until somebody chooses: the week view and the month in full are on where there is room for
-// them, bigger than the Show 5, and off on the Show 5. Which calendars are hidden is the ninth, set on
+// them, bigger than the Show 5, and off on the Show 5. Which calendars are hidden is the eleventh, set on
 // the calendar page itself and this screen's alone.
 
 // calLook is the switches as this frame draws them, the panel's size worked in.
@@ -28,9 +28,13 @@ type calLook struct {
 	icons      bool // a small picture before a title, by a word in it
 	countdowns bool // "in 25 min" on today's events, and the days to a long event on the clock
 	week       bool // the week view, and the Day, Week and Month switch over the month
+	smallChips bool // the calendars' chips at the header line's size on their own rows too
 	nextUp     bool // the next event at the foot of the clock
 	weather    bool // the forecast on the calendar's days
+	monday     bool // the month's and the week's rows start on Monday, rather than Sunday
 	opens      int  // the view it opens on, in opensOpts
+	dashToday  bool // the Dashboard style lists today's events only
+	nextWithin int  // how far ahead the clock's next event looks, in nextWithinOpts
 	wide       bool // a panel bigger than the Show 5's
 }
 
@@ -48,11 +52,21 @@ var (
 	opensVals = []string{"", config.OpensWeek, config.OpensDay, config.OpensAgenda}
 )
 
+var (
+	// dashEventsOpts are the Dashboard style's two lists of events, the week being the default.
+	dashEventsOpts = []string{"Coming week", "Today only"}
+	// nextWithinOpts are how far ahead the clock's next event looks, nextWithinHours each one's hours:
+	// 0 is the default, an event that is on, starts today or starts within 12 hours.
+	nextWithinOpts  = []string{"Today or 12 hours", "1 hour", "3 hours", "6 hours", "12 hours"}
+	nextWithinHours = []int{0, 1, 3, 6, 12}
+)
+
 // lookFor is the switches as c has them, on a panel wide or not.
 func lookFor(c config.Calendar, wide bool) calLook {
 	return calLook{timeline: !c.DayList, refined: !c.AgendaPlain, monthFull: c.MonthFullOn(wide), icons: !c.NoIcons,
-		countdowns: !c.NoCountdowns, week: c.WeekOn(wide), nextUp: !c.NoNextUp, weather: !c.NoWeather,
-		opens: max(0, slices.Index(opensVals, c.Opens)), wide: wide}
+		countdowns: !c.NoCountdowns, week: c.WeekOn(wide), smallChips: c.SmallChips, nextUp: !c.NoNextUp, weather: !c.NoWeather,
+		monday: c.MondayFirst, opens: max(0, slices.Index(opensVals, c.Opens)), wide: wide,
+		dashToday: c.DashboardToday, nextWithin: max(0, slices.Index(nextWithinHours, c.NextUpWithin))}
 }
 
 // wideScreen is whether a panel w by h is bigger than the Show 5's 960 by 480: the Show 8, and
@@ -86,6 +100,9 @@ type lookSwitch struct {
 // monthDetailOpts are the month's two choices, the first being on.
 var monthDetailOpts = []string{"Full", "Simple"}
 
+// chipSizeOpts are the calendars' chips' two sizes, the first (the default) being on.
+var chipSizeOpts = []string{"Normal", "Small"}
+
 var lookSwitches = []lookSwitch{
 	{id: "opens_on", label: "Opens on", sub: "The view a tap on the date opens", icon: "mdi:calendar-start",
 		opts: opensOpts,
@@ -103,10 +120,28 @@ var lookSwitches = []lookSwitch{
 		get: func(l calLook) bool { return l.countdowns }, set: func(on bool) error { return config.Set().Calendar().NoCountdowns(!on) }},
 	{id: "week_view", label: "Week view", sub: "Seven days on their hours", icon: "mdi:calendar-week",
 		get: func(l calLook) bool { return l.week }, set: func(on bool) error { return config.Set().Calendar().Week(on) }},
+	{id: "week_starts_monday", label: "Week starts Monday", sub: "Rather than Sunday", icon: "mdi:calendar-week-begin",
+		get: func(l calLook) bool { return l.monday }, set: func(on bool) error { return config.Set().Calendar().MondayFirst(on) }},
+	{id: "chip_size", label: "Calendar chips", sub: "The calendars' names over the month", icon: "mdi:label-outline",
+		opts: chipSizeOpts,
+		get:  func(l calLook) bool { return !l.smallChips }, set: func(on bool) error { return config.Set().Calendar().SmallChips(!on) }},
 	{id: "next_up", label: "Next up on the clock", sub: "Today's next event at the foot of the clock", icon: "mdi:calendar-arrow-right",
 		get: func(l calLook) bool { return l.nextUp }, set: func(on bool) error { return config.Set().Calendar().NoNextUp(!on) }},
+	{id: "dashboard_events", label: "Dashboard events", sub: "Which events the Dashboard clock style lists", icon: "mdi:view-dashboard-outline",
+		opts: dashEventsOpts,
+		pick: func(l calLook) int { return b2i(l.dashToday) }, choose: func(i int) error { return config.Set().Calendar().DashboardToday(i == 1) }},
+	{id: "next_up_within", label: "Next up within", sub: "How far ahead the clock's next event looks", icon: "mdi:clock-time-four-outline",
+		opts: nextWithinOpts,
+		pick: func(l calLook) int { return l.nextWithin }, choose: func(i int) error { return config.Set().Calendar().NextUpWithin(nextWithinHours[i]) }},
 	{id: "weather", label: "Weather in the calendar", sub: "The forecast on each day", icon: "mdi:weather-partly-cloudy",
 		get: func(l calLook) bool { return l.weather }, set: func(on bool) error { return config.Set().Calendar().NoWeather(!on) }},
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // lookRowPrefix begins the settings rows' ids.

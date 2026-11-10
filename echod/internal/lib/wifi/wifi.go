@@ -16,10 +16,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/HuskerMinion/techo5/echod/internal/layout"
 )
 
+// iface is the Wi-Fi interface: wlan0 on every Echo, mlan0 on the Surface RT.
+var iface = layout.WifiInterface
+
 const (
-	iface   = "wlan0"
 	ctrlDir = "/run/wpa"
 
 	// SetupFlag, while present, tells the boot scripts' network keeper that someone is setting the
@@ -35,7 +39,10 @@ var Conf = "/data/techo5-linux/wpa_supplicant.conf"
 type Network struct {
 	SSID    string
 	Signal  int  // dBm
-	Secured bool // wants a passphrase
+	Secured bool // wants a passphrase, or a login when Enterprise
+	// Enterprise is a network that signs each person in with a username and password (WPA-EAP, 802.1X):
+	// a school's, a college's (eduroam) or a workplace's. JoinLogin joins one.
+	Enterprise bool
 }
 
 // Status is the connection now.
@@ -55,7 +62,7 @@ func Available() bool {
 func cli(ctx context.Context, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "wpa_cli", append([]string{"-p", ctrlDir, "-i", iface}, args...)...).CombinedOutput()
+	out, err := exec.CommandContext(ctx, "wpa_cli", append([]string{"-p", ctrlDir, "-i", iface()}, args...)...).CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("wpa_cli %s: %w: %s", args[0], err, strings.TrimSpace(string(out)))
 	}
@@ -108,7 +115,7 @@ func Current(ctx context.Context) Status {
 
 // address is the interface's IPv4 address, empty without one.
 func address() string {
-	i, err := net.InterfaceByName(iface)
+	i, err := net.InterfaceByName(iface())
 	if err != nil {
 		return ""
 	}
@@ -145,7 +152,8 @@ func Scan(ctx context.Context) ([]Network, error) {
 			continue
 		}
 		sig, _ := strconv.Atoi(f[2])
-		n := Network{SSID: f[4], Signal: sig, Secured: strings.Contains(f[3], "WPA") || strings.Contains(f[3], "WEP")}
+		n := Network{SSID: f[4], Signal: sig, Secured: strings.Contains(f[3], "WPA") || strings.Contains(f[3], "WEP"),
+			Enterprise: strings.Contains(f[3], "-EAP")}
 		if cur, ok := best[n.SSID]; !ok || n.Signal > cur.Signal {
 			best[n.SSID] = n
 		}
@@ -162,38 +170,51 @@ func Scan(ctx context.Context) ([]Network, error) {
 // the association and an address. The previous configuration is kept as Conf.prev and put back
 // if the new network never completes, so a typo does not leave the device off the air.
 func Join(ctx context.Context, ssid, passphrase string) error {
-	if ssid == "" {
-		return errors.New("wifi: no network named")
-	}
-	// A name is at most 32 bytes on the air, and it is also the salt the key below is derived with:
-	// a longer one is not a network anything could join, so it is refused here rather than written.
-	if len(ssid) > 32 {
-		return errors.New("wifi: a network name is at most 32 characters")
+	if err := checkName(ssid); err != nil {
+		return err
 	}
 	if passphrase != "" && (len(passphrase) < 8 || len(passphrase) > 63) {
 		return errors.New("wifi: a passphrase is 8 to 63 characters")
 	}
-	if !oneLine(ssid) {
-		return errors.New("wifi: a network name cannot hold a line ending")
-	}
 	if !oneLine(passphrase) {
 		return errors.New("wifi: a passphrase cannot hold a line ending")
 	}
+	return join(ctx, ssid, block(ssid, passphrase))
+}
+
+// checkName is what a network name has to be before anything is written for it.
+func checkName(ssid string) error {
+	if ssid == "" {
+		return errors.New("wifi: no network named")
+	}
+	// A name is at most 32 bytes on the air, and it is also the salt a passphrase's key is derived
+	// with: a longer one is not a network anything could join, so it is refused here rather than written.
+	if len(ssid) > 32 {
+		return errors.New("wifi: a network name is at most 32 characters")
+	}
+	if !oneLine(ssid) {
+		return errors.New("wifi: a network name cannot hold a line ending")
+	}
+	return nil
+}
+
+// join puts stanza (for ssid) first in the configuration and joins it, as Join says.
+func join(ctx context.Context, ssid, stanza string) error {
 	old, _ := os.ReadFile(Conf)
 	// The new one goes first, since it is the one just asked for, and any older entry for the same
 	// name goes, so a corrected passphrase replaces the one that was wrong. The rest are kept: a
 	// device set up on one network still joins the network it is taken to.
-	kept := []string{block(ssid, passphrase)}
+	kept := []string{stanza}
 	for _, b := range blocks(string(old)) {
 		if ssidOf(b) != ssid {
 			kept = append(kept, b)
 		}
 	}
-	if err := os.WriteFile(Conf, []byte(conf(kept)), 0o600); err != nil {
+	if err := writeFile(Conf, conf(kept)); err != nil {
 		return err
 	}
 	if len(old) > 0 {
-		_ = os.WriteFile(Conf+".prev", old, 0o600)
+		_ = writeFile(Conf+".prev", string(old))
 	}
 	if _, err := cli(ctx, "reconfigure"); err != nil {
 		return err
@@ -235,7 +256,7 @@ func Join(ctx context.Context, ssid, passphrase string) error {
 	}
 	// Back to what worked. The reconfigure re-reads the file, which undoes the select above with it.
 	if len(old) > 0 {
-		_ = os.WriteFile(Conf, old, 0o600)
+		_ = writeFile(Conf, string(old))
 	}
 	_, _ = cli(ctx, "reconfigure")
 	return fmt.Errorf("wifi: could not join %q (%s)", ssid, Current(ctx).State)
@@ -257,6 +278,9 @@ func networkID(ctx context.Context, ssid string) (string, error) {
 	return "", fmt.Errorf("wifi: %q is not among the saved networks", ssid)
 }
 
+// RenewLease gets an address on the network joined now, as a join does (#384).
+func RenewLease() { renewLease() }
+
 // renewLease gets the address on the new network: through techo5-net when the setting is a fixed
 // address (address.go), which decides whether it holds there; otherwise by poking udhcpc for a lease,
 // as always. Never through a techo5-net that is not the one that knows fixed addresses (AddressSupported).
@@ -269,7 +293,10 @@ func renewLease() {
 		}
 		return
 	}
-	pid, err := os.ReadFile("/run/udhcpc.pid")
+	if startDHCP() {
+		return // a client just started asks for its lease by itself
+	}
+	pid, err := os.ReadFile(dhcpPid)
 	if err != nil {
 		return
 	}
@@ -280,6 +307,29 @@ func renewLease() {
 	if proc, err := os.FindProcess(p); err == nil {
 		_ = proc.Signal(sigRenew)
 	}
+}
+
+// ownConf is the network the installer or wifi-set wrote on the Dot (techo5-net's OWN).
+var ownConf = "/data/techo5-linux/wifi.conf"
+
+// keptDate is the time the supplicant's file is to carry when it is written, for it to stay the one
+// the Dot boots with, and whether that is not simply now. techo5-net keeps the file only while it is
+// newer than ownConf (`test -nt`, whole seconds), and rebuilds it from ownConf otherwise: a Dot that
+// booted with no network has no time from NTP, so a join stamped it with a clock years behind the
+// installer's ownConf, and the next boot threw the network joined away for the one it could not join.
+// So it is dated a second past ownConf whenever the clock is not already past it.
+func keptDate() (time.Time, bool) {
+	if !keptByDate {
+		return time.Time{}, false
+	}
+	own, err := os.Stat(ownConf)
+	if err != nil {
+		return time.Time{}, false
+	}
+	if time.Now().Unix() > own.ModTime().Unix() {
+		return time.Time{}, false
+	}
+	return time.Unix(own.ModTime().Unix()+1, 0), true
 }
 
 // decodeName undoes the escaping wpa_cli puts on a network name on the way out. The supplicant prints

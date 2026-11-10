@@ -56,3 +56,22 @@ func TestBrainFormWritesKeyTogetherAndKeepsItWhenBlank(t *testing.T) {
 		t.Fatal("explicit removal did not clear key")
 	}
 }
+
+func TestNativeBrainSavePreservesReplyPlayer(t *testing.T) {
+	st := load(t)
+	key := "test-key"
+	if err := st.Set().Brain().SetReplyPlayer("media_player.kitchen"); err != nil {
+		t.Fatal(err)
+	}
+	for _, explicit := range []*string{nil, &key} {
+		if err := st.Set().Brain().SetWithKey(Brain{Mode: BrainRealtime, RealtimeVoice: "cedar"}, explicit); err != nil {
+			t.Fatal(err)
+		}
+		if got := st.Get().Brain; got.ReplyPlayer != "media_player.kitchen" || got.RealtimeVoice != "cedar" {
+			t.Fatalf("native save lost independent settings: %+v", got)
+		}
+	}
+	if st.Get().Brain.Key != key {
+		t.Fatal("explicit key transaction lost")
+	}
+}

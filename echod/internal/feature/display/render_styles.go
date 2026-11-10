@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/image/font"
 
+	"github.com/HuskerMinion/techo5/echod/internal/config"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 )
@@ -26,11 +27,12 @@ type styleFaceKey struct {
 	size int
 }
 
-// styleFace is a face at size in the screen font, in the Show 5's pixels and scaled to this panel.
-// Sizes are rounded to a few pixels, so a style that fits its text to the box keeps a handful of faces
-// rather than one per fraction of a pixel. A new font empties the set (useFont).
+// styleFace is a face at size in the screen font, in the Show 5's pixels and scaled to this panel and
+// the text size. Sizes are rounded to a few pixels, so a style that fits its text to the box keeps a
+// handful of faces rather than one per fraction of a pixel. A new font or text size empties the set
+// (useFont).
 func (r *renderer) styleFace(bold bool, size int) font.Face {
-	px := max(r.s(size)/4*4, 8)
+	px := max(r.atTextSize(r.s(size))/4*4, 8)
 	k := styleFaceKey{bold, px}
 	if f, ok := r.styleFaces[k]; ok {
 		return f
@@ -61,7 +63,7 @@ func (r *renderer) styledClock(s scene, style string) {
 	// is in a bottom corner where the card would be.
 	_, foot := clockAlign()
 	card := s.nextUp != nil && len(s.glance) == 0 && !timers && !s.strip && !(foot && cornerStyle(style))
-	glance := len(s.glance) > 0 && !timers && !s.strip && !card
+	glance := glanceShows(s, timers) && !card
 	bottom := r.h - r.s(50) // clear of the footer's words
 	switch {
 	case s.strip:
@@ -71,6 +73,9 @@ func (r *renderer) styledClock(s scene, style string) {
 		bottom = box.Min.Y - r.s(14)
 	case glance:
 		bottom = r.h - r.s(50) - r.s(46) - r.s(16)
+	}
+	if s.strip && glance {
+		bottom -= r.s(overStripChipHigh + overStripChipGap) // the chips' row over the music strip
 	}
 	if style == styleGlow {
 		r.glowGround(s)
@@ -129,7 +134,7 @@ func (r *renderer) styledClock(s scene, style string) {
 		r.overlapStyle(s, box)
 	}
 	if glance {
-		r.glanceStrip(s.glance, s.callButton)
+		r.glanceStrip(s.glance, s.callButton, s.strip)
 	}
 	if card {
 		r.drawNextUp(s)
@@ -465,6 +470,7 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 	// up; without the row, the weather line under the date has it. Beside the time, the icon over the
 	// degrees, where that always fits; otherwise at the end of the events' heading. A tap on it opens the
 	// forecast, as one on the row does.
+	tempShown := false
 	if t := s.weather.Temp; t != "" && showRow {
 		if tempX+tempW <= col-r.s(40) {
 			cx := tempX + tempW/2
@@ -473,7 +479,9 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 			}
 			r.text(hf, t, cx-r.width(hf, t)/2, base, cream)
 			r.setTempAt(image.Rect(tempX, top+r.s(14), tempX+tempW, base).Inset(-r.s(10)))
-		} else {
+			tempShown = true
+		} else if len(s.alerts.Here) == 0 {
+			// Not with an alert up: its badge is at this corner, and the weather line under the date has it.
 			hf, mark = r.styleFace(true, 30), r.s(40)
 			x := r.w - r.margin - r.width(hf, t)
 			r.text(hf, t, x, top+r.s(24), cream)
@@ -482,13 +490,22 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 			}
 			wide := max(r.width(hf, "-88°"), r.width(hf, "888°"))
 			r.setTempAt(image.Rect(r.w-r.margin-wide-r.s(10)-mark, top, r.w-r.margin, top+r.s(34)))
+			tempShown = true
 		}
 	}
 	r.styleDateIn(r.small, s, box.Min.X, base+r.s(50), -1, col-r.s(50)-box.Min.X)
 	r.text(r.styleFace(true, 20), locale.Upcoming(screenLang()), col, top+r.s(20), dim)
 	y := top + r.s(62)
 	if len(s.style.next) == 0 {
-		r.text(r.tiny, locale.NothingSoon(screenLang()), col, y, dim)
+		none := locale.NothingSoon(screenLang())
+		if config.Get().Calendar.DashboardToday {
+			// "Today only" has nothing to wait for but today, as the Agenda says it.
+			none = locale.NothingToday(screenLang())
+			if s.style.hadToday {
+				none = locale.NothingElse(screenLang())
+			}
+		}
+		r.text(r.tiny, none, col, y, dim)
 	}
 	// As many events as fit above the row, or the foot, a line each.
 	shown, fit := s.style.next, 0
@@ -548,7 +565,7 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 
 	// Without room for the row, today's weather on a line, so the style that leaves out the weather
 	// corner still says what it is outside and still opens the forecast.
-	if !showRow {
+	if !showRow || (s.weather.Temp != "" && !tempShown) {
 		if line := weatherText(s); line != "" {
 			y := min(base+r.s(100), box.Max.Y)
 			ix := box.Min.X
@@ -561,9 +578,13 @@ func (r *renderer) dashboardStyle(s scene, box image.Rectangle) {
 			// events, which go further down without the row.
 			line = r.clipTo(r.small, line, col-r.s(50)-ix)
 			r.text(r.small, line, ix, y, dim)
-			r.setWeatherAt(image.Rect(box.Min.X, y-r.s(40), ix+r.width(r.small, line), y+r.s(14)))
+			if !showRow {
+				r.setWeatherAt(image.Rect(box.Min.X, y-r.s(40), ix+r.width(r.small, line), y+r.s(14)))
+			}
 		}
-		return
+		if !showRow {
+			return
+		}
 	}
 	days = days[:min(len(days), 5)]
 	left, right := r.dashRowSpan(days, box, row, s.callButton)

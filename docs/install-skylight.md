@@ -122,7 +122,7 @@ screen once TECHO5 starts.
 
 It takes the images from the latest release (`--release <tag>` for another one), checked against
 the release's signed manifest. To use images you built, pass all three: `--installer`, `--boot` and
-`--store` (see [tools/linux/skylight/README.md](../tools/linux/skylight/README.md)).
+`--store` (see [tools/linux/skylight/README.md](../tools/linux/skylight/README.md)). A download that fails its checksum is tried once more; if it fails again, the error says how many bytes arrived, to compare with the size on the release page (fewer means the connection dropped; the same number means antivirus or a proxy changed the file).
 
 What happens:
 
@@ -139,6 +139,16 @@ What happens:
    settings and TECHO5's kernel, and reads each one back. Then it restarts into TECHO5.
 
 The first start grows TECHO5's partitions to their full size. That takes a minute.
+
+### Giving it to someone else
+
+Add `--for-someone-else` to install a Skylight that is going to another person:
+
+```
+python3 tools/install-skylight.py --for-someone-else
+```
+
+It asks for no Wi-Fi network, name or key, and writes none. The Skylight starts its own setup the next time it is powered on, and the new owner's Home Assistant can add it with nothing typed. Everything else (backups, image, first boot) is the same. It cannot be used with `--name`, `--wifi` or `--key-file`. The installer image has to be one that carries the marker, so use a release made after this option was added.
 
 ### Add it to Home Assistant
 

@@ -187,3 +187,30 @@ func TestPageReaderSurvivesDirectFormRoundTrip(t *testing.T) {
 		t.Fatal("form format arguments shifted")
 	}
 }
+
+func TestNativeBrainFormPreservesNewsAndReplyPlayer(t *testing.T) {
+	config.Use(filepath.Join(t.TempDir(), "state.json"))
+	if err := config.Set().Brain().SetReplyPlayer("media_player.kitchen"); err != nil {
+		t.Fatal(err)
+	}
+	values := url.Values{"mode": {"direct"}, "stt": {"localhost:10300"}, "tts": {"localhost:10200"}, "llm": {"http://localhost:8080/v1"}, "news": {"City Radio https://example.com/news.xml"}, "prompt": {"News test"}}
+	if why := saveBrain(form(values)); why != "" {
+		t.Fatal(why)
+	}
+	b := config.Get().Brain
+	sources, err := b.NewsSources()
+	if err != nil || len(sources) != 1 || sources[0].Name != "City Radio" || b.ReplyPlayer != "media_player.kitchen" {
+		t.Fatalf("save lost news or speaker: %+v, %v", b, err)
+	}
+	w := httptest.NewRecorder()
+	brainSection(w, "page-token")
+	page := w.Body.String()
+	for _, want := range []string{`name="news" rows="3" maxlength="2000" placeholder="City Radio https://example.com/news.xml">City Radio https://example.com/news.xml`, `name="prompt" rows="3" maxlength="2000">News test`, `name="realtime_model" value=""`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if strings.Contains(page, "%!") {
+		t.Fatal("form format arguments shifted")
+	}
+}

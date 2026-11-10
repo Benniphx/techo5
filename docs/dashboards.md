@@ -38,7 +38,12 @@ setup page's **Screen & Photos** tab has the same settings, except which dashboa
   choose. A dashboard Home Assistant put up (`dashboard_show`) stays until it's hidden.
 - **Dashboard tiles** (Show only, drawn only): *Normal*; *Large*, taller tiles across the whole
   width; or *Fill the screen*, which lays a view of up to nine tiles out over the whole page, like
-  four lights in a 2×2 grid. A view with anything other than tiles on it is drawn *Large*.
+  four lights in a 2×2 grid. A view with anything other than tiles on it is drawn *Large*. A view
+  with **one** heading, markdown or tile card on it is a [warning page](#a-warning-page-one-large-card).
+- **Dashboard tile layout** (Show only, drawn only): *Side by side*, a tile's icon beside its name and
+  state; or *Name below*, a smaller icon and the state along the top and the name under them, across
+  the tile's whole width. Name below tiles are a little taller, and a long name has more room, which
+  suits a large **Text size**. It works with every size of **Dashboard tiles**.
 - **Dashboard without its header** (streamed only): hides Home Assistant's top bar, which on a small
   screen takes a real slice of it. It works on your dashboards and on the built-in pages (Energy,
   History, Logbook and the rest), with nothing to install and no change to the dashboards themselves,
@@ -78,8 +83,11 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
 
 - **Tap** a tile or a row to do what it says: lights, switches and fans toggle, covers open or close,
   players play or pause, scenes and scripts run, a card's own tap action does what it is set to.
-- **Slide** a finger along a light, cover, thermostat or media player to set its brightness,
-  position, temperature or volume. The tile fills as you slide, and it is set when you let go.
+- **Slide** a finger along a light, cover, thermostat, fan or media player to set its brightness,
+  position, temperature, speed or volume. A fan slides only when it can set its speed, and it moves in
+  the steps the fan takes. The tile fills as you slide, and it is set when you let go. A tile
+  you can slide has a track along its foot, with a bar on it up to the level; a light that is off keeps
+  the empty track.
 - **Tap a thermostat** whose card sets no tap of its own:
   - on the Show (a long press too), for a sheet over the page: the temperature where it is, the one
     it is set to with a step down and up (the low and the high of a range in heat/cool), its modes,
@@ -89,19 +97,76 @@ Each device has its own settings, so the kitchen and a bedroom can show differen
     or keeps a range has no one temperature to step.
 - **Long press** (Show only; on the Spot a long press is the ring menu):
   - on a light that has whites or colors, for a sheet of them. The light follows your finger.
+  - on a fan, for a sheet with an on/off switch, its speed (a slider, in the steps the fan takes), its
+    direction (forward or reverse) when it can turn either way, and its preset modes when it has any.
+    Each control is there only when the fan has it. A fan tile whose card sets a tap of its own keeps
+    that tap on a long press.
   - on a media player, for a sheet with its controls, its volume, the speakers it can be grouped
     with, and, with Music Assistant, your favorite playlists and radio stations. The favorites need
     the device's token to belong to a Home Assistant administrator; with any other token the sheet
-    says so and shows the rest.
+    says so and shows the rest. Its **Library** button opens the whole music library (see
+    [Music library](#music-library)).
 - **Drag** up and down to scroll.
 
 **Streamed dashboards** work as the page itself does: tap, and drag to scroll.
+
+## Music library
+
+On the Echo Show (and the Skylight and Panel builds), a drawn dashboard can open Music Assistant's
+whole library over the page, to browse it and play from it. The Echo Dot and the Echo Spot don't
+have it.
+
+**Opening it**
+
+- Long press a media player for its sheet, and tap **Library**. The button is there when Music
+  Assistant plays to that player, and the library plays on it.
+- Or give any card a tap action that navigates to `#techo5-library`. With an `entity` (a media
+  player), the library plays on Music Assistant's player for it, found the way the media sheet finds
+  it. Without one, it plays on this device.
+
+```yaml
+type: button
+name: Music
+icon: mdi:bookshelf
+entity: media_player.kitchen
+tap_action:
+  action: navigate
+  navigation_path: "#techo5-library"
+```
+
+Home Assistant itself has no view of that name, so the same card does nothing in a browser. If no
+Music Assistant player can be found, the library still opens for browsing, Play and Shuffle are
+grayed out, and a line at the top says so.
+
+**What it shows**
+
+- Tabs along the top for **Artists**, **Albums**, **Playlists**, **Tracks**, **Radio** and search
+  (the magnifier). Each tab is a grid of large covers with names under them; artists are round.
+  Drag up and down to scroll. More of the library is loaded as you near the end.
+- If Music Assistant's library has saved tracks but no artists or albums of its own, the Artists and
+  Albums tabs are made from those tracks, and say "From your saved tracks". An empty tab says so,
+  with a button to the search.
+- Tap an artist for its picture, its albums in a row you drag sideways, and its top tracks. Tap an
+  album or a playlist for its cover, **Play** and **Shuffle**, and its tracks with their lengths.
+  **Back** goes back to where you were, and **Done** closes the library.
+- A tap on a track or a radio station plays it, and **Play** and **Shuffle** play the whole album,
+  playlist or artist. Whatever plays replaces what was queued. What you tapped lights up, and then
+  the library closes: to this device's Now Playing screen when it plays here, or to the media sheet
+  of the speaker it plays on when you opened the library from one.
+- Search opens the on-screen keyboard. It finds artists, albums, playlists, tracks and radio
+  stations, in the library and in your music services, each kind in a row of its own.
+
+**What it needs**
+
+The library is read from Music Assistant directly, with the address and token set on the setup page
+(**Sound & Voice**, under **Music Assistant**). Without them, the library says so and shows nothing
+else. The music plays through Home Assistant, as the media sheet's favorites do.
 
 ## What drawn mode draws
 
 | Home Assistant card | On the device |
 |---|---|
-| Tile, button, entity, light, thermostat, and the Mushroom entity cards | A tile: icon, name, state, tap; a slider for lights, covers, thermostats and media players |
+| Tile, button, entity, light, thermostat, and the Mushroom entity cards | A tile: icon, name, state, tap; a slider for lights, covers, thermostats, fans and media players. A name too long for its tile is drawn smaller, then on two lines, and only what still does not fit is cut short with …. Under a heading (or a Glance or Entities card with a title, for its own tiles or rows), a name Home Assistant gives the entity is shown without the heading in front of it: under *Master Bedroom*, "Master Bedroom ceiling light" is "Ceiling light". A name the card gives is shown as it is |
 | Entities | A card of rows, with a switch for anything on or off |
 | Glance, Mushroom chips | Tiles |
 | Heading, Mushroom title | A heading |
@@ -121,11 +186,67 @@ one on the Spot. A dashboard Home Assistant generates by itself (the default *Ov
 take control of it) is drawn as the Rooms dashboard: every area, with its lights, switches,
 thermostats, covers, players, locks, doors and windows.
 
+Within a section, tiles sit two abreast on a Show. A tile card's **grid_options** (the Layout tab in
+Home Assistant's card editor) change that for one tile: `columns: 12` (or `full`) puts it on a line
+of its own across the whole section, and `rows: 2` makes it twice as tall (up to four), with a bigger
+badge and text to match. For a big "All lights" tile above the rest:
+
+```yaml
+type: tile
+entity: light.all_lights
+grid_options:
+  columns: 12
+  rows: 2
+```
+
+Any other width is drawn as a normal tile. On a view with only a few tiles, **Fill the screen** keeps its even grid and
+ignores grid_options; larger views still follow them.
+
 A change you save in Home Assistant's dashboard editor shows on the device within a second or two.
 
 A tap that opens another view keeps the page you tapped on up until the new view and its
 full-screen pictures are ready, for a second and a half at most. The last few pictures are kept, so
 going back to a view you just left draws it at once.
+
+### Card colors
+
+A tile card's `color` (and Mushroom's `icon_color`) is used: Home Assistant's names (`red`, `amber`,
+`deep-orange`, `blue-grey` and the rest of its palette), `var(--red-color)`, `#rgb`, `#rrggbb`, `rgb(r, g, b)`
+or a list of three numbers. It tints the tile's round badge and its icon. As in Home Assistant, a
+sensor shows its color always, while a light, switch, cover or other thing that is on or off shows it
+only while it is on; an unavailable tile never does. `primary`, `accent` and names the device doesn't know
+leave the theme's colors in use.
+
+### A warning page: one large card
+
+With **Dashboard tiles** on *Fill the screen*, a view of exactly one heading, markdown or tile card
+is drawn as a page of that card alone, with its words as large as the screen takes them, so it can be
+read across a room:
+
+- **Heading**: one big line (or a few, for a long one) in bold, with the subtitle under it.
+- **Markdown**: its title, smaller, above its paragraphs; the paragraphs are set as large as they fit.
+- **Tile or entity card** with no slider or switch: the icon, the state in very large letters, and the name under it. If the
+  tile has no state to show, the name is the large line. A tap on the page does what the tile's tap does.
+
+A `color` on the card fills the whole page with it, with white or black words, whichever reads better.
+A heading and a markdown card take `color` the same way (Home Assistant doesn't define one for them;
+the device reads it). With no color, the page uses the theme's. A view with anything more than that one
+card, or any other **Dashboard tiles** setting, is laid out as usual. A single tile that has a slider
+(a light's brightness, a cover's position, a thermostat, a fan's speed) or a switch keeps its usual full-screen tile, so
+the slider and switch still work; only a tile without controls gets the full page.
+
+This takes the place of a separate "drawn text size": the page's words are fitted to the screen's size,
+so **Text size** does not change them. To use it, make a dashboard whose view has just that card, for
+example:
+
+```yaml
+type: markdown
+content: "# HOME SERVER DOWN"
+color: red
+```
+
+For a pop-up that needs no dashboard, see
+[Reading it from across the room](actions.md#reading-it-from-across-the-room).
 
 ### A dashboard for the screen
 
@@ -210,10 +331,12 @@ On the page:
 - The top bar has the page's title, its items from Tessera, and the time.
 - Swipe left or right to go to the next page. The dots along the foot show where you are. A detail
   page has a back arrow at the top left.
-- Tap a tile to do what it's for: lights, switches, fans, input booleans and automations turn on or
+- Tap a tile to do what it's for: lights, switches, fans, input booleans, automations and remotes turn on or
   off; a cover opens, closes or stops; a scene or script runs; a button is pressed; a media player
   plays or pauses (on Music Assistant's player when it is the one playing, as its play/pause key does).
   Sensors show their value and unit, large.
+- A remote's tile turns it on or off. Tessera's remote card, with its activities and keypad, isn't drawn
+  here, and a remote's key set to *Perform action* does nothing on a tap.
 - Tap a thermostat to open its controls: the temperature with − and +, and its modes.
 - Locks: a tap on an unlocked lock locks it. A tap on a locked lock asks first: the tile turns red
   and says *Tap again to unlock*. Tap again within 4 seconds to unlock. If the lock's tile in
@@ -222,7 +345,7 @@ On the page:
   same way: a tap on a closed one, or on its open key, turns the tile red and says *Tap again to open*.
   Tap again within 4 seconds to open it. Closing one takes a single tap.
 - Press and hold a tile to open the same sheets the drawn dashboard has: a light's whites and colors,
-  a thermostat's controls, a media player's controls, volume, Music Assistant favorites and speakers.
+  a thermostat's or a fan's controls, a media player's controls, volume, Music Assistant favorites and speakers.
   The favorites and speakers are read with the device's Home Assistant token, as on the drawn
   dashboard, and the favorites need it to belong to an administrator.
 - Slide a finger along a light to set its brightness, along a fan to set its speed, along a cover to
@@ -235,9 +358,10 @@ On the page:
   over RTSP (**Live camera video** on, and go2rtc's stream or a picture address on the setup page; see
   [Cameras](setup.md#4-cameras)), the tile plays it live too, at a few frames a second. Until the first
   picture comes, and for a camera tile not set to show the camera, it is an icon and a name. Tap it to
-  put the camera up on its own. The device says `own_pictures` in its **Screen features**, which is
-  what has the add-on offer cameras for it; an add-on that does not know the word yet offers them only
-  to its own boards that draw pictures, and turns a layout with a camera down.
+  put the camera up on its own. The device says `own_pictures` in its **Screen features**, the word for
+  a screen that fetches its cameras' pictures itself. Tessera doesn't take that word yet: it offers
+  cameras only to its own boards that draw pictures, and turns a layout with a camera down
+  ([#356](https://github.com/HuskerMinion/techo5/issues/356)).
 - A weather tile two cells wide or two rows high shows the forecast: days side by side, or one a line
   on a tile one cell wide.
 - Bigger tiles show the controls Tessera gives them (the tile's **Controls** in the editor): a

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/HuskerMinion/techo5/echod/internal/lib/fonts"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 )
@@ -47,6 +48,13 @@ type paint struct {
 	fc    *sheetFaces
 	round bool
 
+	// rowCard is the card the rows are planned for, when a round panel's rows may take more than one
+	// line (row_wrap.go); empty on the Show, whose rows keep one line each.
+	rowCard image.Rectangle
+
+	// glass holds what is behind a raindrop on the glass while it is drawn (weatherfx_glass.go).
+	glass []uint8
+
 	// marked is a mark in a color that means something drawn in the frame being drawn: the header's
 	// "microphone off" pill, Talk red while live. The Show takes the skin's filter off for that frame
 	// (unskinned), so those keep their colors.
@@ -56,16 +64,20 @@ type paint struct {
 	// captions sit above them (captions), so a tap on them does what it does.
 	footAt int
 
-	// font is the screen font the faces in use were made in (font.go), "" for Go, and fontGen the
-	// fonts of the owner's own when they were (lib/fonts.Generation).
-	font    string
-	fontGen uint64
+	// font is the screen font the faces in use were made in (font.go), "" for Go, fontGen the
+	// fonts of the owner's own when they were (lib/fonts.Generation), and textSize the text size they
+	// were drawn at (text_size.go).
+	font     string
+	fontGen  uint64
+	textSize int
 
 	// The drawn dashboard's tiles where they were last drawn, and how far it can scroll; bigTiles is
-	// the Dashboard tiles setting asking for them larger, for the frame being drawn.
+	// the Dashboard tiles setting asking for them larger, and nameBelow the Dashboard tile layout asking
+	// for the name under the badge, for the frame being drawn.
 	dashTiles   []dashTile
 	dashContent int
 	bigTiles    bool
+	nameBelow   bool
 
 	// The color sheet's parts and the sheet itself where they were last drawn, under zmu: empty while
 	// no sheet is up (color_sheet.go).
@@ -114,14 +126,17 @@ func (p *paint) navH() int        { return p.s(navHBase) }
 func (p *paint) navGap() int      { return p.s(navGapBase) }
 func (p *paint) cardIn() int      { return p.s(cardInBase) }
 func (p *paint) cardRad() float64 { return float64(p.s(cardRadBase)) }
-func (p *paint) headerH() int     { return p.s(headerHBase) }
-func (p *paint) rowH() int        { return p.s(rowHBase) }
+func (p *paint) headerH() int     { return p.grownForText(p.s(headerHBase)) }
+func (p *paint) rowH() int        { return p.grownForText(p.s(rowHBase)) }
 func (p *paint) rowIn() int       { return p.s(rowInBase) }
 
 // rowHeight is how tall row is drawn: a heading is shorter than a row with something on it.
 func (p *paint) rowHeight(row settingRow) int {
 	if row.kind == ctlHeading {
 		return p.s(headHBase)
+	}
+	if p.planned() {
+		return p.planRow(p.rowCard, row).h
 	}
 	return p.rowH()
 }
@@ -150,7 +165,7 @@ func (r *paint) faces() sheetFaces {
 	if r.fc != nil {
 		return *r.fc
 	}
-	return facesFor(fontKey{r.font, r.fontGen})
+	return facesFor(r.faceKey())
 }
 
 func (r *paint) text(face font.Face, s string, x, baseline int, c color.Color) {
@@ -158,26 +173,25 @@ func (r *paint) text(face font.Face, s string, x, baseline int, c color.Color) {
 		return
 	}
 	if r.over.record {
-		if face.Metrics().Height.Ceil() <= r.s(scrimTallest) {
+		if face.Metrics().Height.Ceil() <= r.atTextSize(r.s(scrimTallest)) {
 			r.over.noteText(face, s, x, baseline)
 		}
 		return
 	}
 	if r.over.photo != nil {
 		r.over.halo(r.dst, face, s, x, baseline)
-		if _, chosen := c.(chosenColor); !chosen && face.Metrics().Height.Ceil() <= r.s(scrimTallest) {
+		if _, chosen := c.(chosenColor); !chosen && face.Metrics().Height.Ceil() <= r.atTextSize(r.s(scrimTallest)) {
 			c = overPhotoColor(c)
 		}
 	}
-	d := &font.Drawer{Dst: r.dst, Src: image.NewUniform(c), Face: face, Dot: fixed.P(x, baseline)}
-	d.DrawString(s)
+	fonts.DrawString(r.dst, image.NewUniform(c), face, fixed.P(x, baseline), s)
 }
 
 func (r *paint) width(face font.Face, s string) int {
 	if face == nil {
 		return 0
 	}
-	return (&font.Drawer{Face: face}).MeasureString(s).Ceil()
+	return fonts.MeasureString(face, s).Ceil()
 }
 
 // wrap breaks text into lines no wider than maxW, on spaces; a single word wider than the line is
@@ -374,13 +388,19 @@ const (
 )
 
 // sheetFaces are the settings screen's own sizes of the font the rest of the screen uses.
-type sheetFaces struct{ header, label, labelBold, sub, value, nav, navBold, button font.Face }
+type sheetFaces struct {
+	header, label, labelBold, sub, value, nav, navBold, button font.Face
 
-// sheetFacesAt builds them in the font named through a scale: 1:1 for the panel these sizes were
+	// labelSm, labelBoldSm and valueSm are a step smaller, for a row that would otherwise be wrapped
+	// or cut (row_wrap.go); nil where a screen has none.
+	labelSm, labelBoldSm, valueSm font.Face
+}
+
+// sheetFacesAt builds them in the font k names through a scale: 1:1 for the panel these sizes were
 // chosen on (facesFor keeps those), or a renderer's own for another. Not cached: a renderer builds its
 // own once per font.
-func sheetFacesAt(name string, s func(int) int) sheetFaces {
-	f := func(bold bool, size int) font.Face { return fontFace(name, bold, float64(s(size))) }
+func sheetFacesAt(k fontKey, s func(int) int) sheetFaces {
+	f := func(bold bool, size int) font.Face { return k.face(bold, float64(s(size))) }
 	return sheetFaces{
 		header: f(true, 36), label: f(false, 29), labelBold: f(true, 29), sub: f(false, 21),
 		value: f(false, 25), nav: f(false, 24), navBold: f(true, 24), button: f(true, 23),
@@ -638,26 +658,60 @@ func (r *paint) settingRow(card image.Rectangle, top int, row settingRow) {
 	if row.bold {
 		face = fc.labelBold
 	}
-	right, cy := card.Max.X-r.s(26), top+r.rowH()/2
+	rh := r.rowHeight(row)
+	right, cy := card.Max.X-r.s(26), top+rh/2
 	var labelEnd int
-	row.label, row.sub, labelEnd = r.rowWords(card, row, face)
-	base := top + r.s(40)
-	if row.sub == "" {
-		r.text(face, row.label, card.Min.X+r.rowIn(), base, cream)
+	var plan rowPlan
+	planned := r.planned()
+	fullLabel := row.label
+	if planned {
+		plan = r.planRow(card, row)
+		face = plan.labelFace
+		row.label, row.sub = plan.label[0], ""
+		if len(plan.sub) > 0 {
+			row.sub = plan.sub[0]
+		}
 	} else {
-		base = top + r.s(30)
+		row.label, row.sub, labelEnd = r.rowWords(card, row, face)
+	}
+	// The lines' baselines, in the Show 5's pixels at 100%, move apart or together around a middle as
+	// the text size grows or shrinks them, so two lines neither run into each other nor out of the row.
+	// A row grown for large text keeps them in its middle.
+	mid := top + (r.rowH()-r.s(rowHBase))/2
+	line := func(at, middle int) int { return mid + r.s(middle) + r.atTextSize(r.s(at)-r.s(middle)) }
+	base := line(40, 30)
+	lastLabel := row.label
+	switch {
+	case planned && plan.baseL != nil:
+		// More than one line of words: laid out from the top of a row grown to hold them.
+		for i, l := range plan.label {
+			r.text(face, l, card.Min.X+r.rowIn(), top+plan.baseL[i], cream)
+		}
+		for i, l := range plan.sub {
+			r.text(fc.sub, l, card.Min.X+r.rowIn(), top+plan.baseS[i], dim)
+		}
+		base, lastLabel = top+plan.baseL[len(plan.baseL)-1], plan.label[len(plan.label)-1]
+	case row.sub == "":
 		r.text(face, row.label, card.Min.X+r.rowIn(), base, cream)
-		r.text(fc.sub, row.sub, card.Min.X+r.rowIn(), top+r.s(53), dim)
+	default:
+		base = line(30, 40)
+		r.text(face, row.label, card.Min.X+r.rowIn(), base, cream)
+		r.text(fc.sub, row.sub, card.Min.X+r.rowIn(), line(53, 40), dim)
 	}
 	if row.locked {
-		x := card.Min.X + r.rowIn() + r.width(face, row.label) + r.s(lockGap)
+		x := card.Min.X + r.rowIn() + r.width(face, lastLabel) + r.s(lockGap)
 		r.padlock(x+r.s(lockW)/2, base-r.s(9), dim)
 		labelEnd = max(labelEnd, x+r.s(lockW))
 	}
+	row.label = fullLabel // zones name the row by its whole label, not the part that was drawn
 
-	whole := image.Rect(card.Min.X+r.s(8), top, card.Max.X-r.s(8), top+r.rowH())
-	// A value never runs into the label: it keeps its start and loses its end to an ellipsis.
+	whole := image.Rect(card.Min.X+r.s(8), top, card.Max.X-r.s(8), top+rh)
+	// A value never runs into the label: it keeps its start and loses its end to an ellipsis. A planned
+	// row's value was cut to its share when the row was planned.
 	fit := func(text string, rightEdge int) string { return r.fit(fc.value, text, rightEdge-labelEnd-r.s(rowGap)) }
+	if planned {
+		fit = func(string, int) string { return plan.value }
+	}
 	add := func(r0 image.Rectangle, p part) {
 		if row.id != "" {
 			r.addZone(zone{r: r0, kind: zoneRow, id: row.id, part: p, label: row.label})

@@ -5,7 +5,6 @@ package display
 import (
 	"image"
 	"image/color"
-	"image/draw"
 
 	"golang.org/x/image/font"
 )
@@ -55,7 +54,12 @@ func (r *renderer) eqWords(s scene, room, maxW int) []eqLine {
 		face, lineH = r.small, r.s(42)
 		lines = r.wrap(face, s.reply, maxW)
 	}
-	for _, l := range lines {
+	fit := (room - used) / lineH
+	if len(lines) > fit {
+		// Paged: room at the end of each line for the "…" a page with more after it ends in.
+		lines = r.wrap(face, s.reply, maxW-r.width(face, " …"))
+	}
+	for _, l := range replyPage(lines, fit, s.said) {
 		out = append(out, eqLine{face, l, replyCol, lineH})
 	}
 	return out
@@ -76,7 +80,7 @@ func turnGround(s scene) color.RGBA {
 // equalizer draws the whole turn page in the bars style.
 func (r *renderer) equalizer(s scene) {
 	ground := turnGround(s)
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(ground), image.Point{}, draw.Src)
+	fillCanvas(r.dst, ground)
 	top, bot, under, bottom, lines := r.eqLayout(s, 54)
 	drawBars(r.dst, image.Rect(r.s(40), top, r.w-r.s(40), bot), s.eq, ground, max(1, r.s(2)), r.s(4))
 	r.eqText(lines, bot+under, bottom)
@@ -85,7 +89,7 @@ func (r *renderer) equalizer(s scene) {
 // wave draws the whole turn page in the wave style.
 func (r *renderer) wave(s scene) {
 	ground := turnGround(s)
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(ground), image.Point{}, draw.Src)
+	fillCanvas(r.dst, ground)
 	top, bot, under, bottom, lines := r.eqLayout(s, 58)
 	if r.wb == nil {
 		r.wb = &waveBuf{}
@@ -118,7 +122,7 @@ func invertRGB(dst *image.RGBA, area image.Rectangle) {
 // turnVisual draws the whole turn page in the VU, Orb or HAL 9000 style (turn_visual.go).
 func (r *renderer) turnVisual(s scene) {
 	ground := turnGround(s)
-	draw.Draw(r.dst, r.dst.Rect, image.NewUniform(ground), image.Point{}, draw.Src)
+	fillCanvas(r.dst, ground)
 	top, bot, under, bottom, lines := r.eqLayout(s, 58)
 	band := image.Rect(r.s(40), top, r.w-r.s(40), bot)
 	switch s.eq.style {

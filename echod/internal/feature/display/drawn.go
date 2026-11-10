@@ -70,10 +70,11 @@ type mediaZone struct {
 // colors, the media sheet's volume, or a grouped speaker's volume along its button, from lo at its
 // left end to hi at its right.
 type sheetSlider struct {
-	kind   int // colorPartWhite, colorPartHue, mediaPartVolume or mediaPartSpeaker
+	kind   int // colorPartWhite, colorPartHue, mediaPartVolume, mediaPartSpeaker or fanPartSpeed
 	r      image.Rectangle
 	lo, hi float64
-	entity string // the speaker, for mediaPartSpeaker
+	entity string  // the speaker, for mediaPartSpeaker; the fan, for fanPartSpeed
+	step   float64 // the steps a fan's speed takes, for fanPartSpeed
 	// from and base are, on a speaker's button, where the finger came down and the volume it had: the
 	// button is no bar to aim at, so the volume moves by as much as the finger does, as a tile's level.
 	from int
@@ -115,11 +116,11 @@ type textKey struct {
 // textFace is the screen's own font at size, regular or bold, made once: for the dashboard's bigger
 // tiles, whose words grow with them past the fixed sizes the rest of the page uses.
 func (r *paint) textFace(bold bool, size int) font.Face {
-	key := textKey{fontKey{r.font, r.fontGen}, bold, r.s(size)}
+	key := textKey{r.faceKey(), bold, r.s(size)}
 	if fc, ok := textFaces.Load(key); ok {
 		return fc.(font.Face)
 	}
-	fc := fontFace(r.font, bold, float64(key.px))
+	fc := key.font.face(bold, float64(key.px))
 	if fc == nil {
 		return nil
 	}
@@ -200,7 +201,7 @@ func (d *Display) drawnTap(x, y int) {
 	case t == nil:
 	case t.action != nil:
 		slog.Info("dashboard tap", "entity", t.action.Entity, "service", t.action.Service, "view", t.action.View)
-		dashboard.Get().Tap(*t.action)
+		d.tileAction(t)
 	case strings.HasPrefix(t.entity, "climate."):
 		// A thermostat whose card sets no tap of its own (more-info, Home Assistant's default for it):
 		// its controls (climatePress).
@@ -244,6 +245,9 @@ func (d *Display) drawnHold(x, y int) {
 	if slider != nil {
 		d.sliderBegins(*slider)
 	}
+	if onSheet {
+		d.libDragStart(x, y) // the music library scrolls under a finger (library_draw.go)
+	}
 }
 
 // slideStart is how far a finger moves before it counts as a scroll or a slide rather than a tap
@@ -265,8 +269,11 @@ func (d *Display) drawnMove(x, y int) {
 	if sheet {
 		// The sheet is over the page: nothing under it scrolls or slides. That the finger moved is
 		// kept, for where it lifts (drawnRelease), and a slider it came down on follows it.
-		slider, moved := dr.slider, dr.moved
+		slider, moved, onSheet := dr.slider, dr.moved, dr.onSheet
 		d.mu.Unlock()
+		if onSheet && d.libDragMove(x, y) {
+			return
+		}
 		if slider != nil && slider.slides(moved) {
 			d.slideSheet(*slider, x, false)
 		}

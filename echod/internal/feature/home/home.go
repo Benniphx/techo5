@@ -25,7 +25,9 @@ import (
 	"github.com/HuskerMinion/techo5/echod/internal/feature/media"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hook"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/locale"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/openmeteo"
+	"github.com/HuskerMinion/techo5/echod/internal/lib/radiometa"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/safe"
 )
 
@@ -323,6 +325,7 @@ func Get() *Feature {
 		shared.buildNowPlayingSensors()
 		hastate.Get().Changed.Listen(shared.stateChanged)
 		hastate.Get().Changed.Listen(shared.stationStarted)
+		hastate.Get().Changed.Listen(shared.todoChanged)
 		media.Get().OnPlay.Listen(shared.played)
 		// Stopped anywhere (the voice assistant, the setup page, the action button, Home Assistant):
 		// the station is over, and a put-back on its way is not made.
@@ -509,6 +512,12 @@ func (f *Feature) want(h config.Home) {
 	if s := h.Radio.Service; strings.HasPrefix(s, "script.") {
 		keys = append(keys, hastate.Key{Entity: s})
 	}
+	// The to-do lists shown: a list's state is how many items are open, so it changes whenever they do.
+	if hasScreen {
+		for _, l := range config.Get().Todo.Lists {
+			keys = append(keys, hastate.Key{Entity: l})
+		}
+	}
 	others := make(map[string]bool, len(keys))
 	for _, k := range keys {
 		others[k.Entity] = true
@@ -553,11 +562,12 @@ func (f *Feature) locationAction() *esphome.Action {
 func (f *Feature) Actions() []*esphome.Action {
 	actions := append(append(f.cameraActions(), f.gridActions()...), f.accessAction(), f.go2rtcAction())
 	if hasScreen {
-		actions = append(actions, f.slideshowAction(), f.calendarAction(), f.locationAction(), f.cameraButtonsAction())
+		actions = append(actions, f.slideshowAction(), f.calendarAction(), f.todoAction(), f.locationAction(), f.cameraButtonsAction())
 	}
 	if hasGlance {
 		actions = append(actions, f.glanceAction())
 	}
+	actions = append(actions, f.stationAction())
 	return append(actions, []*esphome.Action{
 		{
 			Name: "home_weather",
@@ -681,34 +691,31 @@ func (f *Feature) Radio() Radio {
 	h := config.Get().Home.Radio
 	sources := RadioSources()
 	r := Radio{Configured: len(sources) > 0, Source: radioSource(), Sources: len(sources)}
-	if !r.Configured {
-		// No list to show, but the page is shown for a carried stream all the same, and it has to name
-		// what is playing: the same last word the configured path ends with.
-		return withFollowed(carried(r))
-	}
 	t := hastate.Get()
-	if r.Source == config.RadioFavorites {
-		r.Stations = favoriteNames(h)
-	}
-	// Favorites that turn out to hold no stations (lists not in Home Assistant yet) fall back to
-	// the stations near home, when there are any to fall back to.
-	if r.Source == config.RadioFavorites && len(r.Stations) == 0 && r.Sources > 1 {
-		r.Source = config.RadioLocal
-	}
-	if r.Source == config.RadioOwn {
-		for _, st := range OwnStations() {
-			r.Stations = append(r.Stations, st.Name)
+	if r.Configured {
+		if r.Source == config.RadioFavorites {
+			r.Stations = favoriteNames(h)
 		}
-	}
-	if r.Source != config.RadioFavorites && r.Source != config.RadioOwn {
-		f.fetchList(r.Source)
-		f.mu.Lock()
-		l := f.list(r.Source)
-		for _, st := range l.stations {
-			r.Stations = append(r.Stations, st.Name)
+		// Favorites that turn out to hold no stations (lists not in Home Assistant yet) fall back to
+		// the stations near home, when there are any to fall back to.
+		if r.Source == config.RadioFavorites && len(r.Stations) == 0 && r.Sources > 1 {
+			r.Source = config.RadioLocal
 		}
-		r.Loading, r.Problem = l.busy && len(l.stations) == 0, l.err
-		f.mu.Unlock()
+		if r.Source == config.RadioOwn {
+			for _, st := range OwnStations() {
+				r.Stations = append(r.Stations, st.Name)
+			}
+		}
+		if r.Source != config.RadioFavorites && r.Source != config.RadioOwn {
+			f.fetchList(r.Source)
+			f.mu.Lock()
+			l := f.list(r.Source)
+			for _, st := range l.stations {
+				r.Stations = append(r.Stations, st.Name)
+			}
+			r.Loading, r.Problem = l.busy && len(l.stations) == 0, l.err
+			f.mu.Unlock()
+		}
 	}
 	// Both from the music's own state, which is what the page is drawn from: a remote's track paused from
 	// here is held with play offered rather than playing, and the list needs to know that as the page does.
@@ -747,6 +754,18 @@ func carried(r Radio) Radio {
 	s := snapshotOf(media.Get())
 	switch whosePlaying(s, false) {
 	case playingOwn:
+		if s.titled {
+			// A track Home Assistant named before it played it (media_title): the page names what it
+			// was told, not the station last chosen here or Home Assistant's "last station" text, which
+			// went on saying "Radio" over a recording with an old station's song.
+			r.Chosen = ""
+			r.Playing, r.Paused = s.ownPlaying, s.ownPaused
+			r.Now = titledSource(s.own, locale.Text(config.Get().Screen.Language, "media_playback"))
+			r.Title, r.Artist, r.Album = s.own.Title, s.own.Subtitle, ""
+			r.Art, r.Thumb = nil, nil
+			r.Logo, r.Music = false, false
+			break
+		}
 		if !bluetoothFrom(s.recvFrom) {
 			break
 		}
@@ -874,15 +893,11 @@ func (f *Feature) play(station string, gen *uint64) {
 }
 
 // askFor is the station name to hand the finder: a list label like "101.1 WXYZ on iHeartRadio"
-// was written for Alexa, which took the whole phrase; a search wants just "101.1 WXYZ".
+// was written for Alexa, which took the whole phrase; a search wants just "101.1 WXYZ". The same
+// splitter resolves the label, so the two cannot drift apart.
 func askFor(label string) string {
-	l := strings.TrimSpace(label)
-	for _, tail := range []string{" on iHeartRadio", " on iHeart", " on TuneIn", " on Tune In"} {
-		if strings.HasSuffix(strings.ToLower(l), strings.ToLower(tail)) {
-			return strings.TrimSpace(l[:len(l)-len(tail)])
-		}
-	}
-	return l
+	name, _ := radiometa.SplitName(label)
+	return name
 }
 
 // Stop ends whatever is playing, whoever is playing it.

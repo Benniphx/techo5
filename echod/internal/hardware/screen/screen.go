@@ -133,6 +133,9 @@ type Device struct {
 	tintWarned bool
 	// filter is laid over every row on its way to the panel (SetFilter, filter.go).
 	filter rowFilter
+
+	// out is the board's own way to the pages (output.go); nil on the framebuffer.
+	out output
 }
 
 // SetFilter lays f over every row of the canvas on its way to the panel, a row of four-byte RGBA
@@ -146,6 +149,9 @@ func (d *Device) source() *image.RGBA { return d.filter.over(d.canvas) }
 
 // Open maps the framebuffer and reads its geometry.
 func Open() (*Device, error) {
+	if d := openOutput(); d != nil {
+		return d, nil
+	}
 	f, err := os.OpenFile(devPath, os.O_RDWR, 0)
 	if err != nil {
 		if f, err = os.OpenFile(altPath, os.O_RDWR, 0); err != nil {
@@ -183,8 +189,9 @@ func Open() (*Device, error) {
 	// On TECHO5's mainline kernel /dev/fb0 can be DRM's fbdev emulation (mediatek-drm), which sets no
 	// mode of its own while there is no console on it: unblanking does, so the panel shows this buffer
 	// even before the first pan. simple-framebuffer has no blank operation and says EINVAL; that is fine.
-	// The Skylight's rockchip-drm fbdev emulation is the same kind.
-	if layout.AthenaMainline() || layout.Skylight() {
+	// The Skylight's rockchip-drm fbdev emulation is the same kind, and so is a board's that sets
+	// unblankOnOpen.
+	if layout.AthenaMainline() || layout.Skylight() || unblankOnOpen {
 		_ = ioctl(f.Fd(), fbioBlank, nil)
 	}
 
@@ -239,6 +246,9 @@ func (d *Device) Canvas() *image.RGBA { return d.canvas }
 
 // String describes the framebuffer, for the log.
 func (d *Device) String() string {
+	if d.out != nil {
+		return fmt.Sprintf("%s, %dx%d panel, %d pages, %d bytes/line", d.out, d.panelW, d.panelH, d.pages, d.line)
+	}
 	return fmt.Sprintf("%dx%d panel, %d pages, %d bytes/line, rgba at %d/%d/%d/%d",
 		d.panelW, d.panelH, d.pages, d.line, d.shift[0], d.shift[1], d.shift[2], d.shift[3])
 }
@@ -306,7 +316,13 @@ func (d *Device) present(img *image.RGBA) error {
 	if d.pages > 1 {
 		next = (d.page + 1) % d.pages
 	}
-	dst := d.mem[next*d.pageBytes : (next+1)*d.pageBytes]
+	dst, err := d.pageFor(next)
+	if err != nil {
+		return err
+	}
+	if d.out != nil && d.out.present(d, img, dst, next) {
+		return d.pan(next)
+	}
 
 	w, h := img.Rect.Dx(), img.Rect.Dy()
 	sr, sg, sb, sa := d.shift[0], d.shift[1], d.shift[2], d.shift[3]
@@ -495,9 +511,16 @@ func words(b []byte) []uint32 {
 // and no pan operation (FBIOPAN_DISPLAY gives EINVAL): there it scans out what was written. DRM's
 // fbdev emulation (mediatek-drm) has two pages and pans with an atomic commit, at the next vblank.
 // On the Echo Show 5's mainline kernel that emulation has a single page, where a pan to the page on
-// show is only a wasted commit.
+// show is only a wasted commit, and so it is on a board that sets singlePage.
 func (d *Device) pan(next int) error {
-	if d.pages <= 1 && (layout.AthenaMainline() || layout.CronosMainline()) {
+	if d.out != nil {
+		if err := d.out.show(next); err != nil {
+			return err
+		}
+		d.page = next
+		return nil
+	}
+	if d.pages <= 1 && (layout.AthenaMainline() || layout.CronosMainline() || singlePage) {
 		d.page = 0
 		return nil
 	}
@@ -522,6 +545,10 @@ func (d *Device) Close() error {
 	if d.gpuPath.disp != nil {
 		d.gpuPath.disp.Release(errors.New("screen: closed"))
 		d.gpu = nil
+	}
+	if d.out != nil {
+		d.out.leave(d)
+		d.out = nil
 	}
 	if d.mem != nil {
 		_ = unix.Munmap(d.mem)
@@ -592,7 +619,24 @@ func skylightRaw(level, top int) int {
 // backlight class device whose range is read from max_brightness.
 const cronosBacklightDir = "/sys/class/backlight/display-backlight"
 
+// Hooks a board of this build sets from its own file; none is set on any Show.
+var (
+	// unblankOnOpen: the board's /dev/fb0 is DRM's fbdev emulation, which shows the buffer only once
+	// unblanked (Open).
+	unblankOnOpen bool
+	// singlePage: a single page on the board's framebuffer scans out what was written, with no pan
+	// (pan).
+	singlePage bool
+	// boardBacklight is the board's backlight node and its top level, ahead of every other (ok true).
+	boardBacklight func() (path string, top int, ok bool)
+)
+
 func backlightNode() (path string, top int) {
+	if boardBacklight != nil {
+		if path, top, ok := boardBacklight(); ok {
+			return path, top
+		}
+	}
 	if layout.AthenaMainline() {
 		return mainlineBacklightPath, mainlineBacklightMax
 	}

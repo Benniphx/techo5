@@ -671,8 +671,9 @@ func (a *Adapter) Remove(address string) error {
 // RegisterAgent makes this process the pairing agent. While pairing (which reports whether pairing
 // mode is on) says yes, a pairing is answered yes, which is what a device with no keyboard can do, and
 // the passkey a phone shows is accepted as shown. At any other time pairing is refused, so nothing
-// nearby can bond with the device unasked. A connection bluetoothd asks about is allowed only for the
-// audio profiles, whatever the device.
+// nearby can bond with the device unasked — except a device AllowPairing names, which is how a feature
+// pairs one thing of its own without opening pairing mode. A connection bluetoothd asks about is
+// allowed only for the audio profiles, whatever the device.
 //
 // paired, when set, hears the device path of each pairing the agent said yes to, and code the
 // six-digit code of each one confirmed by number, which the other device shows too: said on the
@@ -693,6 +694,63 @@ func (a *Adapter) RegisterAgent(pairing func() bool, paired func(path string), c
 	}
 	a.agent = ag
 	return nil
+}
+
+// proxied is the devices Home Assistant has asked the Bluetooth proxy to pair, by object path. The
+// agent says yes to their pairing even outside pairing mode: it was asked for, from Home Assistant.
+var proxied = struct {
+	sync.Mutex
+	paths map[dbus.ObjectPath]int
+}{paths: map[dbus.ObjectPath]int{}}
+
+func proxyPairing(path dbus.ObjectPath) bool {
+	proxied.Lock()
+	defer proxied.Unlock()
+	return proxied.paths[path] > 0
+}
+
+func proxyPairingSet(path dbus.ObjectPath, on bool) {
+	proxied.Lock()
+	defer proxied.Unlock()
+	if on {
+		proxied.paths[path]++
+	} else if proxied.paths[path]--; proxied.paths[path] <= 0 {
+		delete(proxied.paths, path)
+	}
+}
+
+// allowed is the device a feature is pairing itself, by object path: the wall clock, asked to pair
+// from Home Assistant or the setup page. The agent says yes to that device outside pairing mode, and
+// only until the caller's done runs, so the adapter is never made discoverable to the whole house.
+var allowed = struct {
+	sync.Mutex
+	paths map[dbus.ObjectPath]int
+}{paths: map[dbus.ObjectPath]int{}}
+
+func pairingAllowed(path dbus.ObjectPath) bool {
+	allowed.Lock()
+	defer allowed.Unlock()
+	return allowed.paths[path] > 0
+}
+
+// AllowPairing lets the agent answer a pairing for path outside pairing mode, and returns what ends
+// that. It is for a feature that discovered the one device it means to pair — the Echo Wall Clock —
+// rather than for opening the adapter's pairing mode to everything nearby.
+func AllowPairing(path dbus.ObjectPath) (done func()) {
+	allowed.Lock()
+	allowed.paths[path]++
+	allowed.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			allowed.Lock()
+			defer allowed.Unlock()
+			if allowed.paths[path]--; allowed.paths[path] <= 0 {
+				delete(allowed.paths, path)
+			}
+		})
+	}
 }
 
 // agent is org.bluez.Agent1. Methods return *dbus.Error; nil is yes.
@@ -721,6 +779,12 @@ func rejected(what string) *dbus.Error {
 
 // open is whether a pairing may go ahead now.
 func (g agent) open(path dbus.ObjectPath, what string) *dbus.Error {
+	if pairingAllowed(path) {
+		return nil
+	}
+	if proxyPairing(path) {
+		return nil
+	}
 	if g.pairing != nil && g.pairing() {
 		if g.paired != nil {
 			g.paired(string(path))

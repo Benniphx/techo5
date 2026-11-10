@@ -129,17 +129,27 @@ def download(url, out):
 
 
 def download_checked(url, out, sha256):
-    """Keeps a download only once its sha256 is the one expected; one already there and right stays."""
+    """Keeps a download only once its sha256 is the one expected; one already there and right stays.
+    A download that comes out wrong is tried once more: a connection that dropped partway is the
+    likeliest cause. The error says how much arrived, which tells a cut-off download from one that
+    something on the way (antivirus that scans downloads, a proxy) changed."""
     if os.path.exists(out) and hash_file(out) == sha256:
         return
     partial = out + '.partial'
-    with _open(url) as r, open(partial, 'wb') as f:
-        shutil.copyfileobj(r, f, 1 << 20)
-    got = hash_file(partial)
-    if got != sha256:
+    for attempt in (1, 2):
+        with _open(url) as r, open(partial, 'wb') as f:
+            shutil.copyfileobj(r, f, 1 << 20)
+        got = hash_file(partial)
+        if got == sha256:
+            os.replace(partial, out)
+            return
+        size = os.path.getsize(partial)
         os.remove(partial)
-        fail('%s does not match its checksum (%s, wanted %s)' % (url, got, sha256))
-    os.replace(partial, out)
+        if attempt == 1:
+            print('   %s did not match its checksum (%d bytes arrived); downloading it again' % (url, size))
+    fail('%s does not match its checksum (%s, wanted %s; %d bytes arrived). Compare the size with the '
+         'one on the release page: fewer bytes is a connection that dropped, the same number is something '
+         'on the way changing the file, such as antivirus that scans downloads or a proxy' % (url, got, sha256, size))
 
 
 # ------------------------------------------------------------------------------------------ signatures
@@ -533,6 +543,19 @@ def ask_name(given, default):
         if not bad(n):
             return n
         print('   One line of at most 31 characters, please.')
+
+
+def check_gift(a, **given):
+    """--for-someone-else leaves the Wi-Fi, the Home Assistant key and the name to the device's own
+    first-run routine, so it cannot be combined with a switch that sets any of them. Nor with an SSH key:
+    the device's first start wipes what an earlier owner left, SSH keys included. given maps each
+    switch to what it was given, e.g. check_gift(a, **{'--name': a.name})."""
+    if not a.for_someone_else:
+        return
+    clash = sorted(sw for sw, v in given.items() if v)
+    if clash:
+        fail("--for-someone-else leaves the name, Wi-Fi and key to the device's own setup, so it cannot be used with %s"
+             % ', '.join(clash))
 
 
 def confirm(force, lines, word='ERASE'):

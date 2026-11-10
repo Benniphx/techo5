@@ -64,6 +64,13 @@ func (d *Driver) Yields(b Background) {
 	d.bg = b
 }
 
+// ClaimCall is Claim for a call: the call itself, its ring and a drop in. The queue plays them at the
+// call volume. It is the one way to make a call claim, so a claim's name can change without changing
+// its volume.
+func (d *Driver) ClaimCall(name string, play func(ctx context.Context, p *Player) error) *Claim {
+	return d.claim(name, claimSpec{call: true}, play)
+}
+
 // Claim takes the speaker and does whatever it takes to make the sound: play queues audio and
 // returns, and the claim ends once what it queued has played out. It must return when ctx is done,
 // which is what being silenced means.
@@ -75,7 +82,7 @@ func (d *Driver) Claim(name string, play func(ctx context.Context, p *Player) er
 // for a turn, the background keeps playing under it, at whatever level it has been ducked to, rather
 // than standing aside until the words are done.
 func (d *Driver) ClaimSpeech(name string, play func(ctx context.Context, p *Player) error) *Claim {
-	return d.claim(name, claimSpec{over: config.Get().Media.OnTurn != config.OnTurnPause}, play)
+	return d.claim(name, claimSpec{over: config.Get().Media.OnTurn != config.OnTurnPause, words: true}, play)
 }
 
 // ClaimOver takes the speaker for something that is not words but still belongs over the music rather
@@ -131,19 +138,21 @@ func duckDB(deep bool) int {
 // words ducks the background, and a sound over the music ducks it too, but it is not words — it never
 // displaces what is being said, and it needs more room than words do.
 type claimSpec struct {
+	call  bool // a call, its ring or a drop in (ClaimCall): played at the call volume
 	over  bool // sounds over the background rather than standing it down
 	waits bool // waits for whatever holds the speaker rather than displacing it
 	deep  bool // ducks deeper than words: a sound whose own level is low, heard over the room's music
 
 	overlay bool // a sound over the music that is not words (ClaimOver), which a claim that waits plays beside
 	beside  bool // waits for words, and plays beside an overlay without taking the speaker (ClaimTurn)
+	words   bool // words (ClaimSpeech), which Clearer speech tunes for while they play
 
 	within time.Duration // how long a claim that waits waits for its turn before giving up; 0 is for ever
 }
 
 func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Context, p *Player) error) *Claim {
 	ctx, cancel := context.WithCancel(context.Background())
-	c := &Claim{name: name, over: spec.over, overlay: spec.overlay, cancel: cancel, done: make(chan struct{})}
+	c := &Claim{name: name, call: spec.call, over: spec.over, overlay: spec.overlay, cancel: cancel, done: make(chan struct{})}
 	if spec.over {
 		// Only a claim that sounds over the background ducks anything, and working out how far is the
 		// only thing here that reads the listener's setting. A plain claim must not read it: a ring left
@@ -213,6 +222,10 @@ func (d *Driver) claim(name string, spec claimSpec, play func(ctx context.Contex
 		if bg != nil {
 			c.startDuck()
 		}
+		if spec.words && d.p != nil {
+			d.p.speaking.Add(1)
+			defer d.p.speaking.Add(-1)
+		}
 		if err := play(ctx, d.p); err != nil {
 			c.fail(err)
 			return
@@ -271,6 +284,23 @@ func (d *Driver) release(c *Claim) {
 	d.settle()
 }
 
+// roleOf is what a claim's audio is, for the volume the queue plays at: a call, its ring and a drop in
+// are calls; the rest of what a claim says (a reply, an announcement) is the assistant's voice, and a
+// chime held in a claim of its own rides with them. Nothing holding the speaker leaves the device's own
+// sounds on the media volume.
+func roleOf(c *Claim) int {
+	switch {
+	case c == nil:
+		return RoleMedia
+	case c.call:
+		return RoleCall
+	case c.overlay:
+		// A camera's own sound over the music is the street, not the assistant: it plays at the volume.
+		return RoleMedia
+	}
+	return RoleVoice
+}
+
 // settle tells the background whether it may play, which is whenever nothing holds the speaker. Every
 // change to now goes through here, so the two cannot drift apart.
 //
@@ -279,6 +309,7 @@ func (d *Driver) release(c *Claim) {
 func (d *Driver) settle() {
 	d.mu.Lock()
 	d.p.Hold(d.now != nil)
+	d.p.SetRole(roleOf(d.now))
 	want := d.now != nil && !d.now.over
 	if want == d.yielded {
 		d.mu.Unlock()
@@ -378,6 +409,7 @@ func (d *Driver) await(ctx context.Context) time.Time {
 // Claim is a hold on the speaker.
 type Claim struct {
 	name    string
+	call    bool // a call, its ring or a drop in (ClaimCall)
 	over    bool // sounds over the background rather than standing it down
 	overlay bool // a sound over the music that is not words (ClaimOver)
 	cancel  context.CancelFunc

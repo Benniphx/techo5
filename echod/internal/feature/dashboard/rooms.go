@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/HuskerMinion/techo5/echod/internal/feature/home"
 	"github.com/HuskerMinion/techo5/echod/internal/lib/hass"
@@ -274,12 +276,23 @@ func nameOf(e hass.LiveEntity, room string) string {
 	if name == "" {
 		_, name, _ = strings.Cut(e.ID, ".")
 	}
-	if len(name) > len(room)+1 && strings.EqualFold(name[:len(room)], room) {
-		if rest := strings.TrimLeft(name[len(room):], " -:"); rest != "" {
-			name = strings.ToUpper(rest[:1]) + rest[1:]
-		}
+	return withoutRoom(name, room)
+}
+
+// withoutRoom is name without room in front of it, its first letter made a capital: under Kitchen,
+// "Kitchen ceiling light" is "Ceiling light". Only a whole word or words: "Kitchenette light" stays
+// as it is, and so does a name that is nothing but the room.
+func withoutRoom(name, room string) string {
+	if room == "" || len(name) <= len(room)+1 || !strings.EqualFold(name[:len(room)], room) ||
+		!strings.ContainsRune(" -:", rune(name[len(room)])) {
+		return name
 	}
-	return name
+	rest := strings.TrimLeft(name[len(room):], " -:")
+	if rest == "" {
+		return name
+	}
+	r, size := utf8.DecodeRuneInString(rest)
+	return string(unicode.ToUpper(r)) + rest[size:]
 }
 
 func onOff(s string) string {
@@ -430,7 +443,7 @@ func iconOf(e hass.LiveEntity, domain, class string, on bool) string {
 const volumeSet = 4
 
 // adjustOf is the level a finger sliding along the entity's tile sets, if it has one: a light that
-// dims, a cover that stops part way, a thermostat's temperature, a media player's volume.
+// dims, a cover that stops part way, a thermostat's temperature, a fan's speed, a media player's volume.
 func adjustOf(e hass.LiveEntity, domain string) *Adjust {
 	switch domain {
 	case "light":
@@ -462,6 +475,13 @@ func adjustOf(e hass.LiveEntity, domain string) *Adjust {
 		}
 		lo, hi, step := climateLimits(e, t)
 		return &Adjust{Entity: e.ID, Kind: "temperature", Value: t, Min: lo, Max: hi, Step: step}
+	case "fan":
+		// A fan that takes a speed (set speed): a slide sets it, on the steps it says it takes.
+		n := fanNow(e)
+		if !n.HasSpeed {
+			return nil
+		}
+		return &Adjust{Entity: e.ID, Kind: "speed", Value: n.Percentage, Min: 0, Max: 100, Step: n.Step}
 	case "media_player":
 		// Only a player that says its volume and takes one (MediaPlayerEntityFeature.VOLUME_SET): one
 		// that is off says none, and a slide would set nothing anybody could see.

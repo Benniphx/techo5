@@ -18,7 +18,8 @@
 # Assistant sets it; UTC), GO (go binary), WSL_DISTRO (Ubuntu), PREBUILT_DAEMON (the echod-arm or
 # echod-arm-spot the "Build release binaries" GitHub Actions workflow built from this release's tag,
 # vX.Y.Z or spot-vX.Y.Z with --version vX.Y.Z; skips building it here, so the rootfs carries exactly what
-# CI attested instead of a local rebuild; needs gh).
+# CI attested instead of a local rebuild; needs gh), TECHO5_BUILD_DIR (on Linux, where the rootfs is built;
+# ~/techo5-build; give each build its own to run them side by side).
 set -euo pipefail
 
 HOST=${HOST:-}
@@ -160,24 +161,37 @@ if [ "$board" = athena ]; then
 	else
 		echo "== no GPU helper (bin/techo5-gpu-arm, bin/techo5-mesa-arm.tar.gz): the screen is drawn on the cores"
 	fi
+	# The JPEG decoder (tools/jpeg/build.sh, armv7, static, libjpeg-turbo in it): photos and camera pictures
+	# decode on it, and with image/jpeg in the daemon where it is not there (lib/fastjpeg).
+	J=$ROOT/bin/techo5-jpeg-arm
+	if [ -e "$J" ]; then
+		[ "$(od -An -tx1 -j4 -N1 "$J" | tr -d ' ')" = 01 ] && [ "$(od -An -tu2 -j18 -N2 "$J" | tr -d ' ')" = 40 ] && ! grep -q 'ld-musl-\|ld-linux-' "$J" \
+			|| { echo "bin/techo5-jpeg-arm is not a static armv7 binary: build it with tools/jpeg/build.sh" >&2; exit 1; }
+		cp "$J" "$STAGE/bin/techo5-jpeg"
+		echo "== jpeg: sha256 $(sha256sum "$J" | cut -d' ' -f1)"
+	else
+		echo "== no JPEG decoder (bin/techo5-jpeg-arm): pictures are decoded in the daemon"
+	fi
 fi
-cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
+cp "$ROOT/tools/linux/slotctl" "$ROOT/tools/linux/bootctl" "$ROOT/tools/linux/techo5-lib.sh" "$ROOT/tools/linux/mkrootfs.sh" "$ROOT/tools/linux/packages-rootfs.txt" "$STAGE/tools/"
 # EXTRA_PACKAGES: Alpine packages a device needs on top of the list (athena: busybox-extras, for udhcpd).
 [ -n "${EXTRA_PACKAGES:-}" ] && printf '%s\n' $EXTRA_PACKAGES >> "$STAGE/tools/packages-rootfs.txt"
 cp -r "$ROOT/tools/linux/rootfs/." "$STAGE/overlay/"
 [ -n "$DEVICE_OVERLAY" ] && cp -r "$DEVICE_OVERLAY/." "$STAGE/overlay/"
 mkdir -p "$STAGE/overlay/usr/share/licenses/tailscale" && cp "$TS.LICENSE" "$STAGE/overlay/usr/share/licenses/tailscale/LICENSE"
 # The licenses of the other programs built from others' sources above (tools/linux/licenses: Shairport Sync,
-# nqptp, librespot, FFmpeg, Mesa), beside Tailscale's; librespot's and Mesa's only when the image carries them.
+# nqptp, librespot, FFmpeg, Mesa, libjpeg-turbo), beside Tailscale's; librespot's, Mesa's and libjpeg-turbo's
+# only when the image carries them.
 cp -r "$ROOT/tools/linux/licenses/." "$STAGE/overlay/usr/share/licenses/"
 [ -e "$STAGE/bin/techo5-librespot" ] || rm -rf "$STAGE/overlay/usr/share/licenses/librespot"
 [ -e "$STAGE/bin/techo5-gpu" ] || rm -rf "$STAGE/overlay/usr/share/licenses/mesa"
+[ -e "$STAGE/bin/techo5-jpeg" ] || rm -rf "$STAGE/overlay/usr/share/licenses/libjpeg-turbo"
 cp "$INPUTS"/alpine-minirootfs-*-armv7.tar.gz "$STAGE/inputs/"
 [ -n "$VENDOR_TGZ" ] && cp "$VENDOR_TGZ" "$STAGE/inputs/vendor.tar.gz"
 cp "$INPUTS"/apks312/wpa_supplicant-2.9-*.apk "$INPUTS"/apks312/libssl1.1-*.apk "$INPUTS"/apks312/libcrypto1.1-*.apk "$STAGE/inputs/apks312/"
 # scripts must reach the device with LF endings whatever the checkout did
 # (perl rather than sed -i, which macOS's sed spells differently)
-for f in "$STAGE"/tools/*.sh "$STAGE"/tools/slotctl "$STAGE"/tools/*.txt; do perl -pi -e 's/\r$//' "$f"; done
+for f in "$STAGE"/tools/*.sh "$STAGE"/tools/slotctl "$STAGE"/tools/bootctl "$STAGE"/tools/*.txt; do perl -pi -e 's/\r$//' "$f"; done
 find "$STAGE/overlay" -type f -exec perl -pi -e 's/\r$//' {} +
 # Wake word models ship in the image so a fresh unit answers to its default word; boot.sh copies
 # them into the state directory when it is empty. They go in after the line endings are fixed:
@@ -228,7 +242,7 @@ fi
 if [ "$host_build" = linux ]; then
 	echo "== building the rootfs here"
 	bash "$ROOT/tools/linux/wsl-build.sh" "$STAGE" "$VERSION" "$TZ_NAME" >/dev/null
-	tarball=$HOME/techo5-build/rootfs.tar.gz
+	tarball=${TECHO5_BUILD_DIR:-$HOME/techo5-build}/rootfs.tar.gz
 	[ -s "$tarball" ] || { echo "the build failed" >&2; exit 1; }
 	if [ -n "$KEEP" ]; then
 		mkdir -p "$(dirname "$KEEP")"; cp "$tarball" "$KEEP"; echo "built: $KEEP"; exit 0

@@ -81,6 +81,9 @@ type Player struct {
 	// night is the night volume, the most quiet hours play at (night.go).
 	night *esphome.Number
 
+	// voiceVol and callVol are the assistant's voice and a call's audio, as steps from the volume (lanes.go).
+	voiceVol, callVol *esphome.Number
+
 	// nearMiss ducks a playing track for a few seconds after a wake word that nearly fired, so the
 	// next try is heard; see feature/detect/nearmiss.go.
 	nearMiss *esphome.Switch
@@ -90,6 +93,11 @@ type Player struct {
 	haSounds *esphome.Switch
 	// louder is the Louder speech switch (Louder, #304).
 	louder *esphome.Switch
+	// clearer is the Clearer speech switch (speaker.Player.SetClearerSpeech, techo5-dot#25).
+	clearer *esphome.Switch
+	// top is the Louder top volume switch (speaker.Player.SetLouderTop, #304), nil where no tuning
+	// this build plays has a lift for it.
+	top *esphome.Switch
 
 	// sleep stops what is playing after a while, the way a clock radio does.
 	sleep *sleeper
@@ -138,6 +146,9 @@ type Player struct {
 	// recvTrack is what a receiver this device runs says it is playing (feature/streaming: AirPlay,
 	// Spotify Connect), for the screen, with the name of the track it belongs to.
 	recvTrack atomic.Value // receivedTrack
+
+	// nextTitle is what the next play_media is to be named, and when (title.go); nil for nothing.
+	nextTitle atomic.Pointer[pendingTitle]
 
 	// lastExt is the last track a remote named, kept when it stops naming one: Music Assistant clears
 	// the track just before it says it stopped, so what was playing has to come from here. Only just
@@ -341,6 +352,14 @@ func build() *Player {
 				Category: esphome.CategoryConfig,
 			},
 		},
+		clearer: &esphome.Switch{
+			Base: esphome.Base{
+				ObjectID: "clearer_speech",
+				Name:     "Clearer speech",
+				Icon:     "mdi:account-voice",
+				Category: esphome.CategoryConfig,
+			},
+		},
 		nearMiss: &esphome.Switch{
 			Base: esphome.Base{
 				ObjectID: "duck_on_near_miss",
@@ -352,6 +371,8 @@ func build() *Player {
 	}
 	p.quiet = newQuiet()
 	p.night = newNight()
+	p.voiceVol = newLaneOffset("voice_volume", "Voice volume", "mdi:account-voice")
+	p.callVol = newLaneOffset("call_volume", "Call volume", "mdi:phone-in-talk")
 	p.layers = noiseLayers()
 	// Built wherever the amplifier may be (GainPossible), not only where the mixer has already said
 	// so: the card may not be up yet as this builds, and the saved gain is restored then all the same,
@@ -366,10 +387,18 @@ func build() *Player {
 		p.gainApply = speaker.Get().SetSpeakerGain
 		p.gain.OnCommand = p.commandSpeakerGain
 	}
+	if speaker.LouderTopPossible() {
+		p.top = &esphome.Switch{
+			Base: esphome.Base{ObjectID: "louder_top_volume", Name: "Louder top volume",
+				Icon: "mdi:volume-high", Category: esphome.CategoryConfig,
+				DeviceID: component.DevicePlayback},
+		}
+		p.top.OnCommand = p.SetLouderTop
+	}
 
 	// The player itself stays on the device: it is what people reach for. These are how it behaves.
 	bases := []*esphome.Base{&p.resampling.Base, &p.onTurn.Base, &p.duck.Base, &p.jack.Base, &p.asp.Base,
-		&p.bass.Base, &p.treble.Base, &p.quiet.Base, &p.night.Base, &p.nearMiss.Base, &p.haSounds.Base, &p.louder.Base}
+		&p.bass.Base, &p.treble.Base, &p.quiet.Base, &p.night.Base, &p.voiceVol.Base, &p.callVol.Base, &p.nearMiss.Base, &p.haSounds.Base, &p.louder.Base, &p.clearer.Base}
 	if speaker.HasJack {
 		bases = append(bases, &p.output.Base)
 	}
@@ -458,7 +487,10 @@ func build() *Player {
 
 	p.haSounds.OnCommand = p.SetHASounds
 	p.louder.OnCommand = p.SetLouderSpeech
+	p.clearer.OnCommand = p.SetClearerSpeech
 	p.night.OnCommand = func(v float32) { p.SetNightVolume(int(v)) }
+	p.voiceVol.OnCommand = func(v float32) { p.SetVoiceOffset(int(v)) }
+	p.callVol.OnCommand = func(v float32) { p.SetCallOffset(int(v)) }
 
 	p.nearMiss.OnCommand = func(v bool) {
 		p.nearMiss.Set(v)
@@ -544,6 +576,37 @@ func (p *Player) SetHASounds(on bool) {
 	slog.Info("setting changed", "setting", p.haSounds.ObjectID, "using", on)
 }
 
+// SetClearerSpeech turns Clearer speech on or off, from Home Assistant.
+func (p *Player) SetClearerSpeech(on bool) {
+	if err := config.Set().Speaker().ClearerSpeech(on); err != nil {
+		slog.Error("saving a setting failed", "setting", p.clearer.ObjectID, "err", err)
+		return
+	}
+	speaker.Get().SetClearerSpeech(on)
+	p.clearer.Set(on)
+	slog.Info("setting changed", "setting", p.clearer.ObjectID, "using", on)
+}
+
+// SetLouderTop turns Louder top volume on or off, from Home Assistant or the setup page.
+func (p *Player) SetLouderTop(on bool) {
+	if p.top == nil {
+		return
+	}
+	if err := config.Set().Speaker().LouderTop(on); err != nil {
+		slog.Error("saving a setting failed", "setting", p.top.ObjectID, "err", err)
+		return
+	}
+	speaker.Get().SetLouderTop(on)
+	p.top.Set(on)
+	slog.Info("setting changed", "setting", p.top.ObjectID, "using", on)
+}
+
+// LouderTopAvailable is whether the Louder top volume switch is put up on this build.
+func (p *Player) LouderTopAvailable() bool { return p.top != nil }
+
+// LouderTop is whether Louder top volume is on.
+func (p *Player) LouderTop() bool { return p.top != nil && p.top.Get() }
+
 // SetLouderSpeech turns Louder speech on or off, from Home Assistant, the setup page or the screen.
 func (p *Player) SetLouderSpeech(on bool) {
 	if err := config.Set().Speaker().LouderSpeech(on); err != nil {
@@ -556,11 +619,14 @@ func (p *Player) SetLouderSpeech(on bool) {
 
 func (p *Player) Entities() []esphome.Entity {
 	out := []esphome.Entity{p.mp, p.jack, p.resampling, p.onTurn, p.duck, p.asp, p.bass, p.treble,
-		p.quiet, p.night, p.nearMiss, p.haSounds, p.louder, p.sleep.sel}
+		p.quiet, p.night, p.voiceVol, p.callVol, p.nearMiss, p.haSounds, p.louder, p.clearer, p.sleep.sel}
 	// Asked as the entities are listed (once, as the API starts): the mixer if it opens by then,
 	// which leaves out a board that turned out not to have the amplifier, or still may have it.
 	if p.gain != nil && (speaker.GainAvailable() || speaker.GainPossible()) {
 		out = append(out, p.gain)
+	}
+	if p.top != nil {
+		out = append(out, p.top)
 	}
 	if speaker.HasJack {
 		out = append(out, p.output)
@@ -652,6 +718,14 @@ func (p *Player) Restore(c config.Config) {
 	p.haSounds.Set(!c.Speaker.ClassicSounds)
 	slog.Info("restored", "what", p.haSounds.ObjectID, "using", !c.Speaker.ClassicSounds)
 	p.louder.Set(c.Speaker.LouderSpeech)
+	p.clearer.Set(c.Speaker.ClearerSpeech)
+	speaker.Get().SetClearerSpeech(c.Speaker.ClearerSpeech)
+	slog.Info("restored", "what", p.clearer.ObjectID, "using", c.Speaker.ClearerSpeech)
+	if p.top != nil {
+		p.top.Set(c.Speaker.LouderTop)
+		speaker.Get().SetLouderTop(c.Speaker.LouderTop)
+		slog.Info("restored", "what", p.top.ObjectID, "using", c.Speaker.LouderTop)
+	}
 
 	p.duck.Set(float32(c.Media.DuckDB))
 	slog.Info("restored", "what", p.duck.ObjectID, "using", c.Media.DuckDB)
@@ -675,6 +749,9 @@ func (p *Player) Restore(c config.Config) {
 
 	restoreQuiet(p.quiet, c)
 	p.night.Set(float32(c.Speaker.NightVolume))
+	p.voiceVol.Set(float32(c.Speaker.VoiceOffset))
+	p.callVol.Set(float32(c.Speaker.CallOffset))
+	p.pushLanes()
 	slog.Info("restored", "what", p.night.ObjectID, "using", c.Speaker.NightVolume, "daytime", c.Speaker.DayVolume)
 	p.bass.Set(float32(c.Speaker.Bass))
 	p.treble.Set(float32(c.Speaker.Treble))
@@ -752,10 +829,12 @@ func (p *Player) command(c esphome.MediaCommand) {
 			// (overlay.go). Not a track: it is not what the room chose, so it is not what the screen or the
 			// last-station memory is told is playing.
 		default:
+			// Taken before ours, which drops a title nothing used: this is what it was for.
+			title := p.nextTitle.Swap(nil).fresh()
 			p.ours()
 			// Home Assistant converts what it sends to what the device plays; one it did not is not
 			// handed on to the music library, which would be given Home Assistant's own address.
-			p.stream.PlayOnly(c.MediaURL)
+			p.stream.PlayTitled(c.MediaURL, title)
 			p.OnPlay.Emit(c.MediaURL)
 		}
 	}
@@ -1121,6 +1200,7 @@ func (c *claim) playing() bool {
 // that could not be turned off. The remote's track is what the room hears now; this device's is over.
 func (p *Player) External() uint64 {
 	p.remoteLast.Store(true)
+	p.nextTitle.Store(nil)
 	n := p.remote.take()
 	p.stream.Stop()
 	p.refresh()
@@ -1155,6 +1235,21 @@ func (p *Player) RemoteGone() {
 // what the screen asks before it says what the room is playing.
 func (p *Player) ExternalPlaying() bool { return p.remote.playing() }
 
+// ExternalShowing is whether a remote holding the speaker has something for a screen to show: it is
+// playing, or has said nothing yet, or it is paused or stopped with its track still named. Music
+// Assistant goes on holding the speaker after its queue is emptied, with no track named and nothing
+// playing, and the page and the strip then have nothing left to offer (#150).
+func (p *Player) ExternalShowing() bool {
+	if !p.remote.playing() {
+		return false
+	}
+	if playing, _ := p.CarriedState(); playing {
+		return true
+	}
+	t, _ := p.extTrack.Load().(remoteTrack)
+	return t.Title != ""
+}
+
 // Carried reports whether what the room is hearing is somebody else's: a remote holds the speaker and is
 // the thing playing.
 //
@@ -1183,9 +1278,17 @@ func (p *Player) ExternalTrack(title, artist, album string) {
 	p.extTrack.Store(remoteTrack{Title: title, Artist: artist, Album: album})
 	if title != "" {
 		p.lastExt.Store(lastTrack{remoteTrack: remoteTrack{Title: title, Artist: artist, Album: album}})
-	} else if l, _ := p.lastExt.Load().(lastTrack); l.Title != "" && l.clearedAt.IsZero() {
-		l.clearedAt = time.Now()
-		p.lastExt.Store(l)
+	} else {
+		if l, _ := p.lastExt.Load().(lastTrack); l.Title != "" && l.clearedAt.IsZero() {
+			l.clearedAt = time.Now()
+			p.lastExt.Store(l)
+		}
+		// Music Assistant keeps a stopped queue's track named, and clears it once the queue is emptied:
+		// a track held from a pause is over then (#150). The clear that comes with a pause comes within
+		// lastFor of its hold (after it, for a pause from the screen), so it leaves that alone.
+		if h, _ := p.held.Load().(heldTrack); !h.at.IsZero() && time.Since(h.at) > lastFor {
+			p.held.Store(heldTrack{})
+		}
 	}
 	p.refresh()
 }
@@ -1288,6 +1391,28 @@ func (p *Player) Pause() {
 		}
 	}
 	p.stream.Pause()
+}
+
+// Audible reports whether music is what the room is hearing: this player's own track playing, or a
+// remote's track (Music Assistant over Sendspin) that this player carries and that says it is playing.
+// The stop word and the action button ask this, and Playing alone missed a remote's track: its audio
+// never goes through this player's stream, so "stop" over Music Assistant found nothing to stop.
+func (p *Player) Audible() bool {
+	if playing, _ := p.stream.Playing(); playing {
+		return true
+	}
+	playing, _ := p.RemotePlaying()
+	return playing && p.Carried()
+}
+
+// PauseAudible pauses what Audible found. A remote's track is the remote's to pause, so it is asked, as
+// the screen's own controls ask it (Transport); this player's own track is paused here (Pause).
+func (p *Player) PauseAudible() {
+	if p.remoteIsTheTrack() {
+		p.Transport(TransportPause)
+		return
+	}
+	p.Pause()
 }
 
 // stopOnPause holds the received sources that a pause here cannot reach (StopOnPause).
@@ -1502,6 +1627,13 @@ func (p *Player) PlayURLChecked(url string, within time.Duration) error {
 	return err
 }
 
+// PlayTitledChecked is PlayURLChecked for something that is not a station, like a news update: it plays
+// once and ends, named title on the screen, and is never handed to the music library.
+func (p *Player) PlayTitledChecked(url string, title Title, within time.Duration) error {
+	p.ours()
+	return p.stream.PlayTitledChecked(url, &title, within)
+}
+
 // ours marks what is about to play as this player's own, so a play or a pause goes to its own stream
 // rather than to a remote that has let go. Every path that starts local audio has to say so: remoteLast
 // is what decides where a transport command goes, and one left set sends the pause to a session that is
@@ -1512,6 +1644,8 @@ func (p *Player) PlayURLChecked(url string, within time.Duration) error {
 // with the house has to leave the group before anything of its own starts, or the house goes with it.
 func (p *Player) ours() {
 	p.remoteLast.Store(false)
+	// A title is for the next play_media; anything else starting first was not it (title.go).
+	p.nextTitle.Store(nil)
 	if p.remote.playing() {
 		p.OnTakeOver.Emit(struct{}{})
 	}
@@ -1652,7 +1786,7 @@ func (p *Player) Adjust(delta int) {
 		p.Mute(false)
 	}
 	p.Set(p.Volume() + delta)
-	speaker.Sound().Chime(speaker.ToneVolume)
+	speaker.Sound().Chime(speaker.VolumeSound())
 }
 
 // show lights the level as a clockwise arc, the leading segment dimmed by the fraction of a segment

@@ -39,3 +39,43 @@ func TestAgentRules(t *testing.T) {
 		}
 	}
 }
+
+// A pairing Home Assistant asked the proxy for is answered yes outside pairing mode, for that device
+// only, and only while it is under way.
+func TestAgentAllowsProxyPairing(t *testing.T) {
+	g := agent{pairing: func() bool { return false }}
+	if g.RequestAuthorization("/dev_bulb") == nil {
+		t.Fatal("accepted with nothing asked")
+	}
+	proxyPairingSet("/dev_bulb", true)
+	if g.RequestAuthorization("/dev_bulb") != nil || g.RequestConfirmation("/dev_bulb", 1) != nil {
+		t.Error("refused the pairing the proxy started")
+	}
+	if g.RequestAuthorization("/dev_phone") == nil {
+		t.Error("accepted another device")
+	}
+	proxyPairingSet("/dev_bulb", false)
+	if g.RequestAuthorization("/dev_bulb") == nil {
+		t.Error("still accepting after the pairing ended")
+	}
+}
+
+// A feature pairing one device of its own — the wall clock — gets that device through and nothing
+// else, until the window it opened closes.
+func TestAgentAllowsOneDevicePairing(t *testing.T) {
+	g := agent{pairing: func() bool { return false }}
+	done := AllowPairing("/dev_clock")
+
+	if g.RequestConfirmation("/dev_clock", 123456) != nil || g.RequestAuthorization("/dev_clock") != nil {
+		t.Error("refused the device the window was opened for")
+	}
+	if g.RequestAuthorization("/dev_phone") == nil {
+		t.Error("accepted another device")
+	}
+
+	done()
+	if g.RequestConfirmation("/dev_clock", 123456) == nil {
+		t.Error("still accepting after the window closed")
+	}
+	done() // idempotent: a caller may both defer it and call it early
+}

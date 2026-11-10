@@ -13,6 +13,18 @@ func optionLabel(english string) string {
 	switch english {
 	case "Nothing":
 		return tr("option_nothing")
+	case "Coming week":
+		return tr("option_coming_week")
+	case "Today only":
+		return tr("option_today_only")
+	case "Today or 12 hours":
+		return tr("option_today_or_12_hours")
+	case "3 hours":
+		return tr("option_3_hours")
+	case "6 hours":
+		return tr("option_6_hours")
+	case "12 hours":
+		return tr("option_12_hours")
 	case "Its words":
 		return tr("option_its_words")
 	case "The time and its words":
@@ -100,12 +112,20 @@ func optionLabel(english string) string {
 		return tr("option_coming_up")
 	case "Automatic":
 		return tr("option_automatic")
+	case "Normal":
+		return tr("option_normal")
+	case "Small":
+		return tr("ui_small")
+	case "Tiny":
+		return tr("ui_tiny")
 	case "Never":
 		return tr("option_never")
 	case "Always":
 		return tr("option_always")
 	case "Show":
 		return tr("option_show")
+	case "Above the strip":
+		return tr("option_above_the_strip")
 	case "Hide":
 		return tr("option_hide")
 	case "None":
@@ -172,6 +192,32 @@ func optionLabel(english string) string {
 		return tr("option_headphones_aux")
 	case "Speaker and headphones":
 		return tr("option_speaker_and_headphones")
+	case "Line":
+		return tr("ui_timer_style_line")
+	case "Ring":
+		return tr("ui_timer_style_ring")
+	case "Corner":
+		return tr("ui_timer_style_corner")
+	case "Banner":
+		return tr("ui_timer_style_banner")
+	case "Big":
+		return tr("ui_timer_style_big")
+	case "Old phone":
+		return tr("ui_call_ring_old_phone")
+	case "Chime":
+		return tr("ui_call_ring_chime")
+	case "Chimes":
+		return tr("ui_alarm_sound_chimes")
+	case "Beeps":
+		return tr("ui_alarm_sound_beeps")
+	case "Bells":
+		return tr("ui_alarm_sound_bells")
+	case "Gentle":
+		return tr("ui_alarm_sound_gentle")
+	case "Pulse":
+		return tr("ui_alarm_sound_pulse")
+	case "Your own":
+		return tr("ui_alarm_sound_own")
 
 	// The weather source the device itself offers; other sources are Home Assistant's names.
 	case "Home Assistant forecast":
@@ -201,7 +247,7 @@ func weekdayInitials() []string {
 
 func builtinOptionRow(id string) bool {
 	switch id {
-	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "timerstyle", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_month_details", "calpopallday", "calpopwhen",
+	case "photoevery", "clocktap", "alarmwords", "alarmrise", "clock", "clockpos", "weatherpos", "datecolor", "glancesize", "glancemusic", "camtime", "camfit", "cambands", "camshade", "answertime", "idledim", "timerstyle", "callring", "alarmsound", "turnstyle", "musicstrip", "atnight", "nightstyle", "radarsrc", "output", "cal_open", "cal_opens_on", "cal_dashboard_events", "cal_next_up_within", "cal_month_details", "cal_chip_size", "calpopallday", "calpopwhen",
 		"skin", "weather":
 		return true
 	}

@@ -44,7 +44,7 @@ func followPicker(demo bool) pickerView {
 		}
 	}
 	if len(entities) > 2 {
-		p.opts = append(p.opts, calendarsDone)
+		p.opts = append(p.opts, calendarsDone())
 	}
 	return p
 }
@@ -72,6 +72,9 @@ func followText(demo bool) string {
 	name := home.Get().FollowSource()
 	if demo && name != "None" {
 		return "Kitchen speaker"
+	}
+	if name == "None" {
+		return tr("option_none") // the stand-in for no player; a player's own name is left as it is
 	}
 	return name
 }

@@ -1,5 +1,9 @@
 package config
 
+import "errors"
+
+var errWakeMode = errors.New("wake word: choose either a wake call or realtime voice")
+
 // Wake is the wake word configuration, indexed by Home Assistant's wake word slot.
 type Wake struct {
 	Words []WakeWord `json:"words"`
@@ -157,10 +161,20 @@ func (w CommandWord) ThresholdAt() float64 {
 // WakeWord is one slot: which wake word listens there and how it behaves when it fires. An empty ID
 // is the slot switched off, which is also how detection is turned off altogether.
 type WakeWord struct {
+	// CallContact is a phone book contact, by its first name, that a wake of this slot calls in place
+	// of opening a turn, while the phone is idle (feature/voice). Empty, the default, is the usual
+	// assistant. The number stays in the phone book. Like Realtime, it is the device's own choice: never
+	// in a settings file, and never together with Realtime.
+	CallContact string `json:"call_contact,omitempty"`
+
 	ID string `json:"id"`
 
 	// Threshold is the score a detection has to reach. Per word, because models disagree on scale.
 	Threshold float64 `json:"threshold"`
+
+	// PlayingThreshold is the independent cutoff while echo cancellation is active. Zero means an
+	// older config: retain its original 0.10 allowance, including the 0.50 floor.
+	PlayingThreshold float64 `json:"playing_threshold,omitempty"`
 
 	Tone   Tone   `json:"tone"`
 	Effect string `json:"effect"`
@@ -204,10 +218,12 @@ type WakeWord struct {
 }
 
 const (
-	DefaultThreshold = 0.85
-	DefaultEffect    = "Pulse"
-	DefaultTone      = ToneHA
-	DefaultDelivery  = DeliveryWhole
+	DefaultThreshold    = 0.85
+	DefaultPlayingSlack = 0.10
+	MinWakeThreshold    = 0.50
+	DefaultEffect       = "Pulse"
+	DefaultTone         = ToneHA
+	DefaultDelivery     = DeliveryWhole
 
 	DefaultMaxListen = 15
 	DefaultMaxThink  = 90
@@ -219,6 +235,15 @@ const (
 	// measured, 384 gave 8 seams in a 13 second reply and 650 gave one.
 	DefaultBuffer = 650
 )
+
+// PlayingThresholdAt is the effective playback cutoff. Missing settings retain the old formula,
+// so an existing custom threshold keeps exactly its former behavior after an update.
+func (w WakeWord) PlayingThresholdAt() float64 {
+	if w.PlayingThreshold > 0 {
+		return w.PlayingThreshold
+	}
+	return max(w.Threshold-DefaultPlayingSlack, MinWakeThreshold)
+}
 
 // DefaultWakeWord is a slot nobody has set: switched off, and everything else ready for when it is.
 func DefaultWakeWord() WakeWord {
@@ -250,6 +275,20 @@ func (w Wake) Slot(n int) WakeWord {
 		return DefaultWakeWord()
 	}
 	return w.Words[n]
+}
+
+// RepeatedWord is a wake word set in more than one slot, or empty when there is none. The same word
+// in two slots fires both at once, and only the slot that fires first answers, so which assistant gets
+// the request is down to chance (#344).
+func (w Wake) RepeatedWord() string {
+	for i, a := range w.Words {
+		for _, b := range w.Words[i+1:] {
+			if a.ID != "" && a.ID == b.ID {
+				return a.ID
+			}
+		}
+	}
+	return ""
 }
 
 // Slots is the first n slots, one entry each whether or not any has been set.
@@ -332,12 +371,40 @@ type WakeWriter struct {
 	slot int
 }
 
+// CallContact chooses the contact a wake of the slot calls, or none with "". Refused for a slot set for
+// realtime voice, checked in the same update as it is written.
+func (w WakeWriter) CallContact(v string) error {
+	if w.slot < 0 {
+		return errSlot(w.slot)
+	}
+	conflict := false
+	err := w.st.Update(func(c *Config) {
+		for len(c.Wake.Words) <= w.slot {
+			c.Wake.Words = append(c.Wake.Words, DefaultWakeWord())
+		}
+		word := &c.Wake.Words[w.slot]
+		if v != "" && word.Realtime {
+			conflict = true
+			return
+		}
+		word.CallContact = v
+	})
+	if err == nil && conflict {
+		return errWakeMode
+	}
+	return err
+}
+
 func (w WakeWriter) ID(v string) error {
 	return w.word(func(word *WakeWord) { word.ID = v })
 }
 
 func (w WakeWriter) Threshold(v float64) error {
 	return w.word(func(word *WakeWord) { word.Threshold = v })
+}
+
+func (w WakeWriter) PlayingThreshold(v float64) error {
+	return w.word(func(word *WakeWord) { word.PlayingThreshold = v })
 }
 
 func (w WakeWriter) Tone(v Tone) error {
@@ -415,6 +482,12 @@ const (
 	// DeliveryStream takes the reply over the API as it is generated. It starts sooner and it can gap:
 	// the chunks arrive at about the rate they play, so any hiccup splices silence into a word.
 	DeliveryStream Delivery = "stream"
+
+	// DeliveryEarly fetches the reply from its url as soon as Home Assistant says it can be, while the
+	// agent is still writing it, and plays it as it arrives. It starts soonest, and it can pause where
+	// the agent is slower than the speech, mostly between sentences, since that is where text to
+	// speech cuts it.
+	DeliveryEarly Delivery = "early"
 )
 
 // Label is how the setting is shown.
@@ -424,6 +497,8 @@ func (d Delivery) Label() string {
 		return "Whole file"
 	case DeliveryStream:
 		return "Streamed"
+	case DeliveryEarly:
+		return "Early"
 	}
 	return string(d)
 }

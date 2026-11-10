@@ -35,6 +35,11 @@ type Screen struct {
 	// does, until the room has been quiet a while. Off, a tap on the night light does nothing.
 	NightTapLifts bool `json:"night_tap_lifts,omitempty"`
 
+	// NightInfo keeps the Next up strip, the glance chips and notifications on the night clock, drawn in
+	// its dim red at the night brightness. Off, the night clock is the time alone and a notification
+	// waits for a touch. (#397)
+	NightInfo bool `json:"night_info,omitempty"`
+
 	// IgnoreRoomLights has the screen's light in Home Assistant described as a configuration entity, so
 	// it stands apart from the room's lights, and the Screen power switch is what a voice names
 	// (feature/display, screen_room.go). Off, the usual, the light stands with the room's lights as it
@@ -79,7 +84,8 @@ type Screen struct {
 	// modes; "light" for LightTheme; "auto" for the room's light to choose (display/theme_mode.go).
 	ThemeMode string `json:"theme_mode,omitempty"`
 
-	// Welcomed is the first-run card having been seen and put away.
+	// Welcomed is the welcome card having been put away: on a Show from before first run (config.FirstRun)
+	// it says that Show is set up, and finishing first run sets it too.
 	Welcomed bool `json:"welcomed,omitempty"`
 
 	// Clock24 shows times on the screen as 15:04 instead of 3:04 PM.
@@ -117,11 +123,23 @@ type Screen struct {
 	// WeatherPosition is where the home screen's weather sits: empty for the top left, "top-right"
 	// (display/clock_layout.go). The Show's only.
 	WeatherPosition string `json:"weather_position,omitempty"`
+	// GlanceChipSize is the size of the glance strip's text on the clock page: empty for Automatic (the
+	// small face, the tiny one when that fits more chips), "small" or "tiny" to keep to one
+	// (display/render_glance.go).
+	GlanceChipSize string `json:"glance_chip_size,omitempty"`
+	// GlanceWithMusic is where the glance chips go while the music strip is up: empty to hide them, as
+	// they always did, or "above" for a row over the strip (display/render.go).
+	GlanceWithMusic string `json:"glance_with_music,omitempty"`
 
 	// ClockStyle is how the home screen's clock looks all day: empty for the classic face, or "big",
 	// "flip", "led", "analog", "words", "sun", "dashboard", "binary", "world", "agenda", "glow", "nixie",
 	// "stack" or "overlap" (display/clock_style.go). The night clock keeps its own look.
 	ClockStyle string `json:"clock_style,omitempty"`
+
+	// IdleScreen is the custom screen that stands in for the clock while nothing else is on the
+	// screen: empty for the clock itself, or a custom screen's name (display/custom_screens.go). A name
+	// this device does not have is the clock.
+	IdleScreen string `json:"idle_screen,omitempty"`
 
 	// WorldClocks are the World style's places, as time zone names ("Europe/London"); none for its
 	// own three.
@@ -158,6 +176,13 @@ type Screen struct {
 	// and phone contacts to call. Off until somebody wants it, so an update changes nobody's screen.
 	CallButton bool `json:"call_button,omitempty"`
 
+	// CallScreen is how a call being placed or up is drawn on the Show: empty for a page of its own
+	// over everything, as it always was, so an update changes nobody's screen; "button" for a red Hang
+	// up button where the Call button is, over whatever page is showing; "details" for that button with
+	// who the call is with and how long it has lasted beside it. A call ringing keeps its page, and so
+	// does a Drop In.
+	CallScreen string `json:"call_screen,omitempty"`
+
 	// WeatherStill keeps the weather page's sky still: no rain or snow falling across it. The
 	// animation is on unless somebody turns it off, so a saved file without this is animated.
 	WeatherStill bool `json:"weather_still,omitempty"`
@@ -166,9 +191,16 @@ type Screen struct {
 	// somebody wants it, so an update changes nobody's screen.
 	MuteRingSubtle bool `json:"mute_ring_subtle,omitempty"`
 
+	// CameraDotWatchedOnly lights the Spot's camera dot only while a picture leaves the device, not
+	// whenever the camera runs (#431). NoIdleRing leaves out the Spot's gray rim while nothing else is
+	// on it. Both off until somebody wants them, so an update changes nobody's screen.
+	CameraDotWatchedOnly bool `json:"camera_dot_watched_only,omitempty"`
+	NoIdleRing           bool `json:"no_idle_ring,omitempty"`
+
 	// MusicStrip is how many seconds music plays on the full now-playing page before the Show goes
 	// back to its clock with the music in a strip at the foot; none keeps the full page.
-	MusicStrip int `json:"music_strip,omitempty"`
+	MusicStrip       int  `json:"music_strip,omitempty"`
+	ModernNowPlaying bool `json:"modern_now_playing,omitempty"`
 
 	// Language is which words the screen listens for in a turn — "en", "de", "es", "fr", "it", "nl",
 	// "pt", "ru", "ja" — empty for all of them. It has nothing to do with what the assistant understands or
@@ -191,7 +223,18 @@ type Screen struct {
 	// Font is the font the screen's words are drawn in: empty for Go, the screen's own, or one of the
 	// others lib/fonts offers ("inter", "comicneue", ...). One this build does not have is Go.
 	Font string `json:"font,omitempty"`
+
+	// TextSize is how large the screen's words are drawn, in percent of the size the layout gives them;
+	// 0 for the device's own (display.textSize). The boxes they sit in keep their size.
+	TextSize int `json:"text_size,omitempty"`
 }
+
+// The text sizes TextSize may be other than 0: a size from a newer build or a hand-edited file is held
+// to them rather than drawing words too small to read or too big for any box.
+const (
+	TextSizeLeast = 50
+	TextSizeMost  = 200
+)
 
 // DefaultTheme is the palette a new device comes up in.
 const DefaultTheme = "Ember"
@@ -288,6 +331,10 @@ func (w ScreenWriter) NightLight(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightLight = v })
 }
 
+func (w ScreenWriter) NightInfo(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NightInfo = v })
+}
+
 func (w ScreenWriter) NightTapLifts(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NightTapLifts = v })
 }
@@ -373,8 +420,23 @@ func (w ScreenWriter) Font(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.Font = v })
 }
 
+// TextSize saves the size of the screen's words in percent, held to TextSizeLeast..TextSizeMost; 0 or
+// less goes back to the device's own.
+func (w ScreenWriter) TextSize(v int) error {
+	if v > 0 {
+		v = min(max(v, TextSizeLeast), TextSizeMost)
+	} else {
+		v = 0
+	}
+	return w.st.Update(func(c *Config) { c.Screen.TextSize = v })
+}
+
 func (w ScreenWriter) ClockStyle(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.ClockStyle = v })
+}
+
+func (w ScreenWriter) IdleScreen(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.IdleScreen = v })
 }
 
 func (w ScreenWriter) WorldClocks(v []string) error {
@@ -388,6 +450,14 @@ func (w ScreenWriter) DateColor(v string) error {
 
 func (w ScreenWriter) WeatherPosition(v string) error {
 	return w.st.Update(func(c *Config) { c.Screen.WeatherPosition = v })
+}
+
+func (w ScreenWriter) GlanceChipSize(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.GlanceChipSize = v })
+}
+
+func (w ScreenWriter) GlanceWithMusic(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.GlanceWithMusic = v })
 }
 
 func (w ScreenWriter) DimAfterMinutes(v int) error {
@@ -418,6 +488,14 @@ func (w ScreenWriter) MuteRingSubtle(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.MuteRingSubtle = v })
 }
 
+func (w ScreenWriter) CameraDotWatchedOnly(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.CameraDotWatchedOnly = v })
+}
+
+func (w ScreenWriter) NoIdleRing(v bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.NoIdleRing = v })
+}
+
 func (w ScreenWriter) NoStyleSwipe(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.NoStyleSwipe = v })
 }
@@ -430,8 +508,16 @@ func (w ScreenWriter) CallButton(v bool) error {
 	return w.st.Update(func(c *Config) { c.Screen.CallButton = v })
 }
 
+func (w ScreenWriter) CallScreen(v string) error {
+	return w.st.Update(func(c *Config) { c.Screen.CallScreen = v })
+}
+
 func (w ScreenWriter) MusicStrip(seconds int) error {
 	return w.st.Update(func(c *Config) { c.Screen.MusicStrip = max(seconds, 0) })
+}
+
+func (w ScreenWriter) ModernNowPlaying(on bool) error {
+	return w.st.Update(func(c *Config) { c.Screen.ModernNowPlaying = on })
 }
 
 func (w ScreenWriter) Language(v string) error {

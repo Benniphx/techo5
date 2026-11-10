@@ -104,6 +104,12 @@ func brainSection(w http.ResponseWriter, token string) {
 	 <label for="key">API key (replace it when changing providers)</label>
 	 <input id="key" name="key" type="password" value="" placeholder="%s" autocomplete="off">
 	 <p><label><input type="checkbox" name="nokey" value="yes" style="width:auto"> Remove the key</label></p>
+	 <label for="news">News updates</label>
+	 <textarea id="news" name="news" rows="3" maxlength="2000" placeholder="City Radio https://example.com/news.xml">%s</textarea>
+	 <p class="note">Asked for the news, the assistant plays the newest episode of a news podcast. ABC News
+	  Update, Fox News Hourly Update and NPR News Now are built in. Add others here, one a line: a name,
+	  then the podcast's feed address. The first one here plays when no source is named; with none here,
+	  the assistant asks which.</p>
 	 <label for="prompt">Anything the assistant should know</label>
 	 <textarea id="prompt" name="prompt" rows="3" maxlength="2000">%s</textarea>
 	 <p><button type="submit">Save</button></p></form>
@@ -118,7 +124,7 @@ func brainSection(w http.ResponseWriter, token string) {
 		html.EscapeString(b.RealtimeModel), html.EscapeString(b.RealtimeVoice),
 		selected(b.RealtimeTools == ""), selected(b.RealtimeTools == "read"),
 		html.EscapeString(b.Language), keyHint(b.Key != ""),
-		html.EscapeString(b.Prompt))
+		html.EscapeString(b.News), html.EscapeString(b.Prompt))
 }
 
 func keyHint(set bool) string {
@@ -145,6 +151,7 @@ func saveBrain(r *http.Request) string {
 		Model:         v("model"),
 		Search:        strings.TrimRight(v("search"), "/"),
 		Reader:        strings.TrimRight(v("reader"), "/"),
+		News:          strings.TrimSpace(strings.ReplaceAll(r.PostFormValue("news"), "\r", "")),
 		Prompt:        strings.TrimSpace(r.PostFormValue("prompt")),
 	}
 	if b.Mode != config.BrainHomeAssistant && b.Mode != config.BrainDirect && b.Mode != config.BrainRealtime {
@@ -175,6 +182,9 @@ func saveBrain(r *http.Request) string {
 		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return "the page reader should be an address like http://192.168.1.20:8891"
 		}
+	}
+	if _, err := b.NewsSources(); err != nil {
+		return "news updates: " + err.Error()
 	}
 	if b.Mode == config.BrainDirect && (b.STT == "" || b.TTS == "" || b.LLM == "") {
 		return "answering directly needs all three: speech to text, text to speech and the chat model"

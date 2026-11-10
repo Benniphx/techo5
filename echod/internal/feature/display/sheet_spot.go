@@ -151,10 +151,15 @@ func adaptRows(rows []settingRow, sv sheetView) []settingRow {
 			row.sub = tr("ui_not_the_music_s")
 		case row.id == "musicstrip":
 			continue // the strip is the Show's; the round face has no clock page under it to share
+		case row.id == "musiclayout":
+			continue // the layout is for the rectangular page
 		case row.id == "lyrics":
 			continue // the words need the Show's page; the round face has room for the song alone
 		case row.id == "wakesens":
 			row.label = tr("spot_threshold")
+		case row.id == "wakesensplaying":
+			// Under Threshold on the round face, "Playing" says which it is in the room there is.
+			row.label, row.sub = tr("drawer_playing"), tr("wake_word_threshold_playing")
 		case row.id == "output":
 			row.sub = tr("ui_with_headphones_in")
 		case row.id == "sendspin":
@@ -162,16 +167,16 @@ func adaptRows(rows []settingRow, sv sheetView) []settingRow {
 		case row.id == "btsc":
 			row.label, row.sub = tr("ui_secure_connections"), tr("ui_off_if_a_phone_pairs_then_drops")
 		case row.id == "screenweb":
-			row.label = "Screen on network"
+			row.label = tr("screen_on_network")
 		case row.id == "camweb":
-			row.label = "Camera on network"
+			row.label = tr("camera_on_network")
 		case row.id == "talkback":
 			row.label, row.sub = tr("ui_talk_to_cameras"), tr("ui_talk_on_camera_page")
 		case row.id == "e.days":
 			row.label = ""
 		case row.id == "updates":
 			check := settingRow{id: "updatecheck", label: tr("ui_check_for_updates"), sub: row.sub, kind: ctlButton, button: row.button}
-			row.label, row.sub, row.button = "Update channel", "", ""
+			row.label, row.sub, row.button = tr("update_channel"), "", ""
 			out = append(out, row, check)
 			continue
 		case row.kind == ctlChoice:
@@ -210,10 +215,11 @@ func spotFaces(k fontKey) *sheetFaces {
 	if fc, ok := spotFaceCache.faces[k]; ok {
 		return fc
 	}
-	f := func(bold bool, size float64) font.Face { return fontFace(k.name, bold, size) }
+	f := func(bold bool, size float64) font.Face { return k.face(bold, size) }
 	fc := &sheetFaces{
 		header: f(true, 30), label: f(false, 24), labelBold: f(true, 24), sub: f(false, 16),
 		value: f(false, 20), nav: f(false, 20), navBold: f(true, 20), button: f(true, 19),
+		labelSm: f(false, 21), labelBoldSm: f(true, 21), valueSm: f(false, 18),
 	}
 	spotFaceCache.faces = roomFor(spotFaceCache.faces, k)
 	spotFaceCache.faces[k] = fc
@@ -328,7 +334,7 @@ func (r *roundRenderer) cardButtons(actions []headerAction) {
 	if len(buttons) == 1 && len(actions) > 0 {
 		a := actions[0]
 		if a.id == "add" {
-			a.label = "+  Add"
+			a.label = tr("ui_add_alarm")
 		}
 		buttons = append(buttons, a)
 	}
@@ -479,7 +485,7 @@ func (d *Display) sheetView(now time.Time) sheetView {
 	st.version = layout.Version
 	st.night = cmpOr(c.Screen.Night, defaultNight)
 	st.address = deviceAddress()
-	st.wifiName = "Connected"
+	st.wifiName = tr("wifi_connected")
 	if st.address == "" || st.address == "-" {
 		st.wifiName = tr("not_connected")
 	}

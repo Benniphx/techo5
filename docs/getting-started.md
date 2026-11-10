@@ -20,12 +20,13 @@ The model number is on the bottom of the device, or in the Alexa app under the d
 | <img src="images/badges/rook.png" alt="" width="36" align="absmiddle"> **Echo Spot, 1st gen** (2017) | `rook` | VN94DQ | [TECHO5 Spot](https://github.com/HuskerMinion/techo5-spot) | Moderate: the unlock and LineageOS by hand, then a one-command installer |
 | <img src="images/badges/checkers.png" alt="" width="36" align="absmiddle"> **Echo Show 5, 1st gen** (2019) | `checkers` | H23K37 | [TECHO5](https://github.com/HuskerMinion/techo5) | Moderate: the unlock and LineageOS by hand, then the same one-command installer |
 | <img src="images/badges/crown.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 1st gen** (2019) | `crown` | C7H6N3 | [TECHO5](https://github.com/HuskerMinion/techo5) | Moderate: the unlock and LineageOS by hand, then the same one-command installer |
+| <img src="images/badges/athena.png" alt="" width="36" align="absmiddle"> **Echo Show 8, 2nd gen** (2021) | `athena` | A8H3N2 | [TECHO5](https://github.com/HuskerMinion/techo5) | Harder: the saiyaku-athena unlock, then `install-athena.py` from TWRP, see [install-athena.md](install-athena.md) |
+| **Skylight Calendar 15** | `150-CAL` | | [TECHO5](https://github.com/HuskerMinion/techo5) | Different: no unlock, adb is open on its stock firmware; `install-skylight.py`, see [install-skylight.md](install-skylight.md) |
 
-All three Shows install with the same command and run the same build, which tells them apart when it
+All three LineageOS-based Shows (the Show 5 1st and 2nd gen and the Show 8 1st gen) install with the same command and run the same build, which tells them apart when it
 starts; the installer picks each one's boot image out of the release. The Show 5 1st gen has been
-tested end to end, though on one unit so far. The Show 8 is newer still: it has been through an
-install, a slot update and a reboot on one unit, with the screen, microphones, wake word, speaker,
-camera, lens cover and mute latch all working, and nothing else has run on it for long. Two things a
+tested end to end, though on one unit so far. The Show 8 1st gen has the screen, microphones, wake word, speaker,
+camera, lens cover and mute latch all working, and two of them are in daily use. Two things a
 Show 8 owner should know before starting. The 1st gen's label says C7H6N3; the 2nd gen (2021) looks
 almost the same, says A8H3N2, and has its own install: it can be unlocked (thanks to R0rt1z2 on
 XDA) and runs TECHO5 on its own kernel, see [install-athena.md](install-athena.md). When buying second-hand go by that label, not the
@@ -244,7 +245,7 @@ Amazon's sound tuning files, and the volume curve is a first guess.
 The 2018 Echo Dot 3rd gen (model D9N29T, `donut`) is a different machine from the Dot 2, with four
 microphones and another chip, but it takes the same release, installer and updates, with a build of
 the daemon of its own. It keeps its own kernel, and Bluetooth comes as modules built for it.
-Supported, tested on one unit so far. The 2019 refresh and the Dot with a clock have no known unlock.
+Supported, tested on two units so far. The 2019 refresh and the Dot with a clock have no known unlock.
 
 It's unlocked with the kamakiri-donut kit, over wires soldered to test pads under the base. TECHO5
 goes where the kit put TWRP (`swdl`, which the unlock boots as recovery), and its store is on
@@ -315,6 +316,14 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
    *Check:* the round screen shows the TECHO5 clock.
 7. **Add it to Home Assistant**: see below.
 
+## Giving a device to someone else
+
+Every installer (`install-show.py`, `install-athena.py`, `install-skylight.py`, `install-dot.py`, `install-spot.py`) takes `--for-someone-else`; a Dot installed that way gets its network over Bluetooth with Improv. It asks for no Wi-Fi network, name or key, and writes none, and the device's first start clears anything an earlier owner left (the list is in the [setup guide](setup.md#giving-a-device-to-someone-else)). It leaves a small marker on the device, which then starts its own setup (on a Show the screen shows it as soon as the install ends, and it can be unplugged and given away as it is; the others start it the next time they are powered on). The new owner's Home Assistant can add it with nothing typed. Backups, the image and the first boot are the same as usual. It cannot be used with `--name`, `--wifi`, `--key-file` or `--ssh-key`.
+
+```
+python3 tools/install-show.py --for-someone-else
+```
+
 ## After installing (every device)
 
 1. **Add it.** Home Assistant discovers it as an ESPHome device (Settings → Devices & services).
@@ -325,7 +334,9 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
    **Allow the device to perform Home Assistant actions**. The radio favorites, phone call events and
    some screen features need it.
 3. **Pick a wake word** on the device's Assist satellite: Okay Nabu, Hey Jarvis, Hey Mycroft, Alexa,
-   and eight more (Computer, Jarvis, Home Assistant and others), the same on every device.
+   and eight more (Computer, Jarvis, Home Assistant and others), the same on every device. The first
+   four are the light ones; the other eight take about seven times the processor time (see the
+   [voice settings](setup.md#7-voice)).
 4. **Updates** from then on come from Home Assistant's update card: signed releases install into the
    spare slot and roll back on their own if they don't come up healthy. **Update channel** in Home
    Assistant is *stable* unless you change it; *dev* follows test builds, for a device being worked
@@ -336,6 +347,9 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
    - [phone calls](phone.md) through your own SIP provider;
    - SSH (keys only) through the `ssh_keys` action and the SSH switch;
    - cameras, radio lists and weather from the device's Home Assistant actions (see each README);
+   - [to-do and shopping lists](setup.md#to-do-and-shopping-lists) on a Show, the Skylight or the Panel;
+   - the [baby monitor](setup.md#the-baby-monitor), on a device with microphones;
+   - one settings dashboard for all your devices ([ha-dashboard.md](ha-dashboard.md#a-settings-dashboard-for-all-your-devices));
    - multi-room audio through [Music Assistant](https://www.music-assistant.io/) (each device is a
      Sendspin player).
 
@@ -347,13 +361,14 @@ is built on, runs on the unlocked Dot's Fire OS 6 with its own installer, and is
 
    That is a deliberate choice for a device on a home network, not an oversight, and it is the one
    thing on from the start that trusts the network rather than a key. AirPlay and Spotify Connect, on
-   the Show and the Dot, trust it the same way, but only once you turn them on. If your Wi-Fi has
+   every device but the Panel app, trust it the same way, but only once you turn them on. If your Wi-Fi has
    guests on it, or anything you would not hand a speaker to, turn the player off per device with the
    Sendspin switch in Home Assistant, and leave those two off.
 
    Inbound, a device takes nothing on Wi-Fi but what it serves: the Home Assistant API, mDNS, SSH
    (only while its switch is on), Sendspin, the setup page and its views, and AirPlay and Spotify
-   Connect (only while theirs are).
+   Connect (only while theirs are). The Snapcast client listens on nothing: it dials the server it is
+   given, only while its switch is on.
 
 Next: **[Setting it up](setup.md)**, for photos, weather, cameras, music and the night settings.
 
@@ -392,7 +407,10 @@ pipeline rather than the device: Home Assistant is replying in text only.
    plays it, *Streamed* plays it as it arrives. Whole file is the default because it survives a slow
    network better, but it needs to be able to reach the address Home Assistant gives it for the audio.
    Where it cannot, the device falls back to the streamed copy on its own (releases from 2026-09-20
-   on), and setting Reply delivery to **Streamed** makes that permanent.
+   on), and setting Reply delivery to **Streamed** makes that permanent. *Early* fetches the reply
+   while the agent is still writing it, when Home Assistant offers that (an agent that streams its
+   answer): long answers start sooner, at the cost of a possible pause where the agent is slower
+   than the speech.
 5. **Home Assistant on HTTPS with its own certificate.** If Home Assistant's address is `https://` with
    a self-signed certificate, or one issued for a different name than the one the device is given,
    the device refuses the download and the log says `x509: certificate`. The fix that keeps checking
@@ -413,12 +431,14 @@ pipeline rather than the device: Home Assistant is replying in text only.
 |---|---|---|---|
 | Unlock: Show 5 (amonet-cronos) | Yes (fastbrick) | Yes | Use a Linux live USB |
 | Unlock: Dot (amonet-biscuit) | Yes (`fastbrick.bat`/`fastbrick.ps1`, in the release ZIP) | Yes | Use a Linux live USB |
-| Unlock: Spot (amonet-rook) | Yes (fastbrick, as on the bench unit) | Yes | Use a Linux live USB |
+| Unlock: Spot (amonet-rook) | Yes (fastbrick, as on the bench unit) | Yes | A Linux live USB, or `fastboot -S 1G` (below) |
 | LineageOS (Show 5, Spot) | Yes | Yes | Yes (TWRP and `adb` only) |
 | Install TECHO5 on the Show 5 (`install-show.py`) | **Yes** | **Yes** | **Yes** |
 | Fire OS 6574.1, root, adb key (Dot) | Yes | Yes | Yes |
 | Install TECHO5 Dot (`install-dot.py`) | **Yes** | **Yes** | **Yes** |
 | Install TECHO5 Spot (`install-spot.py`) | **Yes** | **Yes** | **Yes** |
+| Install TECHO5 on the Show 8 2nd gen (`install-athena.py`) | **Yes** | **Yes** | **Yes** |
+| Install TECHO5 on the Skylight (`install-skylight.py`) | **Yes** | **Yes** | **Yes** |
 | Updates after that | Home Assistant | Home Assistant | Home Assistant |
 
 **On Linux:**
@@ -430,6 +450,16 @@ pipeline rather than the device: Home Assistant is replying in text only.
 - `screen` is built in, for working on a unit by hand: `screen /dev/cu.usbmodem* 115200`.
 - The amonet BootROM steps need Linux. A live USB (Ubuntu) is more reliable than a virtual machine:
   the exploit re-enumerates USB mid-way, and VM USB passthrough often loses the device.
+- The Spot's unlock also works straight from a Mac with Apple Silicon, tested on one unit
+  ([#394](https://github.com/HuskerMinion/techo5/issues/394)). Its `fastbrick.img` is 32 bytes over the
+  download size the Spot reports, so current `fastboot` refuses it; `-S 1G` makes it send the image
+  whole. Use Google's current platform-tools, not an old Intel build under Rosetta. In the amonet-rook
+  folder, with the Spot where `fastbrick.sh` expects it, run this loop, and stop it with Ctrl+C once
+  the Spot shows TWRP (the first try is usually refused, a later one hangs and then TWRP comes up):
+
+  ```
+  while true; do perl -e 'alarm 8; exec @ARGV' fastboot -S 1G flash brick bin/fastbrick.img; sleep 1; done
+  ```
 - The installers work from Terminal once the device is unlocked (and, for the Show 5 and the Spot,
   on LineageOS).
 
@@ -444,6 +474,7 @@ pipeline rather than the device: Home Assistant is replying in text only.
   with a USB serial console, if a boot doesn't come up healthy. The Show and Spot keep TWRP; the
   Dot keeps a copy of it (see [Going back to TWRP or Fire OS](#going-back-to-twrp-or-fire-os)). Each
   repository's docs describe the way back to LineageOS or Fire OS.
+- **The installer stops on a checksum:** A download that fails its checksum is tried once more; if it fails again, the error says how many bytes arrived, to compare with the size on the release page (fewer means the connection dropped; the same number means antivirus or a proxy changed the file).
 - Ask in the project's GitHub issues, with the device, the step and what it printed.
 
 ## Credits

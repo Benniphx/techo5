@@ -34,6 +34,8 @@
 # <rootfs.tar.gz> comes from tools/linux/deploy-rootfs.sh --out, with
 # DEVICE_OVERLAY=tools/linux/skylight/overlay EXTRA_PACKAGES=busybox-extras.
 set -euo pipefail
+# Modes come from the repo, not from the host's umask (Ubuntu's default 002 gives group write).
+umask 022
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 LINUX=$(cd "$HERE/.." && pwd)
@@ -100,6 +102,7 @@ lf() { sed 's/\r$//' "$1" > "$2"; chmod "$3" "$2"; }
 lf "$HERE/init" "$R/init" 755
 install -d "$R/usr/local/sbin" "$R/usr/local/bin" "$R/etc/profile.d"
 lf "$LINUX/slotctl" "$R/usr/local/sbin/slotctl" 755
+lf "$LINUX/bootctl" "$R/usr/local/sbin/bootctl" 755
 lf "$LINUX/techo5-lib.sh" "$R/lib/techo5-lib.sh" 644
 lf "$HERE/rescue-profile.sh" "$R/etc/profile.d/techo5-rescue.sh" 644
 [ -n "$FBPROBE" ] && install -m 755 "$FBPROBE" "$R/usr/local/bin/fbprobe"

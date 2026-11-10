@@ -129,7 +129,7 @@ func (d *Display) showsNowPlaying() bool {
 	// A stream this player is only carrying is still what the room is doing, so the face is its as
 	// much as the radio's: the state it draws was already being worked out and only this gate was
 	// missing, because a carried stream never satisfies Playing().
-	if media.Get().ExternalPlaying() {
+	if media.Get().ExternalShowing() {
 		return true
 	}
 	if _, _, _, ok := media.Get().Held(); ok {
@@ -202,7 +202,7 @@ func (r *roundRenderer) nowPlayingFace(s roundScene) {
 	if s.paused {
 		label = tr("ui_paused")
 	}
-	label = clip(r.label, r, label+" · "+strings.ToUpper(station), 330)
+	label = clip(r.label, r, label+" · "+upper(station), 330)
 	r.centered(r.label, label, 304, colMusic)
 	if rd.Title != "" {
 		r.centered(r.title, clip(r.title, r, rd.Title, 350), 340, colText)
@@ -274,7 +274,7 @@ func (r *roundRenderer) radioList(s roundScene) {
 	sel := min(max(s.radioSel, 0), len(rows)-1)
 	name := func(i int) string {
 		if rows[i] == stopRow {
-			return "Stop the music"
+			return tr("drawer_stop_music")
 		}
 		return rows[i]
 	}
@@ -293,14 +293,14 @@ func (r *roundRenderer) radioList(s roundScene) {
 	if sel+1 < len(rows) {
 		r.centered(r.body, clip(r.body, r, name(sel+1), 300), max(y+14, 318), colDim)
 	}
-	hint := "turn · tap to play"
+	hint := tr("drawer_turn_tap_to_play")
 	if rows[sel] == stopRow {
-		hint = "turn · tap to stop"
+		hint = tr("drawer_turn_tap_to_stop")
 		if grouped {
-			hint = "turn · tap to stop all rooms"
+			hint = tr("drawer_turn_tap_to_stop_all_rooms")
 		}
 	}
-	r.centered(r.small, hint, 392, colDim)
+	r.centered(r.small, clip(r.small, r, hint, chord(382)-56), 392, colDim)
 
 	// Where in the list, round the ring.
 	const from, span = 1.25 * math.Pi, 1.5 * math.Pi
@@ -318,12 +318,12 @@ func (r *roundRenderer) radioList(s roundScene) {
 func (r *roundRenderer) sourceButtons(rd home.Radio) {
 	sources := home.RadioSources()
 	if len(sources) < 2 {
-		r.centered(r.label, strings.ToUpper(home.SourceLabel(rd.Source)), 118, colMusic)
+		r.centered(r.label, upper(home.SourceLabel(rd.Source)), 118, colMusic)
 		return
 	}
 	for i, src := range sources {
 		x0, x1 := sourceButton(i, len(sources))
-		name := shortSource(src)
+		name := clip(r.label, r, shortSource(src), x1-x0-32)
 		cx := (x0 + x1) / 2
 		if src == rd.Source {
 			r.line(float64(x0+14), sourceY, float64(x1-14), sourceY, 30, colMusic)
@@ -362,11 +362,11 @@ func sourceAt(x, y int) string {
 func shortSource(src string) string {
 	switch src {
 	case "local":
-		return "Local"
+		return tr("ui_local")
 	case "popular":
-		return "Popular"
+		return tr("ui_popular")
 	}
-	return "Favorites"
+	return tr("drawer_favorites")
 }
 
 // clip shortens a line to fit width pixels in face.
@@ -433,9 +433,9 @@ func (r *roundRenderer) radarFace(s roundScene) {
 	}
 	drawPlaces(r.dst, r.small, places, keep, boxIn, 6)
 
-	label := "Radar " + clockHM(f.At.Local())
+	label := tr("ui_radar") + " " + clockHM(f.At.Local())
 	if i == n-1 {
-		label += " (latest)"
+		label += " (" + tr("ui_radar_latest") + ")"
 	}
 	w := r.width(r.label, label)
 	r.line(float64(center-w/2-10), 62, float64(center+w/2+10), 62, 32, color.RGBA{0, 0, 0, 160})

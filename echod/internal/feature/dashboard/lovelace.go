@@ -3,9 +3,11 @@
 package dashboard
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"html"
+	"image/color"
 	"math"
 	"regexp"
 	"strconv"
@@ -138,8 +140,16 @@ func (l *lovelaceSource) sections(lk look) []Section {
 	var out []Section
 	for _, nodes := range sects {
 		var blocks []Block
+		under := lk
+		under.room = ""
 		for _, n := range nodes {
-			blocks = append(blocks, n.blocks(lk)...)
+			got := n.blocks(under)
+			for _, b := range got {
+				if b.Heading != "" {
+					under.room = b.Heading
+				}
+			}
+			blocks = append(blocks, got...)
 		}
 		// Tiles one after another make one grid, however many cards they came from: a section of
 		// tile cards is one grid in Home Assistant too.
@@ -260,10 +270,10 @@ func (c *compiler) cardItself(card raw) node {
 		if title == "" {
 			title = str(card, "title")
 		}
-		return headingNode{text: c.render(title, ""), sub: c.render(str(card, "subtitle"), "")}
+		return headingNode{text: c.render(title, ""), sub: c.render(str(card, "subtitle"), ""), color: cardColorOf(card)}
 
 	case kind == "markdown":
-		return textNode{title: c.render(str(card, "title"), ""), body: c.render(str(card, "content"), "")}
+		return textNode{title: c.render(str(card, "title"), ""), body: c.render(str(card, "content"), ""), color: cardColorOf(card)}
 
 	case kind == "entities":
 		return c.rowsCard(card)
@@ -372,7 +382,9 @@ func (c *compiler) cardItself(card raw) node {
 		if e == "" {
 			// A button that only runs something: its name, its icon, what it runs.
 			if a := actionOf(card, ""); a != nil {
-				return listNode{items: []tileItem{{name: str(card, "name"), icon: str(card, "icon"), action: a, fixed: true}}}
+				wide, high := gridOf(card)
+				return listNode{items: []tileItem{{name: str(card, "name"), icon: str(card, "icon"), action: a, fixed: true,
+					wide: wide, high: high}}}
 			}
 			return nil
 		}
@@ -458,7 +470,28 @@ func (c *compiler) items(v any) []tileItem {
 // item is an entity as a card or a row presents it: its own name and icon if it gives them, and its
 // tap.
 func (c *compiler) item(m raw, entity string) tileItem {
-	return tileItem{entity: entity, name: str(m, "name"), icon: str(m, "icon"), action: actionOf(m, entity)}
+	wide, high := gridOf(m)
+	return tileItem{entity: entity, name: str(m, "name"), icon: str(m, "icon"), action: actionOf(m, entity), color: cardColorOf(m),
+		wide: wide, high: high}
+}
+
+// gridOf reads a card's grid_options. A section is 12 columns wide and a tile normally takes 6, so 12
+// (or "full") means the whole width. rows is the height in tiles, capped at four.
+func gridOf(m raw) (wide bool, high int) {
+	g, _ := m["grid_options"].(raw)
+	if g == nil {
+		return false, 0
+	}
+	switch v := g["columns"].(type) {
+	case float64:
+		wide = v >= 12
+	case string:
+		wide = v == "full"
+	}
+	if r, ok := g["rows"].(float64); ok && r > 1 {
+		high = min(int(r), 4)
+	}
+	return wide, high
 }
 
 func hoursOf(card raw, fallback int) int {
@@ -511,7 +544,12 @@ func actionOf(m raw, entity string) *Action {
 		}
 		return &Action{Entity: entity, Service: service, Data: out}
 	case "navigate":
-		return &Action{View: strings.Trim(str(tap, "navigation_path"), "/")}
+		a := &Action{View: strings.Trim(str(tap, "navigation_path"), "/")}
+		if a.View == LibraryPath {
+			// Not a view: the screen's music library, which plays on the card's player when it has one.
+			a.Entity = entity
+		}
+		return a
 	}
 	return nil
 }
@@ -555,19 +593,25 @@ func (g group) blocks(l look) []Block {
 	return out
 }
 
-type headingNode struct{ text, sub textRef }
+type headingNode struct {
+	text, sub textRef
+	color     color.RGBA
+}
 
 func (h headingNode) blocks(l look) []Block {
 	if t := h.text.get(l.rendered); t != "" {
-		return []Block{{Heading: t, Right: h.sub.get(l.rendered)}}
+		return []Block{{Heading: t, Right: h.sub.get(l.rendered), Color: h.color}}
 	}
 	return nil
 }
 
-type textNode struct{ title, body textRef }
+type textNode struct {
+	title, body textRef
+	color       color.RGBA
+}
 
 func (t textNode) blocks(l look) []Block {
-	b := Block{Title: t.title.get(l.rendered), Text: plainText(t.body.get(l.rendered))}
+	b := Block{Title: t.title.get(l.rendered), Text: plainText(t.body.get(l.rendered)), Color: t.color}
 	if b.Title == "" && len(b.Text) == 0 {
 		return nil
 	}
@@ -582,7 +626,10 @@ type tileItem struct {
 	entity, name, icon, value string
 	section                   string // a heading within a list instead
 	action                    *Action
-	fixed                     bool // not an entity's: drawn as given
+	color                     color.RGBA // the card's color; zero for none
+	fixed                     bool       // not an entity's: drawn as given
+	wide                      bool       // spans the whole section (gridOf)
+	high                      int        // height in tiles; 0 and 1 both mean one (gridOf)
 }
 
 // listNode is tiles.
@@ -593,12 +640,16 @@ type listNode struct {
 
 func (n listNode) blocks(l look) []Block {
 	var out []Block
+	room := l.room
 	if t := n.title.get(l.rendered); t != "" {
 		out = append(out, Block{Heading: t})
+		room = t
 	}
 	var tiles []Tile
 	for _, it := range n.items {
-		tiles = append(tiles, it.tile(l.states))
+		t := it.tile(l.states, room)
+		t.Wide, t.High = it.wide, it.high
+		tiles = append(tiles, t)
 	}
 	if len(tiles) > 0 {
 		out = append(out, Block{Tiles: tiles})
@@ -615,15 +666,17 @@ type rowsNode struct {
 func (n rowsNode) blocks(l look) []Block {
 	var out []Block
 	cur := Block{Title: n.title.get(l.rendered)}
+	room := cmp.Or(cur.Title, l.room)
 	for _, it := range n.items {
 		if it.section != "" {
 			if len(cur.Rows) > 0 || cur.Title != "" {
 				out = append(out, cur)
 			}
 			cur = Block{Title: it.section}
+			room = it.section
 			continue
 		}
-		t := it.tile(l.states)
+		t := it.tile(l.states, room)
 		t.Switch = t.Tap != nil && strings.HasSuffix(t.Tap.Service, "toggle") && (t.Value == "On" || t.Value == "Off" || strings.HasPrefix(t.Value, "On ·"))
 		cur.Rows = append(cur.Rows, t)
 	}
@@ -633,7 +686,9 @@ func (n rowsNode) blocks(l look) []Block {
 	return out
 }
 
-func (it tileItem) tile(states map[string]hass.LiveEntity) Tile {
+// tile is the item as a tile. An entity's own name, when the card gives none, is shown without the
+// room it is under in front of it (withoutRoom); a name the card gives is shown as it is.
+func (it tileItem) tile(states map[string]hass.LiveEntity, room string) Tile {
 	if it.fixed {
 		t := Tile{Name: it.name, Icon: orIcon(it.icon, "gesture-tap"), Value: it.value, Tap: it.action}
 		if t.Tap != nil && t.Tap.Service == "" && t.Tap.View == "" {
@@ -651,8 +706,14 @@ func (it tileItem) tile(states map[string]hass.LiveEntity) Tile {
 		if name == "" {
 			name = it.entity
 		}
+		name = withoutRoom(name, room)
 	}
 	t := describe(e, name)
+	if it.color.A != 0 && !t.Gone {
+		if domain, _, _ := strings.Cut(it.entity, "."); t.On || !colorsOnlyWhenActive[domain] {
+			t.Color = it.color
+		}
+	}
 	if it.icon != "" {
 		t.Icon = it.icon
 	}
@@ -681,7 +742,7 @@ type templateNode struct {
 func (t templateNode) blocks(l look) []Block {
 	tile := Tile{Name: t.primary.get(l.rendered), Value: t.secondary.get(l.rendered), Icon: orIcon(t.icon.get(l.rendered), "card-text-outline")}
 	if t.item.entity != "" {
-		base := t.item.tile(l.states)
+		base := t.item.tile(l.states, l.room)
 		tile.On, tile.Tap = base.On, base.Tap
 	} else if t.item.action != nil && (t.item.action.Service != "" || t.item.action.View != "") {
 		tile.Tap = t.item.action
