@@ -20,7 +20,7 @@ permissions:
 jobs:
   build:
     if: github.repository == 'Benniphx/techo5' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     outputs:
       changed: ${{ steps.prepare.outputs.changed }}
