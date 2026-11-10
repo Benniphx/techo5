@@ -1375,7 +1375,7 @@ func (r *renderer) realtimeCard(s scene) {
 	if s.remaining > 0 {
 		r.text(r.small, fmt.Sprintf("Sitzung endet in %d s", s.remaining), r.margin+20, top+76, dim)
 	}
-	r.words(s.heard, s.reply, top+90)
+	r.words(s.heard, s.reply, s.said, top+90)
 	draw.Draw(r.dst, image.Rect(r.margin+10, bottom-50, r.w-r.margin-10, bottom-5), image.NewUniform(ember), image.Point{}, draw.Src)
 	r.text(r.small, "Tippen zum Beenden", r.margin+20, bottom-18, cream)
 }
